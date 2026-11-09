@@ -351,16 +351,6 @@ static func goalie_unsettled_at(ctx: RoleContext, release_time_s: float,
 			release_time_s, puck_pos_at_release, closing_speed_m_s)
 
 
-# The fastest charged pass along `dir` (world XZ) this bot can load: its pace at
-# the pocket's share, the hold the state machine pulls the puck to first when
-# the puck's own spot can't carry the feed.
-func pass_launch_cap(ctx: RoleContext, dir: Vector3, facing: Vector2) -> float:
-	holds.configure_from(ctx)
-	holds.pocket(Vector2(dir.x, dir.z), Vector2(ctx.self_velocity.x, ctx.self_velocity.z),
-			facing)
-	return ctx.self_wrister_shot_speed * holds.pocket_result.power_share
-
-
 # Whether a shot released at `release` by a carrier now at `from_pos` is what
 # value_at prices the spot by. Outside the zone, from outside it, at a keeper
 # home, the spot is worth its position and the shot (near nothing at that range)

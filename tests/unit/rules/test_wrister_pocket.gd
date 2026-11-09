@@ -16,12 +16,13 @@ var _facing_cfg := FacingRules.Config.new()
 var _out := WristerPocket.Result.new()
 var _facing := FacingRules.Result.new()
 var _load := WristerLoad.Result.new()
+var _cand := WristerPocket.Result.new()
 
 
 func _solve(aim: Vector2, velocity: Vector2, left_handed: bool,
 		facing: Vector2 = AHEAD) -> WristerPocket.Result:
 	WristerPocket.solve(_out, aim, velocity, facing, left_handed, _load_cfg, _facing_cfg,
-			0.6, 0.75, _facing, _load)
+			0.6, 0.75, _facing, _load, _cand)
 	return _out
 
 
@@ -75,7 +76,7 @@ func test_a_skating_carrier_never_pockets_past_its_backhand_stop() -> void:
 		var aim: Vector2 = AHEAD.rotated(deg_to_rad(deg))
 		for left: bool in [LEFTY, RIGHTY]:
 			WristerPocket.solve(_out, aim, AHEAD * 8.0, AHEAD, left, _load_cfg, carry,
-					UNLOADED, BACKHAND, _facing, _load)
+					UNLOADED, BACKHAND, _facing, _load, _cand)
 			FacingRules.solve(fr, AHEAD, _out.dir, AHEAD * 8.0, false, false, left, carry)
 			assert_false(fr.pivoting, "aim %d°, %s" % [deg, "lefty" if left else "righty"])
 
@@ -118,7 +119,7 @@ func test_the_bearing_path_matches_the_local_frame_solve() -> void:
 		worst_share = maxf(worst_share, absf(WristerPocket.share_at(puck, aim, facing, left,
 				_load_cfg, UNLOADED, BACKHAND, _load) - _ref_share(puck, aim, facing, left, lr)))
 		WristerPocket.solve(_out, aim, vel, facing, left, _load_cfg, _facing_cfg,
-				UNLOADED, BACKHAND, _facing, _load)
+				UNLOADED, BACKHAND, _facing, _load, _cand)
 		var best: float = -1.0
 		var second: float = -1.0
 		var best_dir := Vector2.ZERO

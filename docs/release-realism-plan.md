@@ -238,8 +238,11 @@ who loads the puck, not just have the rule switched on.
   fires along its committed aim from wherever the puck sits, so it waits on
   neither the aim nor the body. (Every bot release is charged now; the Aim-B2
   reach-cone commit went with the one-tick quick release.)
-- **A pass holds the puck where it is** when that already carries the feed's
-  pace, else goes to the pocket for it (`_lock_pass_hold`). A backhand pass's
+- **A pass is released from a pocket**, never from where the carry left the
+  puck: of the pocket's candidate angles, the one that carries the feed's pace
+  kept best (`AIShotHolds.solve_pass_kept`). The carrier locks it at commit
+  and the agent mirrors it (`_lock_pass_hold`); the carry rests the puck there
+  ahead of a near-leading pass (`SkaterAgentCarryCursor`). A backhand pass's
   power is committed over the backhand coefficient so it leaves at the solved
   pace.
 - **The wind-up is drawn on the load's hand.** The poke-avoidance side flip went
@@ -247,16 +250,16 @@ who loads the puck, not just have the rule switched on.
 
 ### 3c. Pricing in the same currency (as built)
 
-- **Shots: a hold sweep.** The shoot-now eval prices up to four holds — the puck
-  where it is, the best-loaded pocket, and a reach out to either side of the
-  shot line — each at the pace its load allows, from where the pull puts the
+- **Shots: a hold sweep.** The shoot-now eval prices up to three listed holds —
+  the best-loaded pocket and a reach out to either side of the shot line — each
+  at the pace its load allows, from where the pull puts the
   release, with the pull's time in the goalie's budget. The side reaches are
   the old lateral relocations (the pull-across, the backhand tuck), now at the
   load's honest pace rather than a flat backhand coefficient. A pull costs the
   blade's travel, or the body's turn onto the cursor when the turn is what loads
   the puck (a forehand pulled beside the stick hip is loaded before the body
-  moves). The as-is hold is scored first and ties keep it. The tip read fires
-  from the faster of the as-is hold and the pocket.
+  moves). The puck where it is is only where each pull starts; ties keep the
+  pocket. The tip read fires from the listed hold with the best share × keep.
 - **Each hold is priced at its keep** (`AIShotHolds.price_keep`): the odds the
   puck survives the route the blade walks to it (`BladeRoute` to a hold in
   front, around the body to one behind) and the charge there, against every
@@ -266,13 +269,13 @@ who loads the puck, not just have the rule switched on.
   HARD at +25° in `test_real_rush_sim.gd`: the two side holds near-tied, the bot
   flipped between them, and the pull across ran the puck through his body and
   his stick. The pull now also goes round the front.
-- **Passes:** the launch-pace solve is capped at the pocket's share
-  (`_pass_launch_cap`), on both the scored and the fired pass.
-- **Not priced yet:** a pass's pull time (the back-wedge rotation charge,
-  `_facing_rotation_time`, still stands in for it there, though a charged pass
-  no longer turns for its aim), and the rim and dump-in pace ladders (still
-  searched up to the full wrister). The bot pulls to the pocket for them at
-  execution, so the pace holds; only the time is unpriced.
+- **Passes:** priced from their pocket — the lead and lanes from the release
+  the pull and wind-up carry him to, the pull's wait in the delay (beside the
+  back-wedge rotation, not on top of it), its keep on the release — and the
+  launch-pace solve is capped at that pocket's share, on both the scored and
+  the fired pass. Dump-ins pay their pull's time too.
+- **Not priced yet:** the dump-in's keep at its pocket, and a rim's path is
+  walked from the puck where it is rather than from its pocket.
 - **Carry candidates' shots** on arrival are held where the sweep would hold
   them: the best pocket for the line at the arrival pace, or the line's other
   side when a stick covers the pocket, at that hold's pace and keep, plus any

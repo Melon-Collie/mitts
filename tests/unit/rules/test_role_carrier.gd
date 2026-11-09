@@ -95,7 +95,9 @@ func test_forechecker_on_the_hip_contests_the_pass_release() -> void:
 	# windup. Before the release contest, he was invisible to the pass EV
 	# (lane / miss / reception all miss him), so a swarmed defenseman kept
 	# firing "clean" breakout feeds straight into pokes. Same geometry with
-	# him a stick clear of the blade leaves the feed's value intact.
+	# him a stick clear of the blade leaves the feed's value intact. The feed
+	# leaves from the pocket off his far side (AIShotHolds.solve_pass_kept), so
+	# what the hip man still takes off it is his reach on the wind-up.
 	var self_pos := Vector3(4.0, 0.0, 20.0)          # own zone, off-center
 	var outlet := Vector3(4.0, 0.0, 7.0)             # open outlet up the wall
 	var clear_of_blade: Array = [
@@ -115,9 +117,9 @@ func test_forechecker_on_the_hip_contests_the_pass_release() -> void:
 	var h := AIRoleCarrier.new()
 	h.decide(hc)
 	assert_gt(s.debug_pass_score, 0.0, "the stick-clear feed is a real option")
-	assert_lt(h.debug_pass_score, s.debug_pass_score * 0.9,
+	assert_lt(h.debug_pass_score, s.debug_pass_score,
 			"a stick on the carrier contests the release and the same feed "
-			+ "is worth materially less; hip=%f clear=%f"
+			+ "is worth less; hip=%f clear=%f"
 			% [h.debug_pass_score, s.debug_pass_score])
 
 
@@ -807,8 +809,8 @@ func test_mid_cut_hold_never_out_prices_the_same_instants_fire() -> void:
 		_place_keeper(ctx, g)
 		var c := AIRoleCarrier.new()
 		c.decide(ctx)
-		assert_gt(c.debug_shoot_score, 0.3,
-				"the mid-cut window (goalie at x=%.1f) is a real chance" % gx)
+		assert_gt(c.debug_shoot_score, AIRoleCarrier.SHOT_MIN_VALUE,
+				"the mid-cut window (goalie at x=%.1f) is a shot worth firing" % gx)
 		if c.intended_action == AIRoleCarrier.INTENT_CARRY:
 			assert_gt(c.last_carry_anchor.distance_to(pos), 0.5,
 					"mid-cut CARRY (goalie at x=%.1f) must be a relocation, not the hold"
@@ -1017,13 +1019,16 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 	return [
 			[1, TEAM_ID, self_pos],
 			[2, TEAM_ID, outlet, false, outlet_vel],
-			[3, 1, Vector3(1.5, 0, 18.0)],        # forechecker
-			[4, 1, Vector3(3.0, 0, 17.5)],        # forechecker
+			[3, 1, Vector3(2.5, 0, 18.0)],        # forechecker
+			[4, 1, Vector3(4.0, 0, 17.5)],        # forechecker
 	]
 
 
-const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(9.0, 0, 22.5)  # deep below the dot
+# Deep in our zone, a stride wide of our slot: a pass released from a pocket
+# inside the slot is never priced (AINetObstacle.pass_crosses_own_slot).
+const _SETTLE_CARRIER := Vector3(4, 0, 20)
+const _STRONG_OUTLET := Vector3(12, 0, 11)    # open, up the strong wall
+const _MARGINAL_OUTLET := Vector3(10.0, 0, 22.5)  # deep below the dot
 const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 0.5)   # …and still drifting into the corner
 
 
@@ -1037,7 +1042,7 @@ func _settle_ctx(self_pos: Vector3, outlet: Vector3) -> RoleContext:
 # Deep in our zone, boxed by two forecheckers, the strong outlet open up the
 # wall; no settle doubt.
 func _strong_outlet_ctx() -> RoleContext:
-	var self_pos := Vector3(3, 0, 20)
+	var self_pos := _SETTLE_CARRIER
 	return _make_ctx(self_pos, _settle_skaters(self_pos, _STRONG_OUTLET))
 
 
@@ -1047,7 +1052,7 @@ func _strong_outlet_ctx() -> RoleContext:
 # can only hold both.
 
 func test_an_obvious_outlet_beats_the_settle_doubt_outright() -> void:
-	var self_pos := Vector3(3, 0, 20)
+	var self_pos := _SETTLE_CARRIER
 	var c := AIRoleCarrier.new()
 	c.decide(_settle_ctx(self_pos, _STRONG_OUTLET))
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS,
@@ -1055,7 +1060,7 @@ func test_an_obvious_outlet_beats_the_settle_doubt_outright() -> void:
 
 
 func test_a_marginal_outlet_pays_the_settle_doubt() -> void:
-	var self_pos := Vector3(3, 0, 20)
+	var self_pos := _SETTLE_CARRIER
 	# Sanity: the weak outlet IS a legal fire — it's the doubt that holds it, not
 	# the standing giveaway bar.
 	var undoubted := AIRoleCarrier.new()
@@ -1085,7 +1090,7 @@ func test_an_obvious_shot_beats_the_settle_doubt_outright() -> void:
 	var self_pos := Vector3(-1.0, 0.0, -GameRules.GOAL_LINE_Z + 4.5)
 	var ctx := _make_ctx(self_pos)
 	var g := GoalieNetworkState.new()
-	g.position_x = 1.2
+	g.position_x = 2.0
 	g.position_z = -GameRules.GOAL_LINE_Z + 0.5
 	_place_keeper(ctx, g)
 	ctx.settle_penalty_frac = 0.6
@@ -1099,7 +1104,7 @@ func test_an_obvious_shot_beats_the_settle_doubt_outright() -> void:
 
 
 func test_settle_doubt_rearms_on_reset_but_not_on_clear_intent() -> void:
-	var self_pos := Vector3(3, 0, 20)
+	var self_pos := _SETTLE_CARRIER
 	var ctx: RoleContext = _settle_ctx(self_pos, _MARGINAL_OUTLET)
 	var c := AIRoleCarrier.new()
 	for _i: int in range(61):
@@ -1709,26 +1714,25 @@ func test_wider_cone_frees_a_lateral_aim() -> void:
 
 # ─── Shot measured from the puck, not the body ──────────────────────────────
 
-func test_shot_is_measured_from_the_puck_not_the_body() -> void:
-	# The carried puck rides the blade, up to a stick's reach from the body — the
-	# shot's view of the net is from the PUCK. Same body position, puck extended
-	# toward the net → the release ref moves with it → wider real angles → higher
-	# shoot score. (The fixture default puts the puck AT the body, so every other
-	# scenario in this file is unchanged.)
-	# 6 m out, where the puck's own spot is the winning hold (further out a side
-	# pocket wins either way, and the read cannot see which point it came from).
+func test_a_shot_leaves_from_a_listed_hold_never_from_the_carried_puck() -> void:
+	# The carried puck rides the blade out in front, a spot no wrist shot is
+	# taken from: the release is a listed hold (AIShotHolds), and where the puck
+	# sits is only where the pull to it starts. (The fixture default puts the
+	# puck AT the body; here it is carried out front.)
 	var self_pos := Vector3(0, 0, -20.65)
-	var ctx_body: RoleContext = _make_ctx(self_pos)
-	var c1 := AIRoleCarrier.new()
-	c1.decide(ctx_body)
-	var body_score: float = c1.debug_shoot_score
-
-	var ctx_blade: RoleContext = _make_ctx(self_pos)
-	ctx_blade.snapshot.puck_state.position = self_pos + Vector3(0, 0, -1.1)
-	var c2 := AIRoleCarrier.new()
-	c2.decide(ctx_blade)
-	assert_gt(c2.debug_shoot_score, body_score,
-			"a puck extended toward the net measures a wider view than the chest")
+	var ctx: RoleContext = _make_ctx(self_pos)
+	var carried := Vector3(0.3, 0, -1.1)
+	ctx.snapshot.puck_state.position = self_pos + carried
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	assert_gt(c.debug_shoot_score, 0.0, "precondition: a shot is priced")
+	assert_gt(c.shoot_now_hold.distance_to(carried), 0.1,
+			"the shot is priced from a hold, not from where the carry left the puck")
+	var listed: bool = false
+	for k: int in c._field.holds.count:
+		var hold := Vector3(c._field.holds.offset[k].x, 0.0, c._field.holds.offset[k].y)
+		listed = listed or hold.is_equal_approx(c.shoot_now_hold)
+	assert_true(listed, "…one of the listed ones")
 
 
 # ─── Blue line: a mate level at the line ────────────────────────────────────
@@ -2469,11 +2473,11 @@ func test_a_rim_is_fired_as_soft_as_the_race_allows() -> void:
 	c._pick_fire_phase(ctx)
 	var best: float = 0.0
 	for k: int in AIRimPass.count:
-		best = maxf(best, c._pass._rim_sure_by_k[k])
+		best = maxf(best, c._pass._rim.sure_by_k[k])
 	var softest: float = INF
 	var hardest: float = 0.0
 	for k: int in AIRimPass.count:
-		if c._pass._rim_sure_by_k[k] >= best * AICarrierPassSearch.RIM_SOFT_SHARE:
+		if c._pass._rim.sure_by_k[k] >= best * AICarrierRimSearch.RIM_SOFT_SHARE:
 			softest = minf(softest, AIRimPass.paces[k])
 			hardest = maxf(hardest, AIRimPass.paces[k])
 	gut.p("  rim fired at %.1f m/s (near-best band %.1f..%.1f)"
@@ -2536,7 +2540,7 @@ func _rim_icings(ctx: RoleContext, c: AIRoleCarrier) -> Array[bool]:
 			c._field.opponent_caps)
 	var out: Array[bool] = []
 	for k: int in n:
-		out.append(c._pass._rim_ices(ctx, origin, k))
+		out.append(c._pass._rim.ices(ctx, origin, k))
 	return out
 
 

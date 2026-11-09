@@ -27,7 +27,9 @@ line is evaluation vs. feel, not "numbers are bad".
 ## One currency across the carrier's compete
 
 SHOOT, PASS and CARRY are compared numerically, so all three price the shot
-through the value seam (`AIShotValue` / `score_shoot_value`). Leaving one leg on
+through the value seam (`AIShotValue` / `score_shoot_value`). Shots and passes
+both release from a listed spot (`AIShotHolds`), each paying its pull's time
+before the release and the odds the puck is still on the blade then. Leaving one leg on
 a different model makes that leg win or lose on scale alone, and a hold priced in
 the wrong model is a permanent veto on the other two. The committed shot is the
 seam's own pick (aim and loft), so what is priced is what is fired.
@@ -1150,13 +1152,13 @@ reaches back into what remains.
   again (`AIRoleCarrier._pick_commit_phase`'s `retention_hopeless` branch).
 
 - **Rims are passes whose lane is the boards** (`AIRimPass`; each receiver's
-  best launch is ranked by `AICarrierPassSearch._rim_launch_for`, and only the single
+  best launch is ranked by `AICarrierRimSearch.launch_for`, and only the single
   best is priced through `carrier_pass_search.gd:_pass_ev`) — a third pass variant beside the flat feed
   and the saucer, in the same currency. It is searched as a RELEASE,
   not aimed at a receiver: bearings banked glancing off the boards near the
   passer, each walked at a pace ladder up to the passer's own wrister max. Of the
   launches that reach a receiver nearly as surely as the best
-  (`AICarrierPassSearch.RIM_SOFT_SHARE`), the SOFTEST is fired: easier to stop, and
+  (`AICarrierRimSearch.RIM_SOFT_SHARE`), the SOFTEST is fired: easier to stop, and
   one that gets by him dies sooner. The walk is the chase election's own, so the
   receiver a rim is priced to reach is the one the election will send to it. The
   LANE is a race along that path in `arrival_race`'s contest band — the
