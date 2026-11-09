@@ -211,3 +211,53 @@ func test_pads_in_the_primary_are_trimmed_in_the_secondary() -> void:
 func test_contrast_ratio_spans_one_to_twenty_one() -> void:
 	assert_almost_eq(TeamColorRegistry.contrast_ratio(Color.WHITE, Color.WHITE), 1.0, 0.001)
 	assert_almost_eq(TeamColorRegistry.contrast_ratio(Color.BLACK, Color.WHITE), 21.0, 0.01)
+
+
+# ── Team colour as ink on a surface ──────────────────────────────────────────
+# Properties of the rule, not of any one palette: every team's ink reads on the
+# dark panel, one that already reads is left alone, and lifting keeps the hue.
+
+const _PANEL: Color = MenuStyle.BROADCAST_BG
+
+
+func test_every_teams_ink_reads_on_the_panel() -> void:
+	for slot: int in TeamColorRegistry.get_all_slots():
+		var pair: Dictionary = TeamColorRegistry.get_score_ink_pair(slot, slot, _PANEL)
+		assert_gte(TeamColorRegistry.contrast_ratio(pair.home, _PANEL),
+				TeamColorRegistry.INK_MIN_CONTRAST - 0.01,
+				TeamColorRegistry.get_preset_name(slot))
+
+
+func test_a_primary_that_already_reads_is_its_own_ink() -> void:
+	for slot: int in TeamColorRegistry.get_all_slots():
+		var primary: Color = TeamColorRegistry.get_preset(slot).primary
+		if TeamColorRegistry.contrast_ratio(primary, _PANEL) < TeamColorRegistry.INK_MIN_CONTRAST:
+			continue
+		var pair: Dictionary = TeamColorRegistry.get_score_ink_pair(slot, slot, _PANEL)
+		assert_eq(pair.home, primary, TeamColorRegistry.get_preset_name(slot))
+
+
+func test_lifting_keeps_the_hue_and_only_goes_as_far_as_it_must() -> void:
+	var navy := Color("#1E2A5A")
+	var ink: Color = TeamColorRegistry.readable_on(navy, _PANEL)
+	assert_almost_eq(ink.ok_hsl_h, navy.ok_hsl_h, 0.01, "same hue")
+	assert_gt(ink.ok_hsl_l, navy.ok_hsl_l, "lightened on a dark surface")
+	assert_almost_eq(TeamColorRegistry.contrast_ratio(ink, _PANEL),
+			TeamColorRegistry.INK_MIN_CONTRAST, 0.05, "no lighter than it needs")
+
+
+func test_on_a_light_surface_ink_darkens() -> void:
+	var pale := Color("#F5D028")
+	var ink: Color = TeamColorRegistry.readable_on(pale, Color.WHITE)
+	assert_lt(ink.ok_hsl_l, pale.ok_hsl_l)
+	assert_gte(TeamColorRegistry.contrast_ratio(ink, Color.WHITE),
+			TeamColorRegistry.INK_MIN_CONTRAST - 0.01)
+
+
+# A near-black primary lifts to a grey, which reads as the UI's own neutral text;
+# its secondary carries the team instead.
+func test_a_hueless_primary_inks_in_its_secondary() -> void:
+	var preset: Dictionary = {"primary": Color("#161618"), "secondary": Color("#5E2457")}
+	var ink: Color = TeamColorRegistry._ink_for(preset, _PANEL)
+	assert_almost_eq(ink.ok_hsl_h, (preset.secondary as Color).ok_hsl_h, 0.01)
+	assert_gte(ink.s, TeamColorRegistry._INK_MIN_SATURATION)

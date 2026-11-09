@@ -560,7 +560,7 @@ func _on_intermission_clip_started(scoring_team_id: int, scorer_name: String,
 		assists.append(assist1_name)
 	if not assist2_name.is_empty():
 		assists.append(assist2_name)
-	var tag_color: Color = HudChrome.team_stripe(scoring_team_id) \
+	var tag_color: Color = HudChrome.team_ink(scoring_team_id) \
 			if scoring_team_id >= 0 else MenuStyle.BROADCAST_CREAM
 	_intermission_overlay.set_goal_caption(
 			tag_color, scorer_name, ", ".join(assists))
@@ -680,10 +680,10 @@ func _on_game_over() -> void:
 	var result_color: Color
 	if _scorebug.home_score() > _scorebug.away_score():
 		result_text = tr(&"RESULT_HOME_WINS")
-		result_color = HudChrome.team_primary(0)
+		result_color = HudChrome.team_ink(0)
 	elif _scorebug.away_score() > _scorebug.home_score():
 		result_text = tr(&"RESULT_AWAY_WINS")
-		result_color = HudChrome.team_primary(1)
+		result_color = HudChrome.team_ink(1)
 	else:
 		result_text = tr(&"RESULT_TIE_GAME")
 		result_color = MenuStyle.BROADCAST_CREAM
