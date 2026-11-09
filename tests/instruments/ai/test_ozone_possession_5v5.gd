@@ -76,7 +76,8 @@ static func _is_shot(rec: Dictionary) -> bool:
 # record: its kind, release spot, the carrier's priced shot, best pass (and the
 # receiver's spot), carry, and the set read at the release.
 func _run(duel: Object) -> Dictionary:
-	var r: Dictionary = {"end": "timeout", "t": SECS, "low_s": 0.0, "passes": 0, "shot": {}}
+	var r: Dictionary = {"end": "timeout", "t": SECS, "low_s": 0.0, "passes": 0, "shot": {},
+			"pass_log": []}
 	var passing: bool = false
 	var last_pass: Dictionary = {}
 	var last_pass_t: float = 0.0
@@ -140,11 +141,19 @@ func _run(duel: Object) -> Dictionary:
 				return r
 			r["passes"] += 1
 			passing = true
+			var kept: float = float(released.get("pass_kept", -1.0))
+			var ev: float = float(released.get("pass_score", 0.0))
+			var from_p: Vector3 = released.get("pass_puck", released["pos"])
+			var to_p: Vector3 = released.get("pass_spot", Vector3.INF)
+			r["pass_log"].append([ev, kept, float(released.get("carry_score", 0.0)),
+					AIPossessionFloor.continuation(from_p, goal), from_p, to_p, "made"])
 			last_pass = released
 			last_pass_t = t
 		if c != -1 and duel.team_map[c] == 1:
 			r["end"] = "picked" if passing else "stripped"
 			r["t"] = t
+			if passing and not r["pass_log"].is_empty():
+				r["pass_log"][-1][6] = "PICKED %.2f s on" % (t - last_pass_t)
 			if passing and not last_pass.is_empty():
 				var from: Vector3 = last_pass.get("pass_puck", last_pass["pos"])
 				var to: Vector3 = last_pass.get("pass_spot", Vector3.INF)
@@ -242,6 +251,7 @@ func _sweep(label: String) -> void:
 	var runs: int = 0
 	var shots: Array[Dictionary] = []
 	var picks: Array[String] = []
+	var pass_log: Array = []
 	var row: String = "   "
 	for start: Array in _starts():
 		var vels: Array = [Vector3.ZERO] + start[3]
@@ -258,6 +268,7 @@ func _sweep(label: String) -> void:
 			t_all += r["t"]
 			if r.has("pick"):
 				picks.append(r["pick"])
+			pass_log.append_array(r["pass_log"])
 			if r["end"] == "shot":
 				var s: Dictionary = r["shot"]
 				shots.append(s)
@@ -286,6 +297,13 @@ func _sweep(label: String) -> void:
 				kp.x, _out(kp), s["keeper_vx"], s["stance"], s["mates"]])
 	gut.p("    mean priced - set: %+.3f over %d shots; a pass within half the shot's price on %d" % [
 			over / maxf(shots.size(), 1), shots.size(), pass_near])
+	gut.p("    every pass: EV | completion | its receiver's worth (EV / completion) | the carry | the continuation where he stood | from -> to | then")
+	for e: Array in pass_log:
+		var f: Vector3 = e[4]
+		var to: Vector3 = e[5]
+		gut.p("        %.3f | %.2f | %.3f | %.3f | %.3f | (%5.1f, %4.1f out) -> %s | %s" % [e[0], e[1],
+				e[0] / e[1] if e[1] > 0.01 else -1.0, e[2], e[3], f.x, _out(f),
+				"(%5.1f, %4.1f out)" % [to.x, _out(to)] if to.is_finite() else "?", e[6]])
 	gut.p("    passes picked off:")
 	for line: String in picks:
 		gut.p("        " + line)
