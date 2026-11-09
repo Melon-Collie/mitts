@@ -301,7 +301,9 @@ var carry_ticks: Dictionary = {}
 # unchanged). When set, called once per team per tick as
 # `goalie_provider.call(team_id: int, puck_pos: Vector3) -> Variant`; a Vector3
 # return overwrites that net's keeper position in the snapshot (a real
-# GoalieController the test owns and ticks), anything else keeps the static one.
+# GoalieController the test owns and ticks), a GoalieNetworkState replaces the
+# whole replicated keeper (his stance, facing and velocity too), anything else
+# keeps the static one.
 var goalie_provider: Callable = Callable()
 
 
@@ -1381,6 +1383,9 @@ func _build_snapshot() -> WorldSnapshot:
 		# keeper for this net with the live controller's tracked position.
 		if goalie_provider.is_valid():
 			var real: Variant = goalie_provider.call(tid, puck_pos)
+			if real is GoalieNetworkState:
+				snap.goalie_states[tid] = real
+				continue
 			if real is Vector3:
 				g.position_x = real.x
 				g.position_z = real.z

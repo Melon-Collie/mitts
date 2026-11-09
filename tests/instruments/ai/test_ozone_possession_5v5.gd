@@ -26,6 +26,10 @@ var _goalie: Node
 var _puck: Node
 var _shooter: Skater
 var _ctrl: GoalieController
+# The keeper as the bots read him: his whole replicated state (stance, facing,
+# velocity), or only his position as the harness's default keeper.
+var _keeper_state: GoalieNetworkState = GoalieNetworkState.new()
+var _full_keeper: bool = true
 
 
 func before_all() -> void:
@@ -101,8 +105,31 @@ func _run(duel: Object) -> Dictionary:
 				for sk: Object in duel.skaters:
 					if sk.peer_id == int(released["peer"]):
 						agent = sk.agent
+				var puck: Vector3 = released.get("pass_puck", at)
+				var keeper: Vector3 = _goalie.global_position
+				keeper.y = 0.0
+				s["puck"] = puck
+				s["keeper"] = keeper
+				s["keeper_vx"] = _keeper_state.velocity_x
+				s["stance"] = AIShotOdds.stance_of(_keeper_state, goal)
+				s["live"] = AIShotValue.now(puck, goal, keeper, _keeper_state.velocity_x,
+						s["stance"], _keeper_state.rotation_y, AIShotOdds.History.CARRIED)
+				s["set_puck"] = AIShotValue.set_keeper(puck, goal)
+				var mates: String = ""
+				for pid: int in OURS:
+					if pid == int(released["peer"]):
+						continue
+					var mp: Vector3 = duel.skater_pos(pid)
+					if _out(mp) > POINT_OUT_M:
+						continue
+					mates += " (%4.1f,%4.1f) feed %.2f set %.2f" % [mp.x, _out(mp),
+							AIShotValue.feed(puck, mp, 16.0, goal, keeper, true),
+							AIShotValue.set_keeper(mp, goal)]
+				s["mates"] = mates
 				if agent != null and agent._carrier != null:
 					s["shot"] = agent._carrier.debug_shoot_score
+					s["history"] = agent._carrier._shot_history()
+					s["tip"] = agent._carrier._shot_sample_is_tip
 					var pp: int = int(released.get("pass_peer", 0))
 					if pp > 0:
 						s["pass_to"] = duel.skater_pos(pp)
@@ -162,7 +189,9 @@ func _setup(carrier: Vector3, vel: Vector3, fa: Vector3, fb: Vector3, tight: boo
 		_shooter.global_position = puck_pos
 		_puck.global_position = puck_pos
 		_ctrl._physics_process(Duel.DT)
-		return _goalie.global_position
+		_keeper_state = GoalieNetworkState.new()
+		_ctrl.fill_state(_keeper_state)
+		return _keeper_state if _full_keeper else _goalie.global_position
 	return duel
 
 
@@ -226,6 +255,12 @@ func _sweep(label: String) -> void:
 		gut.p("    (%5.1f, %4.1f)   %-6s %6.3f  %6.3f  %6.3f %6.3f  %s" % [p.x, _out(p), s["kind"],
 				s["shot"], s["set"], s["pass"], s["carry"],
 				"(%5.1f, %4.1f)" % [to.x, _out(to)] if to.is_finite() else "-"])
+		var pk: Vector3 = s["puck"]
+		var kp: Vector3 = s["keeper"]
+		gut.p("        puck (%5.1f, %4.1f) live %.3f set %.3f hist %d%s | keeper (%5.2f, %4.2f) vx %5.2f st %d |%s" % [
+				pk.x, _out(pk), s["live"], s["set_puck"], int(s.get("history", -1)),
+				" TIP" if s.get("tip", false) else "",
+				kp.x, _out(kp), s["keeper_vx"], s["stance"], s["mates"]])
 	gut.p("    mean priced - set: %+.3f over %d shots; a pass within half the shot's price on %d" % [
 			over / maxf(shots.size(), 1), shots.size(), pass_near])
 
