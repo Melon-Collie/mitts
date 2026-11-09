@@ -572,7 +572,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 							< AIActionScoring.THREAT_GOALIE_HOME_M)
 
 	# Top-level SHOOT: the hold sweep over AIShotHolds' listed spots (the loaded
-	# pocket, a reach to either side of the shot line). Each hold
+	# pocket, a reach to either side of the shot line, the snapshot out front).
+	# Each hold
 	# prices its release at the pace its load allows, its pull's time in the
 	# goalie's budget, at the odds the puck survives the pull and the charge
 	# (price_keep). The compare is strictly greater, so a tie keeps the first

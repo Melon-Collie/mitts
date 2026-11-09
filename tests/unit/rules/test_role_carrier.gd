@@ -2885,11 +2885,12 @@ func test_a_shot_released_outside_the_zone_or_behind_the_line_is_none() -> void:
 
 func test_a_point_man_backing_over_the_line_prices_no_shot() -> void:
 	# Just inside their line, skating out of the zone: his pull and wind-up carry
-	# the release over it, so the shot he would fire is no shot.
+	# the release over it, even from the snapshot out in front of him, so the
+	# shot he would fire is no shot.
 	var at := Vector3(0.0, 0.0, -GameRules.BLUE_LINE_Z - 0.3)
 	var ctx: RoleContext = _set_keeper(_make_ctx(at))
-	ctx.snapshot.skater_states[1].velocity = Vector3(0.0, 0.0, 4.0)
-	ctx.self_velocity = Vector3(0.0, 0.0, 4.0)
+	ctx.snapshot.skater_states[1].velocity = Vector3(0.0, 0.0, 7.0)
+	ctx.self_velocity = Vector3(0.0, 0.0, 7.0)
 	assert_lte(_decided(ctx)._phase_shoot_score, 0.0, "backing out, no shot")
 	var still: RoleContext = _set_keeper(_make_ctx(at))
 	assert_gt(_decided(still)._phase_shoot_score, 0.0, "standing there, he has one")

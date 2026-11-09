@@ -46,6 +46,52 @@ func test_a_puck_already_in_a_hold_pulls_there_in_no_time() -> void:
 	assert_almost_eq(_h.pull_s[0], 0.0, 0.0001)
 
 
+# The listed hold at the carry's presented reach: the snapshot.
+func _snap(h: AIShotHolds) -> int:
+	for k: int in h.count:
+		if absf(h.offset[k].length() - AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M) < 0.001:
+			return k
+	return -1
+
+
+func test_the_snapshot_is_out_in_front_on_the_forehand() -> void:
+	for left: bool in [false, true]:
+		var h := AIShotHolds.new()
+		h.is_left_handed = left
+		h.solve_shot(AHEAD, RIGHT * 0.9, AHEAD * 6.0, AHEAD)
+		var k: int = _snap(h)
+		assert_gte(k, 0, "lefty %s: listed" % left)
+		assert_almost_eq(h.offset[k].normalized().angle_to(AHEAD),
+				AIShotHolds.SNAP_FOREHAND_RAD * (1.0 if left else -1.0), 0.0001,
+				"lefty %s: a third of the way round toward the stick side" % left)
+		# The stick side: −X for a lefty facing up-ice, +X for a righty.
+		assert_true(h.offset[k].x < 0.0 if left else h.offset[k].x > 0.0,
+				"lefty %s: on his forehand" % left)
+
+
+func test_the_snapshot_rides_the_shot_line_not_the_body() -> void:
+	# The cursor resting on it turns the body: a spot that turned with the body
+	# would walk the carrier round in a circle.
+	_h.solve_shot(AHEAD, RIGHT * 0.9, AHEAD * 6.0, AHEAD)
+	var before: Vector2 = _h.offset[_snap(_h)]
+	_h.solve_shot(AHEAD, RIGHT * 0.9, AHEAD * 6.0, AHEAD.rotated(deg_to_rad(-25.0)))
+	var k: int = _snap(_h)
+	assert_gte(k, 0)
+	assert_almost_eq(_h.offset[k], before, Vector2.ONE * 0.0001)
+
+
+func test_a_puck_presented_out_front_shoots_in_stride_without_a_pull() -> void:
+	# Skating with the puck where the carry presents it, a shot ahead leaves from
+	# there at the share its load gives: no pull to a pocket first.
+	var presented: Vector2 = _h.snap_dir(AHEAD) * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
+	_h.solve_shot(AHEAD, presented, AHEAD * 6.0, AHEAD)
+	var k: int = _snap(_h)
+	assert_gte(k, 0)
+	assert_almost_eq(_h.pull_s[k], 0.0, 0.0001)
+	assert_gt(_h.share[k], _h.unloaded_share, "the forehand diagonal loads it past the arms")
+	assert_lt(_h.share[k], 1.0, "but less than the pocket's full load")
+
+
 func test_a_forehand_pulled_beside_the_hip_waits_only_for_the_blade() -> void:
 	# Standing, the cursor out to the side turns the body side-on, but the
 	# forehand there is loaded before it moves: the press needs only the blade.
@@ -78,7 +124,8 @@ func test_a_hold_behind_the_body_waits_for_the_swing_round() -> void:
 	h.solve_shot(AHEAD.rotated(deg_to_rad(60.0)), RIGHT * 0.9, Vector2.ZERO, AHEAD)
 	var behind: int = -1
 	for k: int in h.count:
-		if h.offset[k].dot(AHEAD) < 0.0:
+		# A side reach (the snapshot sits at the carry's reach, not the handling one).
+		if h.offset[k].dot(AHEAD) < 0.0 and absf(h.offset[k].length() - h.handle_reach) < 0.001:
 			behind = k
 	assert_gte(behind, 0)
 	var swing: float = absf(h.origin.angle_to(h.offset[behind])) / h.arc_rate

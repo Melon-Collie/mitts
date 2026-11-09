@@ -169,8 +169,9 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 	var l_pace: float = 0.0
 	# FIRE FROM THE POINT THE BOT SCORED, NOT FROM ITS BODY.
 	# The carrier prices the holds the blade can put the puck in before the
-	# press (AIRoleCarrier "Where the shot is held") — the loaded pocket and a
-	# reach to either side of the shot line — and fires from the best.
+	# press (AIRoleCarrier "Where the shot is held") — the loaded pocket, a reach
+	# to either side of the shot line, the snapshot out front — and fires from
+	# the best.
 	# At point-blank the two flanking holds sit on OPPOSITE sides of a down
 	# keeper, so one of them is routinely outside his butterfly coverage while
 	# the body is still square in front of him. Firing from the body erases the

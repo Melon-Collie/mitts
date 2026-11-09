@@ -11,19 +11,26 @@ extends RefCounted
 # Every charged release comes from a listed spot, never from wherever the carry
 # left the puck; that spot is only where each pull starts (origin), so a puck
 # already sitting in one pulls to it in no time. Shots (solve_shot): the
-# best-loaded pocket (WristerPocket), and a reach out to either side of the
-# shot line, which moves the whole tangent-cone geometry
-# around a goalie in tight (the pull-across, the backhand tuck) at whatever pace
-# the load leaves there. A skating carrier lists no hold past his backhand stop
-# (FacingRules pivoting). Passes (solve_pass) go from the pocket. A pull costs
-# its real time (pull_time, _fill_pulled). All vectors are world XZ, offsets off
-# the body.
+# best-loaded pocket (WristerPocket); a reach out to either side of the shot
+# line, which moves the whole tangent-cone geometry around a goalie in tight
+# (the pull-across, the backhand tuck) at whatever pace the load leaves there;
+# and the snapshot, out in front on the forehand where the carry presents the
+# puck, so a shot in stride or off a catch leaves without a pull, at the share
+# its load gives. A skating carrier lists no hold past his backhand stop
+# (FacingRules pivoting). Passes go from one of the pocket's candidates
+# (solve_pass, solve_pass_kept). A pull costs its real time (pull_time,
+# _fill_pulled). All vectors are world XZ, offsets off the body.
 
 # A puck this near the body's centre has no bearing to load from.
 const MIN_OFFSET_M: float = 0.05
 # Segments the route to a hold is read in (an even count, so one point is its
 # midpoint) for its closest pass by a man.
 const ROUTE_SEGMENTS: int = 4
+# The snapshot's bearing off the shot line, toward the forehand: the puck ahead
+# of the body, a third of the way round to the stick side. Off the line, never
+# off the facing: the body turns to the cursor resting on it, and a spot that
+# turned with the body would walk him round in a circle.
+const SNAP_FOREHAND_RAD: float = PI / 6.0
 
 var is_left_handed: bool = false
 var load_cfg: WristerLoad.Config = WristerLoad.Config.new()
@@ -40,11 +47,11 @@ var arc_rate: float = 7.5
 var origin: Vector2 = Vector2.ZERO
 # solve_shot's holds: offset, share of pace, pull time. A quarter-turn that is
 # the pocket itself is not listed twice.
-var offset: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO]
-var share: Array[float] = [1.0, 1.0, 1.0]
-var pull_s: Array[float] = [0.0, 0.0, 0.0]
+var offset: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO]
+var share: Array[float] = [1.0, 1.0, 1.0, 1.0]
+var pull_s: Array[float] = [0.0, 0.0, 0.0, 0.0]
 # price_keep's odds the puck is still on the blade when each hold fires.
-var keep: Array[float] = [1.0, 1.0, 1.0]
+var keep: Array[float] = [1.0, 1.0, 1.0, 1.0]
 var count: int = 0
 # solve_arrival's hold for a shot from a spot a carry reaches, its share of pace
 # and its odds of keeping the puck through the charge.
@@ -244,6 +251,20 @@ func solve_shot(aim: Vector2, puck_offset: Vector2, velocity: Vector2,
 			continue
 		_fill_pulled(count, dir, aim, _facing.target, facing, velocity)
 		count += 1
+	var snap: Vector2 = snap_dir(aim)
+	FacingRules.solve(_facing, facing, snap, velocity, false, false, is_left_handed, facing_cfg)
+	if not _facing.pivoting:
+		_fill_pulled(count, snap, aim, _facing.target, facing, velocity,
+				AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M)
+		count += 1
+
+
+# The snapshot's direction for a shot along `aim` (SNAP_FOREHAND_RAD toward the
+# stick side, the forehand's home side in WristerLoad's frame).
+func snap_dir(aim: Vector2) -> Vector2:
+	var stick_sign: float = 1.0 if is_left_handed else -1.0
+	var yaw: float = atan2(-aim.x, -aim.y) + stick_sign * SNAP_FOREHAND_RAD
+	return Vector2(-sin(yaw), -cos(yaw))
 
 
 # The listed hold with the best share × keep (price_keep's), the first on a tie;
@@ -404,12 +425,12 @@ static func _world(self_pos: Vector3, off: Vector2, velocity: Vector2, t: float)
 			self_pos.z + off.y + velocity.y * t)
 
 
-# A pulled hold along `dir` at the handling reach. The cursor on it turns the
-# body toward `body`, but the press waits for that turn only when the turn is
-# what loads the puck.
+# A pulled hold along `dir` at `reach` (the handling reach by default). The
+# cursor on it turns the body toward `body`, but the press waits for that turn
+# only when the turn is what loads the puck.
 func _fill_pulled(k: int, dir: Vector2, aim: Vector2, body: Vector2,
-		facing: Vector2, velocity: Vector2) -> void:
-	offset[k] = dir * handle_reach
+		facing: Vector2, velocity: Vector2, reach: float = -1.0) -> void:
+	offset[k] = dir * (handle_reach if reach < 0.0 else reach)
 	var blade_s: float = pull_time(origin, offset[k], facing, velocity)
 	var share_now: float = share_at(offset[k], aim, facing)
 	var share_turned: float = share_at(offset[k], aim, body)

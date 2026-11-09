@@ -146,8 +146,10 @@ the same route, and times the swing at the bot's arc rate, so what the carrier
 prices is the path the cursor walks.
 
 **A charged release comes from a listed spot, and is loaded before the press.**
-Never from wherever the carry left the puck: a shot from a pocket or a reach to
-either side of its line, a pass from a pocket. While a shot
+Never from wherever the carry left the puck: a shot from a pocket, a reach to
+either side of its line or the snapshot out front on the forehand (where the
+carry presents the puck, so a shot in stride needs no pull), a pass from a
+pocket. While a shot
 look leads, or a pass is near the lead with nothing forcing him to evade (no
 man to beat, the shield barely on, the puck kept in the pocket as surely as
 carried), the carry cursor rests the puck in that release's hold, and it is

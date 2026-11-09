@@ -250,9 +250,11 @@ who loads the puck, not just have the rule switched on.
 
 ### 3c. Pricing in the same currency (as built)
 
-- **Shots: a hold sweep.** The shoot-now eval prices up to three listed holds —
-  the best-loaded pocket and a reach out to either side of the shot line — each
-  at the pace its load allows, from where the pull puts the
+- **Shots: a hold sweep.** The shoot-now eval prices up to four listed holds —
+  the best-loaded pocket, a reach out to either side of the shot line, and the
+  snapshot out in front on the forehand, where the carry presents the puck (a
+  shot in stride or off a catch, with no pull) — each at the pace its load
+  allows, from where the pull puts the
   release, with the pull's time in the goalie's budget. The side reaches are
   the old lateral relocations (the pull-across, the backhand tuck), now at the
   load's honest pace rather than a flat backhand coefficient. A pull costs the
