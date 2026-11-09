@@ -105,37 +105,51 @@ static func read(b: PackedByteArray, o: int, p: KeeperPose) -> void:
 	p.blocker_reach = flags & _BLOCKER_REACH != 0
 
 
-static func _s16(v: float) -> int:
-	return clampi(roundi(v), -32768, 32767)
-
-
-static func _s8(v: float) -> int:
-	return clampi(roundi(v), -128, 127)
+# Whether `a` and `b` agree in every field `write` takes, so they write the
+# same bytes; a field `write` takes goes here too.
+static func same(a: KeeperPose, b: KeeperPose) -> bool:
+	if a.pelvis != b.pelvis or a.glove_hand != b.glove_hand or a.blade_center != b.blade_center \
+			or a.blade_yaw != b.blade_yaw or a.stick_tilt != b.stick_tilt or a.pelvis_rot != b.pelvis_rot \
+			or a.lumbar_rot != b.lumbar_rot or a.chest_rot != b.chest_rot or a.neck_rot != b.neck_rot \
+			or a.head_rot != b.head_rot or a.glove_fingers != b.glove_fingers or a.glove_palm != b.glove_palm \
+			or a.glove_elbow_pole != b.glove_elbow_pole or a.blocker_elbow_pole != b.blocker_elbow_pole \
+			or a.blocker_face != b.blocker_face or a.blocker_grip != b.blocker_grip \
+			or a.glove_from_chest != b.glove_from_chest or a.blocker_reach != b.blocker_reach:
+		return false
+	for i: int in 2:
+		var la: KeeperPose.Leg = a.legs[i]
+		var lb: KeeperPose.Leg = b.legs[i]
+		if la.ankle != lb.ankle or la.knee != lb.knee or la.knee_pole != lb.knee_pole \
+				or la.thigh_front != lb.thigh_front or la.shin_front != lb.shin_front or la.toe != lb.toe \
+				or la.flex != lb.flex or la.along_shin != lb.along_shin or la.knee_pinned != lb.knee_pinned \
+				or (la.foot_mode == KeeperPose.FootMode.ALONG_SHIN) != (lb.foot_mode == KeeperPose.FootMode.ALONG_SHIN):
+			return false
+	return true
 
 
 static func _position(b: PackedByteArray, o: int, v: Vector3) -> int:
-	b.encode_s16(o, _s16(v.x * POSITION_SCALE))
-	b.encode_s16(o + 2, _s16(v.y * POSITION_SCALE))
-	b.encode_s16(o + 4, _s16(v.z * POSITION_SCALE))
+	b.encode_s16(o, clampi(roundi(v.x * POSITION_SCALE), -32768, 32767))
+	b.encode_s16(o + 2, clampi(roundi(v.y * POSITION_SCALE), -32768, 32767))
+	b.encode_s16(o + 4, clampi(roundi(v.z * POSITION_SCALE), -32768, 32767))
 	return o + 6
 
 
 static func _angles(b: PackedByteArray, o: int, v: Vector3) -> int:
-	b.encode_s16(o, _s16(wrapf(v.x, -PI, PI) * ANGLE_SCALE))
-	b.encode_s16(o + 2, _s16(wrapf(v.y, -PI, PI) * ANGLE_SCALE))
-	b.encode_s16(o + 4, _s16(wrapf(v.z, -PI, PI) * ANGLE_SCALE))
+	b.encode_s16(o, clampi(roundi(wrapf(v.x, -PI, PI) * ANGLE_SCALE), -32768, 32767))
+	b.encode_s16(o + 2, clampi(roundi(wrapf(v.y, -PI, PI) * ANGLE_SCALE), -32768, 32767))
+	b.encode_s16(o + 4, clampi(roundi(wrapf(v.z, -PI, PI) * ANGLE_SCALE), -32768, 32767))
 	return o + 6
 
 
 static func _direction(b: PackedByteArray, o: int, v: Vector3) -> int:
-	b.encode_s8(o, _s8(v.x * DIRECTION_SCALE))
-	b.encode_s8(o + 1, _s8(v.y * DIRECTION_SCALE))
-	b.encode_s8(o + 2, _s8(v.z * DIRECTION_SCALE))
+	b.encode_s8(o, clampi(roundi(v.x * DIRECTION_SCALE), -128, 127))
+	b.encode_s8(o + 1, clampi(roundi(v.y * DIRECTION_SCALE), -128, 127))
+	b.encode_s8(o + 2, clampi(roundi(v.z * DIRECTION_SCALE), -128, 127))
 	return o + 3
 
 
 static func _scalar(b: PackedByteArray, o: int, v: float) -> int:
-	b.encode_s16(o, _s16(v * SCALAR_SCALE))
+	b.encode_s16(o, clampi(roundi(v * SCALAR_SCALE), -32768, 32767))
 	return o + 2
 
 

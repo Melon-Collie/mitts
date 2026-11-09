@@ -448,3 +448,49 @@ func test_self_view_catch_up_depth_is_bounded_by_the_lead_ceiling() -> void:
 			SkaterMovementRules.ForwardResult.new())
 	var ceiling_m: float = 9.0 * NetworkManager.MAX_INPUT_LEAD_SEC + 0.1
 	assert_lt(d.length(), ceiling_m)
+
+
+# ── Claim-carried lead, bounded against the host's ping (#905) ──────────────
+
+func test_an_honest_lead_passes_unchanged() -> void:
+	var rtt: float = 80.0
+	var honest: float = (NetworkManager.INPUT_LEAD_SEC + rtt / 2000.0) * 1000.0
+	assert_almost_eq(LagCompRewind.plausible_input_lead_ms(honest, rtt), honest, 1e-6)
+
+
+func test_an_understated_lead_is_raised_to_the_link() -> void:
+	# The exploit: report the minimum lead to move the reach earlier.
+	var rtt: float = 120.0
+	var expected: float = (NetworkManager.INPUT_LEAD_SEC + rtt / 2000.0) * 1000.0
+	var bounded: float = LagCompRewind.plausible_input_lead_ms(
+			NetworkManager.INPUT_LEAD_SEC * 1000.0, rtt)
+	assert_gt(bounded, NetworkManager.INPUT_LEAD_SEC * 1000.0 + 1.0)
+	assert_lt(expected - bounded, 25.5, "held within the allowance of the link's lead")
+
+
+func test_an_overstated_lead_is_lowered_to_the_link() -> void:
+	var rtt: float = 20.0
+	var expected: float = (NetworkManager.INPUT_LEAD_SEC + rtt / 2000.0) * 1000.0
+	var bounded: float = LagCompRewind.plausible_input_lead_ms(
+			NetworkManager.MAX_INPUT_LEAD_SEC * 1000.0, rtt)
+	assert_lt(bounded - expected, 25.5)
+
+
+func test_no_ping_sample_leaves_the_lead_to_the_absolute_range() -> void:
+	assert_eq(LagCompRewind.plausible_input_lead_ms(40.0, 0.0), 40.0)
+
+
+func test_every_claim_rpc_bounds_the_lead_before_emitting() -> void:
+	var src: String = FileAccess.get_file_as_string("res://Scripts/networking/network_manager.gd")
+	var handlers: int = 0
+	var at: int = src.find("\nfunc receive_")
+	while at != -1:
+		var end: int = src.find("\nfunc ", at + 1)
+		var body: String = src.substr(at, end - at)
+		if body.contains("_claim_received.emit("):
+			handlers += 1
+			var bound_at: int = body.find("LagCompRewind.plausible_input_lead_ms(")
+			assert_gt(bound_at, -1, "%s emits a claim without bounding its lead" % body.split("(")[0].strip_edges())
+			assert_lt(bound_at, body.find("_claim_received.emit("))
+		at = src.find("\nfunc receive_", at + 1)
+	assert_eq(handlers, 5, "expected the five claim RPCs")

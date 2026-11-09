@@ -354,8 +354,7 @@ var _contact_latch_goalie: bool = false
 #
 # puck_stripped / puck_released stay synchronous: their listeners read call-scoped
 # transient state on the same stack (PuckController.stick_lift_forced_seconds, the
-# queued release velocity read by the dump-release check, the goalie reaction
-# back-date consumed by _on_puck_released).
+# queued release velocity read by the dump-release check).
 #
 # Preallocated parallel arrays (allocation-free per tick); each slot carries the
 # event type, up to two object refs and one float payload (current events use only

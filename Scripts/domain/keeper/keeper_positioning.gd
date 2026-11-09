@@ -420,3 +420,15 @@ static func crease_edge(out: Vector2) -> float:
 static func facing(at: Vector2, puck: Vector2) -> float:
 	var to: Vector2 = puck - at
 	return atan2(-to.x, -to.y)
+
+
+# His state on the wire (KeeperWire); `play` is his controller's, written there,
+# and the bodies and the screen are refilled for each read.
+func wire(w: KeeperWire) -> void:
+	zone = w.s8(zone)
+	post_side = w.s16(post_side, KeeperWire.MM)
+	_velocity = w.v2_16(_velocity, KeeperWire.SPEED)
+	_racing = w.bit(_racing)
+	planted = w.bit(planted)
+	kept_down = w.bit(kept_down)
+	_seal_turn = w.s32(_seal_turn, KeeperWire.ANGLE)

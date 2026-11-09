@@ -67,3 +67,9 @@ func step(dt: float, p: KeeperPose, at: Vector3) -> void:
 	p.chest_rot.y += trunk
 	p.neck_rot.y += yaw
 	p.head_rot.x += pitch
+
+
+func wire(w: KeeperWire) -> void:
+	yaw = w.s32(yaw, KeeperWire.ANGLE)
+	pitch = w.s32(pitch, KeeperWire.ANGLE)
+	trunk = w.s32(trunk, KeeperWire.ANGLE)

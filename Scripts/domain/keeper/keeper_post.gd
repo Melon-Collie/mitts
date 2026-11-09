@@ -276,3 +276,17 @@ static func _kneel_along(leg: KeeperPose.Leg, from: KeeperPose.Leg, to: KeeperPo
 	leg.foot_mode = KeeperPose.FootMode.ALONG_SHIN
 	leg.flex = lerpf(from.flex, to.flex, t)
 	leg.along_shin = 0.0
+
+
+# His state on the wire (KeeperWire); the stances are built once.
+func wire(w: KeeperWire) -> void:
+	x = w.s16(x, KeeperWire.MM)
+	z = w.s16(z, KeeperWire.MM)
+	yaw = w.s32(yaw, KeeperWire.ANGLE)
+	state = w.s8(state)
+	side = w.s16(side, KeeperWire.MM)
+	_from = w.v2_16(_from, KeeperWire.MM)
+	_to = w.v2_16(_to, KeeperWire.MM)
+	_yaw_from = w.s32(_yaw_from, KeeperWire.ANGLE)
+	_clock = w.s32(_clock, KeeperWire.MS)
+	_drop_in_s = w.s32(_drop_in_s, KeeperWire.MS)

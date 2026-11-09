@@ -40,3 +40,44 @@ func test_receive_claim_with_null_state_buffer_is_noop() -> void:
 	# wouldn't fire, but the lighter assertion is that nothing throws.
 	resolver.receive_claim(1, 2, 0.0, 75.0, 25.0)
 	assert_eq(hit_tracker._last_hit_time.size(), 0)
+
+
+# ── contact range ─────────────────────────────────────────────────────────────
+# The rewound bodies must be about touching: a modified client committed and
+# closing must not be credited from across a gap it never closed.
+
+const RADII_SUM: float = 0.7
+
+
+func test_touching_bodies_are_in_range() -> void:
+	assert_true(HitClaimResolver.in_contact_range(
+			Vector3.ZERO, Vector3(RADII_SUM, 0.0, 0.0), RADII_SUM))
+
+
+func test_the_reconstruction_slack_is_tolerated() -> void:
+	var at: Vector3 = Vector3(0.0, 0.0, RADII_SUM + HitClaimResolver.CONTACT_SLACK_M - 0.01)
+	assert_true(HitClaimResolver.in_contact_range(Vector3.ZERO, at, RADII_SUM))
+
+
+func test_a_body_two_metres_off_was_never_touched() -> void:
+	assert_false(HitClaimResolver.in_contact_range(
+			Vector3.ZERO, Vector3(2.0, 0.0, 0.0), RADII_SUM),
+			"two metres between centres is over a metre of open ice")
+
+
+func test_the_slack_stays_well_inside_a_body_width() -> void:
+	assert_lt(HitClaimResolver.CONTACT_SLACK_M, RADII_SUM,
+			"the slack is reconstruction error, not reach")
+
+
+func test_height_does_not_count() -> void:
+	assert_true(HitClaimResolver.in_contact_range(
+			Vector3.ZERO, Vector3(RADII_SUM, 3.0, 0.0), RADII_SUM))
+
+
+func test_a_locked_pin_pair_measures_along_the_boards_normal() -> void:
+	# Flat against the glass: an along-wall offset is not a gap.
+	var axis := Vector3(1.0, 0.0, 0.0)
+	var victim := Vector3(RADII_SUM, 0.0, 1.5)
+	assert_false(HitClaimResolver.in_contact_range(Vector3.ZERO, victim, RADII_SUM))
+	assert_true(HitClaimResolver.in_contact_range(Vector3.ZERO, victim, RADII_SUM, axis))

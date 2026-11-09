@@ -9,71 +9,21 @@ class_name ShotReleaseRules
 # PokeClaimResolver / HitClaimResolver) lives here as pure rules, and one-timer
 # eligibility is gated on server-visible puck state.
 #
-# Design rule: lag compensation is a privilege, the shot itself is not. A
-# stale or forged timestamp earns zero back-date / zero RTT advance rather
-# than rejecting the shot — a legit client during NTP warmup stamps 0 and must
-# still be able to shoot. Only the one-timer contact test can refuse a shot
-# outright, because firing one requires the swing to actually have met the puck.
+# Design rule: the shot itself is never refused for its timing — a legit client
+# during NTP warmup stamps 0 and must still be able to shoot. Only the one-timer
+# contact test can refuse a shot outright, because firing one requires the swing
+# to actually have met the puck.
 
 # The absolute age bound on any client-stamped claim, and the single source for
 # it: LagCompRewind.claim_is_fresh reads this constant, and the four claim
-# resolvers go through that. A release timestamp older than this earns no
-# lag-comp benefits.
+# resolvers go through that.
 const MAX_CLAIM_AGE_S: float = 0.2
-
-# Float-rounding slack on the age boundary. 0.2 isn't representable, so
-# `now - host_timestamp` for a stamp at exactly MAX_CLAIM_AGE_S can land an ULP
-# above it and wrongly reject an at-boundary claim. 1 µs is negligible against
-# the 200 ms window. Applied to both age comparisons so they agree at the edge.
-const _AGE_EPSILON_S: float = 0.000001
-
-# Hard ceiling on the claimed RTT used for the release-point forward advance.
-# Without it, a forged rtt_ms teleports the puck (direction * power * rtt/2)
-# arbitrarily far downfield on every shot.
-const MAX_RTT_MS: float = 300.0
-# The claimed RTT may exceed the host's own measurement of that peer by this
-# factor plus slack (the client's latest unaveraged sample legitimately spikes
-# above the smoothed host-side ping).
-const RTT_MEASURED_HEADROOM: float = 1.5
-const RTT_MEASURED_SLACK_MS: float = 30.0
 
 # Legit lofted shots cap the pre-normalization Y/XZ ratio at
 # ShotMechanics.MAX_LOFT_RATIO (1.0 = 45°), i.e. a normalized direction y of
 # ~0.707. 0.75 leaves headroom for float noise while still blocking
 # near-vertical forged directions.
 const MAX_DIRECTION_Y: float = 0.75
-
-
-# Clamp a client-claimed RTT against the host's own measurement of that peer.
-# `host_measured_ms <= 0` means no sample yet (just connected) — fall back to
-# the hard ceiling only.
-static func clamp_rtt_ms(claimed_ms: float, host_measured_ms: float) -> float:
-	if not is_finite(claimed_ms):
-		return 0.0
-	var ceiling: float = MAX_RTT_MS
-	if host_measured_ms > 0.0:
-		ceiling = minf(host_measured_ms * RTT_MEASURED_HEADROOM + RTT_MEASURED_SLACK_MS, MAX_RTT_MS)
-	return clampf(claimed_ms, 0.0, ceiling)
-
-
-# Goalie-reaction back-date for a release stamped `host_timestamp`, evaluated
-# at host time `now`. Future stamps and stamps older than MAX_CLAIM_AGE_S
-# (forged, or the pre-warmup zero stamp) earn zero back-date.
-static func clamp_back_date(now: float, host_timestamp: float) -> float:
-	if not is_finite(host_timestamp):
-		return 0.0
-	var elapsed: float = now - host_timestamp
-	if elapsed < 0.0 or elapsed > MAX_CLAIM_AGE_S + _AGE_EPSILON_S:
-		return 0.0
-	return elapsed
-
-
-# Whether a release timestamp is fresh enough to drive a state-buffer rewind.
-static func is_timestamp_fresh(now: float, host_timestamp: float) -> bool:
-	if not is_finite(host_timestamp):
-		return false
-	var elapsed: float = now - host_timestamp
-	return elapsed >= 0.0 and elapsed <= MAX_CLAIM_AGE_S + _AGE_EPSILON_S
 
 
 # Normalize a client-supplied shot direction and clamp its elevation angle.
@@ -170,14 +120,16 @@ static func one_timer_claim_is_stale(claim_host_timestamp: float, puck_last_play
 # broadcast interval is slack against ping-estimate error, and it is deliberately
 # one-sided: too little grace eats shots, too much only leaves the host briefly
 # still holding a wind-up the client dropped, which the next broadcast settles.
-# Clamped so a garbage ping reading can't hold a wind-up open indefinitely.
+# Clamped so a garbage ping reading can't hold a wind-up open indefinitely. Only
+# a remote carrier takes a grace at all (RemoteController), so a ping reading 0 —
+# no sample yet, or a sub-millisecond LAN link — still leaves the lead and the
+# broadcast slack to cover: the trip is what is unknown, not the offset.
 const ONE_TIMER_WINDOW_GRACE_MAX_S: float = 0.30
 
 static func one_timer_window_grace(peer_rtt_ms: float, input_lead_s: float,
 		broadcast_interval_s: float) -> float:
-	if not is_finite(peer_rtt_ms) or peer_rtt_ms <= 0.0:
-		return 0.0
-	return clampf(peer_rtt_ms / 2000.0 + input_lead_s + broadcast_interval_s,
+	var rtt_ms: float = maxf(peer_rtt_ms, 0.0) if is_finite(peer_rtt_ms) else 0.0
+	return clampf(rtt_ms / 2000.0 + input_lead_s + broadcast_interval_s,
 			0.0, ONE_TIMER_WINDOW_GRACE_MAX_S)
 
 

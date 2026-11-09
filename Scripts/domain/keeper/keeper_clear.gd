@@ -110,3 +110,9 @@ static func _nearest(at: Vector2, opponents: PackedVector2Array) -> Vector2:
 		if o.distance_to(at) < best.distance_to(at):
 			best = o
 	return best
+
+
+# The way the clear under way sends the puck, on the wire (KeeperWire); the rest
+# is its plan, made afresh.
+func wire(w: KeeperWire) -> void:
+	way = w.v2_16(way, KeeperWire.ANGLE)

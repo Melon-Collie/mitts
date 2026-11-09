@@ -57,6 +57,10 @@ signal join_rejected(reason: String)
 signal peer_joined(peer_id: int)
 signal peer_disconnected(peer_id: int)
 signal world_state_received(data: PackedByteArray)
+# Client: the goalies' whole sim states a snapshot carried (KeeperWireTail),
+# with its host capture time and sequence; emitted just before
+# world_state_received.
+signal keeper_wire_received(tail: PackedByteArray, host_ts: float, seq: int)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
 signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes, from_spectator: bool)
 signal existing_players_synced(player_data: Array)
@@ -97,6 +101,8 @@ signal player_ready_changed(peer_id: int, is_ready: bool)
 signal bot_slot_changed(slot_key: int, is_bot: bool)
 signal bot_slots_synced(bot_slots: Dictionary)
 signal rematch_vote_changed(peer_id: int, vote: int)
+# Host: a remote peer's vote, before GameManager decides whether it counts.
+signal rematch_vote_requested(peer_id: int, vote: int)
 signal rematch_voters_changed(total: int)
 signal clock_ready
 signal pickup_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, blade_curr: Vector3, blade_prev: Vector3)
@@ -310,9 +316,19 @@ const _KICK_FLUSH_DELAY_S: float = 0.5
 # flowing. Bots never enter here (no real connection); offline mode stays empty.
 var _peer_last_seen: Dictionary[int, float] = {}
 const _PEER_LIVENESS_TIMEOUT_S: float = 5.0
+# A peer told to change scene loads it synchronously and sends nothing until it
+# is done, which a slow machine can take longer than the timeout to do. Its
+# liveness clock is pushed this far ahead when it is told, and traffic only ever
+# moves the clock forward — packets already in flight when the grace is granted
+# would otherwise wipe it before the load began. A peer that dies mid-load is
+# still dropped once the grace runs out.
+const _PEER_LOAD_GRACE_S: float = 30.0
 # Callable () -> Array. Set by GameManager at startup so the broadcast loop
 # can pull world state without reaching up into the application layer.
 var _world_state_provider: Callable = Callable()
+# Callable (body: PackedByteArray) -> void, set by GameManager: appends the
+# goalies' sim states to an outgoing snapshot body (KeeperWireTail.append).
+var _keeper_wire_provider: Callable = Callable()
 # Callable (batch_frames: int) -> Array[InputState]. Set by GameManager when the
 # local player spawns; the input-tick poll uses it to gather a batch without
 # holding a controller reference.
@@ -341,6 +357,12 @@ var _sim_started: bool = false
 # connections and their seq watermarks alive, and restarting the seq would make
 # them silently drop every event of the next match.
 var _event_log: SnapshotEventLog = SnapshotEventLog.new()
+# Snapshot deltas (SnapshotDelta): the host's ring and each peer's newest acked
+# snapshot, the client's ring. Connection-scoped like the event log: reset()
+# replaces them, prepare_for_new_game() does not.
+var _delta_sender := SnapshotDelta.Sender.new()
+var _delta_receiver := SnapshotDelta.Receiver.new()
+var _peer_snapshot_acks: Dictionary = {}
 # Stored once so the client receive path doesn't allocate a bound
 # Callable per packet.
 var _snapshot_event_dispatch: Callable = _dispatch_snapshot_event
@@ -372,8 +394,9 @@ var _last_ws_arrival_time: float = -1.0
 # vs the synced host clock, NOT the raw inter-arrival gap, so relay clumping
 # barely moves it. This de-clumped spread is the jitter cushion fed into the
 # interp-delay target (_compute_target_interpolation_delay) as well as the F3
-# "Delay spread" readout.
-var _pdv_floor: float = -1.0
+# "Delay spread" readout. The floor starts unset (INF), never at a sentinel a
+# measured delay can reach: clock-sync error makes a LAN delay negative.
+var _pdv_floor: float = INF
 var _pdv_mean: float = 0.0
 var _pdv_dev: float = 0.0
 # get_target_interpolation_delay() per-physics-frame cache (see that function).
@@ -399,6 +422,10 @@ var pending_reconnect_lobby_id: int = 0
 var pending_session_end_reason: String = ""
 
 var _input_timer: float = 0.0
+var _snapshot_ack_timer: float = 0.0
+# A third of a broadcast-window ack lag (SnapshotDelta.MAX_BASELINE_AGE at 45 Hz
+# is ~0.7 s).
+const _SNAPSHOT_ACK_INTERVAL_S: float = 1.0 / 15.0
 # Broadcast cadence. Counter ticks here every physics frame (see
 # `_physics_process`); the broadcast call itself fires from `try_broadcast`,
 # invoked end-of-tick by GameManager._capture_and_broadcast_post_physics
@@ -413,14 +440,15 @@ var _connect_timer: float = -1.0
 var input_delta: float = 1.0 / Constants.INPUT_RATE
 var state_delta: float = 1.0 / Constants.STATE_RATE
 # Number of physics ticks between broadcasts. PHYSICS_TICK / STATE_RATE
-# (120/60 = 2 — every other tick). Recomputed by `set_broadcast_rate`, a runtime
+# (90/45 = 2 — every other tick). Recomputed by `set_broadcast_rate`, a runtime
 # knob with no callers today, kept for future congestion response; the cadence
 # must not be downshifted per phase, since the client jitter window assumes
 # STATE_RATE packet spacing. Stall resilience: on a host main-thread freeze
 # Godot's physics catch-up fires several back-to-back ticks, the counter
-# increments for each, and try_broadcast() fires per tick — so clients get the
-# multiple distinct host_timestamps they need to interpolate through the gap
-# instead of one snap.
+# increments for each, and try_broadcast() fires per tick — so clients get one
+# snapshot per eligible tick instead of one snap. Their millisecond labels can
+# coincide inside one frame; the skater and puck buffers keep the later of a
+# tie (BufferedStateInterpolator.intake).
 var _state_tick_divisor: int = Constants.PHYSICS_TICK / Constants.STATE_RATE
 const CONNECT_TIMEOUT: float = 10.0
 
@@ -754,6 +782,7 @@ func _on_peer_disconnected(id: int) -> void:
 	_peer_rtt_ema_ms.erase(id)
 	_peer_loss_rates.erase(id)
 	_peer_input_watermarks.erase(id)
+	_peer_snapshot_acks.erase(id)
 	_claim_rate_window_start.erase(id)
 	_claim_rate_count.erase(id)
 	_input_rate_window_start.erase(id)
@@ -832,10 +861,11 @@ func _close() -> void:
 	if is_instance_valid(SteamManager):
 		SteamManager.leave_lobby()
 
+# The host's ping to each peer is a property of the link, not the match, so it
+# survives here (reset() and a disconnect clear it): cleared, every reader saw
+# "no sample" until the next ping two seconds into the new match.
 func prepare_for_new_game() -> void:
 	_input_batch_provider = Callable()
-	_peer_ping_ms.clear()
-	_peer_rtt_ema_ms.clear()
 	_peer_loss_rates.clear()
 	_peer_input_watermarks.clear()
 	_claim_rate_window_start.clear()
@@ -854,7 +884,7 @@ func prepare_for_new_game() -> void:
 	packet_loss_pct = 0.0
 	_jitter_samples.clear()
 	_last_ws_arrival_time = -1.0
-	_pdv_floor = -1.0
+	_pdv_floor = INF
 	_pdv_mean = 0.0
 	_pdv_dev = 0.0
 	_interp_delay = Constants.NETWORK_INTERPOLATION_DELAY
@@ -945,11 +975,14 @@ func reset() -> void:
 	_input_rate_count.clear()
 	_jitter_samples.clear()
 	_last_ws_arrival_time = -1.0
-	_pdv_floor = -1.0
+	_pdv_floor = INF
 	_pdv_mean = 0.0
 	_pdv_dev = 0.0
 	_interp_delay = Constants.NETWORK_INTERPOLATION_DELAY
 	_event_log = SnapshotEventLog.new()
+	_delta_sender.reset()
+	_delta_receiver.reset()
+	_peer_snapshot_acks.clear()
 	NetworkSimManager.clear_pending()
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -957,8 +990,9 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
 		if is_host:
 			# Immediately resync clients — they've been without world state for the
-			# duration of the OS freeze.
-			_broadcast_state()
+			# duration of the OS freeze. Not during a replay: the host sends none.
+			if not _replay_mode:
+				_broadcast_state()
 		else:
 			# Reset the input timer so we don't burst-send stale inputs.
 			_input_timer = 0.0
@@ -1035,8 +1069,8 @@ func _process(delta: float) -> void:
 	if not is_host and _input_batch_provider.is_valid():
 		_input_timer += capped_delta
 		if _input_timer >= input_delta:
-			# One batch per _process call, so below 120 fps the remainder can only
-			# grow — cap it at one interval or a long sub-120 fps stretch banks
+			# One batch per _process call, so below INPUT_RATE fps the remainder can
+			# only grow — cap it at one interval or a long low-fps stretch banks
 			# minutes of "owed" sends and the client double-sends (one per render
 			# frame) long after the frame rate recovers. The 12/24-frame batch
 			# redundancy already covers the low-fps cadence itself.
@@ -1046,21 +1080,30 @@ func _process(delta: float) -> void:
 			_input_batch_provider.call(batch, batch_frames)
 			# Pre-sized once and written at offsets, rather than append_array-ing a
 			# fresh PackedByteArray per input (a throwaway buffer per input per
-			# batch, plus a realloc per append, 120x/s).
+			# batch, plus a realloc per append, INPUT_RATE times a second).
 			var buf: PackedByteArray = _input_batch_buf
-			buf.resize(3 + batch.size() * InputState.BYTES_SIZE)
+			buf.resize(INPUT_BATCH_HEADER + batch.size() * InputState.BYTES_SIZE)
 			# u16 client-measured downstream loss in basis points (0..10000 = 0..100%),
 			# u8 count. The client's own WS-seq-gap loss is authoritative for the
 			# host->client link, so the host stores it directly instead of re-deriving
 			# loss from an undersampled seq echo (see _peer_loss_rates).
 			buf.encode_u16(0, clampi(roundi(packet_loss_pct * 100.0), 0, 65535))
 			buf.encode_u8(2, batch.size())
+			# The newest snapshot this client rebuilt: the host's delta baseline.
+			buf.encode_u8(3, 1 if _delta_receiver.newest_seq >= 0 else 0)
+			buf.encode_u16(4, maxi(_delta_receiver.newest_seq, 0))
 			for i: int in batch.size():
-				batch[i].write_bytes(buf, 3 + i * InputState.BYTES_SIZE)
+				batch[i].write_bytes(buf, INPUT_BATCH_HEADER + i * InputState.BYTES_SIZE)
 			NetworkTelemetry.record_input_sent()
-			# rpc_id encodes the buffer into the packet synchronously, so reusing
-			# it on the next send is safe.
-			receive_input_batch.rpc_id(1, buf)
+			receive_input_batch.rpc_id(1, WirePacking.pack(buf, WirePacking.INPUT_MODE))
+	# A spectator sends no input batches, so its snapshot ack (the host's delta
+	# baseline) rides its own message, often enough to stay well inside the
+	# host's baseline window.
+	elif not is_host and _delta_receiver.newest_seq >= 0:
+		_snapshot_ack_timer += capped_delta
+		if _snapshot_ack_timer >= _SNAPSHOT_ACK_INTERVAL_S:
+			_snapshot_ack_timer = 0.0
+			receive_snapshot_ack.rpc_id(1, _delta_receiver.newest_seq)
 
 	if not is_host:
 		_ws_loss_window_timer += capped_delta
@@ -1101,7 +1144,7 @@ func is_broadcast_due() -> bool:
 # Invoked end-of-tick by GameManager._capture_and_broadcast_post_physics, right
 # after StateBufferManager.capture(). The cadence counter advances in
 # `_physics_process` whether or not this runs, so a host stall's physics catch-up
-# still emits one broadcast per eligible tick with distinct host_timestamps.
+# still emits one broadcast per eligible tick.
 func try_broadcast() -> void:
 	if not is_host:
 		return
@@ -1127,15 +1170,34 @@ func _broadcast_state() -> void:
 		return
 	if is_offline_mode:
 		return
-	# Redundant carrier events ride the tail of every snapshot (SnapshotEventLog).
-	# PackedByteArray is copy-on-write, so this append can't mutate the replay
-	# recorder/file-writer copies taken inside get_world_state — replay frames
-	# stay event-free and decode_for_replay never sees the block.
-	_event_log.append_block(state, local_time())
+	# The goalies' sim states ride behind the recorded snapshot, inside the delta
+	# body (KeeperWireTail). Each keeper snaps his own state to his blob as it is
+	# written, so this runs only here, online: offline play never meets the wire.
+	# It runs at the end of the tick the snapshot captures (PostPhysicsNetHook,
+	# after every actor and the puck), the instant a client re-seeds from, so the
+	# host goes on from exactly the state the client rebuilds.
+	var body: PackedByteArray = state.duplicate()
+	if _keeper_wire_provider.is_valid():
+		_keeper_wire_provider.call(body)
+	else:
+		var no_goalies: Array[GoalieController] = []
+		KeeperWireTail.append(body, no_goalies)
+	# Redundant carrier events ride the tail of every snapshot (SnapshotEventLog),
+	# after the delta body: they change every packet and never take part in it.
+	var events := PackedByteArray()
+	_event_log.append_block(events, local_time())
+	_delta_sender.begin(body)
 	NetworkTelemetry.record_world_state_sent()
+	# Peers acked to the same snapshot get the same packet.
+	var packed_by_ack: Dictionary = {}
 	for peer_id in connected_peer_ids():
-		receive_world_state.rpc_id(peer_id, state)
-		NetworkTelemetry.record_bytes_sent(state.size())
+		var ack: int = _peer_snapshot_acks.get(peer_id, -1)
+		if not packed_by_ack.has(ack):
+			packed_by_ack[ack] = WirePacking.pack(
+					_delta_sender.packet_for(ack, events), WirePacking.SNAPSHOT_MODE)
+		var packed: PackedByteArray = packed_by_ack[ack]
+		receive_world_state.rpc_id(peer_id, packed)
+		NetworkTelemetry.record_bytes_sent(packed.size())
 
 # ── RPCs ──────────────────────────────────────────────────────────────────────
 @rpc("any_peer", "reliable")
@@ -1389,18 +1451,24 @@ func apply_local_attributes(attrs: PlayerAttributes) -> void:
 	local_attributes_changed.emit(attrs)
 
 
-# Cap on inputs per RPC. Matches the host queue depth in RemoteController so a
-# malicious peer can't force the loop into hundreds of failed decode iterations
-# by claiming count=255 with a short payload.
+# u16 downstream loss, u8 count, u8 has-ack, u16 newest rebuilt snapshot; then
+# the inputs.
+const INPUT_BATCH_HEADER: int = 6
+
+# Cap on inputs per RPC, well above the 24-frame redundant window a client
+# sends, so a malicious peer can't force the loop into hundreds of failed decode
+# iterations by claiming count=255 with a short payload.
 const _MAX_INPUTS_PER_BATCH: int = 120
 
 @rpc("any_peer", "unreliable_ordered")
 func receive_input_batch(data: PackedByteArray) -> void:
+	if not is_host:
+		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	# Liveness: stamp actual receipt time (before any NetworkSimManager delay).
-	if is_host and _peer_last_seen.has(sender_id):
-		_peer_last_seen[sender_id] = local_time()
-	if is_host and not _rate_ok(sender_id, _INPUT_BATCH_RATE_CAP_PER_S,
+	if _peer_last_seen.has(sender_id):
+		_peer_last_seen[sender_id] = maxf(_peer_last_seen[sender_id], local_time())
+	if not _rate_ok(sender_id, _INPUT_BATCH_RATE_CAP_PER_S,
 			_input_rate_window_start, _input_rate_count):
 		return
 	# Branch rather than hand NetworkSimManager a closure: with the sim disabled
@@ -1412,19 +1480,23 @@ func receive_input_batch(data: PackedByteArray) -> void:
 		_apply_input_batch(data, sender_id)
 
 
-func _apply_input_batch(d: PackedByteArray, sid: int) -> void:
-	if d.size() < 3:
+func _apply_input_batch(packed: PackedByteArray, sid: int) -> void:
+	var d: PackedByteArray = WirePacking.unpack(packed, WirePacking.INPUT_MAX_RAW,
+			WirePacking.INPUT_MODE)
+	if d.size() < INPUT_BATCH_HEADER:
 		return
 	# Client-reported downstream loss (basis points) — stored verbatim as
 	# this peer's link loss (see _peer_loss_rates).
 	_peer_loss_rates[sid] = float(d.decode_u16(0)) / 100.0
+	if d.decode_u8(3) == 1:
+		_note_snapshot_ack(sid, d.decode_u16(4))
 	var count: int = d.decode_u8(2)
 	if count > _MAX_INPUTS_PER_BATCH:
 		push_warning("oversized input batch from peer %d: count=%d" % [sid, count])
 		return
 	# Clients ship a redundant trailing window (12-24 frames) so a lost packet is
-	# covered by the next one — at 120 batches/s that makes ~119 of every 120
-	# records a duplicate the consumer's dedupe throws away. Peek each record's
+	# covered by the next one — with one new frame per batch, all but one of the
+	# 12-24 records is a duplicate the consumer's dedupe throws away. Peek each record's
 	# host_timestamp (u32 at offset 0 of the record) against the watermark the
 	# consumer reported and skip the decode entirely for stamps it already knows,
 	# instead of allocating an InputState per record and discarding it one call
@@ -1433,13 +1505,32 @@ func _apply_input_batch(d: PackedByteArray, sid: int) -> void:
 	var watermark: int = _peer_input_watermarks.get(sid, -1)
 	var inputs: Array[InputState] = []
 	for i: int in count:
-		var off: int = 3 + i * InputState.BYTES_SIZE
+		var off: int = INPUT_BATCH_HEADER + i * InputState.BYTES_SIZE
 		if off + InputState.BYTES_SIZE > d.size():
 			break
 		if d.decode_u32(off) <= watermark:
 			continue
 		inputs.append(InputState.from_bytes(d, off))
 	input_batch_received.emit(sid, inputs)
+
+
+# A spectator's newest rebuilt snapshot: what an input batch carries for a player.
+@rpc("any_peer", "unreliable")
+func receive_snapshot_ack(seq: int) -> void:
+	if not is_host:
+		return
+	var sid: int = multiplayer.get_remote_sender_id()
+	if not _rate_ok(sid, _INPUT_BATCH_RATE_CAP_PER_S, _input_rate_window_start, _input_rate_count):
+		return
+	_note_snapshot_ack(sid, seq & SnapshotDelta.SEQ_MASK)
+
+
+# A peer's newest rebuilt snapshot, from its input batch. Kept only if newer:
+# batches arrive unordered and an older ack would only shrink the baseline age.
+func _note_snapshot_ack(peer_id: int, seq: int) -> void:
+	var prev: int = _peer_snapshot_acks.get(peer_id, -1)
+	if prev < 0 or SnapshotDelta.seq_ahead(seq, prev) > 0:
+		_peer_snapshot_acks[peer_id] = seq
 
 
 # The newest input stamp a peer's RemoteController has already processed or
@@ -1465,7 +1556,16 @@ func receive_world_state(data: PackedByteArray) -> void:
 		_apply_world_state(data)
 
 
-func _apply_world_state(s: PackedByteArray) -> void:
+func _apply_world_state(packed: PackedByteArray) -> void:
+	var s: PackedByteArray = _delta_receiver.read(WirePacking.unpack(
+			packed, WirePacking.SNAPSHOT_MAX_RAW, WirePacking.SNAPSHOT_MODE))
+	if s.is_empty():
+		return
+	var keepers_at: Vector2i = KeeperWireTail.bounds(s)
+	if keepers_at.x < 0:
+		return
+	var keepers: PackedByteArray = s.slice(keepers_at.x, keepers_at.y)
+	s = KeeperWireTail.without(s, keepers_at)
 	var now: float = local_time()
 	if _last_ws_arrival_time > 0.0:
 		var expected_interval: float = 1.0 / Constants.STATE_RATE
@@ -1485,8 +1585,10 @@ func _apply_world_state(s: PackedByteArray) -> void:
 		NetworkTelemetry.record_ws_arrival_gap(gap * 1000.0)
 	_last_ws_arrival_time = now
 	# PDV delay vs the synced host clock, off the world-state header's
-	# host_capture_time. Clumping barely moves this, unlike the gap above.
-	if is_clock_ready() and s.size() >= WorldStateCodec.WS_HOST_TIME_OFFSET + 4:
+	# host_capture_time. Clumping barely moves this, unlike the gap above. Not in
+	# replay: estimated_host_time() is the clip's clock there, seconds in the past.
+	if is_clock_ready() and not _replay_mode \
+			and s.size() >= WorldStateCodec.WS_HOST_TIME_OFFSET + 4:
 		_record_packet_delay(estimated_host_time()
 				- float(s.decode_u32(WorldStateCodec.WS_HOST_TIME_OFFSET))
 				/ Constants.TIME_WIRE_SCALE)
@@ -1502,7 +1604,10 @@ func _apply_world_state(s: PackedByteArray) -> void:
 	# guarantee than the reliable-RPC-vs-unreliable-snapshot race).
 	_event_log.apply_block(s, multiplayer.get_unique_id(), _snapshot_event_dispatch)
 	NetworkTelemetry.record_world_state()
-	NetworkTelemetry.record_bytes_received(s.size())
+	NetworkTelemetry.record_bytes_received(packed.size())
+	if s.size() >= WorldStateCodec.WS_HOST_TIME_OFFSET + 4:
+		keeper_wire_received.emit(keepers, float(s.decode_u32(WorldStateCodec.WS_HOST_TIME_OFFSET))
+				/ Constants.TIME_WIRE_SCALE, s.decode_u16(WorldStateCodec.WS_SEQUENCE_OFFSET))
 	world_state_received.emit(s)
 
 # ── Clock Sync ────────────────────────────────────────────────────────────────
@@ -1512,7 +1617,7 @@ func send_ping(client_send_time: float) -> void:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	if _peer_last_seen.has(peer_id):
-		_peer_last_seen[peer_id] = local_time()
+		_peer_last_seen[peer_id] = maxf(_peer_last_seen[peer_id], local_time())
 	NetworkSimManager.send(
 		func(cst: float, pid: int) -> void:
 			receive_pong.rpc_id(pid, cst, local_time()),
@@ -1604,8 +1709,8 @@ func notify_pickup_claim_rejected() -> void:
 # StateBufferManager world-snapshot reconstructions and every input batch a
 # decode loop, so a modified client spamming them is a CPU lever. Caps sit
 # well above legitimate maxima (claims: client floors allow ~20/s per type →
-# 60/s combined headroom; input batches: ≤120/s by the send-timer clamp →
-# 200/s headroom) and drop silently beyond — a legit client can never hit them.
+# 60/s combined headroom; input batches: ≤INPUT_RATE (90/s) by the send-timer
+# clamp → 200/s headroom) and drop silently beyond — a legit client can never hit them.
 const _CLAIM_RATE_CAP_PER_S: int = 60
 const _INPUT_BATCH_RATE_CAP_PER_S: int = 200
 var _claim_rate_window_start: Dictionary[int, float] = {}
@@ -1650,6 +1755,8 @@ func receive_pickup_claim(host_timestamp: float, interp_delay_ms: float, input_l
 		NetworkTelemetry.record_claim_stamp_reject()
 		send_pickup_claim_nack(peer_id)
 		return
+	input_lead_ms = LagCompRewind.plausible_input_lead_ms(input_lead_ms,
+			float(get_peer_ping_ms(peer_id)))
 	pickup_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, blade_curr, blade_prev)
 
 func send_poke_claim(host_timestamp: float, interp_delay_ms: float, expected_carrier_peer_id: int,
@@ -1670,6 +1777,8 @@ func receive_poke_claim(host_timestamp: float, interp_delay_ms: float, input_lea
 	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(peer_id))):
 		NetworkTelemetry.record_claim_stamp_reject()
 		return
+	input_lead_ms = LagCompRewind.plausible_input_lead_ms(input_lead_ms,
+			float(get_peer_ping_ms(peer_id)))
 	poke_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, expected_carrier_peer_id, blade_curr, blade_prev)
 
 func send_stick_lift_claim(host_timestamp: float, interp_delay_ms: float, expected_carrier_peer_id: int,
@@ -1690,6 +1799,8 @@ func receive_stick_lift_claim(host_timestamp: float, interp_delay_ms: float, inp
 	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(peer_id))):
 		NetworkTelemetry.record_claim_stamp_reject()
 		return
+	input_lead_ms = LagCompRewind.plausible_input_lead_ms(input_lead_ms,
+			float(get_peer_ping_ms(peer_id)))
 	stick_lift_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, expected_carrier_peer_id, blade_curr)
 
 func send_stick_tie_claim(host_timestamp: float, interp_delay_ms: float, target_peer_id: int,
@@ -1710,6 +1821,8 @@ func receive_stick_tie_claim(host_timestamp: float, interp_delay_ms: float, inpu
 	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(peer_id))):
 		NetworkTelemetry.record_claim_stamp_reject()
 		return
+	input_lead_ms = LagCompRewind.plausible_input_lead_ms(input_lead_ms,
+			float(get_peer_ping_ms(peer_id)))
 	stick_tie_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id, blade_curr)
 
 func send_hit_claim(victim_peer_id: int, host_timestamp: float, interp_delay_ms: float) -> void:
@@ -1729,6 +1842,8 @@ func receive_hit_claim(victim_peer_id: int, host_timestamp: float, interp_delay_
 	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(hitter_peer_id))):
 		NetworkTelemetry.record_claim_stamp_reject()
 		return
+	input_lead_ms = LagCompRewind.plausible_input_lead_ms(input_lead_ms,
+			float(get_peer_ping_ms(hitter_peer_id)))
 	hit_claim_received.emit(hitter_peer_id, victim_peer_id, host_timestamp, interp_delay_ms, input_lead_ms)
 
 func start_replay_mode(initial_ts: float) -> void:
@@ -2285,7 +2400,11 @@ func send_player_ready(is_ready: bool) -> void:
 func request_rematch_vote(vote: int) -> void:
 	if not is_host:
 		return
-	var peer_id: int = multiplayer.get_remote_sender_id()
+	rematch_vote_requested.emit(multiplayer.get_remote_sender_id(), vote)
+
+# Host: puts a vote in every peer's pool. A remote's vote reaches here only
+# through GameManager's gate on rematch_vote_requested.
+func relay_rematch_vote(peer_id: int, vote: int) -> void:
 	for remote_id: int in connected_peer_ids():
 		notify_rematch_vote.rpc_id(remote_id, peer_id, vote)
 	rematch_vote_changed.emit(peer_id, vote)
@@ -2296,10 +2415,7 @@ func notify_rematch_vote(peer_id: int, vote: int) -> void:
 
 func send_rematch_vote(vote: int) -> void:
 	if is_host:
-		var peer_id: int = local_peer_id()
-		for remote_id: int in connected_peer_ids():
-			notify_rematch_vote.rpc_id(remote_id, peer_id, vote)
-		rematch_vote_changed.emit(peer_id, vote)
+		relay_rematch_vote(local_peer_id(), vote)
 	else:
 		request_rematch_vote.rpc_id(1, vote)
 
@@ -2351,6 +2467,7 @@ func send_join_in_progress(peer_id: int, config: Dictionary) -> void:
 	var rs: int = config.get("rule_set", pending_rule_set)
 	var gid: String = config.get("game_id", "")
 	var ts: int = config.get("team_size", pending_team_size)
+	_grant_load_grace(peer_id)
 	notify_join_in_progress.rpc_id(peer_id,
 		config.num_periods, config.period_duration,
 		config.ot_enabled, config.ot_duration, hslot, aslot, rs, gid, ts)
@@ -2386,6 +2503,12 @@ func sync_lobby_roster(roster: Array) -> void:
 	pending_lobby_roster = roster
 	lobby_roster_synced.emit(roster)
 
+func _grant_load_grace(peer_id: int) -> void:
+	if _peer_last_seen.has(peer_id):
+		_peer_last_seen[peer_id] = maxf(_peer_last_seen[peer_id],
+				local_time() + _PEER_LOAD_GRACE_S)
+
+
 func send_game_start(config: Dictionary) -> void:
 	var hslot: int = int(config.get("home_color_slot", TeamColorRegistry.DEFAULT_HOME_SLOT))
 	var aslot: int = int(config.get("away_color_slot", TeamColorRegistry.DEFAULT_AWAY_SLOT))
@@ -2397,6 +2520,7 @@ func send_game_start(config: Dictionary) -> void:
 	pending_rule_set = rs
 	pending_team_size = ts
 	for peer_id: int in connected_peer_ids():
+		_grant_load_grace(peer_id)
 		notify_game_start.rpc_id(peer_id,
 			config.num_periods, config.period_duration,
 			config.ot_enabled, config.ot_duration, hslot, aslot, rs, gid, ts)
@@ -2555,6 +2679,7 @@ func notify_return_to_lobby(roster: Array) -> void:
 
 func send_return_to_lobby_to_all(roster: Array) -> void:
 	for peer_id: int in connected_peer_ids():
+		_grant_load_grace(peer_id)
 		notify_return_to_lobby.rpc_id(peer_id, roster)
 	pending_lobby_roster = roster
 	return_to_lobby_received.emit(roster)
@@ -2575,7 +2700,7 @@ func get_jitter_p95() -> float:
 func _record_packet_delay(d: float) -> void:
 	const GAIN: float = 0.125       # Jacobson 1/8: ~8-sample memory, spike decays geometrically
 	const FLOOR_RISE: float = 0.01
-	if _pdv_floor < 0.0 or d < _pdv_floor:
+	if d < _pdv_floor:
 		_pdv_floor = d
 	else:
 		_pdv_floor += (d - _pdv_floor) * FLOOR_RISE
@@ -2589,7 +2714,7 @@ func get_packet_delay_spread_ms() -> float:
 	return (_pdv_mean + 4.0 * _pdv_dev) * 1000.0
 
 func get_packet_delay_floor_ms() -> float:
-	return maxf(_pdv_floor, 0.0) * 1000.0
+	return maxf(_pdv_floor, 0.0) * 1000.0 if is_finite(_pdv_floor) else 0.0
 
 func get_target_interpolation_delay() -> float:
 	# Cached once per physics frame: get_jitter_p95() duplicates + sorts the sample
@@ -2678,6 +2803,9 @@ func _on_ws_sequence_received(seq: int) -> void:
 # ── Registration ──────────────────────────────────────────────────────────────
 func set_world_state_provider(provider: Callable) -> void:
 	_world_state_provider = provider
+
+func set_keeper_wire_provider(provider: Callable) -> void:
+	_keeper_wire_provider = provider
 
 func set_input_batch_provider(provider: Callable) -> void:
 	_input_batch_provider = provider

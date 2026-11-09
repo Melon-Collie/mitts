@@ -540,3 +540,35 @@ func _falling_pose(p: KeeperPose, down: float) -> void:
 	push.knee_pole = push.knee_pole.lerp(launch.legs[_push_leg()].knee_pole, down)
 	push.shin_front = push.shin_front.lerp(launch.legs[_push_leg()].shin_front, down).normalized()
 	push.ankle.x -= _side * _along
+
+
+# His state on the wire (KeeperWire); the stances are built once.
+func wire(w: KeeperWire) -> void:
+	fall = w.s16(fall, KeeperWire.FRACTION)
+	x = w.s16(x, KeeperWire.MM)
+	z = w.s16(z, KeeperWire.MM)
+	yaw = w.s32(yaw, KeeperWire.ANGLE)
+	speed = w.s16(speed, KeeperWire.SPEED)
+	phase = w.s8(phase)
+	_side = w.s16(_side, KeeperWire.MM)
+	_origin = w.v2_16(_origin, KeeperWire.MM)
+	_heading = w.v2_16(_heading, KeeperWire.ANGLE)
+	_yaw_from = w.s32(_yaw_from, KeeperWire.ANGLE)
+	_yaw_to = w.s32(_yaw_to, KeeperWire.ANGLE)
+	_along = w.s16(_along, KeeperWire.MM)
+	_target = w.s16(_target, KeeperWire.MM)
+	_peak = w.s16(_peak, KeeperWire.MM)
+	_from = w.s8(_from)
+	_clock = w.s32(_clock, KeeperWire.MS)
+	_fold = w.s16(_fold, KeeperWire.FRACTION)
+	_stop = w.s16(_stop, KeeperWire.MM)
+	_stop_from_speed = w.s16(_stop_from_speed, KeeperWire.SPEED)
+	_stop_side = w.s16(_stop_side, KeeperWire.MM)
+	_plant = w.s16(_plant, KeeperWire.MM)
+	w.leg(_released)
+	_released_knee = w.v3_16(_released_knee, KeeperWire.MM)
+	_rotating = w.bit(_rotating)
+	_turn_s = w.s32(_turn_s, KeeperWire.MS)
+	w.pose(_stance)
+	for i: int in 2:
+		_stance_knees[i] = w.v3_16(_stance_knees[i], KeeperWire.MM)

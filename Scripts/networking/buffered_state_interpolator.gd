@@ -55,6 +55,26 @@ static func find_bracket(buffer: Array, render_time: float, out: BracketResult =
 			return _make(a, b, render_time, out)
 	return null
 
+enum Intake { APPEND, REPLACED, OUT_OF_ORDER }
+
+# Admits one snapshot to a buffer kept sorted by host-capture stamp. Older than
+# the newest is out of order. EQUAL to it is a host catch-up: physics steps run
+# back to back inside one frame and snapshots are labelled with the host's
+# millisecond wall clock, so two broadcasts can share a label. The later one is
+# the later tick, so it takes the newest entry's place (`state` written there)
+# rather than opening a zero-length bracket the render would step across.
+# APPEND leaves the append to the caller, which owns its entry recycling.
+static func intake(buffer: Array, host_ts: float, state: Variant) -> Intake:
+	if buffer.is_empty():
+		return Intake.APPEND
+	var newest = buffer[buffer.size() - 1]
+	if host_ts < newest.timestamp:
+		return Intake.OUT_OF_ORDER
+	if host_ts == newest.timestamp:
+		newest.state = state
+		return Intake.REPLACED
+	return Intake.APPEND
+
 # Drops stale buffer entries; keeps at least min_keep at the tail so the next
 # tick still has material to bracket against.
 static func drop_stale(buffer: Array, render_time: float, min_keep: int = 2) -> void:

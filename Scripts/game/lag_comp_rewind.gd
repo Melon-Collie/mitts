@@ -6,6 +6,7 @@ class_name LagCompRewind
 # interpolated — is per-claim doctrine in `Scripts/networking/CLAUDE.md`. Every
 # resolver goes through these helpers instead of shifting a raw timestamp.
 
+const _ClockSyncScript: GDScript = preload("res://Scripts/networking/clock_sync.gd")
 const _INTERP_DELAY_CLAMP_MS_MAX: float = 200.0
 
 # The outer age fence every claim resolver shares, single-sourced from the domain
@@ -79,15 +80,35 @@ static func plausible_interp_delay_ms(reported_ms: float, peer_rtt_ms: float) ->
 
 
 # Host-time at which to query StateBufferManager for the claimant's
-# locally-predicted entity. RTT does not enter the formula — the rewind depth is
-# a function of the input-lead stamping convention, so validation is
-# RTT-independent and lower-ping players don't beat higher-ping players on
-# legitimately-stamped claims. The lead follows the client's RTT estimate
-# (ClockSync.input_lead_for_rtt), so claims carry the lead the client stamped
-# with and the rewind follows it. input_lead_ms < 0 (or absent — the host's own
-# local claims) uses the base constant.
+# locally-predicted entity: the claim stamp plus the input lead the client
+# stamped with (ClockSync.input_lead_for_rtt, carried on the claim). No open-coded
+# RTT term — contested claims are arbitrated by these stamped view-times, not by
+# whose packet landed first. input_lead_ms < 0 (or absent — the host's own local
+# claims) uses the base constant.
 static func self_view_time(host_timestamp: float, input_lead_ms: float = -1.0) -> float:
 	return host_timestamp + clamped_lead_s(input_lead_ms)
+
+
+# Allowance for the client's own RTT estimate disagreeing with the host's ping
+# of the same link: the lead pays rtt/2, so this admits 50 ms of RTT
+# disagreement either way.
+const _INPUT_LEAD_ALLOWANCE_MS: float = 25.0
+
+
+# Anti-cheat bound on the claim-carried input_lead_ms, applied at the RPC
+# boundary. The stamp is bounded against the host's ping, but the arbitration
+# instant is stamp + lead: reporting the minimum lead with a backdated stamp
+# moved a reach ~rtt/2 + 100 ms earlier than an honest one and won contested
+# pickups. The lead the client SHOULD stamp with is the host's own
+# reconstruction (ClockSync.input_lead_for_rtt on its ping, as
+# NetworkManager.peer_input_lead_s), so the report is held within the allowance
+# of it. No ping sample yet → only clamped_lead_s's absolute range.
+static func plausible_input_lead_ms(reported_ms: float, peer_rtt_ms: float) -> float:
+	if not is_finite(reported_ms) or peer_rtt_ms <= 0.0:
+		return reported_ms
+	var expected_ms: float = _ClockSyncScript.input_lead_for_rtt(peer_rtt_ms) * 1000.0
+	return clampf(reported_ms, expected_ms - _INPUT_LEAD_ALLOWANCE_MS,
+			expected_ms + _INPUT_LEAD_ALLOWANCE_MS)
 
 
 # The claim-carried input lead, in seconds, bounded to the range a legitimate
@@ -102,10 +123,10 @@ static func clamped_lead_s(input_lead_ms: float = -1.0) -> float:
 			NetworkManager.INPUT_LEAD_SEC, NetworkManager.MAX_INPUT_LEAD_SEC)
 
 
-# Host-time at which to query StateBufferManager for any entity the claimant
-# rendered via interpolation (or, for the goalie, via AI tracking the
-# interpolated puck). `interp_delay_ms` is clamped to a sane range so a
-# malicious or warmup-glitched claim can't query arbitrarily far back.
+# Host-time of the claimant's interpolated past: where it drew the goalie, and
+# the base remote skaters (and a carried puck) are forward-predicted from.
+# `interp_delay_ms` is clamped to a sane range so a malicious or
+# warmup-glitched claim can't query arbitrarily far back.
 static func remote_view_time(host_timestamp: float, interp_delay_ms: float) -> float:
 	return host_timestamp - clampf(interp_delay_ms, 0.0, _INTERP_DELAY_CLAMP_MS_MAX) / 1000.0
 
@@ -117,9 +138,9 @@ static func prev_tick(view_time: float) -> float:
 
 
 # Host-time at which to query the LOOSE puck for a claim. The claimant renders
-# the loose puck predicted to its estimate of host present — i.e. AT the claim
-# stamp — so the host rewinds its own history to the stamp itself (the callers'
-# freshness gates clamp a stale/future stamp). The CARRIED puck is unaffected —
+# the loose puck predicted to the shared render clock — the claim stamp plus its
+# input lead, the instant its own body occupies — so the host reads its history
+# there (the callers' freshness gates clamp a stale/future stamp). The CARRIED puck is unaffected —
 # it rides the carrier's render timeline (remote_view + forward_predict_skater);
 # this helper is only for claims against a loose puck (pickup / deflect
 # verdicts, the one-timer range gate).

@@ -113,3 +113,16 @@ func on_net() -> bool:
 		return false
 	var p: Vector3 = position_in(t)
 	return absf(p.x) < GameRules.NET_HALF_WIDTH and p.y < GameRules.NET_HEIGHT
+
+
+# The read under way on the wire (KeeperWire): where a shot is from may be
+# anywhere on the rink, in 32 bits. The delays are the tier's.
+func wire(w: KeeperWire) -> void:
+	age = w.s32(age, KeeperWire.MS)
+	at = w.v3_32(at, KeeperWire.MM)
+	velocity = w.v3_16(velocity, KeeperWire.SPEED)
+	_primed = w.bit(_primed)
+	_hidden_s = w.s32(_hidden_s, KeeperWire.MS)
+	_first = w.bit(_first)
+	_from = w.v3_32(_from, KeeperWire.MM)
+	_from_velocity = w.v3_16(_from_velocity, KeeperWire.SPEED)
