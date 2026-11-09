@@ -536,3 +536,31 @@ Point shots priced at nothing change none of the integration's readings.
   flying the path the dump search walks, what is left between the price and the
   outcome is the race for it: the dump's read of who gets there first.
 - **Host cost** is §6's.
+
+### Step 5 in 5v5, after the lane read and the tip
+
+`test_ozone_possession_5v5.gd` (48 Hard possessions low in their zone, five a
+side, the real keeper), on `main` and after the pass lane read starts a defender
+on the release (`AIPuckLane.lane_read_delay`) and the carrier stopped shooting
+for a tip:
+
+| measure | main | after |
+|---|---|---|
+| ending in a shot / picked off / stripped | 25 / 9 / 12 | 12 / 22 / 10 |
+| … shots from the slot | 4 | 4 |
+| passes | 43 | 51 |
+| a possession | 2.5 s | 2.2 s |
+
+- **Holding the puck low and cycling it is not what the bots choose, and the
+  currency says it should not be.** A feed that reaches a man at the crease or
+  the slot is worth 0.4–0.86 (the shot field's one-timers against the live
+  keeper measure 0.64–0.78 off a 3–6 m feed), keeping the puck 0.03–0.2, and
+  a pick-off in their corner costs about nothing (their possession at their own
+  goal line is `FLOOR_OWN_GOAL_LINE`). Any feed in close that completes more
+  than one time in four or so beats keeping the puck, and the pass calibration
+  (`test_pass_carry_calibration.gd`) holds those completions to within a few
+  points of what happens. §4's cycle shows only while every lane is shut.
+- The levers, should the play want more patience: the keeper's in-tight
+  conversion (a goalie change and a regenerated field), or what a turnover in
+  their end costs (`FLOOR_OWN_GOAL_LINE`, a feel tunable). Neither is pulled:
+  forcing a feed a goalie leaks on is taken as the play.
