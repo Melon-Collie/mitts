@@ -93,10 +93,6 @@ const SHOT_MIN_FORWARD_OF_LINE_M: float = 0.3
 # ── Where the shot is held (shoot-now eval) ──────────────────────────────────
 # The share of pace the winning hold's load gives the committed shot.
 var _shot_sample_share: float = 1.0
-# True when the winning shoot read is the TIP rip (AIActionScoring.tip_ev):
-# fired flat at full pace THROUGH the net-front teammate's blade at the net
-# centre — the commit path aims it there instead of at a direct-model hole.
-var _shot_sample_is_tip: bool = false
 # The puck's spot off the body (world XZ) the last shoot-now sweep's winner
 # fires from. Fresh every eval, so the state machine's fire-tracking carry
 # holds the puck there while a shot look is live; ZERO until a sweep scores.
@@ -613,34 +609,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 			_shot_sample_share = share
 			shoot_now_hold = hold
 
-	# Shoot-for-tip: the same rip can score by DEFLECTION off a net-front
-	# teammate. An alternative AIM of the same fire action, so it competes with
-	# the direct read by max(), never additively. Scored against the in-zone
-	# teammates gathered for the pass options, with the goalie taken set at his
-	# current spot (conservative). Fired from the faster hold.
-	_shot_sample_is_tip = false
-	if not shot_unavailable and not _field.receiver_pos.is_empty():
-		var tip_k: int = 1 if _field.holds.share[1] > _field.holds.share[0] else 0
-		var tip_hold := Vector3(_field.holds.offset[tip_k].x, 0.0, _field.holds.offset[tip_k].y)
-		var tip_share: float = _field.holds.share[tip_k]
-		var tip_pull_s: float = _field.holds.pull_s[tip_k]
-		var tip_released_at: Vector3 = self_pos + tip_hold + horizontal_velocity \
-				* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + tip_pull_s)
-		var tip_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(tip_released_at,
-				attacking_goal, goalie_now)
-		var tip_speed: float = ctx.self_wrister_shot_speed * tip_share
-		for tip_man: Vector3 in _field.receiver_pos \
-				if _shootable_from(tip_released_at, attacking_goal, goalie_now) \
-				else AIActionScoring.EMPTY_VEC3:
-			var tip_s: float = AIActionScoring.tip_ev(
-					tip_release, tip_man, attacking_goal, goalie_now,
-					_field.opponents_release,
-					tip_speed, _field.opponent_caps) * _field.holds.keep[tip_k]
-			if tip_s > _phase_shoot_score:
-				_phase_shoot_score = tip_s
-				_shot_sample_share = tip_share
-				shoot_now_hold = tip_hold
-				_shot_sample_is_tip = true
+	# The shot is the direct one only: a rip for a net-front teammate to tip is
+	# not priced, since nothing measured backs a tip's redirect (#736).
 
 	var self_state: SkaterNetworkState = snapshot.skater_states[ctx.peer_id]
 	_pass.search(ctx, self_state.facing, _field.teammate_ids)
@@ -886,17 +856,6 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 										ctx.caps_by_peer.get(best_pass_peer))),
 						AIPuckLane.SOFTEST_FEED_M_S,
 						pass_target_speed)
-		elif new_intent == INTENT_SHOOT and _shot_sample_is_tip:
-			# TIP rip at the net centre — the line the tipper's reactive mode
-			# steps onto (AIRoleFinisher._try_reactive_decision). Flat keeps the
-			# puck on the blade plane; full pace keeps the arrival above the
-			# deflect threshold so contact redirects instead of catching.
-			shot_loft_level = ShotMechanics.ELEVATION_FLAT
-			shot_aim_point = Vector3(
-					attacking_goal.x, 0.0, attacking_goal.z)
-			shot_power_t = 1.0
-			shot_hold_offset = shoot_now_hold
-			shot_hold_share = _shot_sample_share
 		elif new_intent == INTENT_SHOOT:
 			# Aim and loft are the shot field's pick the holds were solved toward
 			# (_pick_fire_phase); at a net with no keeper replicated, flat at the
