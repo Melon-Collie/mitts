@@ -4,7 +4,7 @@ C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeSkaterMovement`,
 `NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`, `NativeSkaterGait`,
 `NativeLegChain`, `NativeCarryRollout`, `NativeShotOdds`, `NativeHemFlaps`,
-`NativeBladePass`). The
+`NativeBladePass`, `NativeCarrySpace`). The
 GDScript originals (in `Scripts/domain/rules/`, `Scripts/domain/ai/`,
 `Scripts/controllers/` and `Scripts/actors/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
@@ -203,6 +203,18 @@ without a built binary, loses performance, never correctness — CI builds it):
   through float as the GDScript's packed arrays do, so the two agree to the bit.
   38 → 5 µs a read; the carrier's carry search 26–28% faster in the zone.
   `tests/unit/ai/test_native_shot_odds_parity.gd`.
+
+- **Carry space** — `AIEvadeRead.evade_safety` (the keep odds every
+  `AIPossessionValue` read pays) and `AICarrySpace.carry_safety` /
+  `carry_strip_point` (a carry's keep odds and where it is stripped: the
+  possession read's drives and entries, the carrier's carry search, the wheel),
+  on the AI worker. One call each, with `reach_clearance` (its escape gate and
+  the defender who stops), the crossing band and the safety maps inside;
+  `AICarrySpace.native` holds the one instance `NativeCarrySpaceFactory.install`
+  builds from `GameManager._ready`, and `AICarrySpace.pack_caps` hands the caps
+  over as five floats a man. A point or direction the GDScript holds in a
+  Vector3 / Vector2 is rounded to float where it is, so the two agree to the
+  bit. `tests/unit/ai/test_native_carry_space_parity.gd`.
 
 - **Jersey tails** — `HemFlaps.step` (render rate, every skater and keeper,
   every frame): the cloth below the belt or the chest protector — the

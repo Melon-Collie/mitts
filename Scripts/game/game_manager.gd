@@ -494,6 +494,7 @@ func _ready() -> void:
 	print("[native] hot-path kernels: %s" % NativeKernels.summary())
 	NativeCarryRolloutFactory.install()
 	NativeShotOddsFactory.install()
+	NativeCarrySpaceFactory.install()
 	AIShotOdds.prepare()
 	# Make Manrope the engine-wide fallback font so every Control that
 	# doesn't set its own font picks it up automatically — saves us from
@@ -3852,7 +3853,7 @@ func _note_shot_trajectory() -> void:
 		var xg: float = AIActionScoring.expected_goals(
 				pos, Vector3(0.0, 0.0, directed_line_z),
 				_defending_goalie_pos(directed_line_z), _shot_release_spread(),
-				AIShotOdds.Stance.UPRIGHT, _xg_query)
+				AIShotOdds.Stance.UPRIGHT, _xg_query, _shot_tracker.release_history())
 		_shot_tracker.note_xg(xg)
 
 

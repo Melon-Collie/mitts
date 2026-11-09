@@ -188,6 +188,10 @@ class SimSkater:
 	# (see step()).
 	var wrister_hold: Vector3 = Vector3.ZERO
 	var wrister_active: bool = false
+	# The blade's contact off the body as the charge starts: the pin the release
+	# loads from (SkaterController._solve_wrister_load's wrister_origin, latched
+	# on entering WRISTER_AIM), never the blade the hold walks after it.
+	var wrister_pin: Vector3 = Vector3.ZERO
 	# ≥ 0 marks a scripted puppet container (no agent); the gap it holds.
 	var puppet_hold_gap: float = -1.0
 	var puppet_depth_floor_z: float = 0.0
@@ -281,8 +285,8 @@ var _carrier_belief := CarrierBelief.new()
 var _reaction_delay_s: float = -1.0
 # Each net's keeper x last tick, for the velocity a live keeper publishes.
 var _keeper_x: Dictionary = {}
-# Loose-puck board bounce restitution (the harness's coarse boards — flight
-# fidelity is still not the point; containment is).
+# An airborne puck's bounce off the glass (coarse: it drops there, and only
+# containment is the point). A sliding puck runs the host's own step.
 const BOARD_RESTITUTION: float = 0.5
 
 # ── Outcome telemetry (scenario assertions read these) ──────────────────────
@@ -537,6 +541,16 @@ func step() -> void:
 				rec["pass_peer"] = c.agent._carrier.debug_pass_peer_id
 				rec["pass_score"] = c.agent._carrier.debug_pass_score
 				rec["carry_score"] = c.agent._carrier.debug_carry_score
+				var read: Vector4 = c.agent._carrier._pass.debug_completion
+				rec["pass_kept"] = read.x * read.y * (1.0 - read.z) * read.w if read.x >= 0.0 \
+						else -1.0
+				rec["pass_release_clean"] = read.x
+				rec["pass_lane"] = read.y
+				rec["pass_miss"] = read.z
+				rec["pass_reception"] = read.w
+				rec["pass_spot"] = c.agent._carrier._pass.debug_spot
+				rec["pass_puck"] = puck_pos
+				rec["since_pick_ticks"] = c.agent._carrier._ticks_since_pick
 			releases.append(rec)
 			_release_grace[c.peer_id] = ticks + RELEASE_GRACE_TICKS
 			_release(c)
@@ -633,24 +647,13 @@ func step() -> void:
 			puck_vel *= _airborne_keep
 			_airborne_keep = LANDING_SPEED_KEEP
 	else:
-		var speed: float = Vector2(puck_vel.x, puck_vel.z).length()
-		if speed > 0.0:
-			var drop: float = GameRules.PUCK_ICE_DECEL_M_S2 * DT
-			var scale: float = maxf(speed - drop, 0.0) / speed
-			puck_vel *= scale
-		puck_pos += puck_vel * DT
-		# Boards: clamp to the rink and reflect the outward component (the
-		# same analytic backstop the real Puck runs). Without this a dumped
-		# or rimmed puck sailed out of the world and every loose-puck
-		# scenario beyond a few metres was unwinnable by construction —
-		# and rims can't wrap corners a harness doesn't have.
-		var clamped: Vector2 = GameRules.clamp_to_rink_inner(
-				Vector2(puck_pos.x, puck_pos.z))
-		if clamped.x != puck_pos.x or clamped.y != puck_pos.z:
-			var outward := Vector2(puck_pos.x - clamped.x, puck_pos.z - clamped.y)
-			puck_vel = PuckCollisionRules.board_rescue_velocity(
-					puck_vel, outward, BOARD_RESTITUTION)
-			puck_pos = Vector3(clamped.x, puck_pos.y, clamped.y)
+		# The sliding puck's step the host drives the real one with
+		# (PuckAuthorityRules): ice friction, and the boards' rigid-wall
+		# restitution and friction round the rounded corners, so a rim runs
+		# the path the rim search and the chase election walk.
+		var stepped: Transform3D = AITrajectory.step_puck(puck_pos, puck_vel, DT)
+		puck_pos = stepped.origin
+		puck_vel = stepped.basis.x
 		for s: SimSkater in skaters:
 			if not _can_play(s) or not PuckInteractionRules.check_pickup(
 					prev_puck, puck_pos, s.prev_blade, s.blade, PICKUP_RADIUS):
@@ -862,6 +865,7 @@ func _place_blade(s: SimSkater) -> void:
 	if in_charge and not s.wrister_active:
 		s.wrister_active = true
 		s.wrister_hold = s.arm.heel - s.pos
+		s.wrister_pin = s.blade - s.pos
 	var held: bool = s.wrister_active
 	s.wrister_active = in_charge
 	var cursor: Vector3 = s.input.mouse_world_pos
@@ -1220,7 +1224,7 @@ func _release(c: SimSkater) -> void:
 		var aim: Vector3 = ShotMechanics.wrister_aim_dir(c.input.bot_wrister_aim_dir,
 				c.input.mouse_world_pos, c.pos)
 		var to_local: Basis = Basis(Vector3.UP, atan2(-c.facing.x, -c.facing.y)).inverse()
-		var pin: Vector3 = c.blade - c.pos
+		var pin: Vector3 = c.wrister_pin
 		WristerLoad.solve(_load, to_local * Vector3(pin.x, 0.0, pin.z), to_local * aim,
 				lefty, kit.wrister_load)
 		result = ShotMechanics.release_wrister(c.pos, c.input.mouse_world_pos, c.blade,

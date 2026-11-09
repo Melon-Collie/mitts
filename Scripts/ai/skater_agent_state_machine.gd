@@ -228,6 +228,10 @@ var _state: State = State.OFF_PUCK
 # Identity / orientation
 var _peer_id: int = 0
 var _team_id: int = 0
+# The pass this bot is on: who released the puck it is chasing or holds, and
+# where he stood (RoleContext.fed_from). -1 / INF: not a teammate's release.
+var _fed_by: int = -1
+var _fed_from: Vector3 = Vector3.INF
 # +1 if own goal is at +GOAL_LINE_Z (Team 0), -1 for Team 1.
 # See GameManager._assign_goals_to_teams for the source of truth.
 var _own_goal_dir: float = 1.0
@@ -282,8 +286,12 @@ var _inert_rush_read := AIRushRead.new()
 # The slot + target this bot's role chose on the previous role dispatch —
 # feeds RoleContext.prev_role_target for argmax switch-hysteresis (INF is
 # stamped across a slot change so no role inherits another role's target).
+# A stand that rides a man is a moving frame, so the incumbent is where it
+# has ridden to since: its target_velocity over the seconds since it was chosen.
 var _prev_role_slot: int = AIRoleSlots.Slot.NONE
 var _prev_role_target: Vector3 = Vector3.INF
+var _prev_role_target_vel: Vector3 = Vector3.ZERO
+var _prev_role_target_age_s: float = 0.0
 # The man this skater's role is covering, from the last role dispatch
 # (RoleDecision.locked_man_pid) — reset on slot change, and cleared on
 # leaving OFF_PUCK: a skater chasing or carrying
@@ -359,10 +367,12 @@ var _holds := AIShotHolds.new()
 # (_state_from_carrier_intent); this sentinel tells that state to aim at a
 # LOCATION and skip the receiver-close bail.
 #
-# The dump is the rim pass (AIRimPass): it fires FLAT on the charged wrister at
-# `_dump_launch_speed`, because how far round the boards it carries IS its pace.
+# The dump fires on the charged wrister at `_dump_launch_speed` along the ice,
+# because how far round the boards it carries IS its pace: FLAT, or chipped at
+# the LOW rung when `_dump_lofted` (a dump-in over the sticks).
 var _dump_target: Vector3 = Vector3.INF
 var _dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S
+var _dump_lofted: bool = false
 
 # Multi-tick wrister charge: shoot_held for BOT_WRISTER_CHARGE_TICKS while the
 # cursor sweeps, so SkaterStateMachine fires a real wrister at release (direction
@@ -951,6 +961,7 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	_current_self_state = self_state
 	_current_snapshot = snapshot
 	_current_delta = input.delta
+	_prev_role_target_age_s += input.delta
 	# EVERY dispatch-path brain read must go through this, so dispatch can run
 	# off-thread.
 	_current_strategy = _strategy()
@@ -1252,6 +1263,27 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		_set_state(State.CHASE_PUCK)
 
 
+# Holds where a teammate's release left from while the puck is loose off him and
+# through this bot's own possession of it; anyone else's puck clears it.
+func _track_feed(snapshot: WorldSnapshot) -> void:
+	if snapshot == null or snapshot.puck_state == null:
+		return
+	var carrier: int = snapshot.puck_state.carrier_peer_id
+	if carrier == _peer_id:
+		return
+	var releaser: int = snapshot.loose_puck_released_by if carrier == -1 else -1
+	if releaser == -1 or releaser == _peer_id \
+			or _team_id_by_peer.get(releaser, -1) != _team_id:
+		_fed_by = -1
+		_fed_from = Vector3.INF
+		return
+	if releaser == _fed_by:
+		return
+	var passer: SkaterNetworkState = snapshot.skater_states.get(releaser)
+	_fed_by = releaser
+	_fed_from = passer.position if passer != null else snapshot.puck_state.position
+
+
 # Fills the reused RoleContext (_role_ctx — never a fresh allocation, this runs per
 # dispatch per bot) with the read-only inputs every role-behavior decide() needs.
 func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
@@ -1290,6 +1322,8 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	_holds.configure_from(ctx)
 	ctx.self_stagger_timer = self_state.stagger_timer if self_state != null else 0.0
 	ctx.self_settle_s = self_state.settle_left_s if self_state != null else 0.0
+	_track_feed(snapshot)
+	ctx.fed_from = _fed_from
 	ctx.pursuit_standoff_m = _pursuit_standoff_m
 	ctx.pass_speed_scale = _pass_speed_scale
 	ctx.check_aggression = _check_aggression
@@ -1315,6 +1349,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.rush_read = _current_strategy.get_rush_read()
 		ctx.team_size = _current_strategy.get_team_size()
 		ctx.icing_enforced = _current_strategy.icing_enforced()
+		ctx.covers_whistled = _current_strategy.covers_whistled()
 		ctx.numbers_up = _current_strategy.numbers_up()
 		var lobby_slot: int = _current_strategy.position_of(_peer_id)
 		ctx.self_is_defense = PlayerRules.is_defense_slot(lobby_slot)
@@ -1335,6 +1370,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.ping_pass_target_peer = -1
 		ctx.team_size = GameRules.DEFAULT_TEAM_SIZE
 		ctx.icing_enforced = false
+		ctx.covers_whistled = false
 		ctx.numbers_up = false
 		ctx.self_is_defense = false
 		ctx.self_home_side = 0.0
@@ -1348,7 +1384,8 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 	# Target switch-hysteresis input: the target this bot's role chose last
 	# dispatch — INF across a slot change so no role inherits another's
 	# target (see RoleContext.prev_role_target).
-	ctx.prev_role_target = _prev_role_target if slot == _prev_role_slot else Vector3.INF
+	ctx.prev_role_target = _prev_role_target + _prev_role_target_vel * _prev_role_target_age_s \
+			if slot == _prev_role_slot and _prev_role_target.is_finite() else Vector3.INF
 	# Pinch-read hysteresis incumbent, same reset-across-slot-change contract.
 	ctx.prev_held_forward_stand = _prev_held_forward_stand \
 			if slot == _prev_role_slot else false
@@ -1429,6 +1466,8 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 			decision.target_position = ctx.self_pos
 	_prev_role_slot = slot
 	_prev_role_target = decision.target_position
+	_prev_role_target_vel = decision.target_velocity
+	_prev_role_target_age_s = 0.0
 	_prev_locked_man_pid = decision.locked_man_pid
 	_prev_held_forward_stand = decision.held_forward_stand
 	return decision
@@ -1676,6 +1715,7 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		if _carrier.intended_action == AIRoleCarrier.INTENT_DUMP:
 			_dump_target = _carrier.dump_target
 			_dump_launch_speed = _carrier.dump_launch_speed
+			_dump_lofted = _carrier.dump_lofted
 		else:
 			_dump_target = Vector3.INF
 	debug_shoot_score = _carrier.debug_shoot_score
@@ -1705,9 +1745,11 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		_intended_action = new_intent
 
 	# Steering by latched intent. CARRY drifts to the carry destination. A SHOOT
-	# pre-aim steers to the projected release position — no braking, so the shot
-	# fires before the goalie can reset. A PASS brakes: pass leads aim from a held
-	# spot.
+	# pre-aim glides: the release was priced at the body's velocity now, so it
+	# neither brakes (the shot fires before the goalie can reset) nor pushes on
+	# (steered at a point re-projected ahead each tick, a shooter drifting away
+	# from the net built speed away from it, and his blade lagged the hold the
+	# load was priced from). A PASS brakes: pass leads aim from a held spot.
 	if _intended_action == State.CARRY:
 		if _carrier.carry_move >= 0:
 			# The rolled move the carrier priced is the input it skates, the stance
@@ -1723,11 +1765,8 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 			_apply_steering(input, snapshot, self_pos, _last_carry_anchor,
 					false, _self_max_speed)
 	elif _intended_action == State.SHOOT_PRESSED:
-		var hv: Vector3 = Vector3.ZERO
-		if self_state != null:
-			hv = Vector3(self_state.velocity.x, 0.0, self_state.velocity.z)
-		_apply_steering(input, snapshot, self_pos,
-				self_pos + hv * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)
+		input.move_vector = Vector2.ZERO
+		input.brake = false
 	else:
 		_apply_brake_steering(input, snapshot, self_pos)
 
@@ -2230,11 +2269,14 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	if is_dump:
 		_pass_should_saucer = false
 		_pass_target_peer_id = -1
-		# FLAT is load-bearing on the charged path: release_wrister normalizes
-		# (dir.x, tan, dir.z) at `power`, so any loft spends pace going up and the
-		# ground speed stops being the pace the landing search solved.
-		input.elevation_level = ShotMechanics.ELEVATION_FLAT
-		_pass_target_speed = _dump_launch_speed
+		# release_wrister normalizes (dir.x, tan, dir.z) at `power`, so a chip
+		# asks for the pace over its loft's cosine: the ground pace is what the
+		# landing search solved.
+		input.elevation_level = ShotMechanics.ELEVATION_LOW if _dump_lofted \
+				else ShotMechanics.ELEVATION_FLAT
+		_pass_target_speed = _dump_launch_speed * sqrt(1.0
+				+ GameRules.DEFAULT_LOFT_TAN_LOW * GameRules.DEFAULT_LOFT_TAN_LOW) \
+				if _dump_lofted else _dump_launch_speed
 
 	_apply_brake_steering(input, snapshot, self_pos)
 	# Saucer: LOW loft over a contested mid-lane stick. Set every tick (the level

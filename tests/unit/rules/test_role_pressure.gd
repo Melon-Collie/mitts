@@ -176,11 +176,10 @@ func test_standing_target_sticks_within_margin() -> void:
 	# A standing target whose re-scored value is within TARGET_SWITCH_MARGIN
 	# of the fresh argmax is kept — the anti-flicker guarantee. Solo carrier,
 	# straight shot: first decide picks a spot on the shot lane; a prev
-	# target nudged 0.15 m along the same lane blocks essentially the same
-	# shot, so decide must return the prev, not re-jump to the argmax.
-	# (0.15 m, not more: the release-contest read grades distance from the
-	# carrier's blade steeply — one stick length spans full-to-no contest —
-	# so "near-equal" on this lane is a genuinely small span.)
+	# target 0.15 m round the gap ring from it blocks essentially the same
+	# shot, so decide must return the prev, not re-jump to the argmax. Round
+	# the ring, not deeper: the ladder sets the stand's distance, so a deeper
+	# prev is set back onto the ring, which is the argmax itself.
 	var carrier_pos := Vector3(0, 0, 22)
 	var skaters: Array = [
 		[1, TEAM_ID, Vector3(8, 0, 18), Vector3.ZERO],
@@ -188,11 +187,12 @@ func test_standing_target_sticks_within_margin() -> void:
 	]
 	var ctx: RoleContext = _make_ctx(Vector3(8, 0, 18), 200, skaters)
 	var first: Vector3 = AIRolePressure.decide(ctx).target_position
-	var prev: Vector3 = first + Vector3(0, 0, 0.15)  # a hair deeper on the lane
+	var offset: Vector3 = first - carrier_pos
+	var prev: Vector3 = carrier_pos + offset.rotated(Vector3.UP, 0.15 / offset.length())
 	var ctx2: RoleContext = _make_ctx(Vector3(8, 0, 18), 200, skaters)
 	ctx2.prev_role_target = prev
 	var second: Vector3 = AIRolePressure.decide(ctx2).target_position
-	assert_eq(second, prev,
+	assert_almost_eq(second, prev, Vector3.ONE * 0.001,
 			"a near-equal standing target is kept through hysteresis")
 
 

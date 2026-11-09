@@ -125,10 +125,22 @@ const GOALIE_HOME_M: float = 3.0
 # aim point — picks a point past the goalie for the lane segment check.
 const GOALIE_SHADOW_HALF_M: float = 0.3
 
+# How long a keeper needs, from a shooter taking the puck, to have read him and
+# set on him from anywhere across the crease: his read, then a push the width of
+# the mouth. A shooter who has had the puck no longer than this faces a keeper
+# still set on the play before (AIShotOdds.History).
+static func goalie_reset_s() -> float:
+	return goalie_leg_delay_s + 2.0 * GameRules.NET_HALF_WIDTH / GOALIE_MAX_LATERAL_SPEED_MPS
+
+
 # How long (s) he takes to stand back up out of the butterfly (KeeperDrop's
 # rise; test_ai_goalie_model_mirrors.gd holds the two together): a shot sooner
 # than this from now still finds him in the stance he is in.
 const GOALIE_RECOVERY_S: float = 0.35
+
+# The fastest a loose puck can be going for him to cover it (KeeperCover): one
+# slowing at his feet he covers, one going by he saves, and it stays live.
+const COVER_STOPS_M_S: float = KeeperCover.STOPS_M_S
 
 
 # ── Predicted post-seal ─────────────────────────────────────────────────────

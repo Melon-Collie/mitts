@@ -5,8 +5,8 @@ class_name AIRolePressure
 #
 # INVERSE SCORING: each candidate is scored by how much our body there deflates
 # the carrier's best option (AIDefensiveVerbs.carrier_best_option). The argmax
-# takes carrier_stand as the ring's centre and the gap and inside shade as
-# floors, then picks the bearing.
+# takes carrier_stand as the ring's centre, the gap as its radius and the inside
+# shade as a floor, then picks the bearing.
 
 # Engaged/closing boundary: inside it the argmax runs the full polar ring,
 # outside it only the calculated closing stands. 1.5 search steps.
@@ -144,9 +144,11 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	var found: bool = false
-	# The ladder is a FLOOR on the gap: the score improves monotonically as you
-	# close, so a free argmax collapses onto him.
-	var min_gap_sq: float = gap * gap
+	# The ladder sets the gap, both ways: closer, the score improves as you
+	# close, so a free argmax collapses onto him; wider, a body on his inside
+	# takes as much off him at three sticks as at one, so it never closes, and
+	# the incumbent holds whatever offset it was picked at.
+	var gap_sq: float = gap * gap
 	for raw: Vector3 in candidates:
 		# A clamp, not a filter: filtering empties the set exactly when the ring
 		# has closed onto the man. The distance is doctrine; the argmax picks the
@@ -155,7 +157,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 		var gx: float = raw.x - carrier_pos.x
 		var gz: float = raw.z - carrier_pos.z
 		var gd_sq: float = gx * gx + gz * gz
-		if gd_sq < min_gap_sq:
+		if gd_sq < gap_sq or (ap.dir_net != Vector3.ZERO and gd_sq > gap_sq):
 			if gd_sq > 0.0001:
 				var k: float = gap / sqrt(gd_sq)
 				c = Vector3(carrier_pos.x + gx * k, 0.0, carrier_pos.z + gz * k)
@@ -185,7 +187,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 				poss, c, ride, ctx.caps_by_peer.get(ctx.peer_id), carrier_pos,
 				carrier_velocity, our_goalie_pos, opp_teammates, bases,
 				_set_in(ctx, ap, c, ride)) \
-				+ AIStationSearch.incumbent_bonus(ctx, c)
+				+ AIStationSearch.incumbent_bonus(ctx, raw)
 		if pressure_score > best_score:
 			best_score = pressure_score
 			best_pos = c
@@ -237,22 +239,27 @@ static func is_level(ctx: RoleContext, ap: AICarrierApproach) -> bool:
 	return _depth_on(ctx, ap) <= AIRoleRushD.stick_m(ctx)
 
 
-# The angle's finish, the level pressurer's last play: still in front of him,
-# step into his path at contact, facing him, so he skates through the body.
-# Behind him, the slot is what is left to deny: skate (not backpedal) to the
-# first ice on his line to our net I get to before he does
-# (AIDefensiveVerbs.cut_off_share), riding
-# it as he moves, so whichever way he goes to the net — down the wall and in, or
-# straight across — he meets the body or the reach-in there. Chasing his hip
-# instead, a carrier any faster than me is never caught, and cuts in front.
+# The angle's finish, the level pressurer's last play. Still in front of him with
+# his line to our net inside my stick, step into his path at contact, facing
+# him, so he skates through the body. Otherwise — wider of his line than that,
+# or behind him — the first ice on that line I get to before he does
+# (AIDefensiveVerbs.cut_off_share), riding it as he moves, so whichever way he
+# goes to the net, down the wall and in or straight across, he meets the body
+# or the reach-in there: in front, taken facing him; behind, skated to (not
+# backpedalled). Never step out onto a man whose line I am wide of: level
+# inside a carrier on the wall, that walks me out to him while he cuts in
+# across my front to the net. Chasing his hip instead, a carrier any faster
+# than me is never caught, and cuts in front.
 static func _close_on_him(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision) -> RoleDecision:
-	var contact_m: float = 2.0 * GameRules.OFFSIDE_LINE_SLACK
-	if _depth_on(ctx, ap) > 0.0:
-		d.target_position = ap.carrier_pos + ap.dir_net * contact_m
+	var depth: float = _depth_on(ctx, ap)
+	if depth > 0.0 and _off_his_line(ctx, ap, depth) <= AIRoleRushD.stick_m(ctx):
+		d.target_position = ap.carrier_pos + ap.dir_net * (2.0 * GameRules.OFFSIDE_LINE_SLACK)
 		d.target_velocity = ap.carrier_vel
 	else:
 		d.target_position = AIDefensiveVerbs.cut_off(ctx, ap, d)
+		if depth > 0.0:
+			d.face_travel = false
 	d.arrive_at_speed = true
 	d.pressures_puck = true
 	d.engaged_peer_id = ctx.snapshot.puck_state.carrier_peer_id
@@ -277,6 +284,12 @@ static func _set_in(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3, rid
 static func _depth_on(ctx: RoleContext, ap: AICarrierApproach) -> float:
 	return (ctx.self_pos.x - ap.carrier_pos.x) * ap.dir_net.x \
 			+ (ctx.self_pos.z - ap.carrier_pos.z) * ap.dir_net.z
+
+
+# How far across from the carrier's line to our net I stand, `depth` down it.
+static func _off_his_line(ctx: RoleContext, ap: AICarrierApproach, depth: float) -> float:
+	var on_line: Vector3 = ap.carrier_pos + ap.dir_net * depth
+	return Vector2(ctx.self_pos.x - on_line.x, ctx.self_pos.z - on_line.z).length()
 
 
 # True if `c` is on our net's side of the carrier — never lose inside position.

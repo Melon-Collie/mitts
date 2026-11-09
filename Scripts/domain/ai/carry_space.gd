@@ -35,6 +35,14 @@ const EVADE_SAMPLE_ANGLES: int = 12
 # is the only currency.
 const EVADE_SAFE_CLEAR_MIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
 
+# NativeCarrySpace, installed by the application layer (NativeCarrySpaceFactory)
+# when the extension is built: carry_safety, carry_strip_point and
+# AIEvadeRead.evade_safety run in it, held to the GDScript references by
+# test_native_carry_space_parity.gd. Null: the GDScript. AI worker only, as the
+# reads are; the caps it takes are packed into one scratch (pack_caps).
+static var native: RefCounted = null
+static var _native_caps: PackedFloat64Array = PackedFloat64Array()
+
 
 # Gap (metres) from a puck point to the nearest board; negative outside the
 # playing surface. INNER extents (the surface the puck lives on), rounded
@@ -409,6 +417,17 @@ static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
 static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], apply_escape: bool = false) -> float:
+	if native != null:
+		return native.carry_safety(from, to, arrival_time, opponents, opponent_vels,
+				pack_caps(opponent_caps, opponents.size()), apply_escape)
+	return carry_safety_reference(from, to, arrival_time, opponents, opponent_vels,
+			opponent_caps, apply_escape)
+
+
+# carry_safety in GDScript: the reference NativeCarrySpace is held to.
+static func carry_safety_reference(from: Vector3, to: Vector3, arrival_time: float,
+		opponents: Array[Vector3], opponent_vels: Array[Vector3],
+		opponent_caps: Array = [], apply_escape: bool = false) -> float:
 	var carry_dir := Vector2.ZERO
 	var carry_speed: float = 0.0
 	var dx: float = to.x - from.x
@@ -453,6 +472,17 @@ static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 # strip happens first. Mirrors lane_loss_point for passes; from == to is a stand.
 # `covered_only`: how far the carry GETS — nothing covered reaches `to`.
 static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
+		opponents: Array[Vector3], opponent_vels: Array[Vector3],
+		opponent_caps: Array = [], apply_escape: bool = false, covered_only: bool = false) -> Vector3:
+	if native != null:
+		return native.carry_strip_point(from, to, arrival_time, opponents, opponent_vels,
+				pack_caps(opponent_caps, opponents.size()), apply_escape, covered_only)
+	return carry_strip_point_reference(from, to, arrival_time, opponents, opponent_vels,
+			opponent_caps, apply_escape, covered_only)
+
+
+# carry_strip_point in GDScript: the reference NativeCarrySpace is held to.
+static func carry_strip_point_reference(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], apply_escape: bool = false, covered_only: bool = false) -> Vector3:
 	var carry_dir := Vector2.ZERO
@@ -739,3 +769,29 @@ static func carry_lane_clearance(from: Vector3, to: Vector3, arrival_time: float
 	if min_perp_sq == INF:
 		return 1.0
 	return clampf(sqrt(min_perp_sq) / CARRY_PATH_CLEAR_RADIUS_M, 0.0, 1.0)
+
+
+# `opponent_caps` as NativeCarrySpace takes them: max_accel, blade_span,
+# max_speed, lateral_grip and max_blade_reach per opponent, a null one at the
+# league's; empty when the caps do not index-match (every opponent at the
+# league's). Fills one scratch, so the result lives until the next call.
+static func pack_caps(opponent_caps: Array, n: int) -> PackedFloat64Array:
+	if opponent_caps.size() != n:
+		_native_caps.resize(0)
+		return _native_caps
+	_native_caps.resize(n * 5)
+	for i: int in n:
+		var caps: AISkaterCaps = opponent_caps[i]
+		if caps == null:
+			_native_caps[i * 5] = MANEUVER_ACCEL_M_S2
+			_native_caps[i * 5 + 1] = EVADE_STICK_REACH_M
+			_native_caps[i * 5 + 2] = AIArrival.SKATER_REF_SPEED_M_S
+			_native_caps[i * 5 + 3] = 1.0
+			_native_caps[i * 5 + 4] = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
+		else:
+			_native_caps[i * 5] = caps.max_accel
+			_native_caps[i * 5 + 1] = caps.blade_span
+			_native_caps[i * 5 + 2] = caps.max_speed
+			_native_caps[i * 5 + 3] = caps.lateral_grip
+			_native_caps[i * 5 + 4] = caps.max_blade_reach
+	return _native_caps

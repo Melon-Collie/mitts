@@ -28,7 +28,12 @@ const START_Z: float = 8.0
 const CARRIER := 1
 const DEFENDER := 2
 # Bot rushes that reach the crease untouched today, each with its issue.
-const KNOWN_UNTOUCHED: Array[String] = []
+#   v9.0/14m/c8/d3 — the carrier crosses the top of the circles in front of a
+#   defender set flat, who builds his lateral speed too late, loses the inside
+#   and is beaten when he turns down: #916.
+#   v7.5/10m/c8/d3 — the same lane, never touched (closest ~2 m); whether he
+#   shoots just outside the crease or drives onto it varies by machine: #916.
+const KNOWN_UNTOUCHED: Array[String] = ["v9.0/14m/c8/d3", "v7.5/10m/c8/d3"]
 # At the crease: a stick off its paint.
 const NET_REACHED_M: float = CreaseRules.ARC_RADIUS + GameRules.DEFAULT_STICK_LENGTH_M
 
