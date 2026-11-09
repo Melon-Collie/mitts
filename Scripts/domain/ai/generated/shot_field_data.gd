@@ -11,7 +11,7 @@ class_name AIShotFieldData
 # AIM_POINTS aims post to post, then FLAT / LOW / HIGH goal intervals
 # (open_set_edges.gd: millimetres across the net, edges bisected).
 
-const FINGERPRINT: String = "a901a425a68cc6047e888a2b95f1f1e8"
+const FINGERPRINT: String = "cd1f405dbf0e1099fbd244047b3fc443"
 const SPOT_X: Array[float] = [-12.0, -10.0, -8.0, -6.0, -4.0, -2.0, 0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
 const SPOT_FWD: Array[float] = [0.6, 1.5, 2.5, 3.5, 4.5, 6.0, 7.5, 9.5, 12.0, 15.0, 17.5, 19.5]
 const AIM_POINTS: int = 24
