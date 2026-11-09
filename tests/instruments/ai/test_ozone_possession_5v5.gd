@@ -78,6 +78,8 @@ static func _is_shot(rec: Dictionary) -> bool:
 func _run(duel: Object) -> Dictionary:
 	var r: Dictionary = {"end": "timeout", "t": SECS, "low_s": 0.0, "passes": 0, "shot": {}}
 	var passing: bool = false
+	var last_pass: Dictionary = {}
+	var last_pass_t: float = 0.0
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	for i: int in int(SECS / Duel.DT):
 		var before: int = duel.releases.size()
@@ -139,9 +141,29 @@ func _run(duel: Object) -> Dictionary:
 				return r
 			r["passes"] += 1
 			passing = true
+			last_pass = released
+			last_pass_t = t
 		if c != -1 and duel.team_map[c] == 1:
 			r["end"] = "picked" if passing else "stripped"
 			r["t"] = t
+			if passing and not last_pass.is_empty():
+				var from: Vector3 = last_pass.get("pass_puck", last_pass["pos"])
+				var to: Vector3 = last_pass.get("pass_spot", Vector3.INF)
+				var who: Vector3 = duel.skater_pos(c)
+				var off: float = -1.0
+				if to.is_finite():
+					var d: Vector3 = (to - from)
+					d.y = 0.0
+					d = d.normalized()
+					off = absf((who.x - from.x) * d.z - (who.z - from.z) * d.x)
+				r["pick"] = "priced lane %.2f kept %.2f (clean %.2f miss %.2f catch %.2f) | %s -> %s | picked %.2f s after by a man %.1f m off its line, at (%.1f, %.1f out)" % [
+						float(last_pass.get("pass_lane", -1.0)), float(last_pass.get("pass_kept", -1.0)),
+						float(last_pass.get("pass_release_clean", -1.0)),
+						float(last_pass.get("pass_miss", -1.0)),
+						float(last_pass.get("pass_reception", -1.0)),
+						"(%.1f, %.1f out)" % [from.x, _out(from)],
+						"(%.1f, %.1f out)" % [to.x, _out(to)] if to.is_finite() else "?",
+						t - last_pass_t, off, who.x, _out(who)]
 			return r
 		if duel.puck_pos.z > -GameRules.BLUE_LINE_Z:
 			r["end"] = "out-ours" if passing else ("out-carried" if ours else "cleared")
@@ -220,6 +242,7 @@ func _sweep(label: String) -> void:
 	var passes: int = 0
 	var runs: int = 0
 	var shots: Array[Dictionary] = []
+	var picks: Array[String] = []
 	var row: String = "   "
 	for start: Array in _starts():
 		var vels: Array = [Vector3.ZERO] + start[3]
@@ -234,6 +257,8 @@ func _sweep(label: String) -> void:
 			passes += r["passes"]
 			low_s += r["low_s"]
 			t_all += r["t"]
+			if r.has("pick"):
+				picks.append(r["pick"])
 			if r["end"] == "shot":
 				var s: Dictionary = r["shot"]
 				shots.append(s)
@@ -263,6 +288,9 @@ func _sweep(label: String) -> void:
 				kp.x, _out(kp), s["keeper_vx"], s["stance"], s["mates"]])
 	gut.p("    mean priced - set: %+.3f over %d shots; a pass within half the shot's price on %d" % [
 			over / maxf(shots.size(), 1), shots.size(), pass_near])
+	gut.p("    passes picked off:")
+	for line: String in picks:
+		gut.p("        " + line)
 
 
 func test_ozone_possession_5v5() -> void:
