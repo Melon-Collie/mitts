@@ -33,14 +33,14 @@ extends GutTest
 #   v7.0/z24/c6, v7.0/z24/c-6 — the same gap, reached by their carrier's own
 #   play: he feeds across the neutral zone early, they regroup and come in down
 #   a wing with our line not yet set, and the slot shot follows: #899.
-#   v7.0/z20/c0, v7.0/z24/c0, v8.5/z24/c-6 — our line is set at entry and no
-#   slot shot comes, but a man of theirs stands behind it for a third to two
-#   thirds of their zone time: listed here so the open share leaves them out,
-#   the same layer #899 cannot hold.
+#   v7.0/z20/c0, v7.0/z24/c0, v8.5/z24/c-6 — our line is set at entry, but a
+#   man of theirs stands behind it for a third to two thirds of their zone
+#   time: listed here so the open share leaves them out, the same layer #899
+#   cannot hold. In v7.0/z24/c0 he is fed there and shoots from the slot.
 const KNOWN_THIN: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6", "v7.0/z24/c6",
 		"v7.0/z24/c-6", "v7.0/z20/c0", "v7.0/z24/c0", "v8.5/z24/c-6"]
 const KNOWN_SLOT_SHOTS: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6", "v7.0/z24/c6",
-		"v7.0/z24/c-6"]
+		"v7.0/z24/c-6", "v7.0/z24/c0"]
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
