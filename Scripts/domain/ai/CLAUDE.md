@@ -978,8 +978,11 @@ reaches back into what remains.
   pucks thread better for free. The pass a carrier fires is read on the
   momentum-honest arrival clock (`AILaneReach`): at each point of the lane, can
   the defender's body get within a blade of it before the puck, skated from
-  where his momentum has him when he reads the windup — a man backing in has to
-  stop his retreat first. It is the reach the loose-puck chase plays a pass with
+  where his momentum has him when he reads the pass — a man backing in has to
+  stop his retreat first. He reads it on the release (`lane_read_delay`): no bot
+  moves to a pass's windup, and a man reading it is slower than it lasts. Only a
+  man whose stick already reaches the puck reads the windup, his hands on it
+  throughout. It is the reach the loose-puck chase plays a pass with
   (`AILoosePuckChase.reach_meet_time`, stick out), so a lane the passer reads
   open is one the defender cannot take. Graded by the clock's calibrated error,
   not a shaped curve; it ends a blade short of the receiver, whose own stick
@@ -991,8 +994,8 @@ reaches back into what remains.
   use keeps the closest approach at a constant closing speed. The carrier's own read also takes each
   defender's **stick where he holds it** (`opponent_blades_release`): a
   forechecker reaching for the puck has his blade a metre nearer the lane than
-  his body, and his hands start on the windup, so the first metres of a pass out
-  past him are his. Only a pick his body can hold the stick at counts
+  his body, and a stick on the puck plays it through the windup, so the first
+  metres of a pass out past him are his. Only a pick his body can hold the stick at counts
   (`AISkaterCaps.max_blade_reach`). The **saucer** (`lane_clear_saucer`) is the same
   model under the flight a charged LOW release really gets (the shot ladder's
   set angle, so the lift and the carry grow with pace): during the over window a defender's reach

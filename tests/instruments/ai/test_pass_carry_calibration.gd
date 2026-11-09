@@ -284,18 +284,21 @@ func _commit_row(view: Dictionary, commit: Array, interceptor: int, release_tick
 			var vmax: float = caps_j.max_speed if caps_j != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 			var acc: float = caps_j.max_accel if caps_j != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
 			var read_len: float = line_len - AIPuckLane.LANE_RECEIVER_REACH_M
+			var hold: float = caps_j.max_blade_reach if caps_j != null \
+					else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
+			var delay: float = AIPuckLane.lane_read_delay(from, opps[j], hold)
 			var landed: float = AILaneReach.block(from.x, from.z, dir.x, dir.z, read_len,
 					landed_speed, opps[j].x, opps[j].z, vels[j].x, vels[j].z, reach, vmax, acc,
-					AIPuckLane.LANE_WINDUP_READ_DELAY_S, flown, t_down).x
+					delay, flown, t_down).x
 			var eff: float = line_len / AIPuckLane._friction_traverse_time(line_len, priced_speed)
 			var whole: float = AILaneReach.block(from.x, from.z, dir.x, dir.z, read_len, eff,
 					opps[j].x, opps[j].z, vels[j].x, vels[j].z, reach, vmax, acc,
-					AIPuckLane.LANE_WINDUP_READ_DELAY_S).x
+					delay).x
 			var stick: float = AIPuckLane._blade_block(from.x, from.z, dir.x, dir.z, read_len, eff,
 					blades[j].x, blades[j].z, opps[j].x, opps[j].z, vels[j].x, vels[j].z,
-					caps_j.max_blade_reach if caps_j != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M,
-					AIPuckLane.LANE_LATERAL_FRACTION * vmax,
-					caps_j.blade_speed if caps_j != null else AISkaterCaps.LEAGUE_BLADE_SPEED_M_S).x
+					hold, AIPuckLane.LANE_LATERAL_FRACTION * vmax,
+					caps_j.blade_speed if caps_j != null else AISkaterCaps.LEAGUE_BLADE_SPEED_M_S,
+					delay, delay).x
 			parts = "  his body landed %.2f, body whole line %.2f, stick %.2f; reach %.2f, lands at %.1f m" \
 					% [landed, whole, stick, reach, flown]
 		j += 1
