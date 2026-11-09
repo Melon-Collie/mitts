@@ -348,9 +348,12 @@ const BEACON_MODE_SMART: int = 1
 const BEACON_MODE_DISABLED: int = 2
 const BEACON_MODE_LABELS: Array[String] = ["Always On", "Smart", "Disabled"]
 var self_beacon_mode: int = BEACON_MODE_SMART
-# The on-ice possession cues: the carrier's bold ring, the pulse when the puck
-# changes hands and the halo round a loose puck (PuckFollowCues).
-var puck_cues_enabled: bool = true
+# The on-ice puck-following cues (PuckFollowCues), each its own toggle: the
+# carrier's bold ring, the pulse when the puck changes hands, and the halo round
+# a loose puck.
+var carrier_ring_cue_enabled: bool = true
+var possession_pulse_enabled: bool = true
+var loose_puck_halo_enabled: bool = true
 
 # Bot difficulty. Index matches BotSkillProfile.Difficulty and the OptionButton
 # ordering wherever the menu exposes it.
@@ -573,7 +576,9 @@ func save() -> void:
 	cfg.set_value("game", "ring_color_team", ring_color_team)
 	cfg.set_value("game", "ring_color_enemy", ring_color_enemy)
 	cfg.set_value("game", "self_beacon_mode", self_beacon_mode)
-	cfg.set_value("game", "puck_cues_enabled", puck_cues_enabled)
+	cfg.set_value("game", "carrier_ring_cue_enabled", carrier_ring_cue_enabled)
+	cfg.set_value("game", "possession_pulse_enabled", possession_pulse_enabled)
+	cfg.set_value("game", "loose_puck_halo_enabled", loose_puck_halo_enabled)
 	cfg.set_value("game", "screen_flash", screen_flash)
 	cfg.set_value("game", "screen_shake", screen_shake)
 	cfg.set_value("game", "camera_tilt_deg", camera_tilt_deg)
@@ -1165,7 +1170,12 @@ func _load() -> void:
 		var raw_ring_enemy: Variant = cfg.get_value("game", "ring_color_enemy", ring_color_enemy)
 		ring_color_enemy = raw_ring_enemy if raw_ring_enemy is Color else ring_color_enemy
 		self_beacon_mode = clampi(int(cfg.get_value("game", "self_beacon_mode", BEACON_MODE_SMART)), 0, BEACON_MODE_LABELS.size() - 1)
-		puck_cues_enabled = bool(cfg.get_value("game", "puck_cues_enabled", true))
+		# The single bundled `puck_cues_enabled` key, where a config still has it,
+		# seeds all three so a player who turned the cues off keeps them off.
+		var cues_default: bool = bool(cfg.get_value("game", "puck_cues_enabled", true))
+		carrier_ring_cue_enabled = bool(cfg.get_value("game", "carrier_ring_cue_enabled", cues_default))
+		possession_pulse_enabled = bool(cfg.get_value("game", "possession_pulse_enabled", cues_default))
+		loose_puck_halo_enabled = bool(cfg.get_value("game", "loose_puck_halo_enabled", cues_default))
 		screen_flash = cfg.get_value("game", "screen_flash", true)
 		screen_shake = cfg.get_value("game", "screen_shake", true)
 		camera_tilt_deg = clampf(cfg.get_value("game", "camera_tilt_deg", CAMERA_TILT_DEFAULT), CAMERA_TILT_MIN, CAMERA_TILT_MAX)
