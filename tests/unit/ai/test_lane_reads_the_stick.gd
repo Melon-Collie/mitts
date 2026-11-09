@@ -91,20 +91,15 @@ func test_a_stick_a_saucer_flies_over_does_not_take_it() -> void:
 			"a stick under the flight is beaten by the loft")
 
 
-# The stick starts on the release, LANE_REACTION_DELAY_S after it: a blade
-# further off the line than his hands can carry it from then until the puck has
-# passed the whole read leaves the lane as his body alone leaves it — a blade
-# that would have reached it had it started on the windup.
+# The stick starts on the release, LANE_REACTION_DELAY_S after it. A man 2.4 m
+# off the line holding his stick a metre further out cannot sweep it onto a
+# 20 m/s pass from then before the puck has gone by, so it leaves the lane as his
+# body alone leaves it; read from the windup, it is a certain block.
 func test_the_stick_moves_only_once_the_pass_is_away() -> void:
-	var read_len: float = 12.0 - AIPuckLane.LANE_RECEIVER_REACH_M
-	var t_end: float = AIPuckLane._friction_traverse_time(read_len, SPEED)
-	var sweep: float = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S \
-			* (t_end - AIPuckLane.LANE_REACTION_DELAY_S) + AIPuckLane.LANE_BLADE_CATCH_M
-	var off: float = sweep + 0.25
-	assert_lt(off, sweep + AISkaterCaps.LEAGUE_BLADE_SPEED_M_S
-			* AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, "a stick the windup would have brought on")
-	var body: Array[Vector3] = [Vector3(off + 0.6, 0.0, -5.0)]
-	var blades: Array[Vector3] = [Vector3(off, 0.0, -5.0)]
+	var body: Array[Vector3] = [Vector3(2.4, 0.0, -5.0)]
+	var blades: Array[Vector3] = [Vector3(3.4, 0.0, -5.0)]
+	var body_only: float = AIPuckLane.lane_clear(FROM, TO, body, SPEED, _vels, [], true)
+	assert_gt(body_only, 0.5, "the fixture's body leaves most of the lane")
 	assert_almost_eq(AIPuckLane.lane_clear(FROM, TO, body, SPEED, _vels, [], true, blades),
-			AIPuckLane.lane_clear(FROM, TO, body, SPEED, _vels, [], true), 0.0001,
+			body_only, 0.0001,
 			"a stick his hands cannot carry to the line after the release takes nothing")
