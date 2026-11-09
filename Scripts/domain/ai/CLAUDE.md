@@ -29,7 +29,9 @@ line is evaluation vs. feel, not "numbers are bad".
 SHOOT, PASS and CARRY are compared numerically, so all three price the shot
 through the value seam (`AIShotValue` / `score_shoot_value`). Shots and passes
 both release from a listed spot (`AIShotHolds`), each paying its pull's time
-before the release and the odds the puck is still on the blade then. Leaving one leg on
+before the release and the odds the puck is still on the blade then; a pass
+the puck already carries where it sits is priced from there, unpulled, since
+that is where the press (`_load_ready`) fires it. Leaving one leg on
 a different model makes that leg win or lose on scale alone, and a hold priced in
 the wrong model is a permanent veto on the other two. The committed shot is the
 seam's own pick (aim and loft), so what is priced is what is fired.

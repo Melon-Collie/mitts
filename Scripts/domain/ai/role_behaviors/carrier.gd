@@ -200,8 +200,9 @@ var shot_power_t: float = 1.0
 # The state machine carries the puck to it and presses once the load is there.
 var shot_hold_offset: Vector3 = Vector3.ZERO
 var shot_hold_share: float = 1.0
-# The same for a committed pass, rim or dump-in: the pocket the press holds it
-# in and the share it waits for there (0: no hold, aim the ring).
+# The same for a committed pass, rim or dump-in: where the press holds it (a
+# pocket, or where the puck sits when it already carries the pace) and the
+# share it waits for there (0: no hold, aim the ring).
 var pass_hold_offset: Vector3 = Vector3.ZERO
 var pass_hold_share: float = 0.0
 
@@ -930,8 +931,8 @@ func _lock_pass_hold(ctx: RoleContext, pace: float) -> void:
 			pace / maxf(ctx.self_wrister_shot_speed, 0.001), _pass.best_hold_cap)
 
 
-# The committed dump-in's hold: the pocket for its bearing `dir` and pace, as its
-# search priced it (AICarrierDumpSearch).
+# The committed dump-in's hold: where it leaves from for its bearing `dir` and
+# pace, as its search priced it (AICarrierDumpSearch).
 func _lock_dump_hold(ctx: RoleContext, dir: Vector3, pace: float) -> void:
 	var self_state: SkaterNetworkState = ctx.snapshot.skater_states[ctx.peer_id]
 	var puck: Vector3 = ctx.self_pos if ctx.snapshot.puck_state == null \
@@ -941,7 +942,7 @@ func _lock_dump_hold(ctx: RoleContext, dir: Vector3, pace: float) -> void:
 			Vector2(puck.x - ctx.self_pos.x, puck.z - ctx.self_pos.z),
 			Vector2(ctx.self_velocity.x, ctx.self_velocity.z), self_state.facing,
 			pace / maxf(ctx.self_wrister_shot_speed, 0.001))
-	pass_hold_offset = Vector3(_field.holds.pass_offset.x, 0.0, _field.holds.pass_offset.y)
+	pass_hold_offset = Vector3(_field.holds.pass_from.x, 0.0, _field.holds.pass_from.y)
 	pass_hold_share = _field.holds.pass_share
 
 

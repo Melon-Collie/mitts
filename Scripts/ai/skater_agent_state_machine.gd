@@ -115,11 +115,6 @@ const BOT_WRISTER_PLANT_SPEED_M_S: float = 1.5
 # backhand is drawn on the backhand side.
 const BOT_WRISTER_SIDE_OFFSET_M: float = 0.15
 
-# How far short of the priced share the live load may be when a charged
-# release presses: the aim the pre-aim checks is the locked hole, a few degrees
-# off the line the share was priced along.
-const LOAD_READY_SHARE_SLACK: float = 0.05
-
 # ── Unified mouse motion ─────────────────────────────────────────────────────
 # Every state's `input.mouse_world_pos` goes through `_step_mouse_internal` (one of
 # the `_step_mouse_*` modes), which moves the cursor toward its shaped target at
@@ -1761,7 +1756,7 @@ func _load_ready(snapshot: WorldSnapshot, self_pos: Vector3,
 	var priced: float = _shot_hold_share_locked if _intended_action == State.SHOOT_PRESSED \
 			else _pass_hold_share
 	return _share_as_is(snapshot, self_pos, self_state, _locked_pre_aim_point) \
-			>= priced - LOAD_READY_SHARE_SLACK
+			>= priced - AIShotHolds.LOAD_READY_SHARE_SLACK
 
 
 # Maps the carrier's INTENT_* enum (decoupled from State for unit testing) to a

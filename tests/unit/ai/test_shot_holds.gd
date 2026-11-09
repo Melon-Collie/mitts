@@ -180,14 +180,15 @@ func test_standing_still_keeps_the_reach_to_either_side() -> void:
 	assert_true(left_side and right_side)
 
 
-func test_a_pass_goes_from_the_pocket_even_where_the_puck_would_carry_it() -> void:
-	# Beside the stick hip a feed ahead is loaded, but it is still released from
-	# the pocket, at the blade's pull there.
+func test_a_pass_the_puck_already_carries_leaves_from_where_it_sits() -> void:
+	# Beside the stick hip a feed ahead is loaded: the press finds the share
+	# there at once, so that is where the feed is priced from, with no pull.
 	_h.solve_pass(AHEAD, RIGHT * 1.3, AHEAD * 6.0, AHEAD, 0.9)
-	assert_almost_eq(_h.pass_offset, _h.pocket_offset(), Vector2.ONE * 0.0001)
+	assert_gte(_h.share_at(RIGHT * 1.3, AHEAD, AHEAD),
+			0.9 - AIShotHolds.LOAD_READY_SHARE_SLACK, "the fixture's puck carries the feed")
+	assert_eq(_h.pass_from, RIGHT * 1.3)
+	assert_eq(_h.pass_pull_s, 0.0)
 	assert_almost_eq(_h.pass_share, 0.9, 0.001, "capped at what the feed needs")
-	assert_almost_eq(_h.pass_pull_s,
-			_h.pull_time(RIGHT * 1.3, _h.pass_offset, AHEAD, AHEAD * 6.0), 0.0001)
 
 
 func test_a_pass_the_puck_cannot_carry_goes_to_the_pocket() -> void:
@@ -195,7 +196,26 @@ func test_a_pass_the_puck_cannot_carry_goes_to_the_pocket() -> void:
 	_h.solve_pass(AHEAD, AHEAD * 0.9, AHEAD * 6.0, AHEAD, 0.9)
 	assert_ne(_h.pass_offset, AHEAD * 0.9)
 	assert_almost_eq(_h.pass_offset.length(), _h.handle_reach, 0.001)
+	assert_eq(_h.pass_from, _h.pass_offset)
+	assert_almost_eq(_h.pass_pull_s,
+			_h.pull_time(AHEAD * 0.9, _h.pass_offset, AHEAD, AHEAD * 6.0), 0.0001)
 	assert_almost_eq(_h.pass_share, 0.9, 0.001, "capped at what the feed needs")
+
+
+# The press fires once the puck carries the priced share less the slack
+# (SkaterAgentStateMachine._load_ready), so a feed is priced from where the
+# puck sits exactly when that is already true.
+func test_a_pass_is_priced_where_the_press_fires_it() -> void:
+	for a: float in [0.0, 45.0, 90.0, 135.0, 180.0, -45.0, -90.0, -135.0]:
+		var aim: Vector2 = AHEAD.rotated(deg_to_rad(a))
+		for puck: Vector2 in [AHEAD * 0.9, RIGHT * 0.9, RIGHT * 1.3, -RIGHT * 0.9,
+				(AHEAD + RIGHT).normalized() * 0.9]:
+			for needed: float in [0.0, 0.5, 0.7, 0.9, 1.0]:
+				_h.solve_pass(aim, puck, Vector2.ZERO, AHEAD, needed)
+				var fires_now: bool = _h.share_at(puck, aim, AHEAD) \
+						>= _h.pass_share - AIShotHolds.LOAD_READY_SHARE_SLACK
+				var label := "aim %.0f°, puck %s, needs %.1f" % [a, str(puck), needed]
+				assert_eq(_h.pass_pull_s == 0.0 and _h.pass_from == puck, fires_now, label)
 
 
 func test_a_pass_waits_for_the_turn_only_when_the_turn_loads_it() -> void:
@@ -203,12 +223,31 @@ func test_a_pass_waits_for_the_turn_only_when_the_turn_loads_it() -> void:
 		var aim: Vector2 = AHEAD.rotated(deg_to_rad(a))
 		_h.solve_pass(aim, AHEAD * 0.9, Vector2.ZERO, AHEAD, 1.0)
 		var blade: float = _h.pull_time(AHEAD * 0.9, _h.pass_offset, AHEAD, Vector2.ZERO)
-		assert_almost_eq(_h.pass_wait(0.0), blade, 0.0001, "aim %.0f°: a feed nothing loads" % a)
+		assert_eq(_h.pass_wait(0.0), 0.0, "aim %.0f°: a feed nothing loads goes at once" % a)
 		var full: float = _h.pass_wait(1.0)
+		if _h.pass_from == _h.origin:
+			continue
 		assert_gte(full, blade - 0.0001)
 		if full > blade + 0.0001:
 			assert_lt(_h.share_at(_h.pass_offset, aim, AHEAD), _h.pass_share,
 					"aim %.0f°: the turn is only waited for when it buys load" % a)
+
+
+func test_a_kept_pass_the_puck_already_carries_is_read_from_where_it_sits() -> void:
+	var reads: Array[Vector3] = []
+	var lane := func(off: Vector2, pull_s: float) -> float:
+		reads.append(Vector3(off.x, pull_s, off.y))
+		return 1.0
+	_h.solve_pass_kept(AHEAD, RIGHT * 1.3, AHEAD * 6.0, AHEAD, 0.9, Vector3.ZERO,
+			AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, [] as Array[Vector3],
+			[] as Array[Vector3], [], lane)
+	assert_false(reads.is_empty())
+	for r: Vector3 in reads:
+		assert_eq(r, Vector3(1.3, 0.0, 0.0), "every lane is read from the puck, unpulled")
+	assert_eq(_h.pass_keep_at, RIGHT * 1.3)
+	assert_eq(_h.pass_keep_pull, 0.0)
+	assert_eq(_h.pass_from, RIGHT * 1.3)
+	assert_eq(_h.pass_pull_s, 0.0)
 
 
 # ── price_keep: the odds the puck is still on the blade at the press ─────────

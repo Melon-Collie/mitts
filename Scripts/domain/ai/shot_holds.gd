@@ -8,7 +8,7 @@ extends RefCounted
 # winner. One instance per bot, configured from its own build: the carrier and
 # the state machine read the same answers.
 #
-# Every charged release comes from a listed spot, never from wherever the carry
+# Every charged shot comes from a listed spot, never from wherever the carry
 # left the puck; that spot is only where each pull starts (origin), so a puck
 # already sitting in one pulls to it in no time. Shots (solve_shot): the
 # best-loaded pocket (WristerPocket); a reach out to either side of the shot
@@ -18,8 +18,11 @@ extends RefCounted
 # puck, so a shot in stride or off a catch leaves without a pull, at the share
 # its load gives. A skating carrier lists no hold past his backhand stop
 # (FacingRules pivoting). Passes go from one of the pocket's candidates
-# (solve_pass, solve_pass_kept). A pull costs its real time (pull_time,
-# _fill_pulled). All vectors are world XZ, offsets off the body.
+# (solve_pass, solve_pass_kept), or from the puck where it sits when it already
+# carries the share the feed waits for: the press fires the moment the load is
+# there (LOAD_READY_SHARE_SLACK), so that is where such a pass leaves. A pull
+# costs its real time (pull_time, _fill_pulled). All vectors are world XZ,
+# offsets off the body.
 
 # A puck this near the body's centre has no bearing to load from.
 const MIN_OFFSET_M: float = 0.05
@@ -31,6 +34,10 @@ const ROUTE_SEGMENTS: int = 4
 # off the facing: the body turns to the cursor resting on it, and a spot that
 # turned with the body would walk him round in a circle.
 const SNAP_FOREHAND_RAD: float = PI / 6.0
+# How far short of the priced share the live load may be when a charged
+# release presses: the aim the press checks is the locked hole, a few degrees
+# off the line the share was priced along.
+const LOAD_READY_SHARE_SLACK: float = 0.05
 
 var is_left_handed: bool = false
 var load_cfg: WristerLoad.Config = WristerLoad.Config.new()
@@ -63,6 +70,12 @@ var arrival_keep: float = 1.0
 var pass_offset: Vector2 = Vector2.ZERO
 var pass_share: float = 0.0
 var pass_pull_s: float = 0.0
+# Where the last pass_wait's feed leaves from: `origin` when the puck carries
+# its share where it sits, else pass_offset.
+var pass_from: Vector2 = Vector2.ZERO
+# Where solve_pass_kept read pass_keep, and after what pull.
+var pass_keep_at: Vector2 = Vector2.ZERO
+var pass_keep_pull: float = 0.0
 # The hand of the last share_at.
 var is_backhand: bool = false
 # The last pocket solved (solve_shot, pocket).
@@ -73,6 +86,8 @@ var pocket_result := WristerPocket.Result.new()
 var _pass_blade_s: float = 0.0
 var _pass_turn_s: float = 0.0
 var _pass_share_now: float = 1.0
+# The share a feed along the last solve_pass's aim carries from `origin`.
+var _pass_share_as_is: float = 0.0
 
 # Odds the last solve_pass_kept's pick is kept through the blade's pull and
 # the charge.
@@ -129,6 +144,7 @@ func pocket_offset() -> Vector2:
 func solve_pass(aim: Vector2, puck_offset: Vector2, velocity: Vector2, facing: Vector2,
 		needed: float) -> void:
 	origin = puck_offset
+	_read_as_is(aim, facing)
 	pocket(aim, velocity, facing)
 	_fill_pass(aim, velocity, facing, needed)
 
@@ -140,14 +156,19 @@ func solve_pass(aim: Vector2, puck_offset: Vector2, velocity: Vector2, facing: V
 # the offset and the blade's pull: the share of the feed from there that gets
 # by the defence, 0 where it may not leave from at all) is best; the
 # better-loaded on a tie. A passer with a man on one side releases from the
-# other when it still carries the pace. Its keep is left in pass_keep.
+# other when it still carries the pace. A candidate whose share the puck
+# already carries where it sits is read as released from there, unpulled. Its
+# keep is left in pass_keep.
 func solve_pass_kept(aim: Vector2, puck_offset: Vector2, velocity: Vector2, facing: Vector2,
 		needed: float, self_pos: Vector3, charge_s: float, opponents: Array[Vector3],
 		opponent_vels: Array[Vector3], opponent_caps: Array,
 		lane: Callable = Callable()) -> void:
 	origin = puck_offset
+	_read_as_is(aim, facing)
 	var best: float = -1.0
 	pass_keep = 1.0
+	pass_keep_at = origin
+	pass_keep_pull = 0.0
 	if aim.length_squared() >= 0.000001:
 		_read_candidates(aim, velocity, facing)
 		for k: int in _cand_order:
@@ -163,6 +184,9 @@ func solve_pass_kept(aim: Vector2, puck_offset: Vector2, velocity: Vector2, faci
 				continue
 			var off: Vector2 = _cand.dir * handle_reach
 			var blade: float = pull_time(origin, off, facing, velocity)
+			if _carries_as_is(bound):
+				off = origin
+				blade = 0.0
 			var kept: float = keep_for(off, blade, self_pos, velocity, facing, charge_s,
 					opponents, opponent_vels, opponent_caps)
 			if not _may_beat(bound * kept, best):
@@ -172,10 +196,25 @@ func solve_pass_kept(aim: Vector2, puck_offset: Vector2, velocity: Vector2, faci
 			if through > 0.0 and _may_beat(v, best):
 				best = v
 				pass_keep = kept
+				pass_keep_at = off
+				pass_keep_pull = blade
 				WristerPocket.copy(pocket_result, _cand)
 	if best < 0.0:
 		pocket(aim, velocity, facing)
 	_fill_pass(aim, velocity, facing, needed)
+
+
+# The share a feed along `aim` carries with the puck at `origin` and the body
+# facing `facing`, into _pass_share_as_is (none with no facing to load from).
+func _read_as_is(aim: Vector2, facing: Vector2) -> void:
+	_pass_share_as_is = share_at(origin, aim, facing) \
+			if facing.length_squared() >= 0.0001 and aim.length_squared() >= 0.000001 else 0.0
+
+
+# Whether the puck where it sits carries a feed waiting for `waits_for` of the
+# pace, as the press reads it (the state machine's _load_ready).
+func _carries_as_is(waits_for: float) -> bool:
+	return _pass_share_as_is >= waits_for - LOAD_READY_SHARE_SLACK
 
 
 # Reads every pocket candidate round `aim` into _cands (_cand_ok: the blade can
@@ -220,16 +259,16 @@ func _fill_pass(aim: Vector2, velocity: Vector2, facing: Vector2, needed: float)
 	pass_pull_s = pass_wait(needed)
 
 
-# The blade's pull alone to the last solve_pass's pocket.
-func pass_blade_s() -> float:
-	return _pass_blade_s
-
-
-# The wait before the press of a feed from the last solve_pass's pocket needing
-# `needed` of the pace, into pass_share: the blade's pull there, and the turn
-# onto the pocket's facing too when the body as it faces now does not carry it.
+# The wait before the press of a feed from the last solve_pass needing `needed`
+# of the pace, into pass_share and pass_from: none when the puck carries the
+# share where it sits; else the blade's pull to the pocket, and the turn onto
+# the pocket's facing too when the body as it faces now does not carry it there.
 func pass_wait(needed: float) -> float:
 	pass_share = minf(needed, pocket_result.power_share)
+	if _carries_as_is(pass_share):
+		pass_from = origin
+		return 0.0
+	pass_from = pass_offset
 	if _pass_share_now >= pass_share:
 		return _pass_blade_s
 	return maxf(_pass_blade_s, _pass_turn_s)

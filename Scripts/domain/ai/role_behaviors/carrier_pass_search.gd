@@ -45,9 +45,9 @@ var best_rim_pace: float = 0.0
 # The straight feed's pace, as its AIPuckLane.PASS_PACE_FRACS step on the pace
 # scale (1.0 for a rim or no feed): what the commit fires it at.
 var best_pace_frac: float = 1.0
-# Where the best feed is released from (AIShotHolds.solve_pass_kept's pocket, world
-# XZ off the body; ZERO when there is no feed), the share of pace the pocket
-# carries there, and the odds the puck is kept through the pull and the charge.
+# Where the best feed leaves from (AIShotHolds.pass_from, world XZ off the
+# body; ZERO: no feed), the share of pace its pocket carries, and the odds the
+# puck is kept through the pull and the charge.
 var best_hold_offset: Vector3 = Vector3.ZERO
 var best_hold_cap: float = 1.0
 var best_hold_keep: float = 1.0
@@ -83,11 +83,11 @@ func _init(field: AICarrierField) -> void:
 
 # Searches the best pass this eval into the best_* result fields.
 #
-# Every feed is released from a pocket (AIShotHolds.solve_pass_kept), so it is
-# priced from there: the lead and lanes from the release the pull and the
-# wind-up carry him to, the pull's wait before it, and the odds the puck is
-# still on the blade when it goes (AIShotHolds.keep_for), as the shot's holds
-# are.
+# Every feed is priced from where the press fires it (AIShotHolds.pass_from: a
+# pocket, or the puck where it sits when it already carries the pace): the lead
+# and lanes from the release the pull and the wind-up carry him to, the pull's
+# wait before it, and the odds the puck is still on the blade when it goes
+# (AIShotHolds.keep_for), as the shot's holds are.
 #
 # Each receiver is scored as up to two straight variants competing on EV
 # (_pass_variant_ev): the flat feed at the best of its paces
@@ -175,13 +175,14 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 				self_facing_xz, full_need, self_pos, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
 				_field.opponents, _field.opponent_vels, _field.opponent_caps, _release_lane_fn)
 		var launch_cap: float = ctx.self_wrister_shot_speed * holds.pocket_result.power_share
-		var hold_offset := Vector3(holds.pass_offset.x, 0.0, holds.pass_offset.y)
-		var hold_shift: Vector2 = holds.pass_offset - puck_off
-		# Paces are solved from the blade's pull alone; a turn's wait releases later.
-		var blade_pull: float = holds.pass_blade_s()
-		var hold_origin: Vector3 = AICarrierField.pass_origin(ctx, blade_pull, hold_shift)
+		# Paces are solved from the full pace's release; a softer one may leave
+		# sooner, from where the puck sits.
+		var full_pull: float = holds.pass_pull_s
+		var hold_origin: Vector3 = AICarrierField.pass_origin(ctx, full_pull,
+				holds.pass_from - puck_off)
 		var dist: float = hold_origin.distance_to(receiver_state.position)
-		var keep_pull: float = blade_pull
+		var keep_at: Vector2 = holds.pass_keep_at
+		var keep_pull: float = holds.pass_keep_pull
 		var keep: float = holds.pass_keep
 		# Receiver's heading turn rate — the commitment read; 0 for a
 		# commitment-blind tier.
@@ -204,8 +205,9 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var full_speed: float = 0.0
 		var full_lane: float = 0.0
 		var win_origin: Vector3 = hold_origin
-		var win_pull: float = blade_pull
+		var win_pull: float = full_pull
 		var win_keep: float = 1.0
+		var win_hold := Vector3(holds.pass_from.x, 0.0, holds.pass_from.y)
 		var prev_speed: float = -1.0
 		var prev_hold: float = INF
 		var fracs: Array[float] = AIPuckLane.PASS_PACE_FRACS
@@ -228,13 +230,14 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			prev_speed = speed
 			prev_hold = hold
 			var pull: float = holds.pass_wait(speed / maxf(ctx.self_wrister_shot_speed, 0.001))
-			if pull != keep_pull:
+			var from: Vector2 = holds.pass_from
+			if pull != keep_pull or from != keep_at:
 				keep_pull = pull
-				keep = holds.keep_for(holds.pass_offset, pull, self_pos, body_vel,
+				keep_at = from
+				keep = holds.keep_for(from, pull, self_pos, body_vel,
 						self_facing_xz, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
 						_field.opponents, _field.opponent_vels, _field.opponent_caps)
-			var origin: Vector3 = hold_origin if pull == blade_pull \
-					else AICarrierField.pass_origin(ctx, pull, hold_shift)
+			var origin: Vector3 = AICarrierField.pass_origin(ctx, pull, from - puck_off)
 			_last_flat_variant_lane = 0.0
 			var s_pace: float = _pass_variant_ev(
 					ctx, receiver_state, receiver_omega, receiver_caps,
@@ -252,6 +255,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 				win_origin = origin
 				win_pull = pull
 				win_keep = keep
+				win_hold = Vector3(from.x, 0.0, from.y)
 		if s <= 0.0:
 			pass_speed = full_speed
 			pass_frac = 1.0
@@ -304,7 +308,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			best_pass_peer = peer_id
 			best_pass_saucer = use_saucer
 			best_pass_frac = pass_frac
-			best_hold = hold_offset
+			best_hold = win_hold
 			best_cap = launch_cap / maxf(ctx.self_wrister_shot_speed, 0.001)
 			best_keep = win_keep
 	if rim_peer != -1:
@@ -324,8 +328,10 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 				AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, _field.opponents, _field.opponent_vels,
 				_field.opponent_caps)
 		var rim_pull: float = holds.pass_pull_s
-		var rim_keep: float = holds.pass_keep if rim_pull == holds.pass_blade_s() \
-				else holds.keep_for(holds.pass_offset, rim_pull, self_pos, body_vel,
+		var rim_from: Vector2 = holds.pass_from
+		var rim_keep: float = holds.pass_keep \
+				if rim_pull == holds.pass_keep_pull and rim_from == holds.pass_keep_at \
+				else holds.keep_for(rim_from, rim_pull, self_pos, body_vel,
 						self_facing_xz, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
 						_field.opponents, _field.opponent_vels, _field.opponent_caps)
 		var s_rim: float = _pass_ev(ctx, AIRimPass.meet_point(rim_k, rim_t),
@@ -345,7 +351,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			best_pass_frac = 1.0
 			best_pass_rim_dir = AIRimPass.dirs[rim_k]
 			best_pass_rim_pace = AIRimPass.paces[rim_k]
-			best_hold = Vector3(holds.pass_offset.x, 0.0, holds.pass_offset.y)
+			best_hold = Vector3(rim_from.x, 0.0, rim_from.y)
 			best_cap = holds.pocket_result.power_share
 			best_keep = rim_keep
 	best_peer = best_pass_peer
@@ -361,7 +367,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 
 
 # The share of a full-pace feed to the receiver being searched that gets by the
-# defence from a pocket at `off` (world XZ off the body) after the blade's
+# defence from a release at `off` (world XZ off the body) after the blade's
 # `pull_s`: flat, or saucered where the search would try one. 0 where _pass_ev
 # hard-zeros the release (through a cage, across our slot).
 func _release_lane(off: Vector2, pull_s: float) -> float:
