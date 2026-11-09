@@ -42,6 +42,9 @@ var _how: Dictionary = {}
 # puck's pace, the thrown length, and how long before the release the carrier
 # last chose.
 var _intercepts: Array = []
+# Per interception (_receiver_row): the catch the passer priced against the man
+# who took it, where he stood at the release.
+var _receiver_rows: Array = []
 # Per carrier, the tick he committed to his pending pass and his own view then:
 # [tick, opponents at the release (his projection), their velocities, caps,
 # blades at the release, the priced spot, the priced lane].
@@ -459,6 +462,9 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 	var sample_every: int = int(CARRY_SAMPLE_S / Duel.DT)
 	for i: int in ticks:
 		var before: int = duel.releases.size()
+		var touches_before: int = duel.deflects + duel.bobbles + duel.contests
+		var bobbles_before: int = duel.bobbles
+		var deflects_before: int = duel.deflects
 		duel.step()
 		var c: int = duel.carrier()
 		var c_team: int = _team_of(duel, c) if c != -1 else -1
@@ -483,7 +489,9 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 							"", Vector2(duel.puck_vel.x, duel.puck_vel.z).length(), commit[12],
 							commit[8], "%d/%d/%d" % [to, commit[13], commit[14]], 0])
 				open_passes.append([rec, i, int(rec["team"]), -1, -1, -1,
-						_release_view(duel, rec), commit, _exec_row(duel, rec, commit)])
+						_release_view(duel, rec), commit, _exec_row(duel, rec, commit),
+						{"min_d": INF, "touch": "", "speed_at": 0.0, "rcv_at": Vector3.INF,
+								"state": ""}])
 				if commit.size() > 10 and commit[10]:
 					_saucer_flight(duel, commit, i)
 			# A carrier who released leaves his open carry samples.
@@ -494,6 +502,23 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 		# Passes: the first side to touch it, then whether it holds through the catch.
 		for op: Array in open_passes:
 			if op[3] == -1:
+				# The receiver's blade on the puck while it is in flight to him.
+				var rs: Object = _sim(duel, int(op[0]["pass_peer"]))
+				if rs != null:
+					var bd: float = Vector2(rs.blade.x - duel.puck_pos.x,
+							rs.blade.z - duel.puck_pos.z).length()
+					if bd < op[9]["min_d"]:
+						op[9]["min_d"] = bd
+						op[9]["rcv_at"] = rs.pos
+						op[9]["state"] = SkaterAgentStateMachine.State.keys()[rs.agent._state] \
+								if rs.agent != null else "?"
+						op[9]["speed_at"] = Vector2(duel.puck_vel.x - rs.vel.x,
+								duel.puck_vel.z - rs.vel.z).length()
+					if op[9]["touch"] == "" and duel.deflects + duel.bobbles + duel.contests \
+							> touches_before and bd < 1.0:
+						op[9]["touch"] = "bobbled" if duel.bobbles > bobbles_before \
+								else ("deflected" if duel.deflects > deflects_before
+										else "contested")
 				if c != -1:
 					op[3] = i
 					op[4] = c_team
@@ -503,6 +528,16 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 						if not row.is_empty():
 							_intercepts.append(row)
 							_commit_rows.append(_commit_row(op[6], op[7], c, op[1]))
+							var rr: Array = _receiver_row(duel, op[6], op[0], c, i - op[1])
+							if not rr.is_empty():
+								var led: Vector3 = op[0].get("pass_spot", Vector3.INF)
+								var at: Vector3 = op[9]["rcv_at"]
+								rr.append_array([op[9]["min_d"], op[9]["speed_at"],
+										op[9]["touch"] if op[9]["touch"] != "" else "-",
+										Vector2(at.x - led.x, at.z - led.z).length()
+												if at.is_finite() and led.is_finite() else -1.0,
+										op[9]["state"]])
+							_receiver_rows.append(rr)
 				elif i - op[1] > int(LOOSE_AFTER_S / Duel.DT):
 					op[3] = -2   # loose: left out
 					_how["loose"] = int(_how.get("loose", 0)) + 1
@@ -615,6 +650,7 @@ func test_report_pass_and_carry_calibration() -> void:
 	_table("passes, the flight alone (release × lane × no miss)", mode_rows)
 	_table("carries, both sides", _carries)
 	_report_intercepts()
+	_report_receiver_end()
 	_report_exec()
 	_report_rims()
 	gut.p("  saucers: %d" % _saucers.size())
@@ -623,6 +659,68 @@ func test_report_pass_and_carry_calibration() -> void:
 		gut.p("     %5.1f       %5.1f       %4.1f to %4.1f                %4.1f       %4.1f"
 				% [r[0], r[1], r[2], r[3], r[4], r[5]])
 	assert_true(true)
+
+
+# The catch an interception beat, as the passer's reception read prices it: the
+# man who took it where he stood at the release, and his reach on the catch spot
+# when the puck gets there (AICarrySpace.reach_clearance, the passer's
+# catch_safety) committed for the read's short window and for the whole flight;
+# how far his body and blade stood from the spot, and where along the line he
+# took it.
+func _receiver_row(duel: Object, view: Dictionary, rec: Dictionary, interceptor: int,
+		ticks_after: int) -> Array:
+	var spot: Vector3 = rec.get("pass_spot", Vector3.INF)
+	if not spot.is_finite():
+		return []
+	var from: Vector3 = view["from"]
+	var v: Vector3 = view["vel"]
+	v.y = 0.0
+	var speed: float = maxf(v.length(), 1.0)
+	var dist: float = Vector2(spot.x - from.x, spot.z - from.z).length()
+	var flight: float = AIPuckLane._friction_traverse_time(dist, speed)
+	var receiver: Object = _sim(duel, int(rec["pass_peer"]))
+	var r_vel: Vector3 = receiver.vel if receiver != null else Vector3.ZERO
+	var settle: float = AIFeedReception.receiver_settle_s(
+			AIFeedReception.arrival_closing_speed(from, spot, speed, r_vel))
+	var caps: Array = [Duel.match_caps()]
+	var pick: Vector3 = duel.puck_pos
+	var dir: Vector3 = (spot - from) / maxf(dist, 0.01)
+	var pick_along: float = ((pick.x - from.x) * dir.x + (pick.z - from.z) * dir.z) / maxf(dist, 0.01)
+	for o: Array in view["opps"]:
+		if o[0] != interceptor:
+			continue
+		var p: Vector3 = o[1]
+		var pv: Vector3 = o[2]
+		var b: Vector3 = o[3]
+		var opps: Array[Vector3] = [p]
+		var vels: Array[Vector3] = [pv]
+		var short: float = AICarrySpace.reach_clearance(spot, flight + settle, opps, vels, caps,
+				AICarrySpace.EVADE_HORIZON_S + settle)
+		var whole: float = AICarrySpace.reach_clearance(spot, flight + settle, opps, vels, caps)
+		return [float(rec.get("pass_reception", -1.0)),
+				AICarrySpace.clearance_to_safety(short), AICarrySpace.clearance_to_safety(whole),
+				short, whole, Vector2(p.x - spot.x, p.z - spot.z).length(),
+				Vector2(b.x - spot.x, b.z - spot.z).length(), pv.length(),
+				flight, settle, pick_along, ticks_after * Duel.DT]
+	return []
+
+
+func _report_receiver_end() -> void:
+	gut.p("  the catch each interception beat:")
+	gut.p("     priced   catch safety,       clearance (m),   his body  his blade  his    flight  settle  taken at  after  | receiver's blade: closest  rel m/s  touched  | receiver off his lead (m), doing")
+	gut.p("     reception  short / whole     short / whole    to spot   to spot    m/s    (s)     (s)     the line  (s)    |                   (m)")
+	var short_safe: int = 0
+	var late: int = 0
+	for r: Array in _receiver_rows:
+		if r.is_empty():
+			continue
+		gut.p("     %4.2f       %4.2f / %4.2f       %5.2f / %5.2f    %4.1f      %4.1f       %4.1f   %4.2f    %4.2f    %4.2f      %4.2f   |  %5.2f    %5.1f    %-8s |  %4.1f  %s" % r)
+		if r[10] >= 0.7:
+			late += 1
+			if r[1] >= 0.8:
+				short_safe += 1
+	gut.p("     %d taken in the last 30%% of the line; of those, %d the short window priced safe (>= 0.8)"
+			% [late, short_safe])
 
 
 func _report_intercepts() -> void:
