@@ -463,7 +463,25 @@ work, aims the same way and was left.)
   circle. It needs a second start there (the nearest held point of a coarse
   ring, `search_lie`'s), kept by hysteresis so it does not flip between the
   two each tick, and eased across when it does change.
-- **The native port** (§8 phase 4) before that: a second start multiplies a
-  cost that is already ~2.7 ms a skater a tick in GDScript.
 - **A playtest** in free play to judge the look in front and at the sides;
   the backhand in tight will look worse than today until the far side is in.
+
+## 15. The native port
+
+`NativeHoldModel` (`native/src/native_hold_model.*`) runs `project` and
+`evaluate`; the elbow swivel moved out of `NativeArmRig` into
+`native/src/arm_swivel.*`, which both kernels hold, so the hold model's arms
+are the arm rig's by construction. `held_top_hand` packs the tick's body
+(`SkaterHoldModel.pack`) and calls it where the extension is built; the
+GDScript is the reference and the fallback.
+
+- **Parity** (`test_native_hold_model_parity.gd`, 400 cases off a live
+  carrier's body, moved, turned, rescaled, the height rule on and off, 356 of
+  them unheld, walks up to 1.04 m): every limit and the held hand equal to the
+  bit. The arm rig's parity is unchanged by the extraction (worst 4.9e-5).
+- **Cost** (`measure-frame-cost.sh 6`, two runs each, headless): the host's
+  tick 2.54 ms off, 3.51 ms on — ~0.16 ms a skater a tick, against ~2.7 ms in
+  GDScript, nearly all of it under capture and broadcast, where the tick
+  first reads each skater's shaft. A far-side second start (§14) would add at
+  most another projection's worth.
+

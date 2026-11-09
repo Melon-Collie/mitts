@@ -366,3 +366,57 @@ static func search_lie(body: Body, blade: Vector3, length: float, lie: float, wi
 				nearest = absf(elevation - lie)
 				out.held_found = true
 				out.held_hand = h
+
+
+# NativeHoldModel configured as this model, or null where the extension is not
+# built or predates it: project and evaluate as this file's, the parity held by
+# tests/unit/rules/test_native_hold_model_parity.gd.
+static func native() -> RefCounted:
+	if not ClassDB.class_exists(&"NativeHoldModel") \
+			or not ClassDB.class_has_method(&"NativeHoldModel", &"configure_hold"):
+		return null
+	var model: RefCounted = ClassDB.instantiate(&"NativeHoldModel") as RefCounted
+	model.configure_torso(PackedVector2Array(SkaterMeshBuilder.TORSO_PROFILE),
+			PackedFloat64Array(SkaterMeshBuilder.TORSO_REAR_SWAY),
+			PackedFloat64Array(SkaterMeshBuilder.TORSO_DEPTH),
+			SkaterMeshBuilder.TORSO_XZ_SCALE.x, SkaterMeshBuilder.TORSO_XZ_SCALE.y,
+			SkaterMeshBuilder.SLEEVE_RADIUS_M, SkaterArmPoses.SWIVEL_CONTACT_M)
+	model.configure_swivel(PackedFloat64Array([
+			SkaterArmPoses.SWIVEL_TORSO, SkaterArmPoses.SWIVEL_REST,
+			SkaterArmPoses.SWIVEL_SHOULDER, SkaterArmPoses.SWIVEL_EXTENSION_MAX,
+			SkaterArmPoses.SWIVEL_WRIST, SkaterArmPoses.SWIVEL_HOLD,
+			SkaterArmPoses.SWIVEL_UPPER_SAMPLE, SkaterArmPoses.SWIVEL_SAMPLES,
+			SkaterArmPoses.SWIVEL_GOLDEN_STEPS, SkaterArmPoses.SWIVEL_FREE_DOT]))
+	model.configure_hold(PackedFloat64Array([SHAFT_SAMPLES, SHAFT_FROM, SHAFT_TO,
+			SHAFT_RADIUS_M, PROJECT_STEPS, PROJECT_SETTLED_M, deg_to_rad(PROJECT_LIE_DEG),
+			_NORMAL_STEP_M, _CLEARANCE_CAP_M]))
+	return model
+
+
+# The body as NativeHoldModel takes it, into arrays sized by the caller
+# (PACKED_VECTORS, PACKED_SCALARS) so a tick allocates nothing.
+const PACKED_VECTORS: int = 9
+const PACKED_SCALARS: int = 11
+
+
+static func pack(body: Body, vectors: PackedVector3Array, scalars: PackedFloat64Array) -> void:
+	vectors[0] = body.shoulders[0]
+	vectors[1] = body.shoulders[1]
+	vectors[2] = body.rest_poles[0]
+	vectors[3] = body.rest_poles[1]
+	vectors[4] = body.outward[0]
+	vectors[5] = body.outward[1]
+	vectors[6] = body.back
+	vectors[7] = body.wrists[0]
+	vectors[8] = body.wrists[1]
+	scalars[0] = body.upper_len
+	scalars[1] = body.forearm_len
+	scalars[2] = body.reach
+	scalars[3] = body.slack
+	scalars[4] = body.elbow_flex_max
+	scalars[5] = body.fist_radius
+	scalars[6] = body.knob_extend
+	scalars[7] = body.knob_radius
+	scalars[8] = body.spacing
+	scalars[9] = body.grip
+	scalars[10] = body.hand_below_shoulder

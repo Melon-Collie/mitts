@@ -84,6 +84,10 @@ static var held_hands: bool = OS.get_environment("MITTS_HELD_HANDS") == "1" \
 		or OS.get_cmdline_user_args().has("--held-hands")
 var _hold_body := SkaterHoldModel.Body.new()
 var _hold_report := SkaterHoldModel.Report.new()
+# NativeHoldModel where it is built (SkaterHoldModel.native), and the body packed for it.
+var _native_hold: RefCounted = null
+var _hold_vectors := PackedVector3Array()
+var _hold_scalars := PackedFloat64Array()
 # The held hand for the tick state it was solved from (held_top_hand), and the
 # drawn offset off the marker eased toward it, with its rate.
 var _held_key := Transform3D(Basis(Vector3.INF, Vector3.INF, Vector3.INF), Vector3.INF)
@@ -172,6 +176,9 @@ func setup(skater: Skater, controller: SkaterController,
 		_pass_scalars.resize(PassS.COUNT)
 		_pass_vectors.resize(PassV.COUNT)
 		_sync_pass_config()
+	_native_hold = SkaterHoldModel.native()
+	_hold_vectors.resize(SkaterHoldModel.PACKED_VECTORS)
+	_hold_scalars.resize(SkaterHoldModel.PACKED_SCALARS)
 
 # Drop the cached configs so the next solve rebuilds them from the controller
 # exports. Called by SkaterController.apply_attributes (stick length, ROM, and
@@ -1026,8 +1033,14 @@ func held_top_hand() -> Vector3:
 	_held_fold = fold
 	fill_hold_body(_hold_body)
 	_hold_body.hand_below_shoulder = SkaterHoldModel.HAND_BELOW_SHOULDER_M
-	_held_hand = SkaterHoldModel.project(_hold_body, marker, _skater.blade.position,
-			deg_to_rad(_skater.blade_lie_deg), _hold_report)
+	var lie: float = deg_to_rad(_skater.blade_lie_deg)
+	if _native_hold != null:
+		SkaterHoldModel.pack(_hold_body, _hold_vectors, _hold_scalars)
+		_held_hand = _native_hold.project(_hold_vectors, _hold_body.torso, _hold_scalars,
+				marker, _skater.blade.position, lie)
+	else:
+		_held_hand = SkaterHoldModel.project(_hold_body, marker, _skater.blade.position, lie,
+				_hold_report)
 	return _held_hand
 
 

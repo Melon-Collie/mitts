@@ -4,7 +4,7 @@ C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeSkaterMovement`,
 `NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`, `NativeSkaterGait`,
 `NativeLegChain`, `NativeCarryRollout`, `NativeShotOdds`, `NativeHemFlaps`,
-`NativeBladePass`). The
+`NativeBladePass`, `NativeHoldModel`). The
 GDScript originals (in `Scripts/domain/rules/`, `Scripts/domain/ai/`,
 `Scripts/controllers/` and `Scripts/actors/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
@@ -185,6 +185,16 @@ without a built binary, loses performance, never correctness — CI builds it):
   `SkaterArmPoses` through `configure_swivel`, never as copies.
   `tests/unit/rules/test_native_arm_rig_parity.gd`, whose tolerance is looser
   than the other kernels' because the swivel is a minimum rather than a root.
+
+- **Hold model** — `SkaterIKCoordinator.held_top_hand` (every skater's tick
+  with held hands on, once per tick state): `project` walks the held hand over
+  the stick's sphere (`SkaterHoldModel.project`), and `evaluate` returns the
+  report's limits for the parity test. The elbow swivel is the arm rig's own
+  (`src/arm_swivel.*`, shared with `NativeArmRig`); the jersey, swivel weights
+  and hold constants come from `SkaterHoldModel.native()`, and the tick's body
+  is packed each call (`SkaterHoldModel.pack`, into scratch arrays). ~2.7 ms →
+  ~0.16 ms a skater a tick. `tests/unit/rules/test_native_hold_model_parity.gd`,
+  which measures the two equal to the bit.
 
 - **Carry rollout** — `AICarryRollout.roll_all` (the bot carrier's near moves,
   four rolls a carry search on the AI worker): every move skated in one call,

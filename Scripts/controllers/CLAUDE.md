@@ -453,8 +453,10 @@ the drawn hand, and every read of the shaft — stick lifts and ties, the host's
 marker keeps everything that orients the blade (its heading, contact, the
 carry's pin, the reach lean): those cancel only while the hand stays on the
 shoulder→blade line. Shots, the block and a skater who is down keep the
-marker. It costs ~2.7 ms a skater a tick in GDScript, so it needs its native
-port before it can be on in a match.
+marker. Where the extension is built `NativeHoldModel` runs the projection
+(~0.16 ms a skater a tick, against ~2.7 ms in GDScript): change
+`SkaterHoldModel.evaluate` / `project` or anything under them and the port
+changes with it, or `test_native_hold_model_parity.gd` fails.
 
 **A carrier keeps both hands on the stick.** An empty stick reaches one-handed
 to the rim when there is a puck to reach for (`ReachPurposeRules`) and rests in
