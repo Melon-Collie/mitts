@@ -45,12 +45,12 @@ func score(ctx: RoleContext, dest: Vector3,
 			apex, dest, v_apex, ctx.self_max_speed, ctx.self_max_accel, ctx.self_lateral_grip)
 	# The same exact ceiling ladder as _score_move_candidate_base, per leg.
 	var decay: float = AIActionScoring.delay_discount(t1 + t2)
-	if decay <= best_so_far:
+	if AICarrierField.kept_ceiling(decay) <= best_so_far:
 		return -INF
 	var lane1: float = AICarrySpace.carry_lane_clearance(
 			self_pos, apex, t1, _field.opponents, _field.opponent_vels,
 			ctx.self_max_speed)
-	if lane1 <= 0.0 or lane1 * decay <= best_so_far:
+	if lane1 <= 0.0 or AICarrierField.kept_ceiling(lane1 * decay) <= best_so_far:
 		return -INF
 	var cur_puck: Vector3 = AICarrierField.puck_pos_at(self_pos, ctx.attacking_goal_pos)
 	var apex_puck: Vector3 = AICarrierField.puck_pos_at(apex, ctx.attacking_goal_pos)
@@ -58,7 +58,7 @@ func score(ctx: RoleContext, dest: Vector3,
 	var safety1: float = AICarrySpace.carry_safety(
 			cur_puck, apex_puck, t1, _field.opponents,
 			_field.opponent_vels, _field.opponent_caps, true)
-	if lane1 * decay * safety1 <= best_so_far:
+	if AICarrierField.kept_ceiling(lane1 * decay, safety1) <= best_so_far:
 		return -INF
 	# Leg two starts where the defense has skated to during leg one.
 	_field.project_opponents(t1, _scratch_opponents)
@@ -72,7 +72,7 @@ func score(ctx: RoleContext, dest: Vector3,
 			_field.opponent_vels, _field.opponent_caps, true)
 	var keep: float = safety1 * safety2
 	var ceiling: float = lane1 * lane2 * decay * keep
-	if ceiling <= best_so_far:
+	if AICarrierField.kept_ceiling(lane1 * lane2 * decay, keep) <= best_so_far:
 		return -INF
 	_field.project_opponents(t1 + t2, _scratch_opponents)
 	var dest_score: float = _field.value_at(ctx, dest, self_pos, _scratch_opponents)

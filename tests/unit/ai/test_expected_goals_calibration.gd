@@ -16,14 +16,19 @@ const Snapshot := preload("res://tests/snapshot.gd")
 
 # A const initializer can't reference another script's constant, so this is a var.
 var GOAL := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+var FED: int = AIShotOdds.History.FED
 
 
 func _nhw() -> float:
 	return GameRules.NET_HALF_WIDTH
 
 
-func _xg(shooter: Vector3, goalie: Vector3, spread: float) -> float:
-	return AIActionScoring.expected_goals(shooter, GOAL, goalie, spread)
+# A keeper squared on the shooter has tracked his carry (CARRIED); a beaten one,
+# pulled off the line, was caught by a pass (FED).
+func _xg(shooter: Vector3, goalie: Vector3, spread: float,
+		history: int = AIShotOdds.History.CARRIED) -> float:
+	return AIActionScoring.expected_goals(shooter, GOAL, goalie, spread,
+			AIShotOdds.Stance.UPRIGHT, null, history)
 
 
 func _settled() -> float:
@@ -72,7 +77,7 @@ func test_wider_release_lowers_xg_monotonically() -> void:
 	var beaten := Vector3(0.9, 0.0, GOAL.z + 0.6)
 	var prev: float = 1.0
 	for spread: float in [0.05, 0.10, 0.18, 0.30, 0.50]:
-		var xg: float = _xg(shooter, beaten, spread)
+		var xg: float = _xg(shooter, beaten, spread, FED)
 		assert_lt(xg, prev, "xG falls as the release gets wilder (σ=%.2f)" % spread)
 		prev = xg
 
@@ -82,7 +87,7 @@ func test_deke_shot_is_worth_less_than_the_same_open_net_settled() -> void:
 	# but the shot itself is brutal. Same window, different execution.
 	var shooter := Vector3(0.0, 0.0, GOAL.z + 6.0)
 	var beaten := Vector3(0.9, 0.0, GOAL.z + 0.6)
-	assert_lt(_xg(shooter, beaten, _awkward()), _xg(shooter, beaten, _settled()),
+	assert_lt(_xg(shooter, beaten, _awkward(), FED), _xg(shooter, beaten, _settled(), FED),
 			"an awkward release off an open net is worth less than a settled one")
 
 
@@ -100,7 +105,7 @@ func test_more_open_net_is_worth_more() -> void:
 	var shooter := Vector3(0.0, 0.0, GOAL.z + 6.0)
 	var squared := Vector3(0.0, 0.0, GOAL.z + 1.5)
 	var beaten := Vector3(0.9, 0.0, GOAL.z + 0.6)
-	assert_gt(_xg(shooter, beaten, _settled()), _xg(shooter, squared, _settled()),
+	assert_gt(_xg(shooter, beaten, _settled(), FED), _xg(shooter, squared, _settled()),
 			"a beaten goalie is worth more than a square one")
 
 
@@ -115,8 +120,8 @@ func _baseline_ratio() -> float:
 		var shooter := Vector3(0.0, 0.0, GOAL.z + d)
 		var beaten := Vector3(0.9, 0.0, GOAL.z + 0.6)
 		# Half the attempts settled, half out of a move — a plausible mix.
-		geo_total += 0.5 * _xg(shooter, beaten, settled) \
-				+ 0.5 * _xg(shooter, beaten, awkward)
+		geo_total += 0.5 * _xg(shooter, beaten, settled, FED) \
+				+ 0.5 * _xg(shooter, beaten, awkward, FED)
 		base_total += XGBaseline.for_shot(0.0, GOAL.z + d, 0, ShotEvent.ShotType.SHOT)
 	return geo_total / maxf(base_total, 0.001)
 
@@ -137,7 +142,7 @@ func test_xg_calibration_snapshot() -> void:
 	var snap := Snapshot.new("res://tests/unit/ai/snapshots/xg_calibration.txt")
 	var shooter := Vector3(0.0, 0.0, GOAL.z + 6.0)
 	var beaten := Vector3(0.9, 0.0, GOAL.z + 0.6)
-	snap.record("6 m past a beaten keeper, settled release", _xg(shooter, beaten, _settled()))
-	snap.record("6 m past a beaten keeper, backhand on the move", _xg(shooter, beaten, _awkward()))
+	snap.record("6 m past a beaten keeper, settled release", _xg(shooter, beaten, _settled(), FED))
+	snap.record("6 m past a beaten keeper, backhand on the move", _xg(shooter, beaten, _awkward(), FED))
 	snap.record("beaten-keeper mix over the location model", _baseline_ratio())
 	snap.verify(self)

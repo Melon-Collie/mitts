@@ -62,6 +62,21 @@ func _settle_penalty(ctx: RoleContext) -> float:
 			-_settle_elapsed_s / maxf(ctx.settle_penalty_tau_s, 0.001))
 
 
+# The play this shooter's keeper last saw (AIShotOdds.History), each until he
+# has had time to set on the shooter again (AIGoalieModel.goalie_reset_s): come
+# out from behind the net, he is sealed on the post the carrier came round; a
+# pass just taken leaves him set on the passer, across the royal road or on the
+# shooter's side of it; otherwise, and held longer, he has tracked the carry.
+func _shot_history() -> int:
+	var reset_s: float = AIGoalieModel.goalie_reset_s()
+	if _since_behind_s < reset_s:
+		return AIShotOdds.History.WRAPPED
+	if _settle_elapsed_s >= reset_s or not _fed_from.is_finite():
+		return AIShotOdds.History.CARRIED
+	return AIShotOdds.History.FED_ACROSS if AIShotOdds.crosses_royal_road(_fed_from.x, _self_x) \
+			else AIShotOdds.History.FED_SAME
+
+
 # Move `value` away from being chosen by `penalty` of its own magnitude: a
 # positive score shrinks toward zero, a negative one deepens. Higher is better
 # everywhere this is read, so the one form handicaps both signs.
@@ -133,6 +148,13 @@ var _hold_elapsed_s: float = 0.0
 # press-state bail back to CARRY is the same possession.
 var _settle_arm_pending: bool = true
 var _settle_elapsed_s: float = 0.0
+# Seconds since he was last behind the goal line he attacks, this possession
+# (INF: not yet): a shot out of a wrap (_shot_history).
+var _since_behind_s: float = INF
+# Where the pass he took this possession left from (RoleContext.fed_from; INF:
+# none), and where he is (_shot_history).
+var _fed_from: Vector3 = Vector3.INF
+var _self_x: float = 0.0
 
 # Set when intent commits to PASS (or to a rim, released as a DUMP). Consumed by
 # the state machine entering PASS_PRESSED. -1 = no current pass target.
@@ -187,6 +209,8 @@ var carry_brake: bool = false
 var dump_target: Vector3 = Vector3.INF
 # Launch pace (m/s) the rim fires at: its searched pace.
 var dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S
+# Whether the dump is chipped over the sticks: every dump-in is, a rim never.
+var dump_lofted: bool = false
 
 # ── Puck-protect mirror (read by the state machine's carry blade aim) ────────
 # Where in the blade's handling envelope the puck is safest right now, as an
@@ -298,11 +322,17 @@ func decide(ctx: RoleContext) -> RoleDecision:
 	# Each call spans this many physics ticks; draining the cooldown by the real
 	# span keeps the re-eval cadence in wall time at every difficulty tier.
 	var step_ticks: int = maxi(1, ctx.dispatch_period_ticks)
+	var step_s: float = float(step_ticks) / float(_PhysicsConstants.PHYSICS_TICK)
 	if _settle_arm_pending:
 		_settle_arm_pending = false
 		_settle_elapsed_s = 0.0
 	else:
-		_settle_elapsed_s += float(step_ticks) / float(_PhysicsConstants.PHYSICS_TICK)
+		_settle_elapsed_s += step_s
+	_since_behind_s += step_s
+	if (ctx.self_pos.z - ctx.attacking_goal_pos.z) * signf(ctx.attacking_goal_pos.z) > 0.0:
+		_since_behind_s = 0.0
+	_fed_from = ctx.fed_from
+	_self_x = ctx.self_pos.x - ctx.attacking_goal_pos.x
 	_ticks_since_pick += step_ticks
 	if _commit_phase_pending:
 		# Second dispatch of a sliced re-eval (see _commit_phase_pending). The
@@ -365,6 +395,7 @@ func reset() -> void:
 	_carry_plan = CarryPlan.NONE
 	dump_target = Vector3.INF
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
+	dump_lofted = false
 	_dumping_in = false
 	protect_offset = Vector3.ZERO
 	protect_gain = 0.0
@@ -377,6 +408,8 @@ func reset() -> void:
 	_full_eval_pending = true
 	_settle_arm_pending = true
 	_settle_elapsed_s = 0.0
+	_since_behind_s = INF
+	_fed_from = Vector3.INF
 	_carry.reset()
 
 
@@ -391,6 +424,7 @@ func clear_intent() -> void:
 	pass_should_saucer = false
 	dump_target = Vector3.INF
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
+	dump_lofted = false
 	_dumping_in = false
 	_pick_action_cooldown = 0
 	_ticks_since_pick = 0
@@ -535,7 +569,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		keeper_yaw = opp_keeper.rotation_y
 		if not shot_unavailable:
 			AIShotOdds.pick_shot_now(wrister_base_release, attacking_goal, keeper_now,
-					keeper_vel_x, keeper_stance, _shot_pick, keeper_yaw)
+					keeper_vel_x, keeper_stance, _shot_pick, keeper_yaw, null, _shot_history())
 	var shot_target: Vector3 = _shot_pick.aim if _shot_pick.aim.is_finite() else attacking_goal
 	var shot_dir: Vector3 = shot_target - wrister_base_release
 	shot_dir.y = 0.0
@@ -559,9 +593,11 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var share: float = _field.holds.share[k]
 		var pull_s: float = _field.holds.pull_s[k]
 		var sample_speed: float = ctx.self_wrister_shot_speed * share
-		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
-				self_pos + hold + horizontal_velocity
-						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s),
+		var released_at: Vector3 = self_pos + hold + horizontal_velocity \
+				* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s)
+		if not _shootable_from(released_at, attacking_goal, goalie_now):
+			continue
+		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(released_at,
 				attacking_goal, goalie_now)
 		# Priced through the seam like the carry and pass legs, against the
 		# keeper as he reads now: the field prices what he does over the wind-up
@@ -570,7 +606,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var s: float = AIActionScoring.score_shoot_value(
 				release, attacking_goal, keeper_now, _field.opponents_release,
 				keeper_vel_x, keeper_stance, sample_speed,
-				_field.opponent_caps, -1.0, keeper_yaw) * _field.holds.keep[k]
+				_field.opponent_caps, -1.0, keeper_yaw, true, _shot_history()) \
+				* _field.holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_share = share
@@ -587,12 +624,14 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var tip_hold := Vector3(_field.holds.offset[tip_k].x, 0.0, _field.holds.offset[tip_k].y)
 		var tip_share: float = _field.holds.share[tip_k]
 		var tip_pull_s: float = _field.holds.pull_s[tip_k]
-		var tip_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
-				self_pos + tip_hold + horizontal_velocity
-						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + tip_pull_s),
+		var tip_released_at: Vector3 = self_pos + tip_hold + horizontal_velocity \
+				* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + tip_pull_s)
+		var tip_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(tip_released_at,
 				attacking_goal, goalie_now)
 		var tip_speed: float = ctx.self_wrister_shot_speed * tip_share
-		for tip_man: Vector3 in _field.receiver_pos:
+		for tip_man: Vector3 in _field.receiver_pos \
+				if _shootable_from(tip_released_at, attacking_goal, goalie_now) \
+				else AIActionScoring.EMPTY_VEC3:
 			var tip_s: float = AIActionScoring.tip_ev(
 					tip_release, tip_man, attacking_goal, goalie_now,
 					_field.opponents_release,
@@ -623,6 +662,19 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		_phase_dump_score = _dump.best_score
 		_phase_dump_dir = _dump.best_dir
 		_phase_dump_pace = _dump.best_pace
+
+
+# Whether a shot released at `released_at` can score at all, by the proofs the
+# fire phase gates the puck where it is on: in front of the goal line, and inside
+# the zone unless their keeper has left his net. The release is where the shot
+# leaves from, so a point man backing over the line or a carrier skating behind
+# the goal line through his pull and wind-up has no shot to price.
+static func _shootable_from(released_at: Vector3, attacking_goal: Vector3,
+		goalie_now: Vector3) -> bool:
+	if (released_at.z - attacking_goal.z) * -signf(attacking_goal.z) <= SHOT_MIN_FORWARD_OF_LINE_M:
+		return false
+	return AIActionScoring.in_offensive_zone(released_at, attacking_goal) \
+			or goalie_now.distance_to(attacking_goal) >= AIActionScoring.THREAT_GOALIE_HOME_M
 
 
 # COMMIT phase of the compete: the CARRY candidate argmax, and the
@@ -791,6 +843,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			pass_target_peer_id = -1
 			dump_target = puck_now + _phase_dump_dir * RIM_AIM_STANDOFF_M
 			dump_launch_speed = _phase_dump_pace
+			dump_lofted = true
 		elif new_intent == INTENT_PASS and best_pass_rim_dir != Vector3.ZERO:
 			# The rim: chosen as a pass, released as a FLAT charged dump along
 			# its bearing at its searched pace (the aim is the boards, not the
@@ -799,6 +852,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			pass_target_peer_id = best_pass_peer
 			dump_target = puck_now + best_pass_rim_dir * RIM_AIM_STANDOFF_M
 			dump_launch_speed = _phase_best_pass_rim_pace
+			dump_lofted = false
 		elif new_intent == INTENT_PASS:
 			pass_target_peer_id = best_pass_peer
 			# Every pass is a paced wrister: distance-adaptive launch speed, soft for

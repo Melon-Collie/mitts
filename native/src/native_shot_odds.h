@@ -11,9 +11,10 @@
 namespace mitts {
 
 // C++ port of the query half of Scripts/domain/ai/shot_odds.gd (AIShotOdds
-// ._weigh, ._weigh_spot and ._weighted_odds): bilinear over the release-spot
-// grid, a kernel over each spot's cells, the normalised weights and the odds
-// they give. The GDScript builds the field and computes each query's inputs;
+// ._weigh, ._weigh_spot, ._weighted_odds and ._blend_best): bilinear over the
+// release-spot grid, a kernel over each spot's cells of the query's kinds, the
+// normalised weights, the odds they give, and the best aim of their blended open
+// sets. The GDScript builds the field and computes each query's inputs;
 // it loads the per-cell arrays here once (set_grid, set_cells, set_bandwidths).
 // The GDScript is the reference; tests/unit/ai/test_native_shot_odds_parity.gd
 // fuzzes the two. Change them together or not at all.
@@ -46,6 +47,11 @@ class NativeShotOdds : public godot::RefCounted {
 	std::vector<float> square;
 	std::vector<float> travel;
 	std::vector<float> flight;
+	// Per cell × loft × candidate aim (set_aims), and each cell's kind.
+	std::vector<float> aim_odds;
+	int64_t aims_per_cell = 0;
+	std::vector<uint8_t> kind;
+	std::vector<float> blend;
 
 	double offset_bw = 1.0;
 	double velocity_bw = 1.0;
@@ -63,7 +69,7 @@ class NativeShotOdds : public godot::RefCounted {
 	static int bracket(const std::vector<double> &grid, double v);
 	double weigh_spot(int spot, double spot_weight, bool p_is_feed, bool p_one_timer,
 			int64_t p_stance, double a, double b, double p_depth, double p_square,
-			int64_t p_in_seal_zone);
+			int64_t p_in_seal_zone, int64_t p_kinds);
 	void push(int cell, double w);
 
 protected:
@@ -89,12 +95,16 @@ public:
 			const godot::PackedFloat32Array &p_flight);
 	void set_bandwidths(double p_offset, double p_velocity, double p_depth, double p_square,
 			double p_travel, double p_flight, double p_min_weight, int64_t p_post_seal_stance);
+	void set_aims(const godot::PackedFloat32Array &p_aim_odds, int64_t p_aims_per_cell,
+			const godot::PackedByteArray &p_kind);
 
 	// AIShotOdds._weigh then ._weighted_odds: fills the matched cells and their
 	// normalised weights, and returns the odds they give (0 when nothing matches).
 	double weigh(double local_x, double local_y, bool p_is_feed, bool p_one_timer,
 			int64_t p_stance, double a, double b, double p_depth, double p_square,
-			bool set_query, int64_t p_in_seal_zone);
+			bool set_query, int64_t p_in_seal_zone, int64_t p_kinds);
+	// AIShotOdds._blend_best over the last weigh's cells.
+	double blend_best();
 
 	int64_t get_count() const { return q_count; }
 	godot::PackedInt32Array get_cells() const;

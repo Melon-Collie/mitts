@@ -7,15 +7,17 @@ extends RefCounted
 # here models the goalie: a goalie change is a regeneration, never an edit here.
 #
 # A cell is one measured situation: a release spot, the keeper's read, and his
-# open set (FLAT / LOW / HIGH × aims post to post). Each aim's odds are its goal
-# fraction under REFERENCE_SPREAD_RAD of placement scatter; the cell's odds are
-# its best aim's. A query is bilinear over the release-spot grid; within a spot
+# open set (FLAT / LOW / HIGH, each the goal intervals across the mouth). Each
+# candidate aim's odds are the share of its crossings, scattered by
+# REFERENCE_SPREAD_RAD, that land in a goal interval; the cell's odds are its
+# best aim's. A query is bilinear over the release-spot grid; within a spot
 # it is a kernel over the cells' keeper state, so the answer leans on the
 # situations most like this one.
 #
 # Two kinds of situation:
 #   shot now — the keeper as he stands: shooting off the carry, or what a carry
-#     arrives at. Samples: settled, after a deke, as feeds left him on arrival,
+#     arrives at. Samples: settled, after a deke, as feeds left him on arrival
+#     (passes across, and out from behind the net with him sealed on the post),
 #     and drawn out of position by a decoy carrier. His stance is matched exactly
 #     (Stance): a keeper sealed on his post and one sprawled after a feed are
 #     both "down", and nothing alike. A sealed one is matched on whether the
@@ -25,10 +27,10 @@ extends RefCounted
 #   feed     — a pass, read at the passer's decision with the keeper square on the
 #     passer; what he manages over the flight is the goalie's own answer.
 #
-# The value queries average the cells' best odds; the pick blends the cells'
-# per-aim odds and takes the best aim, so it costs more and runs once a shot is
-# committed. Where neighbouring cells disagree on the aim, the average of their
-# bests reads a little above the best of the blend.
+# A shot now is priced, and picked, at the best aim of the cells' blended per-aim
+# odds: the shot that is fired. The other value queries average the cells' best
+# odds, which reads above the blend's best where neighbouring cells disagree on
+# the aim.
 #
 # Where the application layer installs `native_factory` (the extension is built),
 # the weighing runs in NativeShotOdds, held to this file by
@@ -60,6 +62,38 @@ const FLIGHT_BANDWIDTH_S: float = 0.1
 const _MIN_WEIGHT: float = 1e-4
 # How the keeper stands, matched exactly within a spot.
 enum Stance { UPRIGHT, DOWN, POST_SEAL }
+# The play the shooter saw before he shot, which the keeper's read alone does
+# not tell apart: he carried the puck in, so the keeper tracked him (the SET and
+# DEKE cells); he has just taken a pass, so the keeper was set on someone else
+# (the caught feeds, and the decoys, a feed's limit), across the royal road
+# (FED_ACROSS: he had to push across his crease) or from the shooter's own side
+# of it (FED_SAME), or either (FED: the pass's side not known); he came out from
+# behind the net (WRAP). ANY: not known, every cell. A shot now weighs only the
+# cells of its history: keepers who look alike and conceded differently, because
+# of how the play got there, are not one keeper.
+enum History { ANY, CARRIED, FED, WRAPPED, FED_ACROSS, FED_SAME }
+# Each cell's kind (_kind) and each History's kinds as a mask over them. A feed
+# or a decoy crosses the royal road when its passer (the decoy carrier) and the
+# release are on different sides of it (crosses_royal_road).
+enum CellKind { SET, DEKE, FEED_ACROSS, FEED_SAME, DECOY_ACROSS, DECOY_SAME, WRAP }
+const _ACROSS: int = (1 << CellKind.FEED_ACROSS) | (1 << CellKind.DECOY_ACROSS)
+const _SAME_SIDE: int = (1 << CellKind.FEED_SAME) | (1 << CellKind.DECOY_SAME)
+const _HISTORY_KINDS: Array[int] = [
+	0b1111111,
+	(1 << CellKind.SET) | (1 << CellKind.DEKE),
+	_ACROSS | _SAME_SIDE,
+	1 << CellKind.WRAP,
+	_ACROSS,
+	_SAME_SIDE,
+]
+# Half the width of the royal road, the line straight out from the middle of the
+# net (m): a puck inside it is on neither side, and a pass into or out of it
+# crosses.
+const ROYAL_ROAD_HALF_M: float = 0.5
+# A field row of kind PASSOUT is a feed from behind the net, the keeper sealed in
+# the RVH on its passer: the passer stands this far out from the goal line
+# (behind it), at the row's passer x.
+const PASS_OUT_PASSER_FWD_M: float = -0.8
 
 # The field's lofts, in the order its outcome strings are stored.
 const LOFTS: Array[int] = [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW,
@@ -110,6 +144,7 @@ static var _is_shot_sample := PackedByteArray()
 static var _is_feed := PackedByteArray()
 static var _one_timer := PackedByteArray()
 static var _stance := PackedByteArray()
+static var _kind := PackedByteArray()
 static var _in_seal_zone := PackedByteArray()
 static var _offset := PackedFloat32Array()
 static var _velocity := PackedFloat32Array()
@@ -120,19 +155,29 @@ static var _flight := PackedFloat32Array()
 # Per cell × loft × aim, at REFERENCE_SPREAD_RAD.
 static var _aim_odds := PackedFloat32Array()
 static var _aims_per_cell: int = 0
+# Per cell × loft: where its goal intervals start in _edges, and how many floats
+# (two an interval).
+static var _edge_first := PackedInt32Array()
+static var _edge_count := PackedInt32Array()
+static var _edges := PackedFloat32Array()
+# The row column of FLAT's goal intervals; LOW and HIGH follow.
+const _INTERVAL_COLUMN: int = 26
 
 
 # The odds of a shot from `release` at the net at `goal`, against the keeper at
 # `keeper_pos` moving laterally at `keeper_vel_x` (world) in `stance` (Stance;
 # stance_of reads it off a replicated goalie), facing `keeper_yaw` (his
-# rotation_y; NAN when not read, and then his facing does not count).
+# rotation_y; NAN when not read, and then his facing does not count), after the
+# play `history` (History). The odds of the shot that is fired: the best aim of
+# the matched cells' blended open sets, which is pick_shot_now's.
 static func shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 		keeper_vel_x: float, stance: int, keeper_yaw: float = NAN,
-		query: Query = null) -> float:
+		query: Query = null, history: int = History.ANY) -> float:
 	var q: Query = _query(query)
-	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
+	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw,
+			history):
 		return 0.0
-	return q.odds
+	return _blend_best(q)
 
 
 # The odds of a shot from `release` against a keeper square, still and upright on
@@ -186,12 +231,13 @@ static func feed_unaimed(passer: Vector3, receiver: Vector3, speed: float, goal:
 # `out`. `out.aim` is INF when there is no shot from here.
 static func pick_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 		keeper_vel_x: float, stance: int, out: Pick, keeper_yaw: float = NAN,
-		query: Query = null) -> void:
+		query: Query = null, history: int = History.ANY) -> void:
 	out.odds = 0.0
 	out.aim = Vector3.INF
 	out.loft = ShotMechanics.ELEVATION_FLAT
 	var q: Query = _query(query)
-	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
+	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw,
+			history):
 		return
 	_blend_aims(q)
 	var best: int = 0
@@ -207,13 +253,14 @@ static func pick_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 
 # shot_now's odds from the best aim when the crossing scatters by `spread_rad`
 # instead of REFERENCE_SPREAD_RAD: the measured open sets re-read at that spread.
-# Re-parses the cells it weighs, so it is for a once-per-shot read (the xG stat),
-# never a per-tick one.
+# Allocates and re-integrates every cell it weighs, so it is for a once-per-shot
+# read (the xG stat), never a per-tick one.
 static func shot_now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 		keeper_vel_x: float, stance: int, spread_rad: float,
-		keeper_yaw: float = NAN, query: Query = null) -> float:
+		keeper_yaw: float = NAN, query: Query = null, history: int = History.ANY) -> float:
 	var q: Query = _query(query)
-	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
+	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw,
+			history):
 		return 0.0
 	var sigma_m: float = spread_rad \
 			* maxf(Vector2(release.x - goal.x, release.z - goal.z).length(), 0.5)
@@ -221,17 +268,46 @@ static func shot_now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vect
 	var blend := PackedFloat32Array()
 	blend.resize(_aims_per_cell)
 	blend.fill(0.0)
+	var n: int = AIShotFieldData.AIM_POINTS
 	for j: int in q.cells.size():
-		var t: PackedStringArray = AIShotFieldData.ROWS[q.cells[j]].split("\t")
 		for li: int in LOFTS.size():
-			var pattern: String = t[23 + li]
-			for i: int in pattern.length():
-				blend[li * AIShotFieldData.AIM_POINTS + i] += \
-						q.weights[j] * aim_odds(pattern, i, sigma_m)
+			var edges: PackedFloat32Array = _cell_edges(q.cells[j], li)
+			for i: int in n:
+				blend[li * n + i] += q.weights[j] * interval_odds(edges, aim_x(i), sigma_m)
 	var best: float = 0.0
 	for v: float in blend:
 		best = maxf(best, v)
 	return best
+
+
+# Whether a pass from lateral `from_x` to `to_x` (each from the middle of the
+# net) crosses the royal road: they lie on different sides of it, the road
+# itself a side of its own.
+static func crosses_royal_road(from_x: float, to_x: float) -> bool:
+	return _royal_road_side(from_x) != _royal_road_side(to_x)
+
+
+static func _royal_road_side(x: float) -> int:
+	if absf(x) <= ROYAL_ROAD_HALF_M:
+		return 0
+	return 1 if x > 0.0 else -1
+
+
+# A field row's CellKind: a feed's and a decoy's by whether its passer (the
+# decoy carrier) at `from_x` and the release spot at `spot_x` straddle the road.
+static func _cell_kind(kind: String, from_x: float, spot_x: float) -> int:
+	match kind:
+		"FEED", "PASSOUT":
+			return CellKind.FEED_ACROSS if crosses_royal_road(from_x, spot_x) \
+					else CellKind.FEED_SAME
+		"DECOY":
+			return CellKind.DECOY_ACROSS if crosses_royal_road(from_x, spot_x) \
+					else CellKind.DECOY_SAME
+		"DEKE":
+			return CellKind.DEKE
+		"WRAP":
+			return CellKind.WRAP
+	return CellKind.SET
 
 
 # The odds a shot from `release` at an EMPTY net at `goal` goes in: aimed at the
@@ -243,21 +319,26 @@ static func empty_net(release: Vector3, goal: Vector3,
 	var range_m: float = Vector2(release.x - goal.x, release.z - goal.z).length()
 	if (release.z - goal.z) * mirror <= 0.0:
 		return 0.0
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
+	var reach: float = post_reach()
 	var sigma_m: float = spread_rad * maxf(range_m, 0.5)
 	return _erf(reach / (sigma_m * sqrt(2.0)))
 
 
+# How far from the net's centre a puck's centre can cross and still pass inside
+# the posts (m).
+static func post_reach() -> float:
+	return GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - GameRules.PUCK_COLLISION_RADIUS
+
+
 # Lateral aim (m, in the net's own frame) of aim sample `i` post to post.
 static func aim_x(i: int) -> float:
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
+	var reach: float = post_reach()
 	return lerpf(-reach, reach, float(i) / float(AIShotFieldData.AIM_POINTS - 1))
 
 
 static func _weigh_shot_now(q: Query, release: Vector3, goal: Vector3, keeper_pos: Vector3,
-		keeper_vel_x: float, stance: int, keeper_yaw: float) -> bool:
+		keeper_vel_x: float, stance: int, keeper_yaw: float,
+		history: int = History.ANY) -> bool:
 	var local: Vector2 = _local(release, goal)
 	if local.y <= 0.0:
 		return false
@@ -266,9 +347,14 @@ static func _weigh_shot_now(q: Query, release: Vector3, goal: Vector3, keeper_po
 	var k := Vector3(keeper_pos.x, 0.0, keeper_pos.z)
 	var offset: float = (k.x - AIGoalieModel.goalie_arc_match_x(k, goal, release)) * mirror
 	var square: float = NAN if is_nan(keeper_yaw) else squareness(k, keeper_yaw, release)
+	var seal: int = 1 if AIGoalieModel.in_post_seal_zone(release, goal) else 0
 	_weigh(q, local, false, false, stance, offset, keeper_vel_x * mirror,
-			_depth_of(k, goal), square, false,
-			1 if AIGoalieModel.in_post_seal_zone(release, goal) else 0)
+			_depth_of(k, goal), square, false, seal, _HISTORY_KINDS[history])
+	# A history no measured keeper like this one shares reads every cell: what
+	# was seen of the play narrows the evidence, and never empties it.
+	if q.count == 0 and history != History.ANY:
+		_weigh(q, local, false, false, stance, offset, keeper_vel_x * mirror,
+				_depth_of(k, goal), square, false, seal)
 	return q.count > 0
 
 
@@ -317,6 +403,20 @@ static func _sync_cells(q: Query) -> void:
 	q.synced = true
 
 
+# The best aim's odds of the matched cells' blended open sets: the value of the
+# shot pick_shot_now fires. From the kernel when it ran the query.
+static func _blend_best(q: Query) -> float:
+	if q.odds <= 0.0:
+		return 0.0   # the blend's best never exceeds the average of the cells' bests
+	if q.native != null and not q.synced:
+		return q.native.blend_best()
+	_blend_aims(q)
+	var best: float = 0.0
+	for v: float in q.blend:
+		best = maxf(best, v)
+	return minf(best, 1.0)
+
+
 static func _blend_aims(q: Query) -> void:
 	_sync_cells(q)
 	q.blend.resize(_aims_per_cell)
@@ -332,17 +432,18 @@ static func _blend_aims(q: Query) -> void:
 # bilinear over the four spots around `local`, a kernel over the keeper state
 # within each. A feed's state is (a, b) = (travel, flight); a shot's is (a, b) =
 # (offset, velocity) plus `depth` and `square`, each left out of the kernel when
-# NAN, and a sealed keeper's `in_seal_zone` (0 / 1). `set_query`: each spot's SET
-# cell alone.
+# NAN, and a sealed keeper's `in_seal_zone` (0 / 1), among the cells of `kinds`
+# (a mask over CellKind). `set_query`: each spot's SET cell alone.
 static func _weigh(q: Query, local: Vector2, is_feed: bool, one_timer: bool, stance: int,
 		a: float, b: float, depth: float = NAN, square: float = NAN,
-		set_query: bool = false, in_seal_zone: int = 0) -> void:
+		set_query: bool = false, in_seal_zone: int = 0,
+		kinds: int = _HISTORY_KINDS[History.ANY]) -> void:
 	if q.native_epoch != _native_epoch:
 		q.native_epoch = _native_epoch
 		q.native = _new_native() if q.use_native else null
 	if q.native != null:
 		q.odds = q.native.weigh(local.x, local.y, is_feed, one_timer, stance, a, b, depth,
-				square, set_query, in_seal_zone)
+				square, set_query, in_seal_zone, kinds)
 		q.count = q.native.get_count()
 		q.synced = false
 		return
@@ -369,7 +470,7 @@ static func _weigh(q: Query, local: Vector2, is_feed: bool, one_timer: bool, sta
 				total += w
 		else:
 			total += _weigh_spot(q, spot, w, is_feed, one_timer, stance, a, b, depth, square,
-					in_seal_zone)
+					in_seal_zone, kinds)
 	if total <= 0.0:
 		q.cells.clear()
 		q.weights.clear()
@@ -391,7 +492,8 @@ static func _weigh(q: Query, local: Vector2, is_feed: bool, one_timer: bool, sta
 # share. 0 when the spot has no matching cell.
 static func _weigh_spot(q: Query, spot: int, spot_weight: float, is_feed: bool,
 		one_timer: bool, stance: int, a: float, b: float, depth: float = NAN,
-		square: float = NAN, in_seal_zone: int = 0) -> float:
+		square: float = NAN, in_seal_zone: int = 0,
+		kinds: int = _HISTORY_KINDS[History.ANY]) -> float:
 	var ha: float = TRAVEL_BANDWIDTH_M if is_feed else OFFSET_BANDWIDTH_M
 	var hb: float = FLIGHT_BANDWIDTH_S if is_feed else VELOCITY_BANDWIDTH_M_S
 	var first: int = q.cells.size()
@@ -407,7 +509,7 @@ static func _weigh_spot(q: Query, spot: int, spot_weight: float, is_feed: bool,
 			ca = _travel[c]
 			cb = _flight[c]
 		else:
-			if _is_shot_sample[c] == 0 or _stance[c] != stance:
+			if _is_shot_sample[c] == 0 or _stance[c] != stance or (kinds >> _kind[c]) & 1 == 0:
 				continue
 			if stance == Stance.POST_SEAL and _in_seal_zone[c] != in_seal_zone:
 				continue
@@ -474,10 +576,14 @@ static func _build() -> void:
 	_flight.resize(n)
 	_is_shot_sample.resize(n)
 	_is_feed.resize(n)
+	_kind.resize(n)
 	_one_timer.resize(n)
 	_stance.resize(n)
 	_in_seal_zone.resize(n)
 	_aim_odds.resize(n * _aims_per_cell)
+	_edge_first.resize(n * LOFTS.size())
+	_edge_count.resize(n * LOFTS.size())
+	_edges.clear()
 	for c: int in n:
 		var t: PackedStringArray = AIShotFieldData.ROWS[c].split("\t")
 		var spot: int = AIShotFieldData.SPOT_FWD.find(float(t[2])) * AIShotFieldData.SPOT_X.size() \
@@ -490,10 +596,12 @@ static func _build() -> void:
 		var release := Vector3(float(t[7]), 0.0, _FIELD_GOAL.z + float(t[8]))
 		var pre := Vector3(float(t[9]), 0.0, float(t[10]))
 		var now := Vector3(float(t[16]), 0.0, float(t[17]))
-		_is_feed[c] = 1 if kind == "FEED" else 0
+		var fed: bool = kind == "FEED" or kind == "PASSOUT"
+		_is_feed[c] = 1 if fed else 0
+		_kind[c] = _cell_kind(kind, float(t[5]), float(t[1]))
 		_one_timer[c] = 1 if mode == "O" else 0
 		# A feed caught and charged is also the keeper as the receiver finds him.
-		_is_shot_sample[c] = 1 if kind != "FEED" or mode == "K" else 0
+		_is_shot_sample[c] = 1 if not fed or mode == "K" else 0
 		var probe := GoalieNetworkState.new()
 		probe.state_enum = int(float(t[19]))
 		_stance[c] = stance_of(probe, _FIELD_GOAL)
@@ -505,16 +613,20 @@ static func _build() -> void:
 		if kind == "SET":
 			_set_cell[spot] = c
 		var receiver := Vector3(float(t[1]), 0.0, _FIELD_GOAL.z + float(t[2]))
-		var passer := Vector3(float(t[5]), 0.0, receiver.z)
+		var passer := Vector3(float(t[5]), 0.0, receiver.z if kind != "PASSOUT"
+				else _FIELD_GOAL.z + PASS_OUT_PASSER_FWD_M)
 		_travel[c] = AIGoalieModel.goalie_arc_match_x(pre, _FIELD_GOAL, receiver) - pre.x
 		_flight[c] = passer.distance_to(receiver) / maxf(float(t[6]), 0.1)
 		var sigma_m: float = REFERENCE_SPREAD_RAD \
 				* maxf(Vector2(release.x, release.z - _FIELD_GOAL.z).length(), 0.5)
 		var best: float = 0.0
 		for li: int in LOFTS.size():
-			var pattern: String = t[23 + li]
-			for i: int in pattern.length():
-				var p: float = aim_odds(pattern, i, sigma_m)
+			var edges: PackedFloat32Array = decode_intervals(t[_INTERVAL_COLUMN + li])
+			_edge_first[c * LOFTS.size() + li] = _edges.size()
+			_edge_count[c * LOFTS.size() + li] = edges.size()
+			_edges.append_array(edges)
+			for i: int in AIShotFieldData.AIM_POINTS:
+				var p: float = interval_odds(edges, aim_x(i), sigma_m)
 				_aim_odds[c * _aims_per_cell + li * AIShotFieldData.AIM_POINTS + i] = p
 				best = maxf(best, p)
 		_odds[c] = best
@@ -544,36 +656,48 @@ static func _new_native() -> RefCounted:
 			PackedFloat64Array(AIShotFieldData.SPOT_FWD), _spot_first, _spot_count, _set_cell)
 	native.set_cells(_odds, _is_shot_sample, _is_feed, _one_timer, _stance, _in_seal_zone,
 			_offset, _velocity, _depth, _square, _travel, _flight)
+	native.set_aims(_aim_odds, _aims_per_cell, _kind)
 	native.set_bandwidths(OFFSET_BANDWIDTH_M, VELOCITY_BANDWIDTH_M_S, DEPTH_BANDWIDTH_M,
 			SQUARE_BANDWIDTH_RAD, TRAVEL_BANDWIDTH_M, FLIGHT_BANDWIDTH_S, _MIN_WEIGHT,
 			Stance.POST_SEAL)
 	return native
 
 
-# The best aim's goal fraction over `patterns` (FLAT / LOW / HIGH outcome strings
-# post to post) when the crossing scatters by `sigma_m` about the aim, a crossing
-# scoring as the nearest measured aim did.
-static func best_odds(patterns: PackedStringArray, sigma_m: float) -> float:
+# The best candidate aim's goal fraction over `intervals` (FLAT / LOW / HIGH,
+# each goal intervals as decode_intervals reads them) when the crossing scatters
+# by `sigma_m` about the aim.
+static func best_odds(intervals: Array[PackedFloat32Array], sigma_m: float) -> float:
 	var best: float = 0.0
-	for p: String in patterns:
-		for i: int in p.length():
-			best = maxf(best, aim_odds(p, i, sigma_m))
+	for edges: PackedFloat32Array in intervals:
+		for i: int in AIShotFieldData.AIM_POINTS:
+			best = maxf(best, interval_odds(edges, aim_x(i), sigma_m))
 	return best
 
 
-static func aim_odds(pattern: String, i: int, sigma_m: float) -> float:
-	var n: int = pattern.length()
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
-	var step: float = 2.0 * reach / float(n - 1)
-	var aim: float = -reach + step * float(i)
+# A loft's goal intervals as the generator writes them, "-847:-803;312:398"
+# (millimetres across the net's frame, "" for none), into metres [start, end, …].
+static func decode_intervals(text: String) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	if text.is_empty():
+		return out
+	for part: String in text.split(";"):
+		out.append(float(part.get_slice(":", 0)) / 1000.0)
+		out.append(float(part.get_slice(":", 1)) / 1000.0)
+	return out
+
+
+static func _cell_edges(cell: int, loft_index: int) -> PackedFloat32Array:
+	var k: int = cell * LOFTS.size() + loft_index
+	return _edges.slice(_edge_first[k], _edge_first[k] + _edge_count[k])
+
+
+# The goal fraction of a shot aimed at `aim` (m, the net's frame) whose crossing
+# scatters by `sigma_m`, over goal intervals `edges` (flat [start, end, …], m).
+static func interval_odds(edges: PackedFloat32Array, aim: float, sigma_m: float) -> float:
 	var s: float = maxf(sigma_m, 1e-4) * sqrt(2.0)
 	var p: float = 0.0
-	for j: int in n:
-		if pattern[j] != "G":
-			continue
-		var x: float = -reach + step * float(j)
-		p += 0.5 * (_erf((x + 0.5 * step - aim) / s) - _erf((x - 0.5 * step - aim) / s))
+	for k: int in range(0, edges.size(), 2):
+		p += 0.5 * (_erf((edges[k + 1] - aim) / s) - _erf((edges[k] - aim) / s))
 	return p
 
 

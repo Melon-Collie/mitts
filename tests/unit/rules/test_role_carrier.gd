@@ -269,7 +269,8 @@ func test_the_zone_entry_leaf_is_read_when_its_man_gets_there() -> void:
 func test_a_receivers_drive_in_starts_when_the_feed_reaches_him() -> void:
 	# A mate far out is worth his drive in from the reception, its end read when
 	# he gets there (receiver_drive_in_value's start): never as if he stood at the
-	# end of it now.
+	# end of it now. A drive that starts later is read at its start, which its
+	# caller discounts (the continuation it reaches never goes stale).
 	var self_pos := Vector3(0.0, 0.0, 6.0)
 	var ctx := _set_keeper(_make_ctx(self_pos, [
 			[1, TEAM_ID, self_pos], [11, 1, Vector3(9.0, 0.0, -14.0)]]))
@@ -278,7 +279,8 @@ func test_a_receivers_drive_in_starts_when_the_feed_reaches_him() -> void:
 	var now: float = c._field.receiver_drive_in_value(ctx, mate, null)
 	assert_gt(now, 0.0, "his drive in is credited")
 	assert_lt(c._field.receiver_drive_in_value(ctx, mate, null, Vector3.ZERO, Vector3.INF,
-			0.8), now, "fed, his drive starts 0.8 s from now")
+			0.8) * AIActionScoring.delay_discount(0.8), now,
+			"fed, his drive starts 0.8 s from now")
 
 
 func test_forward_pressure_is_directional_and_the_pass_must_be_earned() -> void:
@@ -2777,9 +2779,10 @@ func test_a_down_keeper_is_priced_down_only_for_a_shot_before_he_can_rise() -> v
 
 func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 	# The keeper a carry arrives at has tracked it, so he faces the puck, as the
-	# shoot-now read sees him there. Read with his facing unknown, the field
-	# blends in keepers turned to a decoy or a feed, and in tight a carry to the
-	# crease promised odds the shot on arrival never had.
+	# shoot-now read after a carry (History.CARRIED) sees him there. Read with
+	# his facing unknown, the field blends in keepers turned to a decoy or a feed,
+	# and in tight a carry to the crease promised odds the shot on arrival never
+	# had. The arrival is the better of that shot and keeping the puck there.
 	for spot: Vector3 in [Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 2.5),
 			Vector3(-1.2, 0.0, -GameRules.GOAL_LINE_Z + 2.2)]:
 		var ctx := _standstill_ctx(2.5)
@@ -2792,10 +2795,12 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 		c._field.fill(ctx)
 		c._field.holds.configure_from(ctx)
 		var arrival: float = c._carry._arrival_value(ctx, spot, Vector3.ZERO, 0.0)
-		var shot_there: float = AIShotValue.now(spot, ctx.attacking_goal_pos,
-				Vector3(g.position_x, 0.0, g.position_z), 0.0, AIShotOdds.Stance.UPRIGHT,
-				g.rotation_y)
-		assert_almost_eq(arrival, shot_there, 1e-4,
+		var keeper := Vector3(g.position_x, 0.0, g.position_z)
+		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(spot,
+				ctx.attacking_goal_pos, keeper, 0.0, AIShotOdds.Stance.UPRIGHT, g.rotation_y,
+				AIShotOdds.History.CARRIED))
+		var kept: float = c._field.continuation_at(spot)
+		assert_almost_eq(arrival, maxf(shot_there, kept), 1e-4,
 				"arriving at rest at %s prices the shot the keeper facing it gives" % spot)
 
 
@@ -2821,3 +2826,82 @@ func test_a_long_feed_goes_at_full_pace() -> void:
 	var c := _decided(_feed_ctx(Vector3(10, 0, -16)))
 	assert_eq(c._pass.best_peer, 2, "the feed is priced")
 	assert_eq(c._pass.best_pace_frac, 1.0)
+
+
+# ─── the play the keeper saw ─────────────────────────────────────────────────
+
+func test_the_keeper_read_names_the_play_he_saw() -> void:
+	# Each read holds until the keeper has had time to set on the shooter again.
+	var reset_ticks: int = ceili(AIGoalieModel.goalie_reset_s()
+			* float(AIRoleCarrier._PhysicsConstants.PHYSICS_TICK)) + 1
+	var slot := Vector3(-2.0, 0.0, OPP_NET_Z + 6.0)
+	var c := AIRoleCarrier.new()
+	c.decide(_make_ctx(slot))
+	assert_eq(c._shot_history(), AIShotOdds.History.CARRIED,
+			"a puck he started with: the keeper watched him have it")
+	c.reset()
+	var across: RoleContext = _make_ctx(slot)
+	across.fed_from = Vector3(4.0, 0.0, OPP_NET_Z + 7.0)
+	c.decide(across)
+	assert_eq(c._shot_history(), AIShotOdds.History.FED_ACROSS,
+			"a pass across the royal road just taken")
+	var later: RoleContext = _make_ctx(slot)
+	later.fed_from = across.fed_from
+	later.dispatch_period_ticks = reset_ticks
+	c.decide(later)
+	assert_eq(c._shot_history(), AIShotOdds.History.CARRIED, "held: he tracked the carry")
+	c.reset()
+	var same: RoleContext = _make_ctx(slot)
+	same.fed_from = Vector3(-7.0, 0.0, OPP_NET_Z + 8.0)
+	c.decide(same)
+	assert_eq(c._shot_history(), AIShotOdds.History.FED_SAME, "a pass from his own side")
+	c.decide(_make_ctx(Vector3(-1.2, 0.0, OPP_NET_Z - 1.0)))
+	c.decide(_make_ctx(Vector3(-2.0, 0.0, OPP_NET_Z + 1.5)))
+	assert_eq(c._shot_history(), AIShotOdds.History.WRAPPED, "out from behind the net")
+	var out: RoleContext = _make_ctx(Vector3(-2.0, 0.0, OPP_NET_Z + 2.5))
+	out.dispatch_period_ticks = reset_ticks
+	c.decide(out)
+	assert_eq(c._shot_history(), AIShotOdds.History.CARRIED, "the wrap long over")
+
+
+func test_a_shot_released_outside_the_zone_or_behind_the_line_is_none() -> void:
+	# Where the shot leaves the blade decides it, not where the shooter stands.
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var home := Vector3(0.0, 0.0, OPP_NET_Z + 0.8)
+	var line: float = -GameRules.BLUE_LINE_Z
+	assert_true(AIRoleCarrier._shootable_from(Vector3(0.0, 0.0, line - 0.5), goal, home),
+			"inside the line")
+	assert_false(AIRoleCarrier._shootable_from(Vector3(0.0, 0.0, line + 0.5), goal, home),
+			"released over the line, the keeper home")
+	assert_true(AIRoleCarrier._shootable_from(Vector3(0.0, 0.0, line + 0.5), goal,
+			Vector3(0.0, 0.0, OPP_NET_Z + 10.0)), "over the line at an empty net")
+	assert_false(AIRoleCarrier._shootable_from(Vector3(2.0, 0.0, OPP_NET_Z - 0.3), goal, home),
+			"released behind the goal line")
+
+
+func test_a_point_man_backing_over_the_line_prices_no_shot() -> void:
+	# Just inside their line, skating out of the zone: his pull and wind-up carry
+	# the release over it, so the shot he would fire is no shot.
+	var at := Vector3(0.0, 0.0, -GameRules.BLUE_LINE_Z - 0.3)
+	var ctx: RoleContext = _set_keeper(_make_ctx(at))
+	ctx.snapshot.skater_states[1].velocity = Vector3(0.0, 0.0, 4.0)
+	ctx.self_velocity = Vector3(0.0, 0.0, 4.0)
+	assert_lte(_decided(ctx)._phase_shoot_score, 0.0, "backing out, no shot")
+	var still: RoleContext = _set_keeper(_make_ctx(at))
+	assert_gt(_decided(still)._phase_shoot_score, 0.0, "standing there, he has one")
+
+
+
+func test_a_pass_leaves_from_the_ice_not_through_the_boards() -> void:
+	# Skating into the end boards behind our own net at 7.8 m/s: the windup's
+	# travel ends at the boards, so the release is priced from there.
+	var at := Vector3(3.6, 0.0, 29.1)
+	var ctx: RoleContext = _make_ctx(at)
+	ctx.self_velocity = Vector3(0.3, 0.0, 7.8)
+	var origin: Vector3 = AICarrierField.pass_origin(ctx)
+	var ice: Vector2 = GameRules.clamp_to_rink_inner(Vector2(origin.x, origin.z),
+			GameRules.PUCK_COLLISION_RADIUS)
+	assert_almost_eq(Vector2(origin.x, origin.z), ice, Vector2.ONE * 0.001, "on the ice")
+	assert_gt(origin.z, at.z, "carried on toward the boards up to them")
+	ctx.self_velocity = Vector3(0.0, 0.0, -4.0)
+	assert_lt(AICarrierField.pass_origin(ctx).z, at.z, "skating away, carried on as before")

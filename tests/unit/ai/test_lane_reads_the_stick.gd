@@ -60,3 +60,32 @@ func test_the_pass_is_lost_at_the_stick() -> void:
 	var loss: Vector3 = AIPuckLane.lane_loss_point(FROM, TO, _opps, SPEED, _vels, [], blades)
 	assert_true(loss.is_finite())
 	assert_lt(absf(loss.z - blade.z), 1.5, "picked off where the blade meets the line")
+
+
+# A saucer flies over a stick until it lands; from there its lane is the flat
+# lane's, the stick where he holds it included.
+func _saucer_landing() -> float:
+	var vy: float = AIPuckLane.saucer_launch_vy(SPEED)
+	var root: float = sqrt(vy * vy - 2.0 * GameRules.GRAVITY_M_S2 * GameRules.PUCK_AIRBORNE_HEIGHT_M)
+	return SPEED * (vy + root) / GameRules.GRAVITY_M_S2
+
+
+func test_a_stick_where_a_saucer_lands_takes_it() -> void:
+	var land: float = _saucer_landing()
+	assert_lt(land, 12.0 - AIPuckLane.LANE_RECEIVER_REACH_M - 1.0,
+			"the fixture's saucer lands short of the receiver")
+	var body: Array[Vector3] = [Vector3(2.55, 0.0, -(land + 1.0))]
+	var stick: Array[Vector3] = [Vector3(0.4, 0.0, -(land + 1.0))]
+	var body_only: float = AIPuckLane.lane_clear_saucer(FROM, TO, body, SPEED, _vels)
+	var with_stick: float = AIPuckLane.lane_clear_saucer(FROM, TO, body, SPEED, _vels, [], stick)
+	assert_lt(with_stick, body_only - 0.1, "his stick takes what his body leaves open")
+	assert_lt(with_stick, 0.05, "a stick out over the landing takes it")
+
+
+func test_a_stick_a_saucer_flies_over_does_not_take_it() -> void:
+	var land: float = _saucer_landing()
+	var body: Array[Vector3] = [Vector3(2.55, 0.0, -land * 0.5)]
+	var stick: Array[Vector3] = [Vector3(0.4, 0.0, -land * 0.5)]
+	assert_eq(AIPuckLane.lane_clear_saucer(FROM, TO, body, SPEED, _vels, [], stick),
+			AIPuckLane.lane_clear_saucer(FROM, TO, body, SPEED, _vels),
+			"a stick under the flight is beaten by the loft")

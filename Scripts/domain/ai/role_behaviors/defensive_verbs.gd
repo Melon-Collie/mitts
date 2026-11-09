@@ -55,6 +55,9 @@ static func cover_man_target(ctx: RoleContext, man_pos: Vector3, man_vel: Vector
 	# our goal line, where the buffer and crease leave no legal goal-side spot.
 	var fallback_pos: Vector3 = ctx.self_pos
 	var fallback_score: float = -INF
+	# The man's possession with nobody of ours at a candidate: no candidate raises
+	# it, so a candidate whose lane times it cannot beat the one-timer skips it.
+	var possession_bound: float = poss.feed_possession(carrier_pos, man_pos, man_vel)
 	for c: Vector3 in candidates:
 		if not AIStationSearch.is_legal_position(c):
 			continue
@@ -62,7 +65,7 @@ static func cover_man_target(ctx: RoleContext, man_pos: Vector3, man_vel: Vector
 			continue
 		poss.push_defender(c, Vector3.ZERO, self_caps)
 		var threat: float = poss.threat_of_feed(carrier_pos, man_pos, man_vel,
-				our_goalie_pos)
+				our_goalie_pos, possession_bound)
 		poss.pop_defender()
 		var score: float = -threat + AIStationSearch.incumbent_bonus(ctx, c)
 		# A man on the net (no lane) disables the goal-side filter.
@@ -328,7 +331,8 @@ static func carrier_option_bases(poss: AIPossessionValue, carrier_pos: Vector3,
 #
 # `set_in_s`: the defender is set at `candidate` that long from now, and until
 # then the carrier skates on. His own option is read from where his skating has
-# him by then, against the defence carried on to then (the candidate with it,
+# him by then, the boards stopping him as they stop the defence (predict_at),
+# against the defence carried on to then (the candidate with it,
 # at `candidate_vel`); always evaluated, since its bound was read where he is
 # now. His feeds are read as now.
 static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
@@ -339,7 +343,8 @@ static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
 	var best: float = 0.0
 	var used: int = 0
 	if set_in_s > 0.0:
-		best = poss.threat_of_carrier(carrier_pos + carrier_vel * set_in_s, carrier_vel, our_goalie_pos,
+		best = poss.threat_of_carrier(AITrajectory.predict_at(carrier_pos, carrier_vel, set_in_s),
+				carrier_vel, our_goalie_pos,
 				set_in_s)
 		used = 1
 	while true:

@@ -317,6 +317,13 @@ static func standing_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 # stick, or close enough that building to the carrier's pace from here
 # (ramp_cushion_m) ends with him there — he rides him in down to
 # RETREAT_FINISH_M. Once level the floor lifts: a beaten defender has to chase.
+#
+# The gate holds him by stopping him, so once its brake has him (inside the
+# stopping distance of his retreat, at the steering's arrival brake) the drape
+# is read from a standstill there (standing_cushion_m): a man who would be
+# draped once stopped is draped now, and rides on. Read off his speed instead,
+# the gate braked a defender with a gap to a stop, the stop draped him, and he
+# rebuilt his retreat from rest while a carrier at pace came level.
 static func set_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision) -> void:
 	if d.target_velocity == Vector3.ZERO or ap.dir_net == Vector3.ZERO:
@@ -326,11 +333,26 @@ static func set_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 	if depth <= 0.0:
 		return
 	var threat: int = ctx.rush_read.carrier_peer if ctx.rush_read != null else -1
-	var draped: bool = depth - stick_m(ctx) <= ramp_cushion_m(ctx, ap, threat)
+	var from_net: float = AIRoleReads.xz_distance(ctx.self_pos, ctx.defending_goal_pos)
+	var cushion: float = ramp_cushion_m(ctx, ap, threat)
+	if from_net - AIZoneCoverage.HOUSE_TOP_DEPTH_M <= _gate_brake_m(ctx, from_net):
+		cushion = maxf(cushion, standing_cushion_m(ctx, ap, threat))
+	var draped: bool = depth - stick_m(ctx) <= cushion
 	d.retreat_floor_center = ctx.defending_goal_pos
 	d.retreat_floor_radius_m = RETREAT_FINISH_M if draped \
-			else minf(AIZoneCoverage.HOUSE_TOP_DEPTH_M,
-					AIRoleReads.xz_distance(ctx.self_pos, ctx.defending_goal_pos))
+			else minf(AIZoneCoverage.HOUSE_TOP_DEPTH_M, from_net)
+
+
+# How far short of the house gate its brake takes hold of a defender `from_net`
+# metres off our net: the stopping distance of his speed toward it at the
+# steering's arrival brake (the retreat floor's own law).
+static func _gate_brake_m(ctx: RoleContext, from_net: float) -> float:
+	if from_net < 0.001:
+		return 0.0
+	var to_net := Vector2(ctx.defending_goal_pos.x - ctx.self_pos.x,
+			ctx.defending_goal_pos.z - ctx.self_pos.z) / from_net
+	var v: float = maxf(0.0, ctx.self_velocity.x * to_net.x + ctx.self_velocity.z * to_net.y)
+	return v * v / (2.0 * AISteering.ARRIVAL_BRAKE_DECEL_M_S2)
 
 
 # Bounds a ridden stand's step toward the carrier, set with the retreat floor:

@@ -14,8 +14,12 @@ func _nhw() -> float:
 	return GameRules.NET_HALF_WIDTH
 
 
-func _xg(shooter: Vector3, goalie: Vector3) -> float:
-	return AIActionScoring.expected_goals(shooter, GOAL, goalie)
+# A keeper squared on the shooter has tracked his carry (CARRIED); one pulled off
+# the line was caught by a pass (FED).
+func _xg(shooter: Vector3, goalie: Vector3,
+		history: int = AIShotOdds.History.CARRIED) -> float:
+	return AIActionScoring.expected_goals(shooter, GOAL, goalie,
+			AIActionScoring.XG_BASE_SPREAD_RAD, AIShotOdds.Stance.UPRIGHT, null, history)
 
 
 func test_bounded_in_zero_to_xg_max() -> void:
@@ -35,19 +39,19 @@ func test_beaten_goalie_beats_a_square_goalie() -> void:
 	var shooter := Vector3(0.0, 0.0, GOAL.z + 6.0)
 	var square := Vector3(0.0, 0.0, GOAL.z + 1.5)          # on the puck→net line
 	var beaten := Vector3(_nhw() + 0.4, 0.0, GOAL.z + 0.3) # stranded at the far post
-	assert_gt(_xg(shooter, beaten), _xg(shooter, square),
+	assert_gt(_xg(shooter, beaten, AIShotOdds.History.FED), _xg(shooter, square),
 			"a beaten goalie yields more open net than a square one")
 
 
 func test_a_keeper_stranded_outside_the_cone_concedes_the_empty_net() -> void:
 	# Point-blank with the goalie stranded past the far post the look is the empty
 	# net, short only of what he can push back across over the wind-up: the
-	# field's decoy cells measure him drawn there.
+	# field's decoy cells measure him drawn there, so the play is a feed.
 	var shooter := Vector3(-1.0, 0.0, GOAL.z + 2.5)
 	var stranded := Vector3(_nhw() + 0.4, 0.0, GOAL.z + 0.3)
 	var pulled := Vector3(0.0, 0.0, 0.0)
 	var empty: float = _xg(shooter, pulled)
-	assert_almost_eq(_xg(shooter, stranded), empty, 0.1 * empty,
+	assert_almost_eq(_xg(shooter, stranded, AIShotOdds.History.FED), empty, 0.1 * empty,
 			"a keeper past the far post leaves the point-blank shot the empty net")
 
 

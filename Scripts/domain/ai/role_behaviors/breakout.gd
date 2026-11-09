@@ -10,7 +10,8 @@ class_name AIRoleBreakout
 #     carrier is never the last man back.
 #
 # Both argmax `max(lane_clear(carrier → c), BLOCKED_LANE_FLOOR) × our possession
-# of c` (AIPossessionValue, him there when the pass arrives, moving as he is).
+# of c` (AIPossessionValue, him there when the pass arrives, moving as he is;
+# lane_held).
 # lane_clear is the carrier's own pass model, so the outlet stands where his lane
 # really is clean; the possession read rewards up-ice progress and, unlike
 # score_pass, stays non-zero deep in our zone.
@@ -38,6 +39,13 @@ const WALL_LANE_BAND_M: float = 3.0
 # draped on the carrier zeroes every lane, and without the floor the outlet would
 # freeze.
 const BLOCKED_LANE_FLOOR: float = 0.15
+
+
+# A spot's score: its lane (floored) × our possession there. A spot our
+# possession reads below zero is not made better by a lane that keeps the puck
+# from it, so the lane scales only a positive possession.
+static func lane_held(lane: float, held: float) -> float:
+	return maxf(lane, BLOCKED_LANE_FLOOR) * held if held > 0.0 else held
 
 
 # `is_strong` selects the strong-side-wall outlet (true) vs the
@@ -85,8 +93,7 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 				AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
 		var held: float = possession.at(c, carrier_pos.distance_to(c) / pass_speed,
 				ctx.self_velocity)
-		var score: float = maxf(lane, BLOCKED_LANE_FLOOR) * held \
-				+ AIStationSearch.incumbent_bonus(ctx, c)
+		var score: float = lane_held(lane, held) + AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
 			best_pos = c

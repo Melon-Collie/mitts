@@ -1,0 +1,538 @@
+# Possession floor — what keeping the puck is worth
+
+Status: **steps 0–4 landed; steps 5–6 open, and host AI cost open (§6).** The CLAUDE.md workflow applies: this
+doc is the plan, deviations get discussed first. Supersedes an earlier
+data-driven draft: no external data, no generator, no generated file.
+
+## Decisions
+
+- **Possession of a spot is worth the better of two reads**: the best play the
+  defence allows right now (today's `AIPossessionValue`, unchanged), and the
+  **continuation**, what keeping the puck there is worth over the rest of the
+  possession. Max, never sum: the live read already sees the defence, the
+  continuation does not.
+- **The continuation is a floor plus a slot bonus:**
+
+  ```
+  C(spot) = floor(a) + bonus(spot)
+  bonus(spot) = SLOT_BONUS · min(1, mouth(spot) / mouth(SLOT_REF_M))   in their zone, else 0
+  ```
+
+  `a` is how far up the ice the spot is toward the attacking goal; the floor is
+  piecewise linear, bending at the blue lines, and flat across the attacking
+  zone. `mouth(spot)` is the angle the net mouth covers seen from the spot (the
+  opening between the posts): what a shooter sees, growing as he gets closer
+  and squarer, 0 behind the goal line. The bonus plateaus at `SLOT_BONUS` from
+  `SLOT_REF_M` straight out and in, so it marks the slot without spiking at the
+  crease, where the live shot read already does the work.
+- **No shot field in the continuation.** The set-keeper cells are each one
+  staged keeper, priced at their best aim under a narrow scatter, so they read
+  close to all-or-nothing (83% next to 0% a cell over) and inherit every hole in
+  the grid. That is the right input for aiming now against the keeper in front
+  of you, which is the live read's job; it is the wrong answer to what a shot
+  from here is worth on average. The bonus is the smooth, goalie-free stand-in.
+- **Seven feel tunables, not measurements.** The floor's four anchors,
+  `SLOT_BONUS`, `SLOT_REF_M` and `REBOUND_RECOVER_SHARE` (§2.3) are judgment
+  about how the game should play: what possession is worth before anything
+  specific is on. They live with the other feel tunables (`DECISIONS.md` §7) and
+  are tuned in playtests. Starting values in §2.1.
+- **Why so few numbers is enough:** an exploratory fit of a full possession
+  model showed that a floor by position plus a shot-shaped term reproduces about
+  97% of its variation, and little else is in it. The decision-relevant facts are
+  the floor itself (possession in their zone is worth something everywhere,
+  roughly the same everywhere), its gentle rise through the neutral zone, its
+  sign in our own end, and the slot's premium.
+- **The continuation is independent of the goalie.** Neither term reads him, so
+  killing one shot location cannot collapse a behavior: the live read loses that
+  shot, the continuation does not move.
+- **The opponent's continuation is the same function from his end.** A turnover
+  costs his C at the loss spot: negative deep in his own end (losing it there is
+  nearly free, and that is the forecheck's value), and carrying his slot bonus
+  in ours (losing it in our slot costs more than on the wall).
+- **A read that goes stale decays toward the continuation, not toward zero**
+  (§2.4). This is the counter to the stand-still trap.
+- **3v3 and 5v5 share the same values.**
+- **Numbers-up stays out of scope.** The floor is even-strength. The live read
+  pricing the pass option on a rush is separate work, and the `numbers_up`
+  no-dump rule stays until it lands. This plan is the fix for #892 (a won
+  corner priced at ~0) and the possession half of #785.
+
+## 1. Why
+
+The trigger: a bug let some point shots beat the goalie. Fixing it made point
+shots worth ~0, and the bots stopped entering the zone. Nothing else was holding
+the zone's value up.
+
+`AIPossessionValue` prices a spot as the best of the shot from it, one straight
+drive in, and three entry spots: the **first shot** the side can get to. It is
+one man, it ignores passes, and it stops at the first shot; in the zone
+`AICarrierField._regime_value` is "pure odds, no possession floor", and rebounds
+are not in the shot field (#785). So keeping the puck is never worth anything in
+itself, and every decision that depends on possession inherits that:
+
+- **Cycling.** Below the dots, on the half-wall and behind the net, the shot is
+  worth ~0, so those spots are worth only the pass option they open. Retaining
+  possession never competes with forcing a low-odds play.
+- **Dump and chase.** A won race behind their goal line is worth 0 on its own,
+  which is why `AICarrierDumpSearch` dead-reckons a feed to our support to give
+  the dump any value.
+- **Entries.** An entry is worth the shot or the drive from one of three spots,
+  so a controlled wall entry with no drive lane is worth almost nothing. The
+  workarounds around this: the entry continuation
+  (`docs/zone-entry-currency-plan.md`), and the rule that a straight carry
+  across the line is not credited from outside.
+
+The floor gives all three what they are missing, through the one read every
+consumer already uses.
+
+## 2. The design
+
+### 2.1 The floor and the slot bonus
+
+`a` = `pos.z · signf(goal.z)`: metres toward the attacking goal (their goal line
+at +26.65, their blue line at +7.29, ours at −7.29, our goal line at −26.65).
+The floor is linear between the anchors and flat past each goal line. The bonus
+applies only in their zone (`AIActionScoring.in_offensive_zone`).
+
+| tunable | what | starting value |
+|---|---|---|
+| `FLOOR_OWN_GOAL_LINE` | floor at a = −26.65 | −0.012 |
+| `FLOOR_OWN_BLUE_LINE` | floor at a = −7.29 | 0.004 |
+| `FLOOR_THEIR_BLUE_LINE` | floor at a = +7.29 | 0.023 |
+| `FLOOR_THEIR_GOAL_LINE` | floor at a = +26.65 | 0.021 |
+| `SLOT_BONUS` | the bonus's plateau | 0.05 |
+| `SLOT_REF_M` | metres straight out where the plateau starts | 6.0 |
+
+What those say: possession in our own end is worth slightly less than nothing
+(a turnover there is expensive); it rises through the neutral zone, about 0.13
+points per metre; possession in their zone is worth about 2% anywhere, plus a
+premium for how much net it sees. No lateral term in the floor: the bonus
+carries middle-versus-wall.
+
+The mouth angle from (x across, y out from the goal line), posts at ±0.915
+(`GameRules.NET_HALF_WIDTH`):
+
+```
+mouth = acos( ((−0.915 − x)(0.915 − x) + y²) / (|(−0.915 − x, −y)| · |(0.915 − x, −y)|) )   for y > 0, else 0
+```
+
+At the starting values:
+
+| spot | mouth | C |
+|---|---|---|
+| slot, 4–6 m out | 17–26° (plateau) | 7.1% |
+| 10 m out, centred | 10.5° | 5.2% |
+| top of the circle | 6.4° | 4.1% |
+| point, centred | 5.5° | 3.9% |
+| half-wall | 4.4° | 3.5% |
+| low corner | 1.6° | 2.6% |
+| behind their net | 0° | 2.1% |
+| just outside their line, centred | — | 2.3% |
+| neutral zone, centre | — | 1.4% |
+| behind our net | — | −1.2% |
+
+Both terms are pure functions of position, so the whole continuation is a leaf
+(§3, step 1).
+
+### 2.2 The live continuation
+
+The floor is the value of a possession the carrier keeps. The live read knows
+how likely he is to keep it and where it goes if he does not:
+
+```
+base(spot) = keep · C(spot) − (1 − keep) · C_opp(strip)
+```
+
+- `keep`: the carrier's **evadability**, the odds he can keep the puck at all,
+  in whatever direction: `reach_clearance` at the max-clearance seam
+  (`AICarrySpace.best_evade_point`) over `EVADE_HORIZON_S`, through
+  `clearance_to_safety`. It is the read `AIRoleCarrier._pick_fire_phase`
+  already makes as `_phase_current_safety` for the hold's keep odds. **Not** the
+  drive's keep (`carry_safety` / `_skate_keep`): that prices one play, skating
+  at the net through whoever is in the slot, and reads ~0 at the point whenever
+  a D stands in the middle, which is the drive being closed, not the puck being
+  lost. The continuation is the value of playing on in any direction; the drive
+  is one of the live reads it is maxed against.
+- At a spot other than where the carrier stands now (a carry candidate's end,
+  an entry, a receiver's spot), the same read there: the seam from that spot at
+  the arrival velocity, against the defence projected to the arrival time
+  (`AITrajectory.predict_at`, as `_drive` already projects it). A stand-still
+  candidate over the equal horizon (§2.4, 3) reads it against the defence at the
+  horizon's end, which is where a defender closing on a carrier who waits
+  shows up.
+- `strip`: the puck's spot (`AICarrierField.puck_pos_at`). The evade read has
+  no path, so a puck he cannot keep is lost where he holds it. `C_opp` is the
+  same function for the other side there: his floor, and his slot bonus when the
+  spot is in our zone.
+- Pinned on the boards, the seam search loses half its envelope
+  (`board_gap_m`) and `keep` collapses, as it should: a wall-pinned carrier is
+  about to lose it.
+
+`C_opp` is the static function, never the other side's live read, so there is
+no recursion.
+
+### 2.3 Where it plugs in
+
+- **`AIPossessionValue.at`** (both sides, every consumer): the result becomes
+  the better of today's reads and `base`, each read decayed as in §2.4. Because
+  this is the one read of possession for both sides, the turnover cost
+  (`AICarrierField.turnover_cost` → `_theirs.at`), the dump's "ours at the
+  meet" (`possession_at`), the receiver's spot, the horizon leaf
+  (`horizon_value`) and the defence's `threat_of_carrier` all change with it.
+- **`AICarrierField._regime_value`** in the zone: `max(shoot_s, base)`. The zone
+  plan rejected a possession floor in the zone because the old potential map
+  was on another scale and won everywhere; this one is in the shot currency, and
+  `SLOT_BONUS` is sized to sit below a real chance from the slot (§2.6).
+- **The shot gets rebound credit.** First contact alone makes keeping the puck
+  (~2%) beat every shot from range, so the bots would never shoot from the
+  point. A shot that is saved or missed still leaves a puck in their zone:
+
+  ```
+  shot = p + (1 − p) · REBOUND_RECOVER_SHARE · FLOOR_THEIR_GOAL_LINE
+  ```
+
+  `p` is first contact as today. `REBOUND_RECOVER_SHARE` (feel tunable, start
+  0.3) is how often our side gets that puck back, credited at the zone's floor,
+  not at a shot. It can later be measured instead of chosen (§5).
+- **Values can now be negative.** `at()` starts its max at 0.0 today, and the
+  carry search's exact ceiling prunes and the entries' empty-ice bound assume
+  non-negative values. Audit those before wiring (step 0); clamping at 0 would
+  discard the own-end and forecheck information the floor adds.
+
+### 2.4 Time: why the bots will not stand still
+
+The trap: when the decay on a forward move is bigger than the value it gains,
+standing still wins. With the multiplicative `delay_discount` (τ = 6 s) it binds
+in the neutral zone: the floor rises about 0.13 points per metre, while the
+decay on ~1.3% of possession costs about 0.2 points per second. At speed the
+move wins; from a standstill, where a metre or two takes about a second, it
+loses.
+
+Three things counter it:
+
+1. **The floor has no clock.** It is a value of position, so it never pays
+   anyone to wait.
+2. **Decay toward the baseline.** `delay_discount` stands for a read going
+   stale. A stale read is not worth zero: it reverts to what possession of that
+   spot is worth without the specific look. So every discounted read decays
+   toward the base of the spot it values:
+
+   ```
+   value(read at t) = base(spot) + max(0, read − base(spot)) · exp(−t / τ)
+   ```
+
+   The floor's gain from moving forward is never discounted; only the premium
+   of a specific open look is. An entry read at t decays toward `base` at the
+   entry spot, a drive toward `base` where it ends.
+3. **Every candidate is priced over the same horizon.** Standing still is a
+   move that lasts the horizon and ends where it started, with the defence
+   projected forward like any other move. The carry search already does this
+   outside the zone ("standing still outside pays the step's decay like every
+   move"); keep it inside the zone too once `base` is there. Compared at equal
+   horizons, decay cancels out of the stand-still comparison.
+
+### 2.5 The blue line
+
+The bonus gives their blue line a step: centred, 2.3% just outside and 3.9% just
+inside; on the wall, about +1.2 points. That is the pull into the zone the floor
+alone lacks, strongest in the middle. The live entry and drive reads, and the
+defence closing on a carrier who hovers (his `keep` falls, which the
+equal-horizon rule of §2.4 makes count), do the rest. If bots still hover at the
+line in testing, raise the step through `SLOT_BONUS` or `SLOT_REF_M` before
+reaching for anything new, and never a gate.
+
+### 2.6 The slot plateau and holding the puck
+
+Holding the puck in the slot is worth the plateau (about 7%) times `keep`. Where
+the live shot reads less than that, against a set keeper with no opening, the
+carrier keeps it: looks for the pass, the deke, the keeper moving. Some of that
+is the point; too much is a carrier parked in the slot. Two things bound it:
+the defence closing on him lowers `keep` over the equal horizon, and
+`SLOT_BONUS` should stay below what a live slot shot usually reads. Step 5's
+shot mix and slot-hold time say which side of that line it is on.
+
+### 2.7 What it should make removable
+
+Each is a workaround for the missing continuation; delete one at a time, with
+step 5's measurements before and after:
+
+- the entry continuation special case (`docs/zone-entry-currency-plan.md` §2.2);
+- "a straight carry across the line is not credited from outside";
+- possibly the giveaway bars (`SHOT_MIN_VALUE`, `PASS_MIN_VALUE`): keeping the
+  puck now has a real worth for a giveaway to beat.
+
+Stays: the dump's dead-reckoned feed to our support (it is the live,
+defence-aware half, and now competes with the floor instead of standing in for
+it), and the `numbers_up` rule (out of scope, see Decisions).
+
+### 2.8 Shooting against keeping, worked
+
+The two sides of the carrier's compete (`_pick_commit_phase`: fire if the shot
+beats the best carry, pass or hold, ties fire) are priced by different models
+after this plan. The shot is the live shot field, unchanged but for its rebound
+credit; keeping the puck is the continuation, at the live keep odds:
+
+```
+shoot = p + (1 − p) · REBOUND_RECOVER_SHARE · FLOOR_THEIR_GOAL_LINE
+keep  = keep_odds · C(spot) − (1 − keep_odds) · C_opp(strip)
+```
+
+`p` is first contact from the live read. A carry candidate that moves somewhere
+better is worth the larger of the live read and `keep` where it ends, any shot it
+sets up decaying toward that spot's base (§2.4). At the starting values, with
+illustrative keep odds:
+
+| | point, centred | slot, 5 m out |
+|---|---|---|
+| C | 3.9% | 7.1% |
+| keep odds (assumed) | 0.9, little pressure | 0.6, pressured |
+| C_opp where it is lost | about +0.4% (his end, inside his line) | about −0.8% (deep in his end) |
+| keeping is worth | about 3.5% | about 4.6% |
+| shoots when live first contact exceeds | about 2.9% | about 4.0% |
+
+From the point the bot shoots only when the live read finds a real chance, and
+otherwise works the puck; in the slot under pressure the bar is low. Until step
+6 tests removing it, `SHOT_MIN_VALUE` (0.05) also applies after the settle
+handicap, so the point shot above cannot qualify yet whatever the comparison
+says. With the continuation in, the comparison does that bar's job, which is
+why §2.7 lists the bar as possibly removable.
+
+## 3. Steps
+
+### Step 0 — non-negative audit
+
+Find every reader that assumes possession values are ≥ 0: `AIPossessionValue.at`
+and `entry_at` (the 0.0 start, the `_open_worth` bound), the carry search's exact
+ceiling prunes, the giveaway bars' arithmetic, `turnover_cost`'s consumers.
+Make each correct for negative values. Its own commit, no behavior change on
+today's (non-negative) values; the suite must stay green.
+
+### Step 1 — the floor leaf
+
+`Scripts/domain/ai/possession_floor.gd` (`AIPossessionFloor`): engine-free,
+static, reads `GameRules` for the lines and the posts. `floor_at(pos, goal)`,
+`slot_bonus(pos, goal)`, `continuation(pos, goal)` (their sum). The six
+position tunables as consts there (`REBOUND_RECOVER_SHARE` lives with the shot
+pricing, step 3). Tests (`tests/unit/ai/test_possession_floor.gd`): the floor at
+the anchors, linear between them, flat past the goal lines; the bonus 0 outside
+their zone and behind the goal line, at its plateau inside `SLOT_REF_M`
+straight out, falling with distance and with angle; left/right symmetric; and
+the frame flip (the same spot read for the other goal).
+
+### Step 2 — the live read
+
+In `AIPossessionValue`: `C` and `base` as §2.1–2.2, the max with today's reads,
+every discounted read decaying toward its spot's base as §2.4 (2). In
+`AICarrierField._regime_value`: `max(shoot_s, base)` in the zone.
+`test_possession_value.gd` gains: a puck below their goal line, on empty ice, is
+worth about the floor; behind our net, below zero; a turnover deep in their end
+costs almost nothing, and one in our slot costs more than one on our wall.
+
+### Step 3 — rebound credit
+
+The shot term of §2.3 wherever the carrier prices a shot (the value seam's
+callers in the compete), with `REBOUND_RECOVER_SHARE`. Watch the shot mix in
+step 5: too low and the bots stop shooting from the point; too high and they
+throw everything at a set goalie.
+
+### Step 4 — the stand-still horizon in the zone
+
+As §2.4 (3), in `carrier_carry_search.gd`.
+
+### Step 5 — measure
+
+- **The regression that started this**: with point first-contact odds forced to
+  0, bots still enter the zone (the entry drill's entry rate within a ratchet
+  of normal).
+- **No stand-still**: a lone carrier on empty ice anywhere outside the zone
+  never picks standing still; and at their blue line with a defender closing,
+  he enters or moves the puck rather than hovering (§2.5).
+- **Cycle retention** (new instrument): time in possession below the dots, and
+  the share of those possessions ending in a shot.
+- **Shot mix** (new instrument or a stat off `shot_events`): share of shots
+  from the point against the slot.
+- **Slot holds** (§2.6): how long a carrier with the puck in the slot keeps it
+  before shooting, passing or losing it.
+- **Dump recovery rate** (new instrument).
+- The existing `test_nz_entry_drill.gd` and `test_breakout_drill.gd`, before and
+  after.
+
+### Step 6 — remove the workarounds
+
+§2.7, one per commit, each with step 5's numbers.
+
+## 4. What players should see
+
+Bots that hold the puck low and cycle it instead of throwing it at a set goalie
+from the point, but still put pucks on net for rebounds; that dump it in when
+the line is clogged; that take the zone along the wall under control; and that
+never park at the blue line waiting.
+
+## 5. Open questions
+
+- **Measuring the rebound share.** `REBOUND_RECOVER_SHARE` is a property of the
+  goalie and the puck, not of play, so it can be measured: the shot field's
+  stager already fires shots at the live keeper; recording where saves and
+  misses leave the puck, and which side's nearest body is first to it on the
+  arrival clock, turns the tunable into a measurement that regenerates with the
+  shot field.
+- **Checking the floor.** Possession logs from human games (the `shot_events`
+  pipeline is the natural home) can test the floor's shape later: how often
+  possessions from each part of the ice end in a goal, and against which side.
+  Data the game owns.
+- **3v3.** The shared floor is the decision; 3v3's open ice may make possession
+  worth more everywhere. Human logs are the way to see it.
+- **Starting values.** The floor's four were read off an exploratory fit and
+  rounded; the slot bonus's two are new judgment. All of them stand as
+  judgment. Replace them freely.
+- **The shot field's own shape.** The set-keeper cells read close to
+  all-or-nothing (§Decisions). That is out of this plan's scope, but worth
+  checking against real outcomes: `shot_events` records xG and goals, and the
+  two should agree on average.
+
+## 6. As built (steps 0–4)
+
+- **A read that does not come off leaves the continuation where he stands**
+  (`AIPossessionValue._taken`): an entry raced and lost, a skate or a drive
+  stripped. Priced as zero, a lost race read above a negative continuation, so
+  possession behind our own net could never read below nothing.
+- **The rebound is credited on the odds of reaching the net**, before the lane
+  and the release contest (`score_shoot_value`'s `rebound`), so a blocked shot
+  earns none.
+- **The keep odds are the seam's own safety**, read by `AIEvadeRead.evade_safety`
+  under exact bounds (~45 µs a read in traffic against ~190 µs for the full
+  sweep), and held to `best_evade_point` by `test_evade_safety.gd`.
+- **Host AI cost is up.** Every read adds a keep read, an entry a defender
+  stands on is no longer pruned on its dead live worth (it still carries the
+  zone's floor), and bots that hold the puck in the zone keep the defence in
+  its costliest search (`cover_man_target`) for longer: the branch makes 2.5–4×
+  main's possession reads in the neutral-zone scenarios. With the shipped
+  kernels (`benchmarks/test_ai_perf_benchmark.gd` installs them; until
+  `e4bb2c33` it measured GDScript only), after the keep and carry reads went
+  native (`NativeCarrySpace`) and the cover search reads a feed's possession
+  only when its bound cannot settle it, AI µs per game-second against `main`:
+  nz-rush 5v5 1.83× (267k), loose-neutral 3v3 1.62×, 5v5 1.14×, nz-rush 3v3
+  1.08×, the O-zone cycle 0.80–0.95×. The rest of the possession read
+  (`AIPossessionValue.at`: entries, drives, the shot terms) is the next
+  candidate for the native kernels once the floor stops changing.
+
+## 7. Step 5, first readings
+
+Instruments in `tests/instruments/ai/` (duel harness, real bot brains; the
+O-zone one against the real keeper, settled on the puck before each run), each
+run on `main` before this plan and on the branch, with `point_odds_off.gd`
+zeroing the shot field's 15 m row for the regression, on the duel harness's
+old boards (see below). Small samples: read differences under a few runs as
+noise.
+
+| measure | main | branch |
+|---|---|---|
+| entries carried in, `test_nz_entry_drill` (30 runs) | 25 | 25 |
+| … with point shots worth nothing | 24 | 22 |
+| stall time at their line, both | 0.0 s | 0.0–0.1 s |
+| breakout exits, `test_breakout_drill` (20 runs) | 19, 1.91 s | 19, 2.05 s |
+| stacked line: carried / dumped / turnover, `test_dump_in_drill` (12) | 9 / 2 / 1 | 10 / 1 / 1 |
+| low O-zone possessions ending in a shot, `test_ozone_possession` (48) | 37, at 1.6 s | 36, at 1.5 s |
+| … of those shots from the slot / point / elsewhere | 7 / 0 / 30 | 5 / 0 / 31 |
+| slot holds: count, median | 10, 0.16 s | 9, 0.24 s |
+
+- **The regression does not reproduce in the entry drill**, on `main` either:
+  with the point row zeroed, bots still carry the zone. Whatever stopped them
+  in play is not staged by two defenders standing up at their line.
+- **Low in their zone, the carrier shoots within about a second from a sharp
+  angle**, on both, against a keeper settled on the near post: the field prices
+  a release 10 m wide and 2 m out at ~19% there, well over the giveaway bar, so
+  keeping the puck never gets to compete. Its spots stop at x = ±8 m. That is
+  the shot field's own shape (§5), and it decides what "hold it low and cycle"
+  can show before this plan's values do.
+- `test_carrier_never_stands_still.gd` (unit) holds the outside-the-zone half
+  of the no-stand-still check.
+
+### The shot's price against the keeper
+
+`test_shot_value_calibration.gd`: real bots rushing the real keeper (140 shots a
+tier, mostly in tight with no defence), and the open set measured from each spot
+the O-zone bots fired from (the truth table's staging: a keeper who tracked the
+carry in, every aim at three lofts).
+
+- **The compete's price runs well above what goes in.** Rush shots it priced at
+  0.85 on average scored 0.45–0.49. The xG stat (0.35 on average) is on the
+  scale but barely ranks shots.
+- **The live read is what overprices; the set read reproduces the
+  measurements.** From the corner and the sharp angles the field's live read
+  of the settled keeper said 0.12–0.23 where the keeper conceded nothing, or
+  one aim in 72; at (−4, 2.5) it said 0.57 and the aim it picks scores 0. The
+  set read (SET cells only) matched the measured best aim wherever there was a
+  goal to find. The live read blends in feed and decoy cells whose keeper
+  looked the same and conceded more, and past x = ±8 m it has no cells.
+
+So the shot side of the compete is not on the scale of goals per shot yet, and
+the floor's values cannot be set against it until it is.
+
+### The live read with the keeper moving
+
+`test_shot_field_live_read.gd`: the live read against the measured open set for
+eight stagings (the truth table's own), at spots on the field's grid, between
+its points and beyond it; six spots each, measured best aim at the reference
+scatter. Bias is live minus measured.
+
+| staging | on the grid | between | beyond |
+|---|---|---|---|
+| set | +0.105 (live 0.17, measured 0.07, set read 0.07) | +0.094 | +0.048 |
+| 3 m feed, one-timed | −0.172 | −0.192 | +0.042 |
+| 3 m feed, caught | −0.001, every pair ranked right | −0.136 | +0.035 |
+| 6 m feed, one-timed | −0.079 | −0.034 | +0.082 |
+| 6 m feed, caught | +0.068 | −0.020 | +0.002 |
+| decoy (set on another man) | −0.362 | −0.050 | −0.235 |
+| deke across | +0.059 | +0.004 | +0.039 |
+| wrap (sealed on the post) | +0.163 | +0.397 | +0.302 |
+
+- **It overprices the keeper who is where he should be**: set (+0.10, and
+  the aim it picks scores 0.03 where the best aim gets 0.07) and sealed on
+  the post after a wrap (+0.16 to +0.40, where he concedes nothing). These are
+  the sharp-angle shots from section 7: the bots fire because of them.
+- **It underprices the keeper caught out of position**: set on a decoy
+  (−0.36 on the grid; one cell reads 0.000 where 61 of 72 shots score) and
+  the 3 m one-timer (−0.17). Bots undervalue the plays that beat him.
+- **It is right for a caught feed** on the grid, and close at 6 m.
+- **The set read reproduces the set keeper on the grid** (0.069 against
+  0.069), as the truth table says it should.
+
+
+### Step 5 on the integration branch
+
+`claude/shot-field-integration` (the floor; the shot field's live read fixed:
+the pick's own odds, each read naming the play its keeper saw, a feed being one
+across the royal road, carried wraps, dense feeds, #896's keeper; the saucer
+lane reading the stick where it lands; the pressurer's incumbent riding its
+stand and the gap ladder as its ring) against `main` (d93cbf2b), the same
+instruments. Both on the duel harness as it now stands, whose sliding puck
+steps with the host's own drive (`AITrajectory.step_puck`): on its old boards a
+rim or a dump flew metres off the path the bots price it on, so earlier
+readings of dumps and rims do not compare.
+
+| measure | main | integration |
+|---|---|---|
+| entries carried in (30) | 25, 2.99 s | 22, 2.72 s |
+| … dumped in, won back | 2, 0 | 6, 0 |
+| breakout exits (20) | 19, 1.91 s | 19, 2.13 s |
+| stacked line: carried / dumped / turnover (12) | 9 / 2 / 1 | 8 / 4 / 0 |
+| … dumps won back | 0 of 2 | 2 of 4 |
+| low O-zone possessions ending in a shot (48) | 39, at 1.8 s | 35, at 2.0 s |
+| … from the slot / point / elsewhere | 6 / 1 / 32 | 10 / 0 / 25 |
+| … passes | 26 | 40 |
+| below the dots, a possession | 0.9 s | 1.3 s |
+| slot holds: count, median | 10, 0.19 s | 13, 0.28 s |
+
+Point shots priced at nothing change none of the integration's readings.
+
+- **Low in their zone the floor does what the plan meant it to**: fewer shots,
+  later, half again as many from the slot, and the puck moved 40 times against
+  26. The shot read the carrier names (a feed only when the pass crossed the
+  royal road) is what let it: read as off a feed for the first `goalie_reset_s`
+  of every possession, the carrier fired sooner than on `main`.
+- **The entry drill dumps three times as often and wins none back.** Six of its
+  30 entries are dumps, and their man is first to every one. With the puck now
+  flying the path the dump search walks, what is left between the price and the
+  outcome is the race for it: the dump's read of who gets there first.
+- **Host cost** is §6's.

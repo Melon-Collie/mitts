@@ -610,6 +610,10 @@ func icing_enforced() -> bool:
 	return rule_set == GameRules.RuleSet.NHL
 
 
+func covers_whistled() -> bool:
+	return GameRules.whistles_a_cover(rule_set)
+
+
 func numbers_up() -> bool:
 	return their_rush_read.is_live \
 			and their_rush_read.numbers != AIRushRead.Numbers.EVEN_OR_UP
@@ -642,6 +646,7 @@ func build_view() -> void:
 	v.carrier_lane_val = _carrier_lane
 	v.team_size_val = team_size
 	v.icing_enforced_val = icing_enforced()
+	v.covers_whistled_val = covers_whistled()
 	v.numbers_up_val = numbers_up()
 	v.ping_chase_peer_val = ping_directives.chase_peer()
 	v.pressure_slot_override_val = _pressure_slot_override
