@@ -169,15 +169,16 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 	var l_pace: float = 0.0
 	# FIRE FROM THE POINT THE BOT SCORED, NOT FROM ITS BODY.
 	# The carrier prices the holds the blade can put the puck in before the
-	# press (AIRoleCarrier "Where the shot is held") — where it is, the loaded
-	# pocket, a reach to either side of the shot line — and fires from the best.
+	# press (AIRoleCarrier "Where the shot is held") — the loaded pocket, a reach
+	# to either side of the shot line, the snapshot out front — and fires from
+	# the best.
 	# At point-blank the two flanking holds sit on OPPOSITE sides of a down
 	# keeper, so one of them is routinely outside his butterfly coverage while
 	# the body is still square in front of him. Firing from the body erases the
 	# entire mechanism.
 	#
 	# The body plus `shoot_now_hold` is that winning point, and the winning hold less
-	# the puck's own spot (`_field.holds.offset[0]`) is the pull it represents; the pull
+	# the puck's own spot (`_field.holds.origin`) is the pull it represents; the pull
 	# being non-zero is what marks a FLANK release as opposed to a straight one.
 	var l_blade: Vector3 = start
 	var l_gpos: Vector3 = Vector3.INF
@@ -206,7 +207,7 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 				l_blade = s0.pos + c0.shoot_now_hold
 				l_gpos = _goalie.global_position
 				l_offset = c0.shoot_now_hold \
-						- Vector3(c0._field.holds.offset[0].x, 0.0, c0._field.holds.offset[0].y)
+						- Vector3(c0._field.holds.origin.x, 0.0, c0._field.holds.origin.y)
 			continue
 		# GATE ON THE DECISION, NOT ON `intended_action`. The carrier role's
 		# `intended_action` still reads CARRY on the tick it fires a shot — the

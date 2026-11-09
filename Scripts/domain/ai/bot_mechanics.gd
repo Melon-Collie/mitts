@@ -55,7 +55,8 @@ const BOT_WRISTER_CHARGE_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 8   # ~12
 
 # Lookahead for scoring a wrister at COMMIT time — from the carrier picking SHOOT
 # to the puck leaving the blade: the pre-aim's residual convergence (short, since
-# _carry_aim_track_fire keeps facing pre-tracked during CARRY) plus the charge.
+# the carry cursor rests the puck in the release's hold during CARRY,
+# SkaterAgentCarryCursor) plus the charge.
 # Projects both the shooter's release position and the goalie / opponents.
 const BOT_PRE_AIM_BUFFER_S: float = 0.01
 const BOT_WRISTER_LOOKAHEAD_S: float = (

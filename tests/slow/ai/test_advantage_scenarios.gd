@@ -124,7 +124,7 @@ func test_a_step_on_the_backchecker_ends_in_a_shot() -> void:
 		assert_false(shot.is_empty(), "%s: the rusher gets a shot off" % label)
 		assert_eq(p.lost_at, INF, "%s: and keeps the puck to it" % label)
 		if not shot.is_empty():
-			assert_lt(Play.net_dist(shot["pos"]), 8.0, "%s: from in tight" % label)
+			assert_lt(Play.net_dist(shot["pos"]), SLOT_DEPTH_M, "%s: from inside the slot" % label)
 
 
 func test_an_open_back_door_gets_the_feed_and_the_one_timer() -> void:

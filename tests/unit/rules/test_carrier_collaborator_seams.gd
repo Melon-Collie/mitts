@@ -11,6 +11,7 @@ const _CARRIER: String = _DIR + "carrier.gd"
 const _FIELD: String = _DIR + "carrier_field.gd"
 const _SEARCHES: Array[String] = [
 	_DIR + "carrier_pass_search.gd",
+	_DIR + "carrier_rim_search.gd",
 	_DIR + "carrier_carry_search.gd",
 	_DIR + "carrier_dump_search.gd",
 	_DIR + "carrier_destinations.gd",

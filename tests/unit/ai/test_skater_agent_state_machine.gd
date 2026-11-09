@@ -7,6 +7,7 @@ extends GutTest
 # actors — everything runs headless off the bot's identity set by setup.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
+const Cursor := preload("res://Scripts/ai/skater_agent_carry_cursor.gd")
 const Snapshot := preload("res://tests/snapshot.gd")
 
 # peer 1 = self (team 0), peer 2 = teammate (team 0), peers 11/12 = team 1.
@@ -1029,25 +1030,28 @@ func test_live_off_puck_aim_tracks_the_carrier_puck_during_a_jab() -> void:
 
 
 func test_man_to_beat_reads_reach_not_proximity() -> void:
-	# The square-to-net facing hinges on _has_man_to_beat, which reads the
+	# The square-to-net facing hinges on has_man_to_beat, which reads the
 	# carrier's published forward-puck clearance (metres of room the presented
 	# puck has from the nearest un-beaten stick) rather than a distance band.
 	# EVADE_SAFE_CLEAR_MIN_M — a blade of real air — is the bar.
-	var bar: float = Agent.CARRY_MAN_TO_BEAT_CLEAR_M
-	sm._carry_has_man = false
+	var bar: float = Cursor.CARRY_MAN_TO_BEAT_CLEAR_M
+	sm._carry_cursor.reset()
 	sm._carrier.forward_puck_clearance = bar + 0.01
-	assert_false(sm._has_man_to_beat(), "a blade of air on the forward puck: no man")
+	assert_false(sm._carry_cursor.has_man_to_beat(sm._carrier),
+			"a blade of air on the forward puck: no man")
 	sm._carrier.forward_puck_clearance = bar - 0.01
-	assert_true(sm._has_man_to_beat(), "a stick inside that: a man to beat")
+	assert_true(sm._carry_cursor.has_man_to_beat(sm._carrier),
+			"a stick inside that: a man to beat")
 	# Sticky: while a man is engaged the bar drops, so a defender riding the
 	# boundary holds the prior answer instead of flipping the whole carry aim.
 	sm._carrier.forward_puck_clearance = bar + 0.01
-	assert_true(sm._has_man_to_beat(),
+	assert_true(sm._carry_cursor.has_man_to_beat(sm._carrier),
 			"riding the boundary holds the prior answer (sticky)")
 	# Open more than the sustain band and he is finally beaten.
 	sm._carrier.forward_puck_clearance = \
-			bar + Agent.CARRY_MAN_TO_BEAT_HYSTERESIS_M + 0.01
-	assert_false(sm._has_man_to_beat(), "past the sustain band: man beaten")
+			bar + Cursor.CARRY_MAN_TO_BEAT_HYSTERESIS_M + 0.01
+	assert_false(sm._carry_cursor.has_man_to_beat(sm._carrier),
+			"past the sustain band: man beaten")
 
 
 func test_a_defender_abreast_but_out_of_reach_is_not_a_man_to_beat() -> void:
@@ -1061,8 +1065,8 @@ func test_a_defender_abreast_but_out_of_reach_is_not_a_man_to_beat() -> void:
 	var ctx := _carry_ctx(Vector3.ZERO, stride, Vector3(3.0, 0, 0.0), stride)
 	carrier.decide(ctx)
 	gut.p("  abreast and 3 m wide: forward-puck clearance %.2f m (bar %.2f)"
-			% [carrier.forward_puck_clearance, Agent.CARRY_MAN_TO_BEAT_CLEAR_M])
-	assert_gt(carrier.forward_puck_clearance, Agent.CARRY_MAN_TO_BEAT_CLEAR_M,
+			% [carrier.forward_puck_clearance, Cursor.CARRY_MAN_TO_BEAT_CLEAR_M])
+	assert_gt(carrier.forward_puck_clearance, Cursor.CARRY_MAN_TO_BEAT_CLEAR_M,
 			"a defender abreast but a stick-and-a-half wide cannot reach the puck")
 	# …and the same defender ON the puck line in front very much can.
 	var tight := _carry_ctx(Vector3.ZERO, stride, Vector3(0.3, 0, -1.2), stride)
@@ -1070,7 +1074,7 @@ func test_a_defender_abreast_but_out_of_reach_is_not_a_man_to_beat() -> void:
 	pressed.decide(tight)
 	gut.p("  in front at 1.2 m: forward-puck clearance %.2f m"
 			% pressed.forward_puck_clearance)
-	assert_lt(pressed.forward_puck_clearance, Agent.CARRY_MAN_TO_BEAT_CLEAR_M,
+	assert_lt(pressed.forward_puck_clearance, Cursor.CARRY_MAN_TO_BEAT_CLEAR_M,
 			"a stick in front of the puck is a man to beat")
 
 
@@ -1130,17 +1134,20 @@ func test_threat_facing_fallback_is_debounced() -> void:
 
 
 func test_carry_entry_resets_the_smoothed_shield() -> void:
-	# A fresh pickup must not inherit a phantom shield (or a stale man-to-beat
-	# latch) from a previous carry — _set_state zeroes them on CARRY entry so the
-	# shield eases in from nothing.
+	# A fresh pickup must not inherit a phantom shield, a stale man-to-beat latch
+	# or a tracked hold from a previous carry — _set_state resets the cursor on
+	# CARRY entry so the shield eases in from nothing.
 	sm._state = Agent.State.OFF_PUCK
-	sm._carry_protect_gain_smooth = 0.8
-	sm._carry_protect_offset_smooth = Vector3(1, 0, 0)
-	sm._carry_has_man = true
+	sm._carry_cursor._protect_gain_smooth = 0.8
+	sm._carry_cursor._protect_offset_smooth = Vector3(1, 0, 0)
+	sm._carry_cursor._has_man = true
+	sm._carry_cursor.mode = Cursor.Mode.PASS
 	sm._set_state(Agent.State.CARRY)
-	assert_eq(sm._carry_protect_gain_smooth, 0.0, "shield gain resets on carry entry")
-	assert_eq(sm._carry_protect_offset_smooth, Vector3.ZERO, "shield offset resets on carry entry")
-	assert_false(sm._carry_has_man, "man-to-beat latch resets on carry entry")
+	assert_eq(sm._carry_cursor._protect_gain_smooth, 0.0, "shield gain resets on carry entry")
+	assert_eq(sm._carry_cursor._protect_offset_smooth, Vector3.ZERO,
+			"shield offset resets on carry entry")
+	assert_false(sm._carry_cursor._has_man, "man-to-beat latch resets on carry entry")
+	assert_eq(sm._carry_cursor.mode, Cursor.Mode.CARRY, "no hold tracked on carry entry")
 
 
 # ── incoming-feed reception: give with the puck ──────────────────────────────
@@ -1396,6 +1403,109 @@ func test_carry_dump_intent_commits_and_freezes_target() -> void:
 	assert_eq(landed, Agent.State.PASS_PRESSED, "a dump commits to the PASS_PRESSED release path")
 	assert_eq(sm._dump_target, Vector3(12, 0, 5), "the dump target is frozen at commit")
 	assert_eq(carrier_stub.clear_intent_calls, 1, "commit forces a carrier re-eval")
+
+
+# ── the carry loads the puck for a near-leading pass (#915) ──────────────────
+
+const _PASS_POCKET := Vector3(-0.64, 0.0, -0.64)
+
+
+# A carrier whose best pass is near the lead, nobody on him and the pocket kept
+# as surely as the carry: the carry rests the puck in the pass's pocket.
+func _stub_loading_pass() -> _CarrierStub:
+	var carrier := _stub_carry(AIRoleCarrier.INTENT_CARRY, Vector3.ZERO, TEAMMATE_ID)
+	carrier.debug_shoot_score = -1.0
+	carrier.debug_pass_score = 0.2
+	carrier.debug_carry_score = 0.21
+	carrier.lead_score = 0.21
+	carrier.pass_now_hold = _PASS_POCKET
+	carrier.pass_now_keep = 1.0
+	carrier.carry_keep = 1.0
+	carrier.forward_puck_clearance = AICarrySpace.EVADE_SAFE_MARGIN_M
+	return carrier
+
+
+func _carry_target(s: WorldSnapshot) -> Vector3:
+	return sm._carry_cursor.target(s, Vector3.ZERO, sm._carrier, sm._attacking_goal_pos,
+			sm._own_goal_dir, sm._blade_reach, sm._protects_the_puck, 0.0)
+
+
+func test_a_near_tied_pass_with_no_pressure_parks_the_puck_in_its_pocket() -> void:
+	_stub_loading_pass()
+	var s := _self_snap(Vector3.ZERO, true)
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._carry_cursor.mode, Cursor.Mode.PASS, "the carry loads the pass")
+	assert_almost_eq(_carry_target(s), _PASS_POCKET, Vector3.ONE * 0.0001,
+			"the cursor rests on the pass's pocket")
+
+
+func test_committing_the_loaded_pass_does_not_move_the_cursor() -> void:
+	# The pre-aim must hold the puck where the carry already rested it, or the
+	# motion-limited cursor jumps at commit and can time the press out.
+	var carrier := _stub_loading_pass()
+	var s := _self_snap(Vector3.ZERO, true)
+	sm.dispatch(InputState.new(), s)
+	var carried: Vector3 = _carry_target(s)
+	carrier.next_intent = AIRoleCarrier.INTENT_PASS
+	carrier.pass_hold_offset = carrier.pass_now_hold
+	carrier.pass_hold_share = 1.0   # the puck at the body is not loaded: no press yet
+	sm._dispatch_skip_counter = 0   # a decided tick, not a throttled one
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._intended_action, Agent.State.PASS_PRESSED, "pre-aiming the pass")
+	assert_almost_eq(sm._aim_target_for_intent(s, Vector3.ZERO), carried,
+			Vector3.ONE * 0.0001, "commit aims where the carry rested the puck")
+
+
+func test_a_man_to_beat_keeps_the_carry_presented() -> void:
+	var carrier := _stub_loading_pass()
+	carrier.forward_puck_clearance = -0.5
+	var s := _self_snap(Vector3.ZERO, true)
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._carry_cursor.mode, Cursor.Mode.CARRY, "evading comes first")
+
+
+func test_a_pocket_kept_less_than_the_carry_is_not_loaded() -> void:
+	var carrier := _stub_loading_pass()
+	carrier.pass_now_keep = 0.5
+	carrier.carry_keep = 0.9
+	var s := _self_snap(Vector3.ZERO, true)
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._carry_cursor.mode, Cursor.Mode.CARRY,
+			"an unshielded pocket a stick reaches is no place to rest it")
+
+
+func test_a_pass_well_behind_the_lead_is_not_loaded() -> void:
+	var carrier := _stub_loading_pass()
+	carrier.debug_pass_score = 0.05
+	carrier.lead_score = 0.3
+	var s := _self_snap(Vector3.ZERO, true)
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._carry_cursor.mode, Cursor.Mode.CARRY)
+
+
+func test_holding_for_a_developing_feed_loads_it_whatever_the_lead() -> void:
+	var carrier := _stub_loading_pass()
+	carrier.debug_pass_score = 0.05
+	carrier.lead_score = 0.3
+	carrier.holding_for_feed = true
+	var s := _self_snap(Vector3.ZERO, true)
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._carry_cursor.mode, Cursor.Mode.PASS)
+
+
+func test_a_loaded_pass_holds_through_a_dip_inside_the_band() -> void:
+	var carrier := _stub_loading_pass()
+	var s := _self_snap(Vector3.ZERO, true)
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._carry_cursor.mode, Cursor.Mode.PASS)
+	# Out of the entry margin, inside the absolute band: still loaded.
+	carrier.debug_pass_score = carrier.lead_score \
+			* (1.0 - AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC) \
+			- Cursor.FIRE_AIM_HYSTERESIS_BAND * 0.5
+	assert_eq(_carry_target(s), _PASS_POCKET, "the band holds it")
+	carrier.debug_pass_score -= Cursor.FIRE_AIM_HYSTERESIS_BAND
+	_carry_target(s)
+	assert_eq(sm._carry_cursor.mode, Cursor.Mode.CARRY, "past the band it lets go")
 
 
 func test_carry_holds_intent_against_carrier_flip() -> void:
@@ -1922,6 +2032,12 @@ func test_aim_slew_arc_rate_uses_blade_orbit_radius() -> void:
 
 # ── Carry facing follows the route (face where you're going) ─────────────────
 
+# The carry cursor's carry aim for this bot (SkaterAgentCarryCursor.carry_aim).
+func _carry_aim(s: WorldSnapshot, self_pos: Vector3) -> Vector3:
+	return sm._carry_cursor.carry_aim(s, self_pos, sm._carrier, sm._attacking_goal_pos,
+			sm._own_goal_dir, sm._blade_reach, sm._protects_the_puck, 0.0)
+
+
 func _carry_snap(self_pos: Vector3) -> WorldSnapshot:
 	var s := WorldSnapshot.new()
 	var me := SkaterNetworkState.new()
@@ -1939,23 +2055,23 @@ func test_carry_aim_faces_the_route_when_driving_laterally() -> void:
 	# cursor — and with it body facing — points down the ROUTE: the
 	# goal-facing default had the carrier crabbing the whole way in the slow
 	# crossover class, letting beaten defenders catch back up.
-	sm._last_carry_anchor = Vector3(8, 0, 0)
-	var target: Vector3 = sm._carry_mouse_aim(_carry_snap(Vector3.ZERO), Vector3.ZERO)
+	sm._carrier.last_carry_anchor = Vector3(8, 0, 0)
+	var target: Vector3 = _carry_aim(_carry_snap(Vector3.ZERO), Vector3.ZERO)
 	assert_gt(target.normalized().x, 0.9, "cursor points down the lateral route")
 
 
 func test_carry_aim_faces_the_play_when_retreating() -> void:
 	# A genuine regroup (route back toward our own +Z net): back out facing
 	# the attacking net — the real posture, at the honest backward-speed cost.
-	sm._last_carry_anchor = Vector3(0, 0, 8)
-	var target: Vector3 = sm._carry_mouse_aim(_carry_snap(Vector3.ZERO), Vector3.ZERO)
+	sm._carrier.last_carry_anchor = Vector3(0, 0, 8)
+	var target: Vector3 = _carry_aim(_carry_snap(Vector3.ZERO), Vector3.ZERO)
 	assert_lt(target.normalized().z, -0.9, "a regroup keeps the eyes up ice")
 
 
 func test_carry_aim_faces_the_play_when_anchor_is_underfoot() -> void:
 	# Settling on a spot: no meaningful travel direction — face the play.
-	sm._last_carry_anchor = Vector3(0.3, 0, 0.3)
-	var target: Vector3 = sm._carry_mouse_aim(_carry_snap(Vector3.ZERO), Vector3.ZERO)
+	sm._carrier.last_carry_anchor = Vector3(0.3, 0, 0.3)
+	var target: Vector3 = _carry_aim(_carry_snap(Vector3.ZERO), Vector3.ZERO)
 	assert_lt(target.normalized().z, -0.9, "underfoot anchor: face the play")
 
 
@@ -1969,8 +2085,8 @@ func test_carry_aim_squares_to_goalie_in_ozone_with_no_man_to_beat() -> void:
 	# the net (the goalie, at the attacking goal with no goalie state) rather
 	# than skating on down the sideways route into an awkward-angle shot.
 	var oz_pos := Vector3(0, 0, -15)   # z < -BLUE_LINE_Z → offensive zone
-	sm._last_carry_anchor = Vector3(8, 0, -15)   # due +X, a lateral route
-	var target: Vector3 = sm._carry_mouse_aim(_carry_snap(oz_pos), oz_pos)
+	sm._carrier.last_carry_anchor = Vector3(8, 0, -15)   # due +X, a lateral route
+	var target: Vector3 = _carry_aim(_carry_snap(oz_pos), oz_pos)
 	var facing: Vector3 = (target - oz_pos).normalized()
 	assert_lt(facing.z, -0.9, "no man to beat in the O-zone: squared to the goalie")
 
@@ -1980,15 +2096,15 @@ func test_carry_aim_keeps_the_route_in_ozone_when_a_man_must_be_beaten() -> void
 	# band — a man still to beat, so FACE THE ROUTE keeps the fast forward
 	# stride down the escape instead of squaring up early.
 	var oz_pos := Vector3(0, 0, -15)
-	sm._last_carry_anchor = Vector3(8, 0, -15)
+	sm._carrier.last_carry_anchor = Vector3(8, 0, -15)
 	var s := _carry_snap(oz_pos)
 	_add_skater(s, OPP_ID, Vector3(2, 0, -16))   # goal-side, ~2.2 m away
 	# The facing seam reads the carrier's published forward-puck clearance (see
-	# _has_man_to_beat); that this defender's stick genuinely covers the puck is
+	# has_man_to_beat); that this defender's stick genuinely covers the puck is
 	# the carrier-level claim, pinned in
 	# test_a_defender_abreast_but_out_of_reach_is_not_a_man_to_beat.
 	sm._carrier.forward_puck_clearance = -0.2
-	var target: Vector3 = sm._carry_mouse_aim(s, oz_pos)
+	var target: Vector3 = _carry_aim(s, oz_pos)
 	var facing: Vector3 = (target - oz_pos).normalized()
 	assert_gt(facing.x, 0.9, "a man to beat keeps the carrier facing its route")
 
@@ -1998,10 +2114,10 @@ func test_carry_aim_ignores_a_beaten_man_behind_in_the_ozone() -> void:
 	# end) is beaten and doesn't count, so the carrier squares up to the goalie
 	# even with him trailing close behind.
 	var oz_pos := Vector3(0, 0, -15)
-	sm._last_carry_anchor = Vector3(8, 0, -15)
+	sm._carrier.last_carry_anchor = Vector3(8, 0, -15)
 	var s := _carry_snap(oz_pos)
 	_add_skater(s, OPP_ID, Vector3(0, 0, -12))   # 3 m behind toward our +Z end
-	var target: Vector3 = sm._carry_mouse_aim(s, oz_pos)
+	var target: Vector3 = _carry_aim(s, oz_pos)
 	var facing: Vector3 = (target - oz_pos).normalized()
 	assert_lt(facing.z, -0.9, "a beaten man behind doesn't stop the square-up")
 
@@ -2015,22 +2131,23 @@ func test_carry_aim_ignores_a_beaten_man_behind_in_the_ozone() -> void:
 # behind our net, can't skate it out" report).
 
 func test_carry_reach_cradles_behind_our_own_net() -> void:
-	var reach: float = sm._carry_reach_behind_net(
-			Vector3(0, 0, GameRules.GOAL_LINE_Z + 0.5))
-	assert_almost_eq(reach, SkaterAgentStateMachine.CARRY_BEHIND_NET_CRADLE_M, 0.01,
+	var reach: float = Cursor.reach_behind_net(Vector3(0, 0, GameRules.GOAL_LINE_Z + 0.5),
+			sm._attacking_goal_pos, sm._own_goal_dir)
+	assert_almost_eq(reach, Cursor.CARRY_BEHIND_NET_CRADLE_M, 0.01,
 			"blade cradles tight behind our own net")
 
 
 func test_carry_reach_symmetric_behind_both_nets() -> void:
-	var own: float = sm._carry_reach_behind_net(
-			Vector3(0, 0, GameRules.GOAL_LINE_Z + 0.5))
-	var att: float = sm._carry_reach_behind_net(
-			Vector3(0, 0, -GameRules.GOAL_LINE_Z - 0.5))
+	var own: float = Cursor.reach_behind_net(Vector3(0, 0, GameRules.GOAL_LINE_Z + 0.5),
+			sm._attacking_goal_pos, sm._own_goal_dir)
+	var att: float = Cursor.reach_behind_net(Vector3(0, 0, -GameRules.GOAL_LINE_Z - 0.5),
+			sm._attacking_goal_pos, sm._own_goal_dir)
 	assert_almost_eq(own, att, 0.001, "cradle is symmetric behind both nets")
 
 
 func test_carry_reach_full_in_neutral_zone() -> void:
-	var reach: float = sm._carry_reach_behind_net(Vector3(0, 0, 0))
+	var reach: float = Cursor.reach_behind_net(Vector3(0, 0, 0),
+			sm._attacking_goal_pos, sm._own_goal_dir)
 	assert_almost_eq(reach, AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M, 0.01,
 			"full reach away from both cages")
 
@@ -2038,8 +2155,8 @@ func test_carry_reach_full_in_neutral_zone() -> void:
 func test_carry_reach_full_wide_behind_own_net() -> void:
 	# Wide of the cage (in the corner) behind our own net — carrying the wall,
 	# not net-working — keeps full reach.
-	var reach: float = sm._carry_reach_behind_net(
-			Vector3(2.5, 0, GameRules.GOAL_LINE_Z + 0.5))
+	var reach: float = Cursor.reach_behind_net(Vector3(2.5, 0, GameRules.GOAL_LINE_Z + 0.5),
+			sm._attacking_goal_pos, sm._own_goal_dir)
 	assert_almost_eq(reach, AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M, 0.01,
 			"wide in the corner behind our net keeps full reach")
 
