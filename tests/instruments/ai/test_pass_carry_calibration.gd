@@ -45,6 +45,8 @@ var _intercepts: Array = []
 # Per interception (_receiver_row): the catch the passer priced against the man
 # who took it, where he stood at the release.
 var _receiver_rows: Array = []
+# Per pass (_lead_start): the receiver against the lead his passer priced.
+var _leads: Array = []
 # Per carrier, the tick he committed to his pending pass and his own view then:
 # [tick, opponents at the release (his projection), their velocities, caps,
 # blades at the release, the priced spot, the priced lane].
@@ -222,7 +224,15 @@ func _watch_commit(duel: Object, c: int, tick: int) -> void:
 			Vector3(carrier._pass.debug_origin_pace.x, 0.0, carrier._pass.debug_origin_pace.z),
 			carrier._pass.debug_origin_pace.w, _searched.get(c, [[], -1, []]),
 			carrier._pass.best_is_saucer, s.agent._dump_target.is_finite(),
-			carrier._pass.best_rim_pace, carrier._pass.best_peer, s.agent._pass_target_peer_id]
+			carrier._pass.best_rim_pace, carrier._pass.best_peer, s.agent._pass_target_peer_id,
+			_receiver_state(duel, s.agent._pass_target_peer_id),
+			s.agent._accel_ref.get(s.agent._pass_target_peer_id, Vector3.ZERO)]
+
+
+# The receiver `pid`'s body at this tick: [position, velocity], or [] if none.
+func _receiver_state(duel: Object, pid: int) -> Array:
+	var r: Object = _sim(duel, pid)
+	return [r.pos, r.vel] if r != null else []
 
 
 # An interception against the passer's own view at his commit: his priced lane,
@@ -491,7 +501,7 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 				open_passes.append([rec, i, int(rec["team"]), -1, -1, -1,
 						_release_view(duel, rec), commit, _exec_row(duel, rec, commit),
 						{"min_d": INF, "touch": "", "speed_at": 0.0, "rcv_at": Vector3.INF,
-								"state": ""}])
+								"state": "", "lead": _lead_start(duel, rec, i, commit)}])
 				if commit.size() > 10 and commit[10]:
 					_saucer_flight(duel, commit, i)
 			# A carrier who released leaves his open carry samples.
@@ -501,6 +511,7 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 		_trace_rims(duel, c, c_team)
 		# Passes: the first side to touch it, then whether it holds through the catch.
 		for op: Array in open_passes:
+			_lead_sample(duel, op[9]["lead"], i)
 			if op[3] == -1:
 				# The receiver's blade on the puck while it is in flight to him.
 				var rs: Object = _sim(duel, int(op[0]["pass_peer"]))
@@ -542,6 +553,7 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 					op[3] = -2   # loose: left out
 					_how["loose"] = int(_how.get("loose", 0)) + 1
 					_log_exec(op[8], "loose")
+					_lead_close(op[9]["lead"], "loose")
 			elif op[3] >= 0 and i - op[3] == int(RECEPTION_HOLD_S / Duel.DT):
 				var kept: bool = op[4] == op[2] and c_team == op[2]
 				# Released on by the man who took it (a one-timer, a quick shot or
@@ -562,6 +574,7 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 					how = "kept, another mate"
 				_how[how] = int(_how.get(how, 0)) + 1
 				_log_exec(op[8], how)
+				_lead_close(op[9]["lead"], how)
 				op[3] = -3
 		open_passes = open_passes.filter(func(op: Array) -> bool: return op[3] > -2)
 		# Carries: sample, then score at the window's end.
@@ -651,6 +664,7 @@ func test_report_pass_and_carry_calibration() -> void:
 	_table("carries, both sides", _carries)
 	_report_intercepts()
 	_report_receiver_end()
+	_report_leads()
 	_report_exec()
 	_report_rims()
 	gut.p("  saucers: %d" % _saucers.size())
@@ -703,6 +717,144 @@ func _receiver_row(duel: Object, view: Dictionary, rec: Dictionary, interceptor:
 				Vector2(b.x - spot.x, b.z - spot.z).length(), pv.length(),
 				flight, settle, pick_along, ticks_after * Duel.DT]
 	return []
+
+
+# The receiver against the lead his passer priced: where he stood and how he
+# moved at the release, the spot he was led to, and the puck's flight there
+# (friction-true, at its launch pace off the blade).
+func _lead_start(duel: Object, rec: Dictionary, tick: int, commit: Array) -> Dictionary:
+	var spot: Vector3 = rec.get("pass_spot", Vector3.INF)
+	var rs: Object = _sim(duel, int(rec.get("pass_peer", -1)))
+	if rs == null or not spot.is_finite():
+		return {}
+	var from: Vector3 = duel.puck_pos
+	var speed: float = maxf(Vector2(duel.puck_vel.x, duel.puck_vel.z).length(), 1.0)
+	var flight: float = AIPuckLane._friction_traverse_time(
+			Vector2(spot.x - from.x, spot.z - from.z).length(), speed)
+	var at_commit: Array = commit[15] if commit.size() > 15 else []
+	var since: float = (tick - int(commit[0])) * Duel.DT if not commit.is_empty() else 0.0
+	return {"peer": rs.peer_id, "pos": rs.pos, "vel": rs.vel, "spot": spot,
+			"flight": flight, "end_tick": tick + maxi(roundi(flight / Duel.DT), 1),
+			"at": Vector3.INF, "vel_at": Vector3.ZERO, "states": {}, "how": "",
+			"c_pos": at_commit[0] if not at_commit.is_empty() else Vector3.INF,
+			"c_vel": at_commit[1] if not at_commit.is_empty() else Vector3.ZERO,
+			"since": since,
+			"kind": "rim" if commit.size() > 11 and commit[11] else (
+					"saucer" if commit.size() > 10 and commit[10] else "flat"),
+			"lead_cv": _lead_from_commit(commit, false),
+			"lead_acc": _lead_from_commit(commit, true),
+			"acc": commit[16] if commit.size() > 16 else Vector3.ZERO}
+
+
+# The passer's lead at his commit, re-solved from the receiver's body there at the
+# pace he priced, released a windup on (no pull): with the acceleration the
+# passer's agent read for him, or without it.
+func _lead_from_commit(commit: Array, with_accel: bool) -> Vector3:
+	if commit.size() < 17 or commit[15].is_empty():
+		return Vector3.INF
+	var st := SkaterNetworkState.new()
+	st.position = commit[15][0]
+	st.velocity = commit[15][1]
+	var accel: Vector3 = commit[16] if with_accel else Vector3.ZERO
+	return AIPassLead.lead(commit[7], st, accel, maxf(commit[8], 1.0),
+			AICarrierPassSearch.PASS_LEAD_MAX_S, Duel.match_caps(),
+			AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)[0]
+
+
+# Each tick of the flight: what the receiver's agent is doing, and at the flight's
+# end where he is.
+func _lead_sample(duel: Object, l: Dictionary, tick: int) -> void:
+	if l.is_empty() or l["at"].is_finite():
+		return
+	var rs: Object = _sim(duel, l["peer"])
+	if rs == null:
+		return
+	if rs.agent != null:
+		var st: String = SkaterAgentStateMachine.State.keys()[rs.agent._state]
+		l["states"][st] = int(l["states"].get(st, 0)) + 1
+	if tick >= l["end_tick"]:
+		l["at"] = rs.pos
+		l["vel_at"] = rs.vel
+
+
+func _lead_close(l: Dictionary, how: String) -> void:
+	if l.is_empty() or l["how"] != "":
+		return
+	l["how"] = how
+	_leads.append(l)
+
+
+func _report_leads() -> void:
+	gut.p("  the receiver against his lead, when the puck gets there:")
+	gut.p("     outcome              n   off the lead  constant velocity   speed at release  speed change  turned    mostly doing   | from the commit: velocity change  constant velocity  commit to")
+	gut.p("                              (m, median)   would be off (m)    (m/s)             (m/s)         (deg)                 | to the release (m/s)               would be off (m)   release (s)")
+	var by: Dictionary = {}
+	for l: Dictionary in _leads:
+		if not l["at"].is_finite():
+			continue
+		by.get_or_add("%s %s" % [l["kind"], l["how"]], []).append(l)
+	var keys: Array = by.keys()
+	keys.sort()
+	for how: String in keys:
+		var rows: Array = by[how]
+		var off: Array[float] = []
+		var cv: Array[float] = []
+		var spd: Array[float] = []
+		var dspd: Array[float] = []
+		var turn: Array[float] = []
+		var states: Dictionary = {}
+		var at_cv: Array[float] = []
+		var spot_cv: Array[float] = []
+		var spot_acc: Array[float] = []
+		var acc_m: Array[float] = []
+		var c_dv: Array[float] = []
+		var c_cv: Array[float] = []
+		var since: Array[float] = []
+		for l: Dictionary in rows:
+			if l["lead_cv"].is_finite():
+				spot_cv.append(Vector2(l["spot"].x - l["lead_cv"].x, l["spot"].z - l["lead_cv"].z).length())
+				at_cv.append(Vector2(l["at"].x - l["lead_cv"].x, l["at"].z - l["lead_cv"].z).length())
+				spot_acc.append(Vector2(l["spot"].x - l["lead_acc"].x, l["spot"].z - l["lead_acc"].z).length())
+				acc_m.append(Vector2(l["acc"].x, l["acc"].z).length())
+			if l["c_pos"].is_finite():
+				var cvc: Vector3 = l["c_pos"] + l["c_vel"] * (l["since"] + l["flight"])
+				c_cv.append(Vector2(cvc.x - l["spot"].x, cvc.z - l["spot"].z).length())
+				c_dv.append(Vector2(l["vel"].x - l["c_vel"].x, l["vel"].z - l["c_vel"].z).length())
+				since.append(l["since"])
+			var at: Vector3 = l["at"]
+			var spot: Vector3 = l["spot"]
+			var v0: Vector3 = l["vel"]
+			var v1: Vector3 = l["vel_at"]
+			var cv_at: Vector3 = l["pos"] + v0 * l["flight"]
+			off.append(Vector2(at.x - spot.x, at.z - spot.z).length())
+			cv.append(Vector2(cv_at.x - spot.x, cv_at.z - spot.z).length())
+			spd.append(Vector2(v0.x, v0.z).length())
+			dspd.append(Vector2(v1.x, v1.z).length() - Vector2(v0.x, v0.z).length())
+			turn.append(rad_to_deg(Vector2(v0.x, v0.z).angle_to(Vector2(v1.x, v1.z)))
+					if Vector2(v0.x, v0.z).length() > 0.5 and Vector2(v1.x, v1.z).length() > 0.5
+					else 0.0)
+			for st: String in l["states"]:
+				states[st] = int(states.get(st, 0)) + int(l["states"][st])
+		var top: String = ""
+		var best: int = 0
+		for st: String in states:
+			if states[st] > best:
+				best = states[st]
+				top = st
+		gut.p("     %-18s %3d   %5.2f          %5.2f               %4.1f              %+5.1f         %5.0f    %-14s |  %4.1f                             %5.2f              %4.2f" % [
+				how, rows.size(), _med(off), _med(cv), _med(spd), _med(dspd),
+				_med(turn.map(func(x: float) -> float: return absf(x))), top,
+				_med(c_dv), _med(c_cv), _med(since)])
+		gut.p("         the spot against the lead re-solved at the commit: no accel %.2f m, with the read accel %.2f m (read accel %.1f m/s^2); where he got to, off the no-accel lead %.2f m" % [
+				_med(spot_cv), _med(spot_acc), _med(acc_m), _med(at_cv)])
+
+
+static func _med(a: Array) -> float:
+	if a.is_empty():
+		return 0.0
+	var b: Array = a.duplicate()
+	b.sort()
+	return float(b[b.size() / 2])
 
 
 func _report_receiver_end() -> void:
