@@ -47,6 +47,8 @@ var _intercepts: Array = []
 var _receiver_rows: Array = []
 # Per pass (_lead_start): the receiver against the lead his passer priced.
 var _leads: Array = []
+# Which drill the current run belongs to, for the lead table.
+var _family: String = "ozone"
 # Per carrier, the tick he committed to his pending pass and his own view then:
 # [tick, opponents at the release (his projection), their velocities, caps,
 # blades at the release, the priced spot, the priced lane].
@@ -226,7 +228,7 @@ func _watch_commit(duel: Object, c: int, tick: int) -> void:
 			carrier._pass.best_is_saucer, s.agent._dump_target.is_finite(),
 			carrier._pass.best_rim_pace, carrier._pass.best_peer, s.agent._pass_target_peer_id,
 			_receiver_state(duel, s.agent._pass_target_peer_id),
-			s.agent._accel_ref.get(s.agent._pass_target_peer_id, Vector3.ZERO)]
+			s.agent._accel_by_peer.get(s.agent._pass_target_peer_id, Vector3.ZERO)]
 
 
 # The receiver `pid`'s body at this tick: [position, velocity], or [] if none.
@@ -638,12 +640,14 @@ func test_report_pass_and_carry_calibration() -> void:
 			var tight: bool = combo >= 2 * vels.size()
 			_run(_setup(start[0] * m, vel, start[1] * m, start[2] * m, tight))
 	var ozone: int = _passes.size()
+	_family = "entry"
 	# test_nz_entry_drill's entries and test_breakout_drill's breakouts.
 	for n_def: int in [2, 3]:
 		for x: float in [0.0, 3.0, 5.0, -6.0, -9.0]:
 			for v: float in [1.0, 3.0, 5.0]:
 				_run(_entry(x, v, n_def), false, 8.0)
 	var entries: int = _passes.size() - ozone
+	_family = "breakout"
 	for cx: float in [-8.0, -3.0, 0.0, 4.0, 9.0]:
 		for cz: float in [20.0, 24.0]:
 			for f1_gap: float in [4.0, 7.0]:
@@ -741,24 +745,50 @@ func _lead_start(duel: Object, rec: Dictionary, tick: int, commit: Array) -> Dic
 			"since": since,
 			"kind": "rim" if commit.size() > 11 and commit[11] else (
 					"saucer" if commit.size() > 10 and commit[10] else "flat"),
-			"lead_cv": _lead_from_commit(commit, false),
-			"lead_acc": _lead_from_commit(commit, true),
-			"acc": commit[16] if commit.size() > 16 else Vector3.ZERO}
+			"lead_cv": _lead_from_commit(commit),
+			"lead_acc": _accel_lead_from_commit(commit),
+			"family": _family}
 
 
 # The passer's lead at his commit, re-solved from the receiver's body there at the
-# pace he priced, released a windup on (no pull): with the acceleration the
-# passer's agent read for him, or without it.
-func _lead_from_commit(commit: Array, with_accel: bool) -> Vector3:
+# pace he priced, released a windup on (no pull).
+func _lead_from_commit(commit: Array) -> Vector3:
 	if commit.size() < 17 or commit[15].is_empty():
 		return Vector3.INF
 	var st := SkaterNetworkState.new()
 	st.position = commit[15][0]
 	st.velocity = commit[15][1]
-	var accel: Vector3 = commit[16] if with_accel else Vector3.ZERO
-	return AIPassLead.lead(commit[7], st, accel, maxf(commit[8], 1.0),
-			AICarrierPassSearch.PASS_LEAD_MAX_S, Duel.match_caps(),
-			AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)[0]
+	return AIPassLead.lead(commit[7], st, maxf(commit[8], 1.0),
+			AICarrierPassSearch.PASS_LEAD_MAX_S, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)[0]
+
+
+# The lead from the commit as it would be extrapolating the acceleration the
+# passer's agent read off the receiver (along his travel, capped at his thrust and
+# top speed): the read the lead does not take, set beside where he went.
+func _accel_lead_from_commit(commit: Array) -> Vector3:
+	if commit.size() < 17 or commit[15].is_empty():
+		return Vector3.INF
+	var caps: AISkaterCaps = Duel.match_caps()
+	var pos: Vector3 = commit[15][0]
+	var vel: Vector3 = commit[15][1]
+	var a: Vector3 = commit[16]
+	var speed: float = Vector2(vel.x, vel.z).length()
+	if speed > 0.5:
+		var dir: Vector3 = vel / speed
+		a = dir * a.dot(dir)
+	if a.length() > caps.max_accel:
+		a = a.normalized() * caps.max_accel
+	var cap: float = maxf(speed, caps.max_speed)
+	var release_s: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+	var body: Vector3 = AITrajectory.predict_at(pos, vel, release_s, 6, a, cap)
+	var v: Vector3 = vel + a * release_s
+	if Vector2(v.x, v.z).length() > cap:
+		v *= cap / Vector2(v.x, v.z).length()
+	var from: Vector3 = commit[7]
+	var eff: float = AIPassLead.effective_flight_speed(maxf(commit[8], 1.0), from.distance_to(body))
+	var t: float = AITrajectory.intercept_time(from, body, v, a, eff,
+			AICarrierPassSearch.PASS_LEAD_MAX_S, 6, cap)
+	return AITrajectory.predict_at(body, v, t, 6, a, cap)
 
 
 # Each tick of the flight: what the receiver's agent is doing, and at the flight's
@@ -793,6 +823,8 @@ func _report_leads() -> void:
 		if not l["at"].is_finite():
 			continue
 		by.get_or_add("%s %s" % [l["kind"], l["how"]], []).append(l)
+		by.get_or_add("~%s, %s" % [l["family"], "kept" if l["how"].begins_with("kept") else "not"],
+				[]).append(l)
 	var keys: Array = by.keys()
 	keys.sort()
 	for how: String in keys:
@@ -803,10 +835,9 @@ func _report_leads() -> void:
 		var dspd: Array[float] = []
 		var turn: Array[float] = []
 		var states: Dictionary = {}
+		var at_acc: Array[float] = []
 		var at_cv: Array[float] = []
 		var spot_cv: Array[float] = []
-		var spot_acc: Array[float] = []
-		var acc_m: Array[float] = []
 		var c_dv: Array[float] = []
 		var c_cv: Array[float] = []
 		var since: Array[float] = []
@@ -814,8 +845,8 @@ func _report_leads() -> void:
 			if l["lead_cv"].is_finite():
 				spot_cv.append(Vector2(l["spot"].x - l["lead_cv"].x, l["spot"].z - l["lead_cv"].z).length())
 				at_cv.append(Vector2(l["at"].x - l["lead_cv"].x, l["at"].z - l["lead_cv"].z).length())
-				spot_acc.append(Vector2(l["spot"].x - l["lead_acc"].x, l["spot"].z - l["lead_acc"].z).length())
-				acc_m.append(Vector2(l["acc"].x, l["acc"].z).length())
+				if l["lead_acc"].is_finite():
+					at_acc.append(Vector2(l["at"].x - l["lead_acc"].x, l["at"].z - l["lead_acc"].z).length())
 			if l["c_pos"].is_finite():
 				var cvc: Vector3 = l["c_pos"] + l["c_vel"] * (l["since"] + l["flight"])
 				c_cv.append(Vector2(cvc.x - l["spot"].x, cvc.z - l["spot"].z).length())
@@ -845,8 +876,8 @@ func _report_leads() -> void:
 				how, rows.size(), _med(off), _med(cv), _med(spd), _med(dspd),
 				_med(turn.map(func(x: float) -> float: return absf(x))), top,
 				_med(c_dv), _med(c_cv), _med(since)])
-		gut.p("         the spot against the lead re-solved at the commit: no accel %.2f m, with the read accel %.2f m (read accel %.1f m/s^2); where he got to, off the no-accel lead %.2f m" % [
-				_med(spot_cv), _med(spot_acc), _med(acc_m), _med(at_cv)])
+		gut.p("         the spot against his lead re-solved at the commit %.2f m; where he got to, off that lead %.2f m, off the lead on his read acceleration %.2f m" % [
+				_med(spot_cv), _med(at_cv), _med(at_acc)])
 
 
 static func _med(a: Array) -> float:

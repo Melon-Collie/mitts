@@ -183,7 +183,6 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var dist: float = hold_origin.distance_to(receiver_state.position)
 		var keep_pull: float = blade_pull
 		var keep: float = holds.pass_keep
-		var receiver_accel: Vector3 = ctx.acceleration_by_peer.get(peer_id, Vector3.ZERO)
 		# Receiver's heading turn rate — the commitment read; 0 for a
 		# commitment-blind tier.
 		var receiver_omega: float = ctx.heading_omega_by_peer.get(peer_id, 0.0) \
@@ -238,7 +237,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 					else AICarrierField.pass_origin(ctx, pull, hold_shift)
 			_last_flat_variant_lane = 0.0
 			var s_pace: float = _pass_variant_ev(
-					ctx, receiver_state, receiver_accel, receiver_omega, receiver_caps,
+					ctx, receiver_state, receiver_omega, receiver_caps,
 					origin, speed, false, receiver_is_one_timer,
 					self_facing_xz, our_goalie, carrier_in_oz, maxf(prune_floor, s),
 					frac < 1.0, pull, keep)
@@ -272,7 +271,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		if saucer_speed >= AIPuckLane.SOFTEST_FEED_M_S \
 				and _last_flat_variant_lane < AIPuckLane.SAUCER_SKIP_WHEN_LANE_CLEAR:
 			var s_saucer: float = _pass_variant_ev(
-					ctx, receiver_state, receiver_accel, receiver_omega, receiver_caps,
+					ctx, receiver_state, receiver_omega, receiver_caps,
 					win_origin, saucer_speed, true, receiver_is_one_timer,
 					self_facing_xz, our_goalie, carrier_in_oz, maxf(prune_floor, s),
 					false, win_pull, win_keep)
@@ -412,19 +411,18 @@ static func receiver_gate_m(caps: AISkaterCaps) -> float:
 # fires on contact (no wrister windup), so the goalie only gets the pass flight
 # to react; nor does he settle the catch. One who cannot set catches it.
 func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
-		receiver_accel: Vector3, receiver_omega: float, receiver_caps: AISkaterCaps,
+		receiver_omega: float, receiver_caps: AISkaterCaps,
 		pass_origin: Vector3, pass_speed: float, saucer: bool,
 		receiver_is_one_timer: bool, self_facing_xz: Vector2,
 		our_goalie: Vector3, carrier_in_oz: bool,
 		useless_below: float = -INF, soft: bool = false, pull_s: float = 0.0,
 		keep: float = 1.0) -> float:
 	# Intercept-aware lead, shared with the state machine's firing aim; flight_t
-	# is the SOLVED time. The receiver's real build bounds how far he is led. He
-	# skates on through the pull and the windup, so the lead is solved from the
-	# release, where the state machine aims it and pass_origin throws it.
-	var lead: Array = AIPassLead.lead(
-			pass_origin, receiver_state, receiver_accel, pass_speed,
-			PASS_LEAD_MAX_S, receiver_caps, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s)
+	# is the SOLVED time. He skates on through the pull and the windup, so the
+	# lead is solved from the release, where the state machine aims it and
+	# pass_origin throws it.
+	var lead: Array = AIPassLead.lead(pass_origin, receiver_state, pass_speed, PASS_LEAD_MAX_S,
+			AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s)
 	var receiver: Vector3 = lead[0]
 	var flight_t: float = lead[1]
 	# Fed on his tape only when he can set for it; otherwise he catches it.

@@ -38,15 +38,13 @@ func _receiver(blade_dir: Vector3) -> SkaterNetworkState:
 
 func _lead_point(blade_dir: Vector3) -> Vector3:
 	return AIPassLead.lead_point(
-			Vector3(0.0, 0.0, -14.0), _receiver(blade_dir),
-			Vector3.ZERO, LAUNCH_SPEED, MAX_LEAD_S)
+			Vector3(0.0, 0.0, -14.0), _receiver(blade_dir), LAUNCH_SPEED, MAX_LEAD_S)
 
 
 func test_the_stance_does_not_move_the_aim_point() -> void:
-	# Identical body state — same position, same velocity, same (zero)
-	# acceleration. The ONLY difference is which way the receiver happens to be
-	# holding its stick. If the lead were a prediction of the body's travel,
-	# these would barely differ.
+	# Identical body state — same position, same velocity. The ONLY difference
+	# is which way the receiver happens to be holding its stick. If the lead were
+	# a prediction of the body's travel, these would barely differ.
 	var forward: Vector3 = _lead_point(Vector3(0.0, 0.0, 1.0))
 	var lateral: Vector3 = _lead_point(Vector3(1.0, 0.0, 0.0))
 	var trailing: Vector3 = _lead_point(Vector3(0.0, 0.0, -1.0))
@@ -66,8 +64,8 @@ func test_the_aim_is_exactly_the_body_travel() -> void:
 	# The body's own travel over the solved flight IS the lead. Anything beyond
 	# it was stance, and used to measure a flat one stick reach.
 	var res: Array = AIPassLead.lead(
-			Vector3(0.0, 0.0, -14.0), _receiver(Vector3(0.0, 0.0, 1.0)),
-			Vector3.ZERO, LAUNCH_SPEED, MAX_LEAD_S)
+			Vector3(0.0, 0.0, -14.0), _receiver(Vector3(0.0, 0.0, 1.0)), LAUNCH_SPEED,
+			MAX_LEAD_S)
 	var point: Vector3 = res[0]
 	var flight_t: float = res[1]
 	var body_at_arrival: float = RECEIVER_SPEED * flight_t
@@ -89,7 +87,7 @@ func test_no_residual_bias_at_any_receiver_speed() -> void:
 		r.velocity = Vector3(0.0, 0.0, speed)
 		r.blade_contact_world = Vector3(0.0, 0.0, _reach)  # stick along travel
 		var res: Array = AIPassLead.lead(
-				Vector3(0.0, 0.0, -14.0), r, Vector3.ZERO, LAUNCH_SPEED, MAX_LEAD_S)
+				Vector3(0.0, 0.0, -14.0), r, LAUNCH_SPEED, MAX_LEAD_S)
 		var overshoot: float = res[0].z - speed * res[1]
 		gut.p("  v=%.0f m/s: aim vs body travel %+.3f m" % [speed, overshoot])
 		assert_almost_eq(overshoot, 0.0, 0.01,
