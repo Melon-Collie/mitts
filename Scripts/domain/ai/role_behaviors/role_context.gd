@@ -45,11 +45,6 @@ var prev_held_forward_stand: bool = false
 # `get(pid, -1)`. A Dictionary rather than a resolver Callable because roles
 # iterate skaters at dispatch rate, where Callable.call overhead shows.
 var team_id_by_peer: Dictionary = {}
-# Smoothed per-peer linear acceleration (m/s², world XZ) — the host's shared
-# AIAccelerationTracker cache, or the state machine's local fallback. Leads a
-# receiver along `pos + vel·t + ½·a·t²`. Missing entry = ZERO.
-var acceleration_by_peer: Dictionary = {}
-
 # Smoothed per-peer heading turn rate (rad/s, signed) — the passer's
 # receiver-commitment read (AIPuckLane.pass_miss_prob). Missing entry = 0.
 var heading_omega_by_peer: Dictionary = {}

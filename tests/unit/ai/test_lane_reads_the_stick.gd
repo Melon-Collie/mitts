@@ -50,7 +50,7 @@ func test_a_stick_the_body_cannot_hold_does_not_count() -> void:
 
 
 func test_a_harder_pass_beats_the_stick_more_often() -> void:
-	var blade := Vector3(1.6, 0.0, -1.0)
+	var blade := Vector3(1.6, 0.0, -4.0)
 	assert_gt(_lane(blade, 28.0), _lane(blade, 14.0))
 
 
@@ -89,3 +89,17 @@ func test_a_stick_a_saucer_flies_over_does_not_take_it() -> void:
 	assert_eq(AIPuckLane.lane_clear_saucer(FROM, TO, body, SPEED, _vels, [], stick),
 			AIPuckLane.lane_clear_saucer(FROM, TO, body, SPEED, _vels),
 			"a stick under the flight is beaten by the loft")
+
+
+# The stick starts on the release, LANE_REACTION_DELAY_S after it. A man 2.4 m
+# off the line holding his stick a metre further out cannot sweep it onto a
+# 20 m/s pass from then before the puck has gone by, so it leaves the lane as his
+# body alone leaves it; read from the windup, it is a certain block.
+func test_the_stick_moves_only_once_the_pass_is_away() -> void:
+	var body: Array[Vector3] = [Vector3(2.4, 0.0, -5.0)]
+	var blades: Array[Vector3] = [Vector3(3.4, 0.0, -5.0)]
+	var body_only: float = AIPuckLane.lane_clear(FROM, TO, body, SPEED, _vels, [], true)
+	assert_gt(body_only, 0.5, "the fixture's body leaves most of the lane")
+	assert_almost_eq(AIPuckLane.lane_clear(FROM, TO, body, SPEED, _vels, [], true, blades),
+			body_only, 0.0001,
+			"a stick his hands cannot carry to the line after the release takes nothing")

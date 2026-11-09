@@ -115,11 +115,6 @@ const BOT_WRISTER_PLANT_SPEED_M_S: float = 1.5
 # backhand is drawn on the backhand side.
 const BOT_WRISTER_SIDE_OFFSET_M: float = 0.15
 
-# How far short of the priced share the live load may be when a charged
-# release presses: the aim the pre-aim checks is the locked hole, a few degrees
-# off the line the share was priced along.
-const LOAD_READY_SHARE_SLACK: float = 0.05
-
 # ── Unified mouse motion ─────────────────────────────────────────────────────
 # Every state's `input.mouse_world_pos` goes through `_step_mouse_internal` (one of
 # the `_step_mouse_*` modes), which moves the cursor toward its shaped target at
@@ -250,10 +245,8 @@ var _accel_by_peer: Dictionary = {}
 # Local per-peer heading turn rate (rad/s), the receiver-commitment fallback
 # built alongside _accel_by_peer when the shared snapshot cache is absent.
 var _heading_omega_by_peer: Dictionary = {}
-# The accel source consumed this tick: snapshot.accel_by_peer when present, else
-# the local _accel_by_peer. Set every dispatch.
-var _accel_ref: Dictionary = _accel_by_peer
-# Heading-turn-rate source, resolved alongside _accel_ref.
+# Heading-turn-rate source: snapshot.heading_omega_by_peer when present, else the
+# local _heading_omega_by_peer. Set every dispatch.
 var _omega_ref: Dictionary = _heading_omega_by_peer
 
 # Carrier-role decision behavior. `_state_carry` calls `_carrier.decide(ctx)`
@@ -903,11 +896,9 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	_update_engagement_cooldown(snapshot, self_state)
 	# Resolved on skipped ticks too: press states read it.
 	if not snapshot.accel_by_peer.is_empty():
-		_accel_ref = snapshot.accel_by_peer
 		_omega_ref = snapshot.heading_omega_by_peer
 	else:
 		_update_acceleration_cache(snapshot, input.delta)
-		_accel_ref = _accel_by_peer
 		_omega_ref = _heading_omega_by_peer
 
 	# When we can't legally play the puck (ghosted, or must tag up under NHL
@@ -1228,7 +1219,6 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.own_goal_dir = _own_goal_dir
 	ctx.team_brain = _current_strategy
 	ctx.team_id_by_peer = _team_id_by_peer
-	ctx.acceleration_by_peer = _accel_ref
 	ctx.heading_omega_by_peer = _omega_ref
 	ctx.caps_by_peer = _caps_by_peer
 	# This bot's own attribute-scaled speeds, so the carrier scores ITS shots /
@@ -1766,7 +1756,7 @@ func _load_ready(snapshot: WorldSnapshot, self_pos: Vector3,
 	var priced: float = _shot_hold_share_locked if _intended_action == State.SHOOT_PRESSED \
 			else _pass_hold_share
 	return _share_as_is(snapshot, self_pos, self_state, _locked_pre_aim_point) \
-			>= priced - LOAD_READY_SHARE_SLACK
+			>= priced - AIShotHolds.LOAD_READY_SHARE_SLACK
 
 
 # Maps the carrier's INTENT_* enum (decoupled from State for unit testing) to a
@@ -2520,7 +2510,6 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 		return _attacking_goal_pos
 	# Lead at the launch speed the controller will actually fire at.
 	var pass_speed: float = _pass_target_speed
-	var accel: Vector3 = _accel_ref.get(_pass_target_peer_id, Vector3.ZERO)
 	# Shared with the carrier's pass scoring, so the fired aim is the scored one.
 	# Origin = the carried PUCK (the real release point), as the scoring uses;
 	# leading from the body centre over-leads close feeds.
@@ -2529,8 +2518,8 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	if snapshot.puck_state != null and snapshot.puck_state.carrier_peer_id == _peer_id:
 		origin = Vector3(
 				snapshot.puck_state.position.x, 0.0, snapshot.puck_state.position.z)
-	var led: Array = AIPassLead.lead(
-			origin, receiver, accel, pass_speed, AICarrierPassSearch.PASS_LEAD_MAX_S, receiver_caps)
+	var led: Array = AIPassLead.lead(origin, receiver, pass_speed,
+			AICarrierPassSearch.PASS_LEAD_MAX_S)
 	var lead: Vector3 = AIPassLead.feed_point(receiver, led[0], led[1],
 			_current_strategy != null and _current_strategy.is_one_timer_ready(_pass_target_peer_id),
 			receiver_caps, _attacking_goal_pos)

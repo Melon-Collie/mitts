@@ -41,18 +41,30 @@ const LANE_DEFENDER_CLOSE_SPEED_M_S: float = LANE_LATERAL_FRACTION * GameRules.D
 
 # A defender's STICK, where he holds it: the puck is his if it passes within a
 # blade's catch of where his blade can be — carried at his skating velocity, and
-# moving at his hands' traverse speed (AISkaterCaps.blade_speed) from his read of
-# the windup on — and only where his body can hold the stick there (the arm,
+# moving at his hands' traverse speed (AISkaterCaps.blade_speed) from his read
+# (lane_read_delay) on — and only where his body can hold the stick there (the arm,
 # stick and blade it holds out, AISkaterCaps.max_blade_reach). The catch is the
 # pickup radius (PuckController.PICKUP_RADIUS). A forechecker reaching for the puck has his blade a metre
 # nearer the passing lane than his body: read from the body alone, the first
 # metres of every pass out of his reach look clean.
 const LANE_BLADE_CATCH_M: float = 0.5
-# He reads the windup, not the release — hands and body alike: the charged pass
-# shows itself for its whole wind-up (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)
-# before it flies. Negative: he is moving to it before the puck leaves the blade.
-const LANE_WINDUP_READ_DELAY_S: float = LANE_REACTION_DELAY_S \
-		- AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+
+
+# When a lane defender at `p` starts closing on a pass leaving from `from`, from
+# the release, hands and body alike. A man whose stick reaches the puck there (his
+# body within `hold_reach` and the catch of it) is already playing it, his hands
+# on it through the windup (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S), so he reads
+# the pass as it winds up. Any other starts LANE_REACTION_DELAY_S after it leaves
+# the blade: no bot moves to a pass before then (only a shot's windup is read, by
+# the shot block), and a man reading the windup reacts slower than it lasts.
+# test_backdoor_feed.gd sets the reads against live defenders.
+static func lane_read_delay(from: Vector3, p: Vector3, hold_reach: float) -> float:
+	var dx: float = p.x - from.x
+	var dz: float = p.z - from.z
+	var on_it: float = hold_reach + LANE_BLADE_CATCH_M
+	if dx * dx + dz * dz <= on_it * on_it:
+		return LANE_REACTION_DELAY_S - AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+	return LANE_REACTION_DELAY_S
 
 # A defender's reach in the airborne stretch of a saucer: his BODY radius, no
 # stick, no closing — a flip clears a grounded stick but not a torso. The
@@ -336,8 +348,7 @@ static func _lane_miss_at(
 # how far the lane penetrates that reach, normalised by a stick length
 # (one full stick inside reach ⇒ certain block). Pure float math.
 #
-# `read_delay` is when his closing starts, from the release: the default read
-# delay, or less for a blade that has been moving through the windup.
+# `read_delay` is when his closing starts, from the release.
 static func lane_block_at(
 		fx: float, fz: float, pvx: float, pvz: float, t: float,
 		px: float, pz: float, vx: float, vz: float,
@@ -423,13 +434,14 @@ static func _friction_traverse_time(dist: float, v0: float) -> float:
 
 # One defender's blade on an `accurate` lane, as AILaneReach reads his body:
 # (block, lane arc-coord of the pick) for the blade (bx, bz), where his body could
-# hold the stick there — within `hold_reach` (AISkaterCaps.max_blade_reach) of it
-# as it closes (see LANE_BLADE_CATCH_M). `blade_delay` and `body_delay` are when
+# hold the stick there — within `hold_reach` (AISkaterCaps.max_blade_reach) of
+# the blade as it closes, so within that and the catch of the puck's path (see
+# LANE_BLADE_CATCH_M). `blade_delay` and `body_delay` are when
 # his hands and his body start closing, from the moment the puck is at (fx, fz).
 static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 		line_len: float, eff_speed: float, bx: float, bz: float, px: float, pz: float,
 		vx: float, vz: float, hold_reach: float, close_speed: float,
-		blade_speed: float, blade_delay: float = LANE_WINDUP_READ_DELAY_S,
+		blade_speed: float, blade_delay: float = LANE_REACTION_DELAY_S,
 		body_delay: float = LANE_REACTION_DELAY_S) -> Vector2:
 	var pvx: float = dirx * eff_speed
 	var pvz: float = dirz * eff_speed
@@ -440,12 +452,12 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 		var block: float = lane_block_at(fx, fz, pvx, pvz, t, bx, bz, vx, vz,
 				LANE_BLADE_CATCH_M, blade_speed, blade_delay)
 		if block > 0.0 and lane_block_at(fx, fz, pvx, pvz, t, px, pz, vx, vz,
-				hold_reach, close_speed, body_delay) > 0.0:
+				hold_reach + LANE_BLADE_CATCH_M, close_speed, body_delay) > 0.0:
 			best = Vector2(block, eff_speed * t)
 	var guided: Vector2 = _lane_brake_block(fx, fz, dirx, dirz, line_len, eff_speed,
 			bx, bz, LANE_BLADE_CATCH_M, blade_speed, blade_delay)
 	if guided.x > best.x and lane_block_at(fx, fz, pvx, pvz, guided.y / eff_speed,
-			px, pz, vx, vz, hold_reach, close_speed, body_delay) > 0.0:
+			px, pz, vx, vz, hold_reach + LANE_BLADE_CATCH_M, close_speed, body_delay) > 0.0:
 		best = guided
 	return best
 
@@ -517,16 +529,17 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		if accurate:
 			# Survival: the puck must beat this defender too.
 			var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
+			var delay: float = lane_read_delay(from, p, hold_reach)
 			var lane_block: float = AILaneReach.block(from.x, from.z, dirx, dirz, read_len,
 					eff_speed, p.x, p.z, vx, vz, AILaneReach.defender_reach(caps_i),
 					caps_i.max_speed if caps_i != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
 					caps_i.max_accel if caps_i != null else GameRules.DEFAULT_SKATER_THRUST_M_S2,
-					LANE_WINDUP_READ_DELAY_S).x
+					delay).x
 			if has_blades:
 				var b: Vector3 = opponent_blades[i]
 				lane_block = maxf(lane_block, _blade_block(from.x, from.z, dirx, dirz, read_len,
 						eff_speed, b.x, b.z, p.x, p.z, vx, vz, hold_reach, close_speed,
-						blade_speed).x)
+						blade_speed, delay, delay).x)
 			survival *= 1.0 - lane_block
 			if survival <= 0.0:
 				break
@@ -611,12 +624,14 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 		# man it flew over still plays it sliding off behind him.
 		if landed_len > 0.01:
 			var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
+			var delay: float = lane_read_delay(from, p, caps_i.max_blade_reach if caps_i != null
+					else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M)
 			block = maxf(block, AILaneReach.block(from.x, from.z, dirx, dirz,
 					line_len - LANE_RECEIVER_REACH_M, landed_speed, p.x, p.z, v.x, v.z,
 					AILaneReach.defender_reach(caps_i),
 					caps_i.max_speed if caps_i != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
 					caps_i.max_accel if caps_i != null else GameRules.DEFAULT_SKATER_THRUST_M_S2,
-					LANE_WINDUP_READ_DELAY_S, flown, t_down).x)
+					delay, flown, t_down).x)
 			# His stick on the landed run, read from the touch-down: the puck from
 			# where it lands, him and his blade carried on to then, his reads started
 			# that much before it.
@@ -629,7 +644,7 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 								else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M,
 						close_speed,
 						caps_i.blade_speed if caps_i != null else AISkaterCaps.LEAGUE_BLADE_SPEED_M_S,
-						LANE_WINDUP_READ_DELAY_S - t_down, LANE_REACTION_DELAY_S - t_down).x)
+						delay - t_down, delay - t_down).x)
 		survival *= 1.0 - block
 		if survival <= 0.0:
 			return 0.0
@@ -680,16 +695,17 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 				blade_speed = caps.blade_speed
 				hold_reach = caps.max_blade_reach
 		var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
+		var delay: float = lane_read_delay(from, p, hold_reach)
 		var read: Vector2 = AILaneReach.block(from.x, from.z, dirx, dirz, read_len,
 				eff_speed, p.x, p.z, vx, vz, AILaneReach.defender_reach(caps_i),
 				caps_i.max_speed if caps_i != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
 				caps_i.max_accel if caps_i != null else GameRules.DEFAULT_SKATER_THRUST_M_S2,
-				LANE_WINDUP_READ_DELAY_S)
+				delay)
 		if has_blades:
 			var b: Vector3 = opponent_blades[i]
 			var blade_read: Vector2 = _blade_block(from.x, from.z, dirx, dirz, read_len,
 					eff_speed, b.x, b.z, p.x, p.z, vx, vz, hold_reach, close_speed,
-					blade_speed)
+					blade_speed, delay, delay)
 			if blade_read.x > read.x:
 				read = blade_read
 		if read.x > max_block:

@@ -176,10 +176,11 @@ func search(ctx: RoleContext) -> void:
 	if not is_on(ctx, origin):
 		return
 	_fill_ours(ctx)
-	# Each dump leaves from its own release: the press first pulls the puck to
-	# the hold its pace needs (AIShotHolds.solve_pass, as the carrier locks it
-	# for the press), braking, so a carrier at speed a stride short of their line
-	# releases inside it, where there is no dump-in to make.
+	# Each dump leaves from its own release: the hold its pace needs
+	# (AIShotHolds.solve_pass, as the carrier locks it for the press), the puck
+	# pulled there first unless it already carries the pace where it sits,
+	# braking, so a carrier at speed a stride short of their line releases inside
+	# it, where there is no dump-in to make.
 	var holds: AIShotHolds = _field.holds
 	holds.configure_from(ctx)
 	var self_state: SkaterNetworkState = ctx.snapshot.skater_states[ctx.peer_id]
@@ -201,7 +202,7 @@ func search(ctx: RoleContext) -> void:
 					pace / maxf(ctx.self_wrister_shot_speed, 0.001))
 			var pull_s: float = holds.pass_pull_s
 			var release: Vector3 = AICarrierField.pass_origin(ctx, pull_s,
-					holds.pass_offset - puck_off)
+					holds.pass_from - puck_off)
 			if not is_on(ctx, release):
 				continue
 			if not _walk(release, launch_vel(dir, pace)):

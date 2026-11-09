@@ -98,8 +98,9 @@ static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 	return minf(XG_MAX, beaten + (1.0 - beaten) * XG_COVERED_LEAK)
 
 
-# ── Shoot-for-tip EV ──────────────────────────────────────────────────────────
-# The value of ripping a shot AT THE NET through a net-front teammate's blade.
+# ── Tip EV ────────────────────────────────────────────────────────────────────
+# The value of a shot ripped AT THE NET through a net-front teammate's blade, as
+# the finisher's station search prices a spot to tip from.
 # The finisher's reactive TIP mode steps onto the shot path holding the
 # deliberate deflect, so the puck redirects off his blade at near-full pace
 # whatever its pace (PuckCollisionRules.deflect_velocity), and the outcome is a
@@ -109,8 +110,7 @@ static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 #                                 runs (_lane_block_at)
 # × the redirect (AIShotValue.deflection): a one-timer off the rip whose line
 #                                 is not picked, the keeper as he reads now.
-# max() against the direct read at the call site, never additive — the two are
-# different aims of the same rip.
+# The redirect is read off one-timer feed cells, which no staged tip backs (#736).
 
 # The pace from which the finisher reads a loose puck heading at the net as a
 # shot and goes to tip it (AIRoleFinisher.INCOMING_SHOT_SPEED_M_S): a rip below

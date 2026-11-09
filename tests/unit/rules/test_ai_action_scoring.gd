@@ -905,14 +905,14 @@ func test_lane_clear_accurate_compounds_two_separated_defenders() -> void:
 	# compound to a much less clear lane than either alone.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 16.0)
-	var one_a: Array[Vector3] = [Vector3(5.0, 0.0, 12.0)]     # contests the middle
-	var one_b: Array[Vector3] = [Vector3(-5.6, 0.0, 14.0)]    # contests the receiver end
+	var one_a: Array[Vector3] = [Vector3(4.2, 0.0, 12.0)]     # contests the middle
+	var one_b: Array[Vector3] = [Vector3(-5.0, 0.0, 14.0)]    # contests the receiver end
 	var both: Array[Vector3] = [one_a[0], one_b[0]]
 	var speed: float = 18.0
 	var clear_a: float = AIPuckLane.lane_clear(from, to, one_a, speed, [], [], true)
 	var clear_b: float = AIPuckLane.lane_clear(from, to, one_b, speed, [], [], true)
 	var clear_both: float = AIPuckLane.lane_clear(from, to, both, speed, [], [], true)
-	# Each leaves a real gap alone (~0.6–0.7 clear); together the lane is much
+	# Each leaves a real gap alone (~0.7–0.8 clear); together the lane is much
 	# worse than either — the product compounds two independent, separated threats.
 	assert_gt(clear_a, 0.3)
 	assert_gt(clear_b, 0.3)

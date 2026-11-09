@@ -238,9 +238,11 @@ who loads the puck, not just have the rule switched on.
   fires along its committed aim from wherever the puck sits, so it waits on
   neither the aim nor the body. (Every bot release is charged now; the Aim-B2
   reach-cone commit went with the one-tick quick release.)
-- **A pass is released from a pocket**, never from where the carry left the
-  puck: of the pocket's candidate angles, the one that carries the feed's pace
-  kept best (`AIShotHolds.solve_pass_kept`). The carrier locks it at commit
+- **A pass is released from a pocket**: of the pocket's candidate angles, the
+  one that carries the feed's pace kept best (`AIShotHolds.solve_pass_kept`),
+  unless the puck already carries that share where it sits, where the press
+  fires it at once and the search prices it from there, unpulled
+  (`AIShotHolds.pass_wait`, at `_load_ready`'s slack). The carrier locks it at commit
   and the agent mirrors it (`_lock_pass_hold`); the carry rests the puck there
   ahead of a near-leading pass (`SkaterAgentCarryCursor`). A backhand pass's
   power is committed over the backhand coefficient so it leaves at the solved
