@@ -263,10 +263,10 @@ func test_a_long_shot_to_a_corner_is_met_on_its_line() -> void:
 
 # A shot fired as a match fires it: Puck.release queues the launch, and the
 # skater controllers that release it tick before him and he before the puck, so
-# on the release tick the puck's velocity is still the carried puck's. From a
-# carrier standing still that velocity goes nowhere near his net; he reads the
+# on the release tick the puck's velocity is still the carried puck's, as it was
+# picked up. Picked up at rest, that goes nowhere near his net; he reads the
 # shot's own flight all the same and his gear meets it.
-func test_a_released_shot_from_a_standing_carrier_is_read_and_met() -> void:
+func test_a_released_shot_is_read_from_its_launch() -> void:
 	_spawn(GameRules.GOAL_LINE_Z)
 	var from := Vector3(-1.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 12.0)
 	_puck.global_position = from
