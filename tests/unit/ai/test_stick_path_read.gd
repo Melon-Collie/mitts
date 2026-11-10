@@ -63,6 +63,18 @@ func test_our_own_skating_brings_the_path_into_reach() -> void:
 			puck, vel, REACH, BLADE_SPEED).is_finite())
 
 
+func test_backing_in_the_blade_is_held_out_in_front() -> void:
+	# A carrier driving at me while I back in at most of his pace: the blade is
+	# held up the ice of my body, toward him, where my skating brings it onto
+	# his path as the puck gets there, never on the ice I am leaving.
+	var puck := Vector3(0.0, 0.0, 3.4)
+	var p: Vector3 = AIStickPathRead.path_point(Vector3.ZERO, Vector3(0.0, 0.0, -7.0),
+			Vector3(0.5, 0.0, 0.5), puck, Vector3(0.0, 0.0, -9.0), REACH, BLADE_SPEED)
+	assert_true(p.is_finite())
+	assert_gt(p.z, 1.0, "out in front of me, toward the puck")
+	assert_lte(Vector2(p.x, p.z).length(), REACH + 1e-3, "inside my reach now")
+
+
 func test_the_lane_is_his_line_to_our_net_where_it_reaches_me() -> void:
 	# He is up the ice of me, our net behind me: the lane point is the edge of my
 	# reach on his line, the side nearer him.

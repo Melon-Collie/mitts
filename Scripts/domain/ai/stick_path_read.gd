@@ -15,11 +15,15 @@ const PATH_STEP_S: float = 0.05
 const PATH_HORIZON_S: float = 1.0
 
 
-# The first point on the carried puck's path (dead-reckoned at the carrier's
-# velocity) that is inside `reach` of our body (dead-reckoned at ours) when the
-# puck gets there, and that our blade, from `blade_now` at `blade_speed` across
-# the body, gets to no later than the puck. INF when the path never comes into
-# reach in time.
+# Where to hold the blade now so the puck's path comes through it: the first
+# point on the carried puck's path (dead-reckoned at the carrier's velocity)
+# that is inside `reach` of our body (dead-reckoned at ours) when the puck gets
+# there, and that our blade, from `blade_now` at `blade_speed` across the body,
+# gets to no later than the puck. It is returned in our moving frame — that
+# point less the ground our skating covers before the puck is there — because
+# the cursor rides the body: aimed at the world point itself, a defender backing
+# in leaves his blade behind him. INF when the path never comes into reach in
+# time.
 static func path_point(self_pos: Vector3, self_vel: Vector3, blade_now: Vector3,
 		puck_pos: Vector3, carrier_vel: Vector3, reach: float,
 		blade_speed: float) -> Vector3:
@@ -54,7 +58,7 @@ static func path_point(self_pos: Vector3, self_vel: Vector3, blade_now: Vector3,
 		var bz: float = pz - (blade_now.z + self_vel.z * t)
 		var travel: float = blade_speed * t + GameRules.POKE_RADIUS_M
 		if bx * bx + bz * bz <= travel * travel:
-			return Vector3(px, 0.0, pz)
+			return Vector3(px - self_vel.x * t, 0.0, pz - self_vel.z * t)
 		t += PATH_STEP_S
 	return Vector3.INF
 

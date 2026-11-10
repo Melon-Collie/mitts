@@ -25,7 +25,30 @@ func _trace(carrier_x: float, d_x: float, depth: float, speed: float, secs: floa
 	duel.start(CARRIER)
 	duel._skater(CARRIER).facing = Vector2(0.0, -1.0)
 	duel._skater(DEFENDER).facing = Vector2(0.0, 1.0)
-	gut.p("   t    car(x,z)  car vx vz |   def(x,z)   def vx vz  face | slot     stand-def(dx,dz) stand vx vz | floor cap  turn chk | pursuit(x,z) stick(x,z) brk stn | gap  blade-puck jab")
+	_rows(duel, secs)
+
+
+# test_one_on_one_to_the_crease's net driver: the carrier scripted straight at
+# the net front, ignoring the defender.
+func _trace_drive(carrier_x: float, d_x: float, depth: float, speed: float, secs: float) -> void:
+	var duel := Duel.new()
+	var net_front := Vector3(0.0, 0.0, -(GameRules.GOAL_LINE_Z - CreaseRules.ARC_RADIUS))
+	var start := Vector3(carrier_x, 0.0, START_Z)
+	duel.add_scripted_attacker(CARRIER, 0, [start, net_front] as Array[Vector3],
+			duel.move_cfg.max_speed * duel.move_cfg.puck_carry_speed_multiplier)
+	var car: Object = duel._skater(CARRIER)
+	car.script_skates = true
+	car.script_strippable = true
+	duel.add_skater(DEFENDER, 1, Vector3(d_x, 0.0, START_Z - depth), BotSkillProfile.hard())
+	duel.start(CARRIER)
+	car.vel = (net_front - start).normalized() * speed
+	car.facing = Vector2(car.vel.x, car.vel.z).normalized()
+	duel._skater(DEFENDER).facing = Vector2(0.0, 1.0)
+	_rows(duel, secs)
+
+
+func _rows(duel: Object, secs: float) -> void:
+	gut.p("   t    car(x,z)  car vx vz |   def(x,z)   def vx vz  face | slot     stand-def(dx,dz) stand vx vz | floor cap  turn chk | pursuit(x,z) stick(x,z) brk stn | gap  blade-puck aim hit")
 	for t: int in int(secs / DT):
 		duel.step()
 		if t % EVERY_TICKS != 0:
@@ -52,11 +75,31 @@ func _trace(carrier_x: float, d_x: float, depth: float, speed: float, secs: floa
 					"y" if d.face_travel else "n", "y" if d.commit_check else "n",
 					pursue.x, pursue.y, def.input.move_vector.x, def.input.move_vector.y,
 					"B" if def.input.brake else ".", "S" if def.input.stance_held else "."]
-		row += " | %.1f  %.2f %s" % [car.pos.distance_to(def.pos), def.blade.distance_to(duel.puck_pos),
-				"J" if sm._stick_play._poke_jab_active_ticks > 0 else "."]
+		var me: SkaterNetworkState = SkaterNetworkState.new()
+		me.position = def.pos
+		me.velocity = def.vel
+		me.facing = def.facing
+		me.blade_contact_world = def.blade
+		var snap_now: WorldSnapshot = duel._build_snapshot()
+		snap_now.skater_states[DEFENDER] = me
+		var aim: Vector3 = sm._carrier_stick_aim(snap_now, def.pos, me, d) if d != null \
+				else Vector3.INF
+		var rel_aim: String = "   -   " if not aim.is_finite() \
+				else "%4.1f %4.1f" % [aim.x - def.pos.x, aim.z - def.pos.z]
+		row += " | aim-def %s blade-def %4.1f %4.1f puck-def %4.1f %4.1f" % [rel_aim,
+				def.blade.x - def.pos.x, def.blade.z - def.pos.z,
+				duel.puck_pos.x - def.pos.x, duel.puck_pos.z - def.pos.z]
+		row += " | %.1f  %.2f %s %s" % [car.pos.distance_to(def.pos), def.blade.distance_to(duel.puck_pos),
+				"L" if sm._off_puck_lift_live else ("P" if sm._off_puck_stick_live else "."),
+				"H" if def.input.hit_held else "."]
 		gut.p(row)
 
 
 func test_trace_916() -> void:
 	_trace(8.0, 3.0, 14.0, 9.0, 6.5)
+	assert_true(true)
+
+
+func test_trace_net_driver() -> void:
+	_trace_drive(0.0, 0.0, 12.0, 7.5, 5.0)
 	assert_true(true)
