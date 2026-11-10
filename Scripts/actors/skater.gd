@@ -463,7 +463,7 @@ var bottom_hand: Marker3D = null
 # cuff independently and in either order.
 var forearm_visual_mult: float = 1.0
 
-# Butt-end knob cylinder at the top of the shaft (just past the top hand).
+# Butt-end knob cylinder at the top of the shaft, inside the top fist.
 # Created by SkaterUniformCoordinator on uniform apply; positioned per-tick by
 # update_stick_mesh() so it rides the butt end as the shaft swings.
 var stick_knob_mesh: MeshInstance3D = null
