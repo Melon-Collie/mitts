@@ -74,6 +74,34 @@ func _trace(cx: float, fwd_z: float, speed: float, secs: float) -> void:
 			line += " %d%s (%5.1f %5.1f) %4.1fm gs %d |" % [pid, "*" if pid == c else " ",
 					a.x, a.z, a.distance_to(NET), _goal_side_of(duel, a)]
 		gut.p(line)
+		if entering or (entered and t % 6 == 0 and t * DT < 4.2):
+			_election_at(duel, c)
+
+
+# The back line's election as the brain runs it this tick: each post's target and
+# deadline, and for each of ours his raw race time there, whether he counts as
+# already deeper than the post, and the time the deadline reads.
+func _election_at(duel: Object, carrier: int) -> void:
+	var own_goal_z: float = NET.z
+	var brain: TeamBrain = duel.brains[1]
+	var specs: Array = AIRoleSlots5._specs_for_state(AIPossessionState.State.TRANS_DEFENSE,
+			own_goal_z, brain.strong_x(), duel.puck_pos, 0)
+	var snap: WorldSnapshot = duel._build_snapshot()
+	AIRoleSlots5._apply_back_line_deadlines(specs, snap.skater_states[carrier],
+			duel.caps_by_peer.get(carrier))
+	for spec: Object in specs:
+		if spec.deadline_s == INF:
+			continue
+		var row: String = "        %-6s post (%5.1f %5.1f) deadline %.2f s |" % [
+				AIRoleSlots.label(spec.slot), spec.target.x, spec.target.z, spec.deadline_s]
+		for pid: int in US:
+			var st: SkaterNetworkState = snap.skater_states[pid]
+			var raw: float = AIRoleSlots5._race_time(st, spec, duel.caps_by_peer.get(pid))
+			var deeper: bool = spec.deadline_own_dir * st.position.z \
+					> spec.deadline_own_dir * spec.target.z
+			row += " %d raw %.2f%s dl %.2f |" % [pid, raw, " deep" if deeper else "",
+					AIRoleSlots5._deadline_time(st, spec, raw)]
+		gut.p(row)
 
 
 static func _side(duel: Object, pid: int) -> float:
