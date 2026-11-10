@@ -140,7 +140,8 @@ static func home_layer_behind_me(ctx: RoleContext) -> bool:
 	if ctx.snapshot == null:
 		return false
 	var chaser: int = ctx.snapshot.closest_to_puck_by_team.get(ctx.team_id, -1)
-	var envelope: float = AIRushRead.cover_envelope_m()
+	var my_depth: float = ctx.own_goal_dir * ctx.self_pos.z \
+			+ AIRushRead.cover_envelope_m()
 	for pid: int in ctx.snapshot.skater_states:
 		if pid == ctx.peer_id or pid == chaser:
 			continue
@@ -149,7 +150,7 @@ static func home_layer_behind_me(ctx: RoleContext) -> bool:
 		var mate: SkaterNetworkState = ctx.snapshot.skater_states[pid]
 		if mate.is_ghost:
 			continue
-		if goal_side_of_me_m(ctx, mate.position) > envelope:
+		if ctx.own_goal_dir * mate.position.z > my_depth:
 			return true
 	return false
 
@@ -176,25 +177,15 @@ static func _attacker_behind(ctx: RoleContext, stand: Vector3,
 static func has_support_behind(ctx: RoleContext) -> bool:
 	if ctx.snapshot == null:
 		return false
+	var my_depth: float = ctx.own_goal_dir * ctx.self_pos.z
 	for pid: int in ctx.snapshot.skater_states:
 		if pid == ctx.peer_id:
 			continue
 		if ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
 			continue
-		if goal_side_of_me_m(ctx, ctx.snapshot.skater_states[pid].position) > 0.0:
+		if ctx.own_goal_dir * ctx.snapshot.skater_states[pid].position.z > my_depth:
 			return true
 	return false
-
-
-# How much nearer our net `pos` is than we are: the depth both last-man reads
-# measure. Radial, as the rush read's INSIDE test and the board pin's last-back
-# read are: up the ice it is the difference in depth, and near our net it still
-# puts the net-front man behind a pressurer in the corner or behind the net,
-# where no depth in Z does. A strict order, so no two bodies each read the other
-# as behind them.
-static func goal_side_of_me_m(ctx: RoleContext, pos: Vector3) -> float:
-	var our_net: Vector3 = ctx.defending_goal_pos
-	return AIRoleReads.xz_distance(ctx.self_pos, our_net) - AIRoleReads.xz_distance(pos, our_net)
 
 
 # The shallowest stand depth — metres goal-side of `threat_pos` along `dir_net`

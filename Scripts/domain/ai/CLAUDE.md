@@ -1196,11 +1196,8 @@ reaches back into what remains.
   demands a second clause (`home_layer_behind_me`): somebody home behind me, not
   merely nobody past me, because in a loose-puck race nobody is behind anybody
   yet and the reactive half alone lets every body step up. The clause is
-  antisymmetric (strictly nearer our net, by a cover envelope, with the elected
-  chaser excluded), so exactly one body draws the layer. Both depth reads are
-  radial off our net (`AILastManDiscipline.goal_side_of_me_m`), never Z: below
-  the goal line nobody of ours is deeper in Z than a pressurer behind our net,
-  yet the net-front man is his support. PRESSURE's last-man step-up is
+  antisymmetric (strictly deeper, by a cover envelope, with the elected chaser
+  excluded), so exactly one body draws the layer. PRESSURE's last-man step-up is
   the one thing apart (`settable_stand_depth`, a rendezvous clamp on how far a
   challenge may lunge). Do not resurrect a per-station graded counter race
   without a reason the shared read cannot serve, and a measurement.
