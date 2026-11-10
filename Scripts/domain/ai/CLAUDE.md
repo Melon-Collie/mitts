@@ -418,11 +418,14 @@ opponent in our end winds up and we stand on the line from the release to our
 net, the shot is still under the block's seal when it reaches us (his replicated
 loft rung under gravity), and we are not inside the room our goalie needs to see
 around a screen. He stays down while the released puck is still coming through
-us. The last defender on a man-down rush dives across a pass lane past his
-standing reach: his stick, plus what he skates toward the lane while the pass
-travels to it from rest across it. The dive must still reach the lane, and no
-teammate may be nearer it. Both are the `blocks_shots` cognition gate, closed on
-Easy.
+us. The dive is rarer: only the lone defender back, goal-side (INSIDE, with
+`AIRushRead.back_count` 1), against two or more, the carrier inside shooting
+range in front of our goal line where our goalie can take him, dives across a
+pass lane past his standing reach: his stick, plus what he skates toward the lane
+while the pass travels to it from rest across it. The dive must still reach the
+lane, and no teammate may be nearer it. A beaten defender, or one with a second
+man back, stays on his feet and in the play. Both are the `blocks_shots`
+cognition gate, closed on Easy.
 
 **The coverer's other extra is the press** (`AIPressRead`, applied by
 `SkaterAgentPress` after every other body and stick pass). Within
@@ -1193,8 +1196,11 @@ reaches back into what remains.
   demands a second clause (`home_layer_behind_me`): somebody home behind me, not
   merely nobody past me, because in a loose-puck race nobody is behind anybody
   yet and the reactive half alone lets every body step up. The clause is
-  antisymmetric (strictly deeper, by a cover envelope, with the elected chaser
-  excluded), so exactly one body draws the layer. PRESSURE's last-man step-up is
+  antisymmetric (strictly nearer our net, by a cover envelope, with the elected
+  chaser excluded), so exactly one body draws the layer. Both depth reads are
+  radial off our net (`AILastManDiscipline.goal_side_of_me_m`), never Z: below
+  the goal line nobody of ours is deeper in Z than a pressurer behind our net,
+  yet the net-front man is his support. PRESSURE's last-man step-up is
   the one thing apart (`settable_stand_depth`, a rendezvous clamp on how far a
   challenge may lunge). Do not resurrect a per-station graded counter race
   without a reason the shared read cannot serve, and a measurement.

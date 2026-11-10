@@ -3,8 +3,9 @@ extends GutTest
 # The bots' shot block (SkaterAgentShotBlock, through
 # SkaterAgentStateMachine.apply_shot_block): a defender in a low shot's lane
 # drops into the block and stays down while the released shot comes through;
-# not for a shot over its seal, not on its goalie's doorstep, not on Easy. A
-# 2-on-1's last defender dives across a pass lane he cannot reach on his feet.
+# not for a shot over its seal, not on its goalie's doorstep, not on Easy. The
+# lone defender back against two or more dives across a pass lane he cannot reach
+# on his feet; a beaten one, or one with a second man home, never does.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 const State = SkaterStateMachine.State
@@ -109,10 +110,14 @@ func _rush_snap(me_pos: Vector3, carrier_z: float) -> WorldSnapshot:
 	return s
 
 
-func _rush(numbers: int) -> AIRushRead:
+# The lone defender back, goal-side, unless `back_count` and `mine` say otherwise.
+func _rush(numbers: int, back_count: int = 1,
+		mine: int = AIRushRead.Recovery.INSIDE) -> AIRushRead:
 	var r := AIRushRead.new()
 	r.is_live = true
 	r.numbers = numbers
+	r.back_count = back_count
+	r.recovery_by_peer[SELF_ID] = mine
 	r.carrier_peer = OPP_ID
 	r.attackers.append(OPP_ID)
 	r.attackers.append(OPP_MATE_ID)
@@ -144,6 +149,35 @@ func test_no_dive_at_even_numbers() -> void:
 	var input: InputState = _dive(_rush_snap(Vector3(0.5, 0.0, 17.8), 19.0),
 			_rush(AIRushRead.Numbers.EVEN_OR_UP))
 	assert_false(input.block_held)
+
+
+func test_the_lone_defender_dives_on_a_three_on_one_too() -> void:
+	var input: InputState = _dive(_rush_snap(Vector3(0.5, 0.0, 17.8), 19.0),
+			_rush(AIRushRead.Numbers.DOWN_TWO_PLUS))
+	assert_true(input.stance_held and input.block_held)
+
+
+func test_no_dive_with_a_second_man_home() -> void:
+	# A 3-on-2: down one, but he is not alone back there.
+	var input: InputState = _dive(_rush_snap(Vector3(0.5, 0.0, 17.8), 19.0),
+			_rush(AIRushRead.Numbers.DOWN_ONE, 2))
+	assert_false(input.block_held)
+
+
+func test_a_beaten_defender_plays_it_on_his_feet() -> void:
+	var input: InputState = _dive(_rush_snap(Vector3(0.5, 0.0, 17.8), 19.0),
+			_rush(AIRushRead.Numbers.DOWN_ONE, 1, AIRushRead.Recovery.BEATEN))
+	assert_false(input.block_held)
+
+
+func test_no_dive_with_the_carrier_behind_our_goal_line() -> void:
+	# Out from behind the net our goalie cannot take the shooter.
+	var s: WorldSnapshot = _rush_snap(Vector3(0.5, 0.0, 26.2), 27.4)
+	assert_true(AIShotBlockRead.dive_point(s.skater_states[SELF_ID].position, Vector3.ZERO,
+			s.skater_states[OPP_ID].position, s.skater_states[OPP_MATE_ID].position,
+			1.5, 10.0, AIPuckLane.PASS_SPEED_M_S).is_finite(),
+			"scenario check: the lane is one only a dive takes")
+	assert_false(_dive(s, _rush(AIRushRead.Numbers.DOWN_ONE)).block_held)
 
 
 func test_no_dive_when_a_teammate_is_nearer_the_lane() -> void:

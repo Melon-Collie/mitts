@@ -310,3 +310,29 @@ func test_the_high_slot_does_back_off_once_both_points_activate() -> void:
 	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, hs_stand, true)
 	assert_gt(t.z, hs_stand.z,
 			"as the rearmost body it does back off; got %s" % t)
+
+
+# ── Support is measured toward our net, not in Z ─────────────────────────────
+
+func test_a_pressurer_behind_our_net_has_the_net_front_man_behind_him() -> void:
+	# Chasing a carrier behind our net, nobody of ours is deeper in Z, yet the
+	# man at the net front is exactly the layer that picks the play up.
+	var ctx: RoleContext = _ctx(Vector3(2.5, 0.0, 28.4),
+			[[2, Vector3(-0.8, 0.0, 24.6)]],
+			[[10, Vector3(3.5, 0.0, 28.6)]], 10)
+	assert_true(AILastManDiscipline.has_support_behind(ctx))
+
+
+func test_a_pressurer_in_our_corner_has_the_net_front_man_behind_him() -> void:
+	var ctx: RoleContext = _ctx(Vector3(9.0, 0.0, 24.8),
+			[[2, Vector3(0.0, 0.0, 24.0)]],
+			[[10, Vector3(10.5, 0.0, 25.0)]], 10)
+	assert_true(AILastManDiscipline.has_support_behind(ctx))
+
+
+func test_two_defenders_level_in_the_slot_do_not_back_each_other_up() -> void:
+	# Side by side at the same distance from our net, neither is behind the other.
+	var ctx: RoleContext = _ctx(Vector3(-4.0, 0.0, 20.0),
+			[[2, Vector3(4.0, 0.0, 20.0)]],
+			[[10, Vector3(0.0, 0.0, 12.0)]], 10)
+	assert_false(AILastManDiscipline.has_support_behind(ctx))
