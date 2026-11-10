@@ -18,11 +18,8 @@ const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const SLOT_DEPTH_M: float = 10.0
 const SLOT_HALF_WIDTH_M: float = 4.0
 
-# Starts where the rusher loses the puck today, each with its issue. From (-2,
-# -10) he carries it on the backchecker's side and is stripped at 1.52 s, with
-# the chest fold in the duel rig or without it; without it he won the loose puck
-# back: #888.
-const KNOWN_STEP_LOSSES: Array[String] = ["step from (-2, -10)"]
+# Starts where the rusher loses the puck today, each with its issue.
+const KNOWN_STEP_LOSSES: Array[String] = []
 
 var _goalie: Node
 var _puck: Node

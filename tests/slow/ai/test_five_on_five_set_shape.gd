@@ -26,21 +26,11 @@ extends GutTest
 # Starts whose back line is beaten at entry today, each with its issue: they
 # count against neither the line nor the open share, and their slot shots are
 # known.
-#   v8.5/z20/c6, v8.5/z24/c6 — the 3-on-2 carried in down the middle: a straight
-#   retreat makes our line 1.7 m goal-side, the far D arrives 1.1 m short: #899.
-#   In v8.5/z24/c6 the odd man left behind it takes his feed clean and shoots
-#   from the slot; v8.5/z20/c6 ends in a slot shot too.
-#   v7.0/z24/c6, v7.0/z24/c-6 — the same gap, reached by their carrier's own
-#   play: he feeds across the neutral zone early, they regroup and come in down
-#   a wing with our line not yet set, and the slot shot follows: #899.
-#   v7.0/z20/c0, v7.0/z24/c0, v8.5/z24/c-6 — our line is set at entry, but a
-#   man of theirs stands behind it for a third to two thirds of their zone
-#   time: listed here so the open share leaves them out, the same layer #899
-#   cannot hold. In v7.0/z24/c0 he is fed there and shoots from the slot.
-const KNOWN_THIN: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6", "v7.0/z24/c6",
-		"v7.0/z24/c-6", "v7.0/z20/c0", "v7.0/z24/c0", "v8.5/z24/c-6"]
-const KNOWN_SLOT_SHOTS: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6", "v7.0/z24/c6",
-		"v7.0/z24/c-6", "v7.0/z24/c0"]
+#   v7.0/z24/c6, v7.0/z24/c0 — our line is one man thin at entry, a man of theirs
+#   stands behind it for most of their zone time, and he is fed there and shoots
+#   from the slot: the layer #899 cannot hold.
+const KNOWN_THIN: Array[String] = ["v7.0/z24/c6", "v7.0/z24/c0"]
+const KNOWN_SLOT_SHOTS: Array[String] = ["v7.0/z24/c6", "v7.0/z24/c0"]
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
