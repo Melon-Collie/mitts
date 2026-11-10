@@ -65,17 +65,16 @@ const _RECV_CATCH_STRIDE: int = 1   # Mode B handled aim+steer; caller runs tran
 const _RECV_ONE_TIME: int = 2       # Mode A transitioned to ONE_TIMER_PRESSED; caller returns
 
 
-# ── Defensive poke jab ────────────────────────────────────────────────────────
-# The host strips the carrier when a defender's blade SWEEPS THROUGH the puck
-# (PuckController._check_interactions → check_poke); the ready-stance aim never
-# reaches through it. Within reach, a pressurer briefly aims its blade tip AT the
-# puck. Discrete (jab + cooldown), so it commits and can miss.
+# ── The pressurer's stick ─────────────────────────────────────────────────────
+# The host strips the carrier when a defender's blade comes within the poke
+# radius of the puck (PuckController._check_interactions → check_poke), so the
+# pressurer's blade goes onto the puck's path (AIStickPathRead).
 #
 # Reach: the body's full blade reach (AISkaterCaps.max_blade_reach: arm out,
 # trunk folded, stick down) plus the poke radius, per build in
 # apply_capabilities; the default is the league baseline. Never the stick alone:
 # a reach-in is the arm's, and hand-to-toe falls the arm's length short.
-var _poke_jab_reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + GameRules.POKE_RADIUS_M
+var _poke_reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + GameRules.POKE_RADIUS_M
 var _stick_lift_reach: float = (
 		GameRules.DEFAULT_STICK_LENGTH_M
 		+ GameRules.DEFAULT_BLADE_LENGTH_M
@@ -542,8 +541,11 @@ var _plays_rush_pass_lanes: bool = true
 # _protects_the_puck gates the carry blade's protect blend. False = naive forward
 # carry, the puck presented ahead of the body.
 var _protects_the_puck: bool = true
-# _lifts_sticks gates the jab-or-lift read (AIStickLiftRead). False = jab only.
+# _lifts_sticks gates the stick lift (AIStickLiftRead); _reads_puck_path whether
+# the pressurer's stick reads the puck's path or only where it is
+# (AIStickPathRead).
 var _lifts_sticks: bool = true
+var _reads_puck_path: bool = true
 # _ties_sticks gates both halves of the stick battle: tying a covered man's stick
 # and yanking one's own free. False = neither.
 var _ties_sticks: bool = true
@@ -592,10 +594,12 @@ var _cached_aim_arc_rate: float = MOUSE_ARC_RATE_RAD_S
 var _off_puck_aim_live: bool = false
 var _off_puck_aim_anchor: Vector3 = Vector3.ZERO
 var _off_puck_aim_near_m: float = 0.0
-# Set when the dispatch tick resolved to an ACTIVE poke-jab: skipped ticks re-track
-# the moving puck live, since check_poke is a swept segment test a staircased stab
-# can skip. The jab's counters still advance on the dispatch cadence.
-var _off_puck_jab_live: bool = false
+# Set when the dispatch tick resolved to a held stick lift, or to the pressurer's
+# stick on the puck's path: skipped ticks re-track the moving puck live, since
+# check_poke is a swept segment test a staircased blade can skip. The lift's
+# counters still advance on the dispatch cadence.
+var _off_puck_lift_live: bool = false
+var _off_puck_stick_live: bool = false
 # Same live re-aim for a held tie (the man's shaft) and for a tied attacker's
 # yank (away from the stick holding his).
 var _off_puck_tie_live: bool = false
@@ -647,7 +651,7 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_chase_max_accel = caps.max_accel
 	_blade_reach = caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M
 	_receive_body_offset = caps.blade_span - SkaterAgentReception.RECEIVE_BODY_INSET_M
-	_poke_jab_reach = caps.max_blade_reach + GameRules.POKE_RADIUS_M
+	_poke_reach = caps.max_blade_reach + GameRules.POKE_RADIUS_M
 	_stick_lift_reach = caps.blade_span + GameRules.STICK_LIFT_RADIUS_M
 	_self_wrister_shot_speed = caps.wrister_shot_speed
 	_self_lateral_grip = caps.lateral_grip
@@ -744,6 +748,7 @@ func apply_profile(profile: BotSkillProfile) -> void:
 	_plays_rush_pass_lanes = profile.plays_rush_pass_lanes
 	_protects_the_puck = profile.protects_the_puck
 	_lifts_sticks = profile.lifts_sticks
+	_reads_puck_path = profile.reads_puck_path
 	_ties_sticks = profile.ties_sticks
 	_blocks_shots = profile.blocks_shots
 	# The shot error is the tier's scoring dial; the pass error stays small so
@@ -996,10 +1001,11 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 
 	# Default: no live aim refresh on skipped ticks. The branches below re-arm
 	# the one they hit — plain ready-stance (_off_puck_aim_live) or an active
-	# poke-jab (_off_puck_jab_live). One-timer pre-aim / explicit aim override
+	# lift or stick (_off_puck_lift_live, _off_puck_stick_live). One-timer pre-aim / explicit aim override
 	# leave both off so they keep the throttled cached-target path.
 	_off_puck_aim_live = false
-	_off_puck_jab_live = false
+	_off_puck_lift_live = false
+	_off_puck_stick_live = false
 	_off_puck_tie_live = false
 	_off_puck_yank_live = false
 
@@ -1123,25 +1129,33 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			_one_timer_preserve_ticks += _dispatch_period_ticks
 			would_be_ready = true
 		_set_one_timer_ready(would_be_ready)
-		# Defensive poke jab, only with no one-timer live so its lifecycle doesn't
-		# tick during offensive states. INF (no jab) falls through to the normal aim.
-		var jab_aim: Vector3 = Vector3.INF
+		# The pressurer's stick, only with no one-timer live so the lift's lifecycle
+		# doesn't tick during offensive states: a held lift, else the blade on the
+		# carried puck's path. INF falls through to the normal aim.
+		var lift_aim: Vector3 = Vector3.INF
+		var stick_aim: Vector3 = Vector3.INF
 		if not would_be_ready:
-			jab_aim = _poke_jab_aim(snapshot, self_pos)
+			lift_aim = _lift_aim(snapshot, self_pos)
+			if not lift_aim.is_finite():
+				stick_aim = _carrier_stick_aim(snapshot, self_pos, self_state, decision)
 		# The stick battle: a tied attacker pulls his stick free before anything
-		# else it could be doing, and a defender with no jab ties his man.
+		# else it could be doing, and a defender whose stick is not on the puck
+		# ties his man.
 		var yank_aim: Vector3 = _tie_yank_aim(snapshot, self_pos, self_state)
 		var tie_aim: Vector3 = Vector3.INF
-		if not jab_aim.is_finite():
+		if not lift_aim.is_finite() and not stick_aim.is_finite():
 			tie_aim = _stick_tie_aim(snapshot, self_pos, self_state, decision)
 		else:
 			_stick_play.drop_tie()
 		if yank_aim.is_finite():
 			_off_puck_yank_live = true
 			input.mouse_world_pos = _step_mouse_face(yank_aim)
-		elif jab_aim.is_finite():
-			_off_puck_jab_live = true
-			input.mouse_world_pos = _step_mouse_face(jab_aim)
+		elif lift_aim.is_finite():
+			_off_puck_lift_live = true
+			input.mouse_world_pos = _step_mouse_face(lift_aim)
+		elif stick_aim.is_finite():
+			_off_puck_stick_live = true
+			input.mouse_world_pos = _step_mouse_face(stick_aim)
 		elif tie_aim.is_finite():
 			_off_puck_tie_live = true
 			input.mouse_world_pos = _step_mouse_face(tie_aim)
@@ -2634,14 +2648,44 @@ func _upright_lateral_accel() -> float:
 
 
 # Stick play (SkaterAgentStickPlay): these gather the bot's role, gates and reaches.
-func _poke_jab_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
-	return _stick_play.jab_aim(snapshot, self_pos, _is_puck_pressurer_slot(snapshot),
-			_lifts_sticks, _stick_lift_reach, _poke_jab_reach, _dispatch_period_ticks,
-			_self_blade_speed)
+func _lift_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
+	return _stick_play.lift_aim(snapshot, self_pos, _is_puck_pressurer_slot(snapshot),
+			_lifts_sticks, _stick_lift_reach, _dispatch_period_ticks)
 
 
-func _jab_target(snapshot: WorldSnapshot) -> Vector3:
-	return _stick_play.jab_target(snapshot)
+func _lift_target(snapshot: WorldSnapshot) -> Vector3:
+	return _stick_play.lift_target(snapshot)
+
+
+# The pressurer's blade on an opposing carrier's puck (AIStickPathRead): the
+# first point of its path he beats it to, else the carrier's line to our net
+# where it comes into reach, held out of the shooting lane in our house as a
+# parked blade is (_deflect_safe_aim_dir), and inside the reach edges of the line
+# his hips are on so it never turns him. INF for any other role, with no such
+# carrier or none of it in reach, and while a turn to skate is still to come (the
+# route's cursor makes that pivot). Without the path read (_reads_puck_path) he
+# reads where the puck and his body are now, and plays no lane.
+func _carrier_stick_aim(snapshot: WorldSnapshot, self_pos: Vector3,
+		me: SkaterNetworkState, decision: RoleDecision) -> Vector3:
+	if me == null or decision == null or not _is_puck_pressurer_slot(snapshot):
+		return Vector3.INF
+	var facing: Vector2 = me.facing
+	if decision.face_travel and facing.dot(Vector2(me.velocity.x, me.velocity.z)) < 0.0:
+		return Vector3.INF
+	var target: Vector3 = _stick_play.path_aim(snapshot, me, _poke_reach, _self_blade_speed,
+			_reads_puck_path)
+	if not target.is_finite() and _reads_puck_path:
+		target = _stick_play.lane_aim(snapshot, me, _poke_reach,
+				Vector3(0.0, 0.0, _own_goal_dir * GameRules.GOAL_LINE_Z))
+		if target.is_finite():
+			var to: Vector3 = target - self_pos
+			var dist: float = to.length()
+			if dist > 1e-4:
+				target = self_pos + _deflect_safe_aim_dir(self_pos, to / dist, snapshot) * dist
+	if not target.is_finite():
+		return Vector3.INF
+	return AIStickPathRead.within_reach_edges(self_pos, target, facing,
+			_role_ctx.self_facing_rules, _is_left_handed)
 
 
 func _stick_tie_aim(snapshot: WorldSnapshot, self_pos: Vector3,
@@ -2694,7 +2738,8 @@ func apply_stick_lift_input(input: InputState) -> void:
 	_stick_play.apply_button(input, _state == State.OFF_PUCK)
 
 
-# True if our current role is on the puck defensively — the only roles that jab:
+# True if our current role is on the puck defensively — the only roles whose
+# stick goes onto the puck:
 # the PRESSURER slots (AIRoleSlots.pressures_puck), a station role pressuring
 # this beat, and in the 5v5 zone the one area role that owns the puck
 # (AIZoneCoverage.pressure_slot).
@@ -2720,7 +2765,7 @@ func _owns_zone_pressure(slot: int, snapshot: WorldSnapshot) -> bool:
 			_own_goal_dir * GameRules.GOAL_LINE_Z, snapshot.puck_state.position) == slot
 
 
-# The carried puck's position (the jab aim point), or INF with no carrier.
+# The carried puck's position, or INF with no carrier.
 func _carrier_puck_pos(snapshot: WorldSnapshot) -> Vector3:
 	if snapshot.puck_state == null or snapshot.puck_state.carrier_peer_id == -1:
 		return Vector3.INF
@@ -2815,7 +2860,7 @@ func _step_mouse_aim(target: Vector3) -> Vector3:
 	return _step_mouse_internal(target, _STEP_ARC, _mouse_max_speed_m_s, _mouse_arc_rate_rad_s)
 
 
-# Body-FACING aim (off-puck ready stance, tag-up, one-timer/jab/tie aims): the
+# Body-FACING aim (off-puck ready stance, tag-up, one-timer/lift/stick/tie aims): the
 # cursor goes DIRECTLY where the bot wants to point, like a human flicking the
 # mouse (_face_ring_point); facing_drag_speed
 # is the one rotation limit, as for a human. Any implied blade motion stays
@@ -2943,8 +2988,13 @@ func _off_puck_live_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 		var yank: Vector3 = _tie_yank_aim(snapshot, self_pos, me)
 		if yank.is_finite():
 			return yank
-	if _off_puck_jab_live:
-		return _jab_target(snapshot)
+	if _off_puck_lift_live:
+		return _lift_target(snapshot)
+	if _off_puck_stick_live:
+		var stick: Vector3 = _carrier_stick_aim(snapshot, self_pos,
+				snapshot.skater_states.get(_peer_id), _cached_role_decision)
+		if stick.is_finite():
+			return stick
 	if _off_puck_tie_live and _cached_role_decision != null:
 		var man: SkaterNetworkState = snapshot.skater_states.get(
 				_cached_role_decision.locked_man_pid)
@@ -2970,7 +3020,8 @@ func _ready_stance_aim(self_pos: Vector3, anchor: Vector3, snapshot: WorldSnapsh
 # deflection surface (glancing contact keeps the along-face pace,
 # PuckCollisionRules) and in tight the redirect finds the mouth. So the ready
 # stance takes the BLADE out of the shooting lane; the body stays where the role
-# put it. Active plays (interceptions, jabs, pickups) keep the blade on the line.
+# put it. Active plays (interceptions, a stick on the puck's path, pickups) keep
+# the blade on the line.
 
 # Depth of the discipline zone from our goal center — the house, where a
 # redirect still fits inside the mouth angle (tactical staging constant).

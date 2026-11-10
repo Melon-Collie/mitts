@@ -358,13 +358,25 @@ The election of WHICH body runs the race is not part of the verb and stays in
 `AILoosePuckChase` / `GameManager` — the verb answers "do I go", the election
 answers "am I the one who may".
 
-**The reach-in is the pressurer's extra, and it is a jab or a lift.** Whichever
-role owns the carrier reaches in when the puck is inside its stick; the jab aims
-the blade through the puck, and `AIStickLiftRead` turns it into a stick lift
-exactly when the carrier's body stands on the line to the puck (the jab has no
-path) and the shaft's liftable point is still in reach. The lift is the
-`lifts_sticks` cognition gate, closed on Easy so a shielded puck genuinely
-protects it against a beginner tier.
+**The pressurer's extra is his stick on the puck's path, or a lift.** A poke is
+any blade of ours within the poke radius of the carried puck, with no swing and
+no button (`PuckInteractionRules.check_poke`), so the stick costs nothing to
+have there and goes where the puck is going, not where it is
+(`AIStickPathRead`): the first point of the puck's dead-reckoned path his
+blade, slewing across his own skating, gets to no later than the puck; with
+none in time, the carrier's line to our net where it comes into his reach, the
+ice he has to skate the puck through. Never a discrete jab on a timer: a blade
+that comes back off the puck between stabs is a gap the carry skates through.
+The target is held inside the reach edges of the line his hips are on
+(`FacingRules.reach_edge`), so the stick never pivots him; while a turn to skate
+is still to come, the route's cursor makes that pivot and the stick waits. In
+our house the lane point is held out of the shooting lane as any parked blade
+is (`_deflect_safe_aim_dir`). `AIStickLiftRead` turns the reach-in into a stick
+lift exactly when the carrier's body stands on the line to the puck and the
+shaft's liftable point is still in reach. Reading the path is the
+`reads_puck_path` cognition gate and the lift the `lifts_sticks` one, both
+closed on Easy: its stick reads only where the puck and its own body are now, so
+a carrier skating past outruns it, and a shielded puck is safe.
 
 **A defensive-zone coverer's extra is the stick tie** (`AIStickTieRead`), and its
 price is its own stick. The man is tied only while the puck is coming to him — a loose

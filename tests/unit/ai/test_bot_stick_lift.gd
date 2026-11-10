@@ -1,8 +1,9 @@
 extends GutTest
 
-# The on-puck pressurer's reach-in: a jab at an open puck, a stick lift when the
-# carrier's body blocks the jab. Drives the real state machine's reach-in
-# (_poke_jab_aim) and its per-tick button hold (apply_stick_lift_input).
+# The on-puck pressurer's stick: on the puck's path when it is open, a stick
+# lift when the carrier's body stands between it and the puck. Drives the real
+# state machine's reach-ins (_lift_aim, _carrier_stick_aim) and its per-tick
+# button hold (apply_stick_lift_input).
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
@@ -52,8 +53,8 @@ func _held_ticks() -> int:
 
 func test_a_shielded_puck_draws_a_lift_from_behind() -> void:
 	var s: WorldSnapshot = _carrier_snap()
-	# From here the puck is out of the jab's reach but the shaft is not.
-	var aim: Vector3 = sm._poke_jab_aim(s, Vector3(0.0, 0.0, 1.2))
+	# From here the puck is out of the blade's reach but the shaft is not.
+	var aim: Vector3 = sm._lift_aim(s, Vector3(0.0, 0.0, 1.2))
 	assert_true(aim.is_finite(), "the shaft in reach: the bot reaches in")
 	var lift_point: Vector3 = AIStickLiftRead.shaft_lift_point(
 			s.skater_states[OPP_ID].top_hand_world, s.skater_states[OPP_ID].blade_contact_world)
@@ -61,21 +62,68 @@ func test_a_shielded_puck_draws_a_lift_from_behind() -> void:
 	assert_eq(_held_ticks(), SkaterAgentStickPlay.STICK_LIFT_HOLD_TICKS, "and holds the button through the hook")
 
 
-func test_an_open_puck_draws_the_jab() -> void:
+# Me beside the open puck, facing it, the stick wherever the snapshot puts it.
+func _me_beside(s: WorldSnapshot, pos: Vector3, blade: Vector3) -> SkaterNetworkState:
+	var me := SkaterNetworkState.new()
+	me.position = pos
+	me.facing = Vector2(s.puck_state.position.x - pos.x, s.puck_state.position.z - pos.z).normalized()
+	me.blade_contact_world = blade
+	s.skater_states[SELF_ID] = me
+	return me
+
+
+func test_an_open_puck_draws_the_stick_onto_it() -> void:
 	var s: WorldSnapshot = _carrier_snap()
-	var aim: Vector3 = sm._poke_jab_aim(s, Vector3(1.4, 0.0, -1.2))
-	assert_almost_eq(aim.distance_to(s.puck_state.position), 0.0, 1e-4, "it jabs the puck")
+	var me: SkaterNetworkState = _me_beside(s, Vector3(1.4, 0.0, -1.2), Vector3(1.0, 0.0, -1.2))
+	assert_false(sm._lift_aim(s, me.position).is_finite(), "nothing to lift past")
+	var aim: Vector3 = sm._carrier_stick_aim(s, me.position, me, sm._cached_role_decision)
+	assert_almost_eq(aim.distance_to(s.puck_state.position), 0.0, 1e-4, "the blade goes onto the puck")
 	assert_eq(_held_ticks(), 0, "no lift")
 
 
-func test_the_beginner_tier_only_jabs() -> void:
+func test_the_beginner_tier_never_lifts() -> void:
 	sm._lifts_sticks = false
 	var s: WorldSnapshot = _carrier_snap()
-	# Behind and close enough that the puck is inside the jab's reach.
-	var aim: Vector3 = sm._poke_jab_aim(s, Vector3(0.0, 0.0, 0.6))
-	assert_almost_eq(aim.distance_to(s.puck_state.position), 0.0, 1e-4,
-			"a shielded puck still draws only the jab")
+	# Behind and close enough that the puck is inside his reach.
+	assert_false(sm._lift_aim(s, Vector3(0.0, 0.0, 0.6)).is_finite(),
+			"a shielded puck draws no lift")
 	assert_eq(_held_ticks(), 0)
+
+
+func test_the_stick_leads_a_carrier_skating_past() -> void:
+	var s: WorldSnapshot = _carrier_snap()
+	s.skater_states[OPP_ID].velocity = Vector3(0.0, 0.0, -6.0)
+	var me: SkaterNetworkState = _me_beside(s, Vector3(2.0, 0.0, -3.0), Vector3(1.6, 0.0, -3.0))
+	var aim: Vector3 = sm._carrier_stick_aim(s, me.position, me, sm._cached_role_decision)
+	assert_true(aim.is_finite())
+	assert_lt(aim.z, s.puck_state.position.z - 0.5, "ahead of the puck, where it is going")
+
+
+func test_the_beginner_tier_reads_only_where_the_puck_is() -> void:
+	sm._reads_puck_path = false
+	var s: WorldSnapshot = _carrier_snap()
+	s.skater_states[OPP_ID].velocity = Vector3(0.0, 0.0, -6.0)
+	var me: SkaterNetworkState = _me_beside(s, Vector3(2.0, 0.0, -1.2), Vector3(1.4, 0.0, -1.2))
+	var aim: Vector3 = sm._carrier_stick_aim(s, me.position, me, sm._cached_role_decision)
+	assert_almost_eq(aim.distance_to(s.puck_state.position), 0.0, 1e-4,
+			"the blade goes to the puck where it is now")
+
+
+func test_only_the_pressurer_puts_his_stick_on_the_puck() -> void:
+	sm._cached_role_decision.pressures_puck = false
+	var s: WorldSnapshot = _carrier_snap()
+	var me: SkaterNetworkState = _me_beside(s, Vector3(1.4, 0.0, -1.2), Vector3(1.0, 0.0, -1.2))
+	assert_false(sm._carrier_stick_aim(s, me.position, me, sm._cached_role_decision).is_finite())
+
+
+func test_the_stick_waits_for_a_turn_to_skate() -> void:
+	# Backing in facing the play, told to turn and skate: the route's cursor
+	# turns him first.
+	sm._cached_role_decision.face_travel = true
+	var s: WorldSnapshot = _carrier_snap()
+	var me: SkaterNetworkState = _me_beside(s, Vector3(1.4, 0.0, -1.2), Vector3(1.0, 0.0, -1.2))
+	me.velocity = -Vector3(me.facing.x, 0.0, me.facing.y) * 4.0
+	assert_false(sm._carrier_stick_aim(s, me.position, me, sm._cached_role_decision).is_finite())
 
 
 func test_the_lift_hook_ends_inside_the_fast_drop_window() -> void:
@@ -235,27 +283,3 @@ func test_a_bot_holding_a_tie_follows_the_mans_stick_late() -> void:
 		moved = now
 	assert_almost_eq(moved, 1.0 - exp(-1.0), 0.01,
 			"one lag budget closes 1 - 1/e of the step: a bot reads a pull as late as a human holder")
-
-
-# The jab commits the blade for its window, so in reach is not enough: it waits
-# until the blade, at its own speed, can be on the puck inside the window.
-func _jab_with_blade_at(blade: Vector3) -> Vector3:
-	before_each()   # a fresh agent: no jab window or cooldown carried over
-	sm._lifts_sticks = false
-	var s: WorldSnapshot = _carrier_snap()
-	var me := SkaterNetworkState.new()
-	me.position = Vector3(2.0, 0.0, -1.2)
-	me.blade_contact_world = blade
-	s.skater_states[SELF_ID] = me
-	return sm._poke_jab_aim(s, me.position)
-
-
-func test_a_jab_waits_for_a_blade_that_can_get_there() -> void:
-	var window_m: float = sm._self_blade_speed \
-			* float(SkaterAgentStickPlay.POKE_JAB_ACTIVE_TICKS) \
-			/ float(_PhysicsConstants.PHYSICS_TICK) + GameRules.POKE_RADIUS_M
-	# The puck is in reach of the body either way; only the blade differs.
-	assert_true(_jab_with_blade_at(Vector3(window_m - 0.1, 0.0, -1.2)).is_finite(),
-			"a blade inside the window jabs")
-	assert_false(_jab_with_blade_at(Vector3(2.0, 0.0, 0.8)).is_finite(),
-			"a blade at his hip holds the jab for a better one")

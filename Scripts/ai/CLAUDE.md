@@ -21,7 +21,7 @@ passed per call, and only its own fields written.
 | collaborator | owns |
 |---|---|
 | `SkaterAgentSteering` | body steering to an anchor: the field, brake-pivot, arrival brake, stance carve |
-| `SkaterAgentStickPlay` | the jab / lift reach-in, the tie and its pull, the stick-check button |
+| `SkaterAgentStickPlay` | the pressurer's stick on the puck's path and the lift, the tie and its pull, the stick-check button |
 | `SkaterAgentStandUp` | meeting a carrier about to skate into us with Ctrl held, so the contact is our check |
 | `SkaterAgentBoardPlay` | reaching for and holding a pin, the pinned slide, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
@@ -68,12 +68,12 @@ The DECISION is throttled; the blade is not. Outside the press states the full
 dispatch runs every `_dispatch_period_ticks` (~45 Hz Hard, ~18 Hz Normal, ~13 Hz
 Easy at the 90 Hz tick). Skipped ticks reuse the cached move vector and the brake / stance / hit /
 stick-lift flags, but re-derive the blade target from CURRENT perception — the
-chase reception aim, the off-puck ready stance, jab and tie aims, and the carry
+chase reception aim, the off-puck ready stance, the pressurer's stick, lift and tie aims, and the carry
 cursor — so a catchable feed never transits a blade that only re-aims on
 dispatch ticks. Anything that re-derives on skipped ticks may only READ
 dispatch-throttled state. The press states (SHOOT / PASS / ONE_TIMER) always
 run full-rate: charge timing and pre-aim convergence are tick-sensitive. Every
-counter sized in physics ticks (jab windows, pre-aim wait, the
+counter sized in physics ticks (lift windows, pre-aim wait, the
 role-argmax cooldown) advances by the dispatch span, never by 1, or its
 wall-clock duration stretches with the tier.
 

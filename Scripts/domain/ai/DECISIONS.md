@@ -110,7 +110,7 @@ Shared station bounds: `last_man_discipline.gd:offensive_station_target` (OST) /
 | NONE | `skater_agent_state_machine.gd:_dispatch_role_decision` default arm | — | hold `self_pos` | — | — |
 
 Agent-side per-slot facts outside the role: `_is_reactive_slot` (argmax cadence),
-`_is_puck_pressurer_slot` (who may jab), ping GO_THERE override in `_state_off_puck`.
+`_is_puck_pressurer_slot` (whose stick goes onto the puck), ping GO_THERE override in `_state_off_puck`.
 
 ---
 
@@ -160,7 +160,7 @@ Functions in `skater_agent_state_machine.gd` unless named.
 |---|---|---|---|---|
 | OFF_PUCK | `_state_off_puck` | default | role decision, pings | `test_skater_agent_state_machine.gd` |
 | tag-up override | `_state_off_puck` → `_tag_up_anchor` | `snapshot.is_out_of_play(self)` | blue line | `test_world_snapshot_out_of_play.gd` |
-| off-puck blade priority | `_state_off_puck` | yank > jab > tie > one-timer aim > aim override > ready stance (`_ready_stance_aim`, `_compute_desired_aim_dir`, `_deflect_safe_aim_dir`) | decision, puck | `test_skater_agent_state_machine.gd` |
+| off-puck blade priority | `_state_off_puck` | yank > lift > the pressurer's stick on the puck's path (`_carrier_stick_aim`) > tie > one-timer aim > aim override > ready stance (`_ready_stance_aim`, `_compute_desired_aim_dir`, `_deflect_safe_aim_dir`) | decision, puck | `test_skater_agent_state_machine.gd` |
 | one-timer readiness preserve | `_state_off_puck`, `_set_one_timer_ready` | ready role through a pass flight (`ONE_TIMER_PRESERVE_MAX_TICKS`) | **real** carrier | `test_one_timer_chain.gd` |
 | → CHASE_PUCK | `_should_chase_loose_puck`, `skater_agent_reception.gd:incoming_pass`, `_post_puck_lost_state` | real carrier none, `_loose_elapsed_s ≥` reaction delay; GET_PUCK; reach band (`loose_puck_chase.gd:puck_comes_to_reach`, `_teammate_first_to_puck`); election; not `loose_puck_chase.gd:loose_puck_race_lost` | election, path | `test_skater_agent_state_machine.gd`, `test_loose_puck_chase.gd`; *slow* `test_loose_puck_engagement.gd` |
 | chase steering | `_state_chase_puck`, `_lead_intercept`, `_shade_intercept_goal_side` | chasing | contested 50/50 overshoot, blade-first route, rink clamp | `test_ai_chase_angling.gd`, `test_skater_agent_state_machine.gd` |
@@ -174,7 +174,7 @@ Functions in `skater_agent_state_machine.gd` unless named.
 | goalie-motion aim | `_shot_aim_point` → `shot_aim.gd:compute_open_net_aim` | one-timer / pre-aim fallback | goalie vx if `reads_goalie_motion` | `test_skater_agent_state_machine.gd` |
 | steering | `skater_agent_steering.gd:steer` → `steering.gd:compute_move_vector` (repels, `_moving_frame_pursuit`, `_net_detour`, `_carrier_threat_repel`), `is_rideable_anchor`, `should_brake`, `should_arrival_brake`, `pivot_cuts_in_stance`, `stance_carves_to` | every decided move | anchor, anchor velocity, engaged peer, retreat floor | `test_ai_steering.gd`, `test_approach_speed_cap.gd`; *slow* `test_defensive_routing.gd` |
 | offside brake | `apply_offside_guard` (last write in `skater_agent.gd:tick`) → `steering.gd:offside_brake`; `_teammate_must_tag_up` | every tick incl. skipped, after the deke and board play | puck vs line, team tag-up | `test_ai_steering.gd` |
-| jab / lift | `skater_agent_stick_play.gd:jab_aim`, `jab_target`; `stick_lift_read.gd:prefers_lift` | pressurer slot (`_is_puck_pressurer_slot`) or `pressures_puck`, puck in reach | `lifts_sticks` | `test_bot_stick_lift.gd`, `test_stick_lift_read.gd` |
+| stick on the puck / lift | `_carrier_stick_aim` → `skater_agent_stick_play.gd:path_aim`, `lane_aim` → `stick_path_read.gd:path_point` (the first point of the carried puck's dead-reckoned path the blade beats it to), `lane_point` (else his line to our net where it comes into reach), `within_reach_edges`; `skater_agent_stick_play.gd:lift_aim`, `lift_target`; `stick_lift_read.gd:prefers_lift` | pressurer slot (`_is_puck_pressurer_slot`) or `pressures_puck`, an opposing carrier; not while a turn to skate is still to come | `reads_puck_path`, `lifts_sticks` | `test_bot_stick_lift.gd`, `test_stick_path_read.gd`, `test_stick_lift_read.gd` |
 | stick tie / yank | `skater_agent_stick_play.gd:tie_aim`, `step_tie_follow`, `tie_yank_aim`; `stick_tie_read.gd` | `decision.locked_man_pid`, feed coming to him / me tied | `ties_sticks`, `TIE_LAG_BUDGET_S` | `test_bot_stick_lift.gd`, `test_stick_tie_read.gd` |
 | stick-check button | `skater_agent_stick_play.gd:apply_button` | every tick | lift / tie holds | `test_bot_stick_lift.gd` |
 | reach for a pin | `skater_agent_board_play.gd:_reach_for_pin` (stick button instead of the check) | dispatch holding `hit_held`, unbraced man on the wall within `PIN_REACH_S` of contact, the hit within his balance (`BodyBalanceRules.overshoot`), `_pin_worth_holding` | `check_aggression` | `test_bot_board_play.gd` |
@@ -200,7 +200,7 @@ Plumbing: `skater_agent_state_machine.gd:apply_profile` → SM field → (roles)
 | field | axis | E / N / H | read at |
 |---|---|---|---|
 | `carrier_reaction_delay_s` | precision | 0.34 / 0.22 / 0.05 | `game_manager.gd:_apply_bot_carrier_reaction_delay` (team shape); `_should_chase_loose_puck` (own chase clock) |
-| `dispatch_period_ticks` | precision | 9 / 6 / 2 | `dispatch`, `_stagger_cadence_phases`, `_state_off_puck`, `_state_carry`; `carrier.gd:decide`; `skater_agent_stick_play.gd:jab_aim` |
+| `dispatch_period_ticks` | precision | 9 / 6 / 2 | `dispatch`, `_stagger_cadence_phases`, `_state_off_puck`, `_state_carry`; `carrier.gd:decide`; `skater_agent_stick_play.gd:lift_aim` |
 | `shot_aim_error_rad` | precision | 0.055 / 0.04 / 0.01 | `_set_state` (sample); execution only |
 | `pass_aim_error_rad` | precision | 0.0225 / 0.015 / 0.01 | `_set_state`; `carrier_pass_search.gd:_pass_variant_ev`, `carrier_rim_search.gd:launch_for`, `carrier_field.gd:pass_option_from` (`pass_miss_prob`) |
 | `shot_timing_error_s` | precision | 0.24 / 0.16 / 0.10 | `_sample_release_hold_ticks` |
@@ -215,7 +215,8 @@ Plumbing: `skater_agent_state_machine.gd:apply_profile` → SM field → (roles)
 | `angles_the_chase` | cognition | F / T / T | `_state_chase_puck` |
 | `plays_rush_pass_lanes` | cognition | F / T / T | `rush_d.gd:_decide_d1` |
 | `protects_the_puck` | cognition | F / T / T | `carrier.gd:_pick_fire_phase`; `skater_agent_carry_cursor.gd:carry_aim`; `apply_board_play` (pin answer) |
-| `lifts_sticks` | cognition | F / T / T | `skater_agent_stick_play.gd:jab_aim` |
+| `lifts_sticks` | cognition | F / T / T | `skater_agent_stick_play.gd:lift_aim` |
+| `reads_puck_path` | cognition | F / T / T | `_carrier_stick_aim`; `skater_agent_stick_play.gd:path_aim` (velocities zeroed when off) |
 | `ties_sticks` | cognition | F / T / T | `skater_agent_stick_play.gd:tie_aim`, `tie_yank_aim` |
 | `blocks_shots` | cognition | F / T / T | `apply_shot_block` |
 
@@ -233,7 +234,7 @@ Hand-picked by design ([Evaluators model perception, never feel](CLAUDE.md#evalu
 - **Stability margins** — `role_slots.gd:HYSTERESIS_PENALTY_S/_M`; `role_slots_5v5.gd:POSITION_BIAS_S`; `team_brain.gd:STRONG_SIDE_HYSTERESIS_M`; `possession_state.gd:COVERAGE_HOLD_TICKS`; `rush_read.gd:TRACK_*_MARGIN_S`; `threat_assignment.gd:HYSTERESIS_MARGIN_FRAC`; `zone_coverage.gd:AREA_RELEASE_MARGIN_M`; `loose_puck_chase.gd:HYSTERESIS_S`; `station_search.gd:TARGET_SWITCH_MARGIN`; `action_scoring.gd:ACTION_HYSTERESIS_MARGIN_FRAC` (fire intents, the carry's destination and its near move); SM `FACE_*_HYSTERESIS_M`, `CARRY_MAN_TO_BEAT_HYSTERESIS_M`.
 - **Cadence / search budget** — `team_brain.gd:TICK_PERIOD`; SM `DISPATCH_PERIOD_TICKS`, `ROLE_DECISION_PERIOD_TICKS`, `FAR_PLAY_LOD_RADIUS_M`, `FINISHER_FLIGHT_NEAR_M`; `carrier.gd:PICK_ACTION_PERIOD_TICKS`, `OPEN_ICE_LOD_*`, `CARRY_BEAM_WIDTH`, `EXPOSURE_PROB_FLOOR`; `station_search.gd:SEARCH_STEP_M`, `POLAR_ANGLES`, `STATION_ARGMAX_LOD_M`, `ANTI_CROWD_RADIUS_M`.
 - **Carrier tactics** — `carrier.gd`: `PING_*_EV_MULT`, `PASS_OPTION_DISCOUNT`, `RIM_SOFT_SHARE` (`carrier_rim_search.gd`), `EXPOSURE_APPETITE_*`, `RECEIVER_DRIVE_*`, `OUTLET_DEVELOP_*`, the rolled moves (`carry_rollout.gd`: `HORIZON_S`, `SOFT_TURN_RAD`, `HARD_TURN_RAD`, `STEP_TICKS`), the destination menu's geometry (`carrier_destinations.gd`: `WIDE_*`, `REGROUP_*`, `EXIT_*`, `WALKOUT_*`, `WHEEL_*`), `PASS_LEAD_MAX_S`, `RIM_AIM_STANDOFF_M`; the dump-in's menu (`carrier_dump_search.gd`: `AIM_POINTS`, `PACE_FRACS`).
-- **Execution windows** — SM: `ONE_TIMER_*`, `BOT_WRISTER_*`, `INTENT_MAX_WAIT_TICKS`, `ENGAGEMENT_*`, `PROTECT_TURN_*`, `OWN_NET_BLADE_DISCIPLINE_M`, `READY_STANCE_AIM_FORWARD_M`, `FACE_THREAT_*`; `skater_agent_stick_play.gd` `POKE_JAB_*`, `STICK_LIFT_HOLD_TICKS`; `skater_agent_board_play.gd` `PIN_*`; `skater_agent_steering.gd:SHOT_LANE_LEAD_TIME_S`; `skater_agent_reception.gd` `RECEIVE_*`, `ONE_TIME_*`, `SHOT_RECEPTION_SCORE_GATE`, `WALL_KILL_BAND_M`, `BODY_WALL_MARGIN_M`; `skater_agent_one_timer.gd` `ONE_TIMER_*`, `BOT_ONE_TIMER_ZONE_OFFSET_*`; `skater_agent_carry_cursor.gd` `STICKHANDLE_*`, `CARRY_PROTECT_*`, `CARRY_BEHIND_NET_*`, `CARRY_FACE_*`, `FIRE_AIM_*`, `PASS_LOAD_MAX_SHIELD`; `shot_holds.gd:SNAP_FOREHAND_RAD`; `bot_mechanics.gd`.
+- **Execution windows** — SM: `ONE_TIMER_*`, `BOT_WRISTER_*`, `INTENT_MAX_WAIT_TICKS`, `ENGAGEMENT_*`, `PROTECT_TURN_*`, `OWN_NET_BLADE_DISCIPLINE_M`, `READY_STANCE_AIM_FORWARD_M`, `FACE_THREAT_*`; `skater_agent_stick_play.gd` `STICK_LIFT_*`; `stick_path_read.gd` `PATH_*`; `skater_agent_board_play.gd` `PIN_*`; `skater_agent_steering.gd:SHOT_LANE_LEAD_TIME_S`; `skater_agent_reception.gd` `RECEIVE_*`, `ONE_TIME_*`, `SHOT_RECEPTION_SCORE_GATE`, `WALL_KILL_BAND_M`, `BODY_WALL_MARGIN_M`; `skater_agent_one_timer.gd` `ONE_TIMER_*`, `BOT_ONE_TIMER_ZONE_OFFSET_*`; `skater_agent_carry_cursor.gd` `STICKHANDLE_*`, `CARRY_PROTECT_*`, `CARRY_BEHIND_NET_*`, `CARRY_FACE_*`, `FIRE_AIM_*`, `PASS_LOAD_MAX_SHIELD`; `shot_holds.gd:SNAP_FOREHAND_RAD`; `bot_mechanics.gd`.
 - **Steering field** — `steering.gd`: `*_REPEL_*`, `NET_DETOUR_*`, `ANCHOR_DEADBAND`, `BRAKE_PIVOT_*`, `STANCE_*`, `ARRIVAL_BRAKE_*`, `OFFSIDE_BRAKE_*`.
 - **Faceoff draw** — `ai_controller.gd`: `bot_draw_*`.
 - **Possession continuation** — `possession_floor.gd`: `FLOOR_*`, `SLOT_BONUS`, `SLOT_REF_M` (what possession is worth before anything specific is on; `docs/possession-floor-plan.md`); `action_scoring.gd:REBOUND_RECOVER_SHARE` (the compete's rebound credit on a shot).
