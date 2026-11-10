@@ -25,7 +25,7 @@ func _trace(carrier_x: float, d_x: float, depth: float, speed: float, secs: floa
 	duel.start(CARRIER)
 	duel._skater(CARRIER).facing = Vector2(0.0, -1.0)
 	duel._skater(DEFENDER).facing = Vector2(0.0, 1.0)
-	gut.p("   t    car(x,z)  car vx vz |   def(x,z)   def vx vz  face | slot     stand-def(dx,dz) stand vx vz | floor cap  turn chk | pursuit(x,z) stick(x,z) brk stn | gap")
+	gut.p("   t    car(x,z)  car vx vz |   def(x,z)   def vx vz  face | slot     stand-def(dx,dz) stand vx vz | floor cap  turn chk | pursuit(x,z) stick(x,z) brk stn | gap  blade-puck jab")
 	for t: int in int(secs / DT):
 		duel.step()
 		if t % EVERY_TICKS != 0:
@@ -52,10 +52,11 @@ func _trace(carrier_x: float, d_x: float, depth: float, speed: float, secs: floa
 					"y" if d.face_travel else "n", "y" if d.commit_check else "n",
 					pursue.x, pursue.y, def.input.move_vector.x, def.input.move_vector.y,
 					"B" if def.input.brake else ".", "S" if def.input.stance_held else "."]
-		row += " | %.1f" % car.pos.distance_to(def.pos)
+		row += " | %.1f  %.2f %s" % [car.pos.distance_to(def.pos), def.blade.distance_to(duel.puck_pos),
+				"J" if sm._stick_play._poke_jab_active_ticks > 0 else "."]
 		gut.p(row)
 
 
 func test_trace_916() -> void:
-	_trace(8.0, 3.0, 14.0, 9.0, 4.2)
+	_trace(8.0, 3.0, 14.0, 9.0, 6.5)
 	assert_true(true)
