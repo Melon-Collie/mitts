@@ -2748,14 +2748,17 @@ func apply_stick_lift_input(input: InputState) -> void:
 # True if our current role is on the puck defensively — the only roles whose
 # stick goes onto the puck:
 # the PRESSURER slots (AIRoleSlots.pressures_puck), a station role pressuring
-# this beat, and in the 5v5 zone the one area role that owns the puck
-# (AIZoneCoverage.pressure_slot).
+# this beat, in the 5v5 zone the one area role that owns the puck
+# (AIZoneCoverage.pressure_slot), and on the back line the D who owns the
+# carrier (AIRoleSlots.owns_back_line_carrier).
 func _is_puck_pressurer_slot(snapshot: WorldSnapshot) -> bool:
 	if _current_strategy == null:
 		return false
 	if _cached_role_decision != null and _cached_role_decision.pressures_puck:
 		return true   # a station role on the carrier this beat (the pinching D)
 	var slot: int = _current_strategy.get_slot(_peer_id)
+	if AIRoleSlots.is_back_line_d(slot):
+		return AIRoleSlots.owns_back_line_carrier(_current_strategy, slot)
 	return AIRoleSlots.pressures_puck(slot) or _owns_zone_pressure(slot, snapshot)
 
 

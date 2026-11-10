@@ -100,8 +100,10 @@ var coverage_downgraded: bool = false
 var _forechecking: bool = false
 var forecheck_margin_s: float = -INF
 var forecheck_depth_margin_s: float = -INF
-# 5v5 DZONE: the zone role, and its holder, that owns a carrier coming at our net
-# at pace (AIRoleSlots.carrier_owner); NONE / -1 when the area rule stands.
+# 5v5: the role, and its holder, that owns a carrier coming at our net at pace
+# (AIRoleSlots.carrier_owner) — in DZONE a zone role, in TRANS_DEFENSE one of
+# the back-line D; NONE / -1 when the area rule (DZONE) or BACK_STRONG
+# (TRANS_DEFENSE) stands.
 var _pressure_slot_override: int = AIRoleSlots.Slot.NONE
 var _pressure_owner_peer: int = -1
 var _zone_peers: Array[int] = []
@@ -324,21 +326,28 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 	ping_directives.apply_overrides(slot_assignments, threat_assignments, ping_carrier)
 
 
-# 5v5 DZONE: which zone role owns a carrier coming at our net at pace — the
-# soonest goal-side holder (AIRoleSlots.carrier_owner), the D who rode him in
-# keeping him across the line (last tick's owner, else BACK_STRONG's holder,
-# takes the hysteresis).
+# 5v5: which role owns a carrier coming at our net at pace — the soonest
+# goal-side holder (AIRoleSlots.carrier_owner), the D who rode him in keeping
+# him across the line (last tick's owner, else BACK_STRONG's holder, takes the
+# hysteresis). In DZONE any zone role; in TRANS_DEFENSE either back-line D, so a
+# carrier up the middle is the D in front of him, not the strong D across from
+# him (AIRoleSlots.owns_back_line_carrier).
 func _elect_zone_carrier_owner(snapshot: WorldSnapshot, prev_assignments: Dictionary) -> void:
 	var prev_owner: int = _pressure_owner_peer if _pressure_owner_peer != -1 \
 			else AIRoleSlots.prev_holder(prev_assignments, AIRoleSlots.Slot.PRESSURE)
 	_pressure_slot_override = AIRoleSlots.Slot.NONE
 	_pressure_owner_peer = -1
-	if team_size < 5 or state != AIPossessionState.State.DZONE:
+	if team_size < 5:
 		return
 	_zone_peers.clear()
 	for pid: int in slot_assignments:
-		if AIRoleSlots5.is_zone_slot(slot_assignments[pid]):
+		var slot: int = slot_assignments[pid]
+		if (state == AIPossessionState.State.DZONE and AIRoleSlots5.is_zone_slot(slot)) \
+				or (state == AIPossessionState.State.TRANS_DEFENSE
+						and AIRoleSlots.is_back_line_d(slot)):
 			_zone_peers.append(pid)
+	if _zone_peers.is_empty():
+		return
 	_pressure_owner_peer = AIRoleSlots.carrier_owner(snapshot, team_id, _own_goal_z,
 			_team_id_by_peer, _zone_peers, _caps_by_peer, prev_owner)
 	if _pressure_owner_peer != -1:

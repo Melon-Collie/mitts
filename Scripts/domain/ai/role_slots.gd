@@ -357,6 +357,22 @@ static func carrier_owner(snapshot: WorldSnapshot, team_id: int, own_goal_z: flo
 	return best_pid
 
 
+static func is_back_line_d(slot: int) -> bool:
+	return slot == Slot.BACK_STRONG or slot == Slot.BACK_MID
+
+
+# Whether `slot` is the back-line D who owns the carrier: carrier_owner's pick
+# while one comes at our net at pace (TeamStrategyView.pressure_slot_override),
+# BACK_STRONG otherwise. `view` may be null (no brain).
+static func owns_back_line_carrier(view: TeamStrategyView, slot: int) -> bool:
+	if not is_back_line_d(slot):
+		return false
+	var owner: int = view.pressure_slot_override() if view != null else Slot.NONE
+	if not is_back_line_d(owner):
+		owner = Slot.BACK_STRONG
+	return slot == owner
+
+
 # Last tick's holder of `slot`'s continuity class (_hysteresis_class), or -1.
 static func prev_holder(prev_assignments: Dictionary, slot: int) -> int:
 	var cls: int = _hysteresis_class(slot)

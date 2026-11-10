@@ -39,9 +39,10 @@ func ping_pass_target(_peer_id: int) -> int:
 func ping_chase_peer() -> int:
 	return -1
 
-# The 5v5 zone role that owns the carrier while he comes at our net at pace
-# (AIRoleSlots.carrier_owner), or NONE: the area that holds the puck owns it
-# (AIZoneCoverage.pressure_slot).
+# The 5v5 role that owns the carrier while he comes at our net at pace
+# (AIRoleSlots.carrier_owner): a zone role in DZONE, BACK_STRONG or BACK_MID in
+# TRANS_DEFENSE. NONE: the area that holds the puck owns it
+# (AIZoneCoverage.pressure_slot), or BACK_STRONG does (AIRoleSlots.owns_back_line_carrier).
 func pressure_slot_override() -> int:
 	return AIRoleSlots.Slot.NONE
 

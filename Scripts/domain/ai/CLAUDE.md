@@ -283,7 +283,15 @@ which decides the rest state. Raced up to the post, he has the most momentum to
 brake out, and the carrier went to the slower man in the middle while he
 drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
 
-- `BACK_STRONG` owns the carrier and **stands him up at our line**: while even a
+- `BACK_STRONG` owns the carrier — in 5v5, unless the brain names `BACK_MID`
+  (`AIRoleSlots.owns_back_line_carrier`): while a carrier comes at our net at pace the
+  back-line D whose stick gets onto his line farthest out owns him
+  (`AIRoleSlots.carrier_owner`, the election DZONE keeps), so a carrier up the
+  middle is the D in front of him, and the strong D keeps the strong lane as
+  `BACK_WEAK` keeps the weak one (`AIRoleNeutralZone.decide_back_lane`). Crossing
+  to a middle carrier from the strong post leaves the strong lane to the pass,
+  and holding the lane instead leaves the seam between the D to the carrier
+  (`test_five_on_five_set_shape.gd`). The carrier's D **stands him up at our line**: while even a
   man standing on the line would make his retreat in time (the stand priced with
   a standing start's ramp cushion is still up-ice of it), he waits on it, inside
   the dots, and the carrier comes to him. Then the gap ladder and its route as
@@ -550,7 +558,8 @@ race solved inside its walk's step, last tick's owner or BACK_STRONG's holder
 taking the hysteresis, a dead heat to the man nearest his line) — 3v3's
 PRESSURE, and in 5v5 the zone role that body holds, published as
 `TeamStrategyView.pressure_slot_override` over the area rule
-(`AIZoneCoverage.pressure_slot`). Raced to where the puck is, the backchecker
+(`AIZoneCoverage.pressure_slot`), the same election that names the carrier's D
+on the back line before it. Raced to where the puck is, the backchecker
 he has just passed wins it and never catches him, and the D who rode him back
 pays a reversal his line never asks of him: a lone carrier at speed walked to
 the net front past five defenders (`test_lone_carrier_entry.gd`). The same holds for the route (above) and for the hit:

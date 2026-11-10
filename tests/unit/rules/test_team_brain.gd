@@ -458,6 +458,48 @@ func test_a_stalled_carrier_leaves_the_puck_to_its_area() -> void:
 	assert_eq(brain.pressure_slot_override(), AIRoleSlots.Slot.NONE)
 
 
+# 5v5 neutral zone: their carrier up the middle at the red line at pace, two
+# wingers wide of him; our D pair back, one (140) in front of him, one (130)
+# wide on the strong side; our forwards caught up the ice behind the play.
+func _middle_rush_snapshot() -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	for entry: Array in [
+			[100, 0, Vector3(0.0, 0.0, -10.0), Vector3(0.0, 0.0, 7.0)],
+			[110, 0, Vector3(-4.0, 0.0, -11.0), Vector3(0.0, 0.0, 7.0)],
+			[120, 0, Vector3(4.0, 0.0, -11.0), Vector3(0.0, 0.0, 7.0)],
+			[130, 0, Vector3(6.5, 0.0, 9.0), Vector3(0.0, 0.0, 6.0)],
+			[140, 0, Vector3(-1.0, 0.0, 7.0), Vector3(0.0, 0.0, 6.0)],
+			[200, 1, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 8.5)],
+			[210, 1, Vector3(-8.0, 0.0, -1.5), Vector3(0.0, 0.0, 8.5)],
+			[220, 1, Vector3(8.0, 0.0, -1.5), Vector3(0.0, 0.0, 8.5)]]:
+		var s := SkaterNetworkState.new()
+		s.position = entry[2]
+		s.velocity = entry[3]
+		snap.skater_states[entry[0]] = s
+	var puck := PuckNetworkState.new()
+	puck.carrier_peer_id = 200
+	puck.position = Vector3(1.0, 0.0, 0.0)
+	snap.puck_state = puck
+	return snap
+
+
+func test_a_carrier_up_the_middle_is_the_back_line_d_in_front_of_him() -> void:
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _middle_rush_snapshot())
+	assert_eq(brain.state, AIPossessionState.State.TRANS_DEFENSE,
+			"fixture sanity: TRANS_DEFENSE")
+	assert_true(AIRoleSlots.is_back_line_d(brain.slot_assignments.get(130, -1))
+			and AIRoleSlots.is_back_line_d(brain.slot_assignments.get(140, -1)),
+			"fixture sanity: the D pair is the back line; got %s" % str(brain.slot_assignments))
+	var owner_slot: int = brain.pressure_slot_override()
+	assert_eq(owner_slot, brain.slot_assignments[140],
+			"the D on his line owns him, whichever post he holds")
+	assert_true(AIRoleSlots.owns_back_line_carrier(brain, brain.slot_assignments[140]))
+	assert_false(AIRoleSlots.owns_back_line_carrier(brain, brain.slot_assignments[130]),
+			"and the D across from him does not")
+
+
 func test_zone_coverage_takes_no_man_still_up_the_ice() -> void:
 	# His trailers are in the neutral zone: escorting them walks the coverage
 	# away from the puck.

@@ -49,12 +49,15 @@ static var _league_caps := AISkaterCaps.new()
 
 
 static func decide(ctx: RoleContext, slot: int) -> RoleDecision:
+	if AIRoleSlots.owns_back_line_carrier(ctx.team_brain, slot):
+		return _decide_d1(ctx)
 	if slot == AIRoleSlots.Slot.BACK_MID:
 		return _decide_d2(ctx)
-	return _decide_d1(ctx)
+	# BACK_STRONG with the carrier BACK_MID's: the strong lane, as BACK_WEAK keeps the weak one.
+	return AIRoleNeutralZone.decide_back_lane(ctx, ctx.strong_x)
 
 
-# ── BACK_STRONG: own the carrier ─────────────────────────────────────────────
+# ── The carrier's D (BACK_STRONG, or BACK_MID by election) ─────────────────────
 
 static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
