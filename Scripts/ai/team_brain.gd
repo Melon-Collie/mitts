@@ -435,13 +435,19 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 	var defender_caps: Dictionary = {}
 	var eligible_men: Dictionary = {}
 	var zone_slot_by_def: Dictionary = {}
+	# With the puck loose and one of ours elected to race it, he is on the puck
+	# and the area that holds it covers a man like the rest.
+	var chaser: int = snapshot.closest_to_puck_by_team.get(team_id, -1) \
+			if carrier_pid == -1 else -1
 	for pid: int in slot_assignments:
 		var slot: int = slot_assignments[pid]
 		var is_zone: bool = AIRoleSlots5.is_zone_slot(slot)
 		if slot != AIRoleSlots.Slot.MARK and not is_zone:
 			continue
+		if pid == chaser:
+			continue
 		# The area that owns the puck is pressuring it, not covering a man.
-		if is_zone and slot == pressure_slot:
+		if is_zone and slot == pressure_slot and chaser == -1:
 			continue
 		if not snapshot.skater_states.has(pid):
 			continue

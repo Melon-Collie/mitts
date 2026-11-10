@@ -401,6 +401,33 @@ func test_the_area_owning_the_puck_covers_nobody() -> void:
 				"the pressure owner (slot %d) was also assigned a man" % owner_slot)
 
 
+func test_a_loose_puck_is_the_elected_chasers_and_the_area_owner_covers_a_man() -> void:
+	# The corner puck squirts loose and one of ours (120) is elected to race it:
+	# he is on the puck, so he takes no man, and the strong D whose ice holds it
+	# is handed one instead of standing off the puck and every man.
+	var brain: TeamBrain = _zone_brain()
+	brain.force_retick()
+	brain.tick(0.001, _make_5v5_zone_snapshot())
+	var snap: WorldSnapshot = _make_5v5_zone_snapshot()
+	snap.puck_state.carrier_peer_id = -1
+	snap.puck_state.position = Vector3(8.0, 0.0, 24.5)
+	snap.puck_state.velocity = Vector3(-1.0, 0.0, 0.5)
+	snap.closest_to_puck_by_team[TEAM_ID] = 120
+	brain.force_retick()
+	brain.tick(0.001, snap)
+	assert_eq(brain.state, AIPossessionState.State.DZONE, "fixture sanity: DZONE")
+	assert_false(brain.threat_assignments.has(120), "the chaser takes no man")
+	var owner_slot: int = AIZoneCoverage.pressure_owner(
+			brain.strong_x(), GameRules.GOAL_LINE_Z, snap.puck_state.position)
+	var area_owner: int = -1
+	for pid: int in brain.slot_assignments:
+		if brain.slot_assignments[pid] == owner_slot:
+			area_owner = pid
+	assert_ne(area_owner, 120, "fixture sanity: the chaser is not the area's owner")
+	assert_true(brain.threat_assignments.has(area_owner),
+			"the area's owner covers a man; partition %s" % str(brain.threat_assignments))
+
+
 # ── A carrier at pace across our line ────────────────────────────────────────
 
 # 5v5: their carrier just across our line on the left wall at `carrier_vel`, his

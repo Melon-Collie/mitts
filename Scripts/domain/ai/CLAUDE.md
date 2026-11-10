@@ -559,7 +559,11 @@ overlap on purpose, and independent argmaxes double-cover (most D-zone ticks)
 while leaving the best man open. The areas tile the zone, so a man can stand in
 nobody's coverable area only when his area's owner is on the puck: the pressure
 owner's area is therefore every zone defender's while he is (a strong D in the
-corner leaves his net-front man to whoever the matching sends).
+corner leaves his net-front man to whoever the matching sends). A loose puck
+with a teammate elected to race it (`closest_to_puck_by_team`) is HIS, not the
+area's: the chaser leaves the matching and the area's owner covers a man
+(`AIZoneCoverage.chased_by_another`), or one body stands off both the puck and
+every man while the race is on (`test_zone_coverage_shape.gd`'s low cycle).
 
 ## The gap ladder is one ladder, and both puck-owners read it
 
