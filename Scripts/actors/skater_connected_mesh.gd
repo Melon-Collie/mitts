@@ -586,10 +586,13 @@ static func _torso_vertex(b: ConnectedSkinBuilder, p: Vector3, rest_y: float, th
 		var bend_y: float = SkaterMeshBuilder.torso_ring(SkaterMeshBuilder.TORSO_BEND_STATION)[0].y
 		var lower: int = 1 if rest_y <= bend_y + 1e-5 else 0
 		return b.vertex(p, [Bind.COLUMN_BASE + column * 2 + lower], [1.0])
-	var t: float = SkaterJerseyHem.tuck_share(tuck, theta) * clampf(
+	var share: float = SkaterJerseyHem.tuck_share(tuck, theta)
+	var t: float = share * clampf(
 			(SkaterJerseyHem.BUNCH_Y_M - rest_y) / (SkaterJerseyHem.BUNCH_Y_M - SkaterJerseyHem.PAD_Y_M),
 			0.0, 1.0)
-	var hips: float = SkaterJerseyHem.hang(rest_y) * lerpf(SkaterJerseyHem.carry(theta), 1.0, t)
+	var hips: float = lerpf(
+			SkaterJerseyHem.hang(rest_y) * lerpf(SkaterJerseyHem.carry(theta), 1.0, t),
+			SkaterJerseyHem.tucked_hang(rest_y), share)
 	if hips <= 0.0:
 		return b.vertex(p, [Bind.TORSO], [1.0])
 	return b.vertex(p, [Bind.TORSO, Bind.TAIL], [1.0 - hips, hips])

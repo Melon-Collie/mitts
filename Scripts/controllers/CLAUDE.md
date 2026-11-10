@@ -609,6 +609,16 @@ replace `apply_facing` wholesale, and one that skips this leaves the hips frozen
 at the last yaw anyone wrote — which is how skaters spent whole countdowns still
 turned down the line they skated in on.
 
+**The gait stays on the render clock through the prep.** The locked-phase paths
+pose the blade, the upper body and the hips' yaw on the tick and leave the legs,
+the head and the off hand to the render hook (`_render_pose_update`), as live
+play does. Run on the tick, the gait read the previous frame's animation-LOD
+verdict (`Skater.on_camera`), so every skater but the local one stepped on
+stale legs, and the bottom hand was placed on the post-tick shaft the stick is
+not drawn at. The faceoff's frame drop is then written at render rate, as the
+block's is in live play; the tick's reads of it (`_address_hand_ceiling`) take
+the last frame's.
+
 ## Build once, fill scratch
 
 A per-tick collaborator that produces a compound result should own ONE

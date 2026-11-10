@@ -235,7 +235,11 @@ up with the chest over the seat — so a fold or a twist bends the sweater
 rather than driving its hem through the pants. A tuck (the gear style's
 `jersey_tuck`) is which shared skin the skater wears
 (`SkaterConnectedMesh.shared_mesh`): the tucked tail is pulled inside the
-waistband, and the flaps hold it there.
+waistband, and the flaps hold it there. The waistband holds the jersey just
+above it too (`SkaterJerseyHem.tucked_hang`): the fold pivots at the hip
+joints, well under the rim, so chest-borne cloth there swings through the rim
+at a deep fold (the centre's address), where the loose back meets the rim's
+drawn-in top instead. `test_tuck_holds_through_the_address.gd` holds both.
 `tests/unit/actors/test_body_chain.gd` holds the chain,
 `test_pelvis_fills_the_seat.gd` the seat and `test_jersey_tuck.gd` the tucks.
 

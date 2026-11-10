@@ -32,6 +32,12 @@ const HEM_Y_M: float = -0.350
 # Share of the tail the hips carry at the back; it rises to all of it at the
 # front.
 const CARRY_BACK: float = 0.3
+# Where the jersey is tucked in, the waistband holds it: the hips carry all of it
+# from the ring that bunches over the pad down, the chest taking it back by this
+# height (the waist). The trunk folds about the hip joints, well under the
+# waistband, so cloth above a rim it does not ride swings through the rim — at
+# the centre's address over the dot, by the most.
+const TUCK_PIVOT_Y_M: float = 0.0
 
 # Profile radii (before the lathe's x/z scale) of a tucked ring: the ring under
 # the pad, the belt ring just inside the pants' rim, and the tail below it well
@@ -59,6 +65,12 @@ const CORNER_OUTER_RAD: float = deg_to_rad(85.0)
 # How much of a torso vertex at rest height `y` hangs below the chest.
 static func hang(y: float) -> float:
 	return _smooth((PIVOT_Y_M - y) / (PIVOT_Y_M - BELT_Y_M))
+
+
+# How much of a torso vertex at rest height `y` the hips carry where the jersey
+# is tucked in.
+static func tucked_hang(y: float) -> float:
+	return _smooth((TUCK_PIVOT_Y_M - y) / (TUCK_PIVOT_Y_M - BUNCH_Y_M))
 
 
 # How much of what hangs at `azimuth` the hips carry when it is loose.
