@@ -288,7 +288,11 @@ drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
   back-line D whose stick gets onto his line farthest out owns him
   (`AIRoleSlots.carrier_owner`, the election DZONE keeps), so a carrier up the
   middle is the D in front of him, and the strong D keeps the strong lane as
-  `BACK_WEAK` keeps the weak one (`AIRoleNeutralZone.decide_back_lane`). Crossing
+  `BACK_WEAK` keeps the weak one (`AIRoleNeutralZone.decide_back_lane`). While
+  nobody is elected (a carrier not at pace, a pass in flight) the D who had
+  him keeps him: the posts mirror whenever the strong side flips, and handing
+  the carrier on with `BACK_STRONG`'s label turns the man on him away and sends
+  his partner across. Crossing
   to a middle carrier from the strong post leaves the strong lane to the pass,
   and holding the lane instead leaves the seam between the D to the carrier
   (`test_five_on_five_set_shape.gd`). The carrier's D **stands him up at our line**: while even a

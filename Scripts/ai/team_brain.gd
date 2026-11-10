@@ -329,9 +329,10 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 # 5v5: which role owns a carrier coming at our net at pace — the soonest
 # goal-side holder (AIRoleSlots.carrier_owner), the D who rode him in keeping
 # him across the line (last tick's owner, else BACK_STRONG's holder, takes the
-# hysteresis). In DZONE any zone role; in TRANS_DEFENSE either back-line D, so a
-# carrier up the middle is the D in front of him, not the strong D across from
-# him (AIRoleSlots.owns_back_line_carrier).
+# hysteresis). In DZONE any zone role, the area rule standing while none is
+# elected; in TRANS_DEFENSE either back-line D, so a carrier up the middle is the
+# D in front of him, not the strong D across from him
+# (AIRoleSlots.owns_back_line_carrier), and kept by whoever had him.
 func _elect_zone_carrier_owner(snapshot: WorldSnapshot, prev_assignments: Dictionary) -> void:
 	var prev_owner: int = _pressure_owner_peer if _pressure_owner_peer != -1 \
 			else AIRoleSlots.prev_holder(prev_assignments, AIRoleSlots.Slot.PRESSURE)
@@ -350,6 +351,13 @@ func _elect_zone_carrier_owner(snapshot: WorldSnapshot, prev_assignments: Dictio
 		return
 	_pressure_owner_peer = AIRoleSlots.carrier_owner(snapshot, team_id, _own_goal_z,
 			_team_id_by_peer, _zone_peers, _caps_by_peer, prev_owner)
+	# On the back line the carrier stays with the D who had him while nobody is
+	# elected (no carrier at pace, a pass in flight): the posts mirror whenever
+	# the strong side flips, and handing him on with BACK_STRONG's label turns the
+	# man already on him away and sends his partner across.
+	if _pressure_owner_peer == -1 and state == AIPossessionState.State.TRANS_DEFENSE \
+			and _zone_peers.has(prev_owner):
+		_pressure_owner_peer = prev_owner
 	if _pressure_owner_peer != -1:
 		_pressure_slot_override = slot_assignments[_pressure_owner_peer]
 
