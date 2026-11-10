@@ -283,7 +283,33 @@ which decides the rest state. Raced up to the post, he has the most momentum to
 brake out, and the carrier went to the slower man in the middle while he
 drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
 
-- `BACK_STRONG` owns the carrier and **stands him up at our line**: while even a
+- `BACK_STRONG` owns the carrier — in 5v5, unless the brain names `BACK_MID`
+  (`AIRoleSlots.owns_back_line_carrier`): while a carrier comes at our net at pace the
+  back-line D whose stick gets onto his line farthest out owns him
+  (`AIRoleSlots.carrier_owner`, the election DZONE keeps), so a carrier up the
+  middle is the D in front of him, and the strong D keeps the strong lane as
+  `BACK_WEAK` keeps the weak one (`AIRoleNeutralZone.decide_back_lane`). A
+  carrier not coming at pace is the D's whose lane his skating takes him into
+  (`AIRoleSlots.lane_owner`, off his lead): the D-to-D switch, the D on the side
+  he picks taking him and the other sliding behind; with the puck in flight the
+  D who had him keeps him. Never `BACK_STRONG`'s label: the posts mirror
+  whenever the strong side flips, and a carrier drifting through the middle
+  turned the man on him away and sent his partner across, while keeping him
+  with whoever had him lost the switch. Until the carrier picks a side, while
+  his lead runs between the pair, both D play him
+  (`AIBackLineStands.bracket_side`): the carrier's D on his line at the
+  ladder's gap, his partner a stick off it on his own side, each skated
+  straight to rather than through `depth_first`. Once the ladder steps up on a
+  stalled carrier, one D steps up and the partner goes back to his own job: two
+  stepping up together leave the men still at speed behind them. The depth the
+  pair holds is still sized from the carrier alone, so a stalled carrier with
+  a winger at speed on the stepping D's outside beats the step-up (#930). That is the coached 3-on-2 —
+  make him pick a side, no seam between the D — and it replaces the one-man
+  cross to the middle, which gave up the crossing D's depth on the wingers and
+  his lane to the pass (`test_five_on_five_set_shape.gd`). Crossing
+  to a middle carrier from the strong post leaves the strong lane to the pass,
+  and holding the lane instead leaves the seam between the D to the carrier
+  (`test_five_on_five_set_shape.gd`). The carrier's D **stands him up at our line**: while even a
   man standing on the line would make his retreat in time (the stand priced with
   a standing start's ramp cushion is still up-ice of it), he waits on it, inside
   the dots, and the carrier comes to him. Then the gap ladder and its route as
@@ -358,13 +384,25 @@ The election of WHICH body runs the race is not part of the verb and stays in
 `AILoosePuckChase` / `GameManager` — the verb answers "do I go", the election
 answers "am I the one who may".
 
-**The reach-in is the pressurer's extra, and it is a jab or a lift.** Whichever
-role owns the carrier reaches in when the puck is inside its stick; the jab aims
-the blade through the puck, and `AIStickLiftRead` turns it into a stick lift
-exactly when the carrier's body stands on the line to the puck (the jab has no
-path) and the shaft's liftable point is still in reach. The lift is the
-`lifts_sticks` cognition gate, closed on Easy so a shielded puck genuinely
-protects it against a beginner tier.
+**The pressurer's extra is his stick on the puck's path, or a lift.** A poke is
+any blade of ours within the poke radius of the carried puck, with no swing and
+no button (`PuckInteractionRules.check_poke`), so the stick costs nothing to
+have there and goes where the puck is going, not where it is
+(`AIStickPathRead`): the first point of the puck's dead-reckoned path his
+blade, slewing across his own skating, gets to no later than the puck; with
+none in time, the carrier's line to our net where it comes into his reach, the
+ice he has to skate the puck through. Never a discrete jab on a timer: a blade
+that comes back off the puck between stabs is a gap the carry skates through.
+The target is held inside the reach edges of the line his hips are on
+(`FacingRules.reach_edge`), so the stick never pivots him; while a turn to skate
+is still to come, the route's cursor makes that pivot and the stick waits. In
+our house the lane point is held out of the shooting lane as any parked blade
+is (`_deflect_safe_aim_dir`). `AIStickLiftRead` turns the reach-in into a stick
+lift exactly when the carrier's body stands on the line to the puck and the
+shaft's liftable point is still in reach. Reading the path is the
+`reads_puck_path` cognition gate and the lift the `lifts_sticks` one, both
+closed on Easy: its stick reads only where the puck and its own body are now, so
+a carrier skating past outruns it, and a shielded puck is safe.
 
 **A defensive-zone coverer's extra is the stick tie** (`AIStickTieRead`), and its
 price is its own stick. The man is tied only while the puck is coming to him — a loose
@@ -418,11 +456,14 @@ opponent in our end winds up and we stand on the line from the release to our
 net, the shot is still under the block's seal when it reaches us (his replicated
 loft rung under gravity), and we are not inside the room our goalie needs to see
 around a screen. He stays down while the released puck is still coming through
-us. The last defender on a man-down rush dives across a pass lane past his
-standing reach: his stick, plus what he skates toward the lane while the pass
-travels to it from rest across it. The dive must still reach the lane, and no
-teammate may be nearer it. Both are the `blocks_shots` cognition gate, closed on
-Easy.
+us. The dive is rarer: only the lone defender back, goal-side (INSIDE, with
+`AIRushRead.back_count` 1), against two or more, the carrier inside shooting
+range in front of our goal line where our goalie can take him, dives across a
+pass lane past his standing reach: his stick, plus what he skates toward the lane
+while the pass travels to it from rest across it. The dive must still reach the
+lane, and no teammate may be nearer it. A beaten defender, or one with a second
+man back, stays on his feet and in the play. Both are the `blocks_shots`
+cognition gate, closed on Easy.
 
 **The coverer's other extra is the press** (`AIPressRead`, applied by
 `SkaterAgentPress` after every other body and stick pass). Within
@@ -518,7 +559,11 @@ overlap on purpose, and independent argmaxes double-cover (most D-zone ticks)
 while leaving the best man open. The areas tile the zone, so a man can stand in
 nobody's coverable area only when his area's owner is on the puck: the pressure
 owner's area is therefore every zone defender's while he is (a strong D in the
-corner leaves his net-front man to whoever the matching sends).
+corner leaves his net-front man to whoever the matching sends). A loose puck
+with a teammate elected to race it (`closest_to_puck_by_team`) is HIS, not the
+area's: the chaser leaves the matching and the area's owner covers a man
+(`AIZoneCoverage.chased_by_another`), or one body stands off both the puck and
+every man while the race is on (`test_zone_coverage_shape.gd`'s low cycle).
 
 ## The gap ladder is one ladder, and both puck-owners read it
 
@@ -535,7 +580,8 @@ race solved inside its walk's step, last tick's owner or BACK_STRONG's holder
 taking the hysteresis, a dead heat to the man nearest his line) — 3v3's
 PRESSURE, and in 5v5 the zone role that body holds, published as
 `TeamStrategyView.pressure_slot_override` over the area rule
-(`AIZoneCoverage.pressure_slot`). Raced to where the puck is, the backchecker
+(`AIZoneCoverage.pressure_slot`), the same election that names the carrier's D
+on the back line before it. Raced to where the puck is, the backchecker
 he has just passed wins it and never catches him, and the D who rode him back
 pays a reversal his line never asks of him: a lone carrier at speed walked to
 the net front past five defenders (`test_lone_carrier_entry.gd`). The same holds for the route (above) and for the hit:
@@ -715,8 +761,9 @@ standing D against a carrier down the middle at 9 m/s kept his depth to our line
 and was 6 m wide of him the whole way. He takes the first ice on the carrier's
 line his stick gets to before the carrier does (`AIDefensiveVerbs.cut_off`, the
 same cut-off the level pressurer skates), facing travel, and the ladder takes
-over once he is on it. `test_five_on_five_set_shape.gd` runs it against a
-three-man break.
+over once he is on it. On the 5v5 back line the pair's bracket replaces it
+while the carrier's lead runs between the two D (`BACK_STRONG` above).
+`test_five_on_five_set_shape.gd` runs it against a three-man break.
 
 ### The ladder has a domain: the carrier has to be coming at us
 

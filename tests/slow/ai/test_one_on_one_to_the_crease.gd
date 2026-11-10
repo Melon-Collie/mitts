@@ -28,12 +28,7 @@ const START_Z: float = 8.0
 const CARRIER := 1
 const DEFENDER := 2
 # Bot rushes that reach the crease untouched today, each with its issue.
-#   v9.0/14m/c8/d3 — the carrier crosses the top of the circles in front of a
-#   defender set flat, who builds his lateral speed too late, loses the inside
-#   and is beaten when he turns down: #916.
-#   v7.5/10m/c8/d3 — the same lane, never touched (closest ~2 m); whether he
-#   shoots just outside the crease or drives onto it varies by machine: #916.
-const KNOWN_UNTOUCHED: Array[String] = ["v9.0/14m/c8/d3", "v7.5/10m/c8/d3"]
+const KNOWN_UNTOUCHED: Array[String] = []
 # At the crease: a stick off its paint.
 const NET_REACHED_M: float = CreaseRules.ARC_RADIUS + GameRules.DEFAULT_STICK_LENGTH_M
 
@@ -225,7 +220,10 @@ func test_a_carrier_reaches_the_net_only_through_the_defender() -> void:
 			gut.p(row)
 	gut.p("  → reached the net %d/32 | untouched %d %s  (· = never touched)"
 			% [reached, untouched.size(), str(untouched)])
+	var unknown: Array[String] = []
 	for label: String in untouched:
-		assert_has(KNOWN_UNTOUCHED, label,
-				"a lone carrier walked onto the crease without the defender touching him: %s"
-						% label)
+		if not KNOWN_UNTOUCHED.has(label):
+			unknown.append(label)
+	assert_eq(unknown.size(), 0,
+			"a lone carrier walked onto the crease without the defender touching him: %s"
+					% str(unknown))

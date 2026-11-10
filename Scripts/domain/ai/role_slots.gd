@@ -357,6 +357,45 @@ static func carrier_owner(snapshot: WorldSnapshot, team_id: int, own_goal_z: flo
 	return best_pid
 
 
+static func is_back_line_d(slot: int) -> bool:
+	return slot == Slot.BACK_STRONG or slot == Slot.BACK_MID
+
+
+# Whether `slot` is the back-line D who owns the carrier: carrier_owner's pick
+# while one comes at our net at pace (TeamStrategyView.pressure_slot_override),
+# BACK_STRONG otherwise. `view` may be null (no brain).
+static func owns_back_line_carrier(view: TeamStrategyView, slot: int) -> bool:
+	if not is_back_line_d(slot):
+		return false
+	var owner: int = view.pressure_slot_override() if view != null else Slot.NONE
+	if not is_back_line_d(owner):
+		owner = Slot.BACK_STRONG
+	return slot == owner
+
+
+# Of `peers` goal-side of a carrier at `carrier_pos`, the one whose lane his
+# skating takes him into: nearest across the ice to `lead` (where he is going,
+# AIRushRead's lead), `prev_owner` taking HYSTERESIS_PENALTY_M. The D-to-D switch
+# for a carrier who is not coming at our net: he is the D's on the side he
+# picks, and the other slides behind. -1 when none of `peers` is goal-side.
+static func lane_owner(snapshot: WorldSnapshot, own_goal_z: float, peers: Array,
+		carrier_pos: Vector3, lead: Vector3, prev_owner: int) -> int:
+	var own_dir: float = signf(own_goal_z)
+	var best_pid: int = -1
+	var best: float = INF
+	for pid: int in peers:
+		var s: SkaterNetworkState = snapshot.skater_states.get(pid)
+		if s == null or own_dir * s.position.z <= own_dir * carrier_pos.z:
+			continue
+		var m: float = absf(s.position.x - lead.x)
+		if pid != prev_owner:
+			m += HYSTERESIS_PENALTY_M
+		if m < best or (m == best and pid < best_pid):
+			best = m
+			best_pid = pid
+	return best_pid
+
+
 # Last tick's holder of `slot`'s continuity class (_hysteresis_class), or -1.
 static func prev_holder(prev_assignments: Dictionary, slot: int) -> int:
 	var cls: int = _hysteresis_class(slot)

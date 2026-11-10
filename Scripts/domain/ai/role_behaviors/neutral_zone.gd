@@ -12,7 +12,9 @@ class_name AIRoleNeutralZone
 #   BACK_WEAK (5v5) — our line's weak lane: picks up whoever enters it.
 #
 # BACK_STRONG and BACK_MID are AIRoleRushD's: the man who stands the carrier up
-# and the man who holds the middle behind him.
+# and the man who holds the middle behind him — unless BACK_MID owns the carrier
+# (AIRoleSlots.owns_back_line_carrier), when BACK_STRONG keeps the strong lane as BACK_WEAK
+# keeps the weak one.
 
 # Our line's stand: this far on the neutral-zone side of the blue line, so the
 # back line meets a carrier AT the line rather than inside it.
@@ -37,7 +39,7 @@ static func decide(ctx: RoleContext, slot: int) -> RoleDecision:
 		AIRoleSlots.Slot.NZ_MID:
 			return _decide_mid(ctx)
 		_:
-			return _decide_back_weak(ctx)
+			return decide_back_lane(ctx, -ctx.strong_x)
 
 
 # Depth (metres off our goal line) of our line's stand.
@@ -128,13 +130,15 @@ static func _decide_mid(ctx: RoleContext) -> RoleDecision:
 
 # ── BACK_WEAK: our line's weak lane ──────────────────────────────────────────
 
-static func _decide_back_weak(ctx: RoleContext) -> RoleDecision:
+# A lane of our line, on `side` of the ice (BACK_WEAK's weak one, or the strong
+# one for a BACK_STRONG whose carrier BACK_MID owns): its post, and whoever
+# enters that half once he is in my ice.
+static func decide_back_lane(ctx: RoleContext, side: float) -> RoleDecision:
 	var d := RoleDecision.new()
 	var ap: AICarrierApproach = ctx.scratch_carrier_approach
 	if not AIDefensiveVerbs.read_carrier_approach(ctx, ap):
 		d.target_position = ctx.self_pos
 		return d
-	var side: float = -ctx.strong_x
 	var post: Vector3 = back_post(ctx, ap, side * AIRoleSlots.BACK_LANE_X_M)
 	# Recovering: no man, at pace to the post (AIRoleTrack's doctrine).
 	if not AIRoleTrack.is_inside(ctx, ctx.rush_read):

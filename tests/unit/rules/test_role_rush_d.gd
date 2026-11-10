@@ -520,9 +520,13 @@ func test_the_mid_lane_band_is_the_dot_lane() -> void:
 
 class StubStrategy extends TeamStrategyView:
 	var slots: Dictionary = {}
+	var carrier_slot: int = AIRoleSlots.Slot.NONE
 
 	func get_slot(peer_id: int) -> int:
 		return slots.get(peer_id, AIRoleSlots.Slot.NONE)
+
+	func pressure_slot_override() -> int:
+		return carrier_slot
 
 
 func test_the_back_man_waits_for_him_on_our_line() -> void:
@@ -832,3 +836,112 @@ func test_from_a_stand_he_backpedals_first() -> void:
 
 func test_draped_on_the_carrier_he_faces_him() -> void:
 	assert_false(_retreat(1.5, 9.0, 7.5).face_travel, "within a stick he plays the man")
+
+
+# A carrier up the middle at our line, a man wide on the strong side (+x); me at
+# `self_pos`, the brain naming `owner_slot` the back-line D who owns the carrier.
+func _owned_ctx(self_pos: Vector3, owner_slot: int) -> RoleContext:
+	var ctx: RoleContext = _ctx(self_pos, [
+		[10, 1, Vector3(0.5, 0.0, 4.0), Vector3(0.0, 0.0, 8.0)],
+		[11, 1, Vector3(8.0, 0.0, 5.5), Vector3(0.0, 0.0, 8.0)],
+	], 10)
+	ctx.strong_x = 1.0
+	var strategy := StubStrategy.new()
+	strategy.carrier_slot = owner_slot
+	ctx.team_brain = strategy
+	return ctx
+
+
+func test_the_middle_d_the_brain_names_plays_the_carrier() -> void:
+	# The carrier's D is the brain's pick, whichever post he holds: BACK_MID so
+	# named runs exactly the stand BACK_STRONG would.
+	var me := Vector3(-0.5, 0.0, 12.0)
+	var as_mid: Vector3 = AIRoleRushD.decide(_owned_ctx(me, AIRoleSlots.Slot.BACK_MID),
+			AIRoleSlots.Slot.BACK_MID).target_position
+	var as_strong: Vector3 = AIRoleRushD.decide(_owned_ctx(me, AIRoleSlots.Slot.NONE),
+			AIRoleSlots.Slot.BACK_STRONG).target_position
+	assert_lt(as_mid.distance_to(as_strong), 0.01, "got %s vs %s" % [as_mid, as_strong])
+
+
+func test_a_strong_d_whose_carrier_is_the_middles_keeps_his_lane() -> void:
+	# Across from a carrier BACK_MID owns, the strong D keeps the strong lane, the
+	# man in it his, rather than crossing to a carrier somebody already has.
+	var me := Vector3(6.0, 0.0, 12.0)
+	var d: RoleDecision = AIRoleRushD.decide(_owned_ctx(me, AIRoleSlots.Slot.BACK_MID),
+			AIRoleSlots.Slot.BACK_STRONG)
+	var on_carrier: Vector3 = AIRoleRushD.decide(_owned_ctx(me, AIRoleSlots.Slot.NONE),
+			AIRoleSlots.Slot.BACK_STRONG).target_position
+	assert_gt(d.target_position.x, 3.0, "in the strong lane; got %s" % d.target_position)
+	assert_gt(d.target_position.x, on_carrier.x + 1.0,
+			"wider than the carrier's stand; got %s vs %s" % [d.target_position, on_carrier])
+
+
+func test_with_no_election_the_strong_d_owns_the_carrier() -> void:
+	var strategy := StubStrategy.new()
+	assert_true(AIRoleSlots.owns_back_line_carrier(strategy, AIRoleSlots.Slot.BACK_STRONG))
+	assert_false(AIRoleSlots.owns_back_line_carrier(strategy, AIRoleSlots.Slot.BACK_MID))
+	assert_true(AIRoleSlots.owns_back_line_carrier(null, AIRoleSlots.Slot.BACK_STRONG))
+	strategy.carrier_slot = AIRoleSlots.Slot.BACK_MID
+	assert_false(AIRoleSlots.owns_back_line_carrier(strategy, AIRoleSlots.Slot.BACK_STRONG))
+	assert_true(AIRoleSlots.owns_back_line_carrier(strategy, AIRoleSlots.Slot.BACK_MID))
+	assert_false(AIRoleSlots.owns_back_line_carrier(strategy, AIRoleSlots.Slot.NZ_F1))
+
+
+# A carrier up the middle at the red line, the two D a stick-and-more either
+# side of his line and goal-side of him; me (1) at `self_x`, my partner (12) at
+# -`self_x`, the slots as named, the brain naming `owner_slot`.
+func _pair_ctx(self_x: float, carrier_x: float, self_slot: int,
+		owner_slot: int, carrier_vel: Vector3 = Vector3(0.0, 0.0, 7.0)) -> RoleContext:
+	var ctx: RoleContext = _ctx(Vector3(self_x, 0.0, 10.0), [
+		[10, 1, Vector3(carrier_x, 0.0, 0.0), carrier_vel],
+		[11, 1, Vector3(8.0, 0.0, -1.5), Vector3(0.0, 0.0, 7.0)],
+		[12, 0, Vector3(-self_x, 0.0, 10.0)],
+	], 10, AIRushRead.Numbers.DOWN_ONE, INF, false)
+	var strategy := StubStrategy.new()
+	strategy.slots = {1: self_slot, 12: AIRoleSlots.Slot.BACK_MID
+			if self_slot == AIRoleSlots.Slot.BACK_STRONG else AIRoleSlots.Slot.BACK_STRONG}
+	strategy.carrier_slot = owner_slot
+	ctx.team_brain = strategy
+	ctx.strong_x = 1.0
+	return ctx
+
+
+func test_a_carrier_between_the_pair_is_bracketed_by_both() -> void:
+	# He has not picked a side: the pair plays him together, each on his own
+	# side of his line, so neither crosses at his depth and there is no seam.
+	var as_owner: RoleContext = _pair_ctx(5.0, 0.0, AIRoleSlots.Slot.BACK_STRONG,
+			AIRoleSlots.Slot.BACK_STRONG)
+	assert_eq(AIBackLineStands.bracket_side(as_owner, AIRoleSlots.Slot.BACK_STRONG), 1.0)
+	var own: Vector3 = AIRoleRushD.decide(as_owner, AIRoleSlots.Slot.BACK_STRONG).target_position
+	assert_lt(absf(own.x), 1.0, "the carrier's D on his line; got %s" % own)
+	assert_gt(own.z, 2.0, "at the ladder's gap, not at his depth; got %s" % own)
+	var partner: RoleContext = _pair_ctx(-5.0, 0.0, AIRoleSlots.Slot.BACK_MID,
+			AIRoleSlots.Slot.BACK_STRONG)
+	var p: Vector3 = AIRoleRushD.decide(partner, AIRoleSlots.Slot.BACK_MID).target_position
+	assert_lt(p.x, -1.0, "his partner a stick off it on his own side; got %s" % p)
+	assert_gt(p.x, -1.0 - STICK * 1.5, "and no wider; got %s" % p)
+
+
+func test_a_carrier_outside_the_pair_is_not_bracketed() -> void:
+	# His lead outside both of them: he has picked a side, and he is one D's.
+	var ctx: RoleContext = _pair_ctx(5.0, 9.0, AIRoleSlots.Slot.BACK_STRONG,
+			AIRoleSlots.Slot.BACK_STRONG)
+	assert_eq(AIBackLineStands.bracket_side(ctx, AIRoleSlots.Slot.BACK_STRONG), 0.0)
+
+
+func test_on_a_stalled_carrier_one_d_steps_up_and_his_partner_keeps_his_depth() -> void:
+	# The ladder steps up on a carrier with no pace: the carrier's D goes, and
+	# his partner, whose bracket that was, goes back to holding the middle deep
+	# rather than stepping up beside him with men still at speed.
+	var stalled := Vector3.ZERO
+	var owner_ctx: RoleContext = _pair_ctx(5.0, 0.0, AIRoleSlots.Slot.BACK_STRONG,
+			AIRoleSlots.Slot.BACK_STRONG, stalled)
+	var own: Vector3 = AIRoleRushD.decide(owner_ctx, AIRoleSlots.Slot.BACK_STRONG).target_position
+	assert_lt(own.z, 5.0, "the carrier's D steps up toward him; got %s" % own)
+	var partner: RoleContext = _pair_ctx(-5.0, 0.0, AIRoleSlots.Slot.BACK_MID,
+			AIRoleSlots.Slot.BACK_STRONG, stalled)
+	assert_eq(AIBackLineStands.bracket_side(partner, AIRoleSlots.Slot.BACK_MID), -1.0,
+			"fixture sanity: he is between the pair")
+	var p: Vector3 = AIRoleRushD.decide(partner, AIRoleSlots.Slot.BACK_MID).target_position
+	assert_gt(p.z, own.z + 2.0,
+			"his partner holds the middle deep, not up beside him; got %s vs %s" % [p, own])

@@ -177,9 +177,15 @@ static func assign(
 			# body goal-side of the carrier can hold a post in front of him, so
 			# the soonest of those, from any group; a man behind the play is the
 			# soonest to the spot only because the carrier is already past it.
+			# Goal-side counts a body level with him, a stick back at most
+			# (AIBotMechanics.BLADE_REACH_M: his stick still on the carrier): the
+			# posts ride with the carrier, so the D riding him back across our
+			# line are never deeper than him, and read strictly the post fell to
+			# a forward flying in from behind the play (#899).
 			pid = _pick_soonest(snapshot, teammates, assigned,
 					prev_assignments, spec, caps_by_peer, position_by_peer, false,
-					carrier_depth_z, own_goal_z)
+					carrier_depth_z - signf(own_goal_z) * AIBotMechanics.BLADE_REACH_M,
+					own_goal_z)
 			if pid == -1:
 				pid = _pick_soonest(snapshot, teammates, assigned,
 						prev_assignments, spec, caps_by_peer, position_by_peer, false)

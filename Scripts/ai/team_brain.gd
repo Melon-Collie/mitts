@@ -100,8 +100,10 @@ var coverage_downgraded: bool = false
 var _forechecking: bool = false
 var forecheck_margin_s: float = -INF
 var forecheck_depth_margin_s: float = -INF
-# 5v5 DZONE: the zone role, and its holder, that owns a carrier coming at our net
-# at pace (AIRoleSlots.carrier_owner); NONE / -1 when the area rule stands.
+# 5v5: the role, and its holder, that owns a carrier coming at our net at pace
+# (AIRoleSlots.carrier_owner) — in DZONE a zone role, in TRANS_DEFENSE one of
+# the back-line D; NONE / -1 when the area rule (DZONE) or BACK_STRONG
+# (TRANS_DEFENSE) stands.
 var _pressure_slot_override: int = AIRoleSlots.Slot.NONE
 var _pressure_owner_peer: int = -1
 var _zone_peers: Array[int] = []
@@ -324,25 +326,52 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 	ping_directives.apply_overrides(slot_assignments, threat_assignments, ping_carrier)
 
 
-# 5v5 DZONE: which zone role owns a carrier coming at our net at pace — the
-# soonest goal-side holder (AIRoleSlots.carrier_owner), the D who rode him in
-# keeping him across the line (last tick's owner, else BACK_STRONG's holder,
-# takes the hysteresis).
+# 5v5: which role owns a carrier coming at our net at pace — the soonest
+# goal-side holder (AIRoleSlots.carrier_owner), the D who rode him in keeping
+# him across the line (last tick's owner, else BACK_STRONG's holder, takes the
+# hysteresis). In DZONE any zone role, the area rule standing while none is
+# elected; in TRANS_DEFENSE either back-line D, so a carrier up the middle is the
+# D in front of him, not the strong D across from him
+# (AIRoleSlots.owns_back_line_carrier), and kept by whoever had him.
 func _elect_zone_carrier_owner(snapshot: WorldSnapshot, prev_assignments: Dictionary) -> void:
 	var prev_owner: int = _pressure_owner_peer if _pressure_owner_peer != -1 \
 			else AIRoleSlots.prev_holder(prev_assignments, AIRoleSlots.Slot.PRESSURE)
 	_pressure_slot_override = AIRoleSlots.Slot.NONE
 	_pressure_owner_peer = -1
-	if team_size < 5 or state != AIPossessionState.State.DZONE:
+	if team_size < 5:
 		return
 	_zone_peers.clear()
 	for pid: int in slot_assignments:
-		if AIRoleSlots5.is_zone_slot(slot_assignments[pid]):
+		var slot: int = slot_assignments[pid]
+		if (state == AIPossessionState.State.DZONE and AIRoleSlots5.is_zone_slot(slot)) \
+				or (state == AIPossessionState.State.TRANS_DEFENSE
+						and AIRoleSlots.is_back_line_d(slot)):
 			_zone_peers.append(pid)
+	if _zone_peers.is_empty():
+		return
 	_pressure_owner_peer = AIRoleSlots.carrier_owner(snapshot, team_id, _own_goal_z,
 			_team_id_by_peer, _zone_peers, _caps_by_peer, prev_owner)
+	# On the back line, with no carrier coming at pace, he is the D's whose lane
+	# he is skating into (AIRoleSlots.lane_owner); with the puck in flight, the
+	# D who had him keeps him. Never BACK_STRONG's label: the posts mirror
+	# whenever the strong side flips, and a carrier drifting through the middle
+	# would turn the man already on him away and send his partner across.
+	if _pressure_owner_peer == -1 and state == AIPossessionState.State.TRANS_DEFENSE:
+		_pressure_owner_peer = _back_line_lane_owner(snapshot, prev_owner)
 	if _pressure_owner_peer != -1:
 		_pressure_slot_override = slot_assignments[_pressure_owner_peer]
+
+
+func _back_line_lane_owner(snapshot: WorldSnapshot, prev_owner: int) -> int:
+	var carrier: int = snapshot.puck_state.carrier_peer_id \
+			if snapshot != null and snapshot.puck_state != null else -1
+	if carrier == -1 or _team_id_by_peer.get(carrier, team_id) == team_id:
+		return prev_owner if _zone_peers.has(prev_owner) else -1
+	var i: int = rush_read.attackers.find(carrier)
+	if i == -1 or not snapshot.skater_states.has(carrier):
+		return prev_owner if _zone_peers.has(prev_owner) else -1
+	return AIRoleSlots.lane_owner(snapshot, _own_goal_z, _zone_peers,
+			snapshot.skater_states[carrier].position, rush_read.attacker_leads[i], prev_owner)
 
 
 func pressure_slot_override() -> int:
@@ -406,13 +435,19 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 	var defender_caps: Dictionary = {}
 	var eligible_men: Dictionary = {}
 	var zone_slot_by_def: Dictionary = {}
+	# With the puck loose and one of ours elected to race it, he is on the puck
+	# and the area that holds it covers a man like the rest.
+	var chaser: int = snapshot.closest_to_puck_by_team.get(team_id, -1) \
+			if carrier_pid == -1 else -1
 	for pid: int in slot_assignments:
 		var slot: int = slot_assignments[pid]
 		var is_zone: bool = AIRoleSlots5.is_zone_slot(slot)
 		if slot != AIRoleSlots.Slot.MARK and not is_zone:
 			continue
+		if pid == chaser:
+			continue
 		# The area that owns the puck is pressuring it, not covering a man.
-		if is_zone and slot == pressure_slot:
+		if is_zone and slot == pressure_slot and chaser == -1:
 			continue
 		if not snapshot.skater_states.has(pid):
 			continue

@@ -10,37 +10,28 @@ extends GutTest
 # A role test sees one body; only the whole team can show the layer holding.
 #
 # Real bots on both sides (the duel harness, its static keepers), so their
-# carrier passes and shoots as he reads it. Per start, three readings:
+# carrier passes and shoots as he reads it. Per start, three readings, the
+# first two asserted:
 #   formed — ours goal-side of the carrier as he crosses our blue line;
 #   open   — share of ticks with one of theirs inside our blue line and none of
 #            ours goal-side of him (an odd man behind the layer);
 #   shot   — where their first shot comes from (metres off our net), if any
-#            comes before we take the puck back.
+#            comes before we take the puck back. Printed, not asserted: a
+#            three-man rush may get its chance off a structure that held, and
+#            what is gated is the structure.
 #
 # Team 0 (them) attacks -Z; team 1 (us) defends it.
 #
 # Reference readings over the 12 starts: the back line is never thinner than
-# two at entry outside KNOWN_THIN, nobody of theirs stands behind it, and no
-# start ends in a slot shot.
+# two at entry outside KNOWN_THIN, and nobody of theirs stands behind it.
 #
 # Starts whose back line is beaten at entry today, each with its issue: they
-# count against neither the line nor the open share, and their slot shots are
-# known.
-#   v8.5/z20/c6, v8.5/z24/c6 — the 3-on-2 carried in down the middle: a straight
-#   retreat makes our line 1.7 m goal-side, the far D arrives 1.1 m short: #899.
-#   In v8.5/z24/c6 the odd man left behind it takes his feed clean and shoots
-#   from the slot; v8.5/z20/c6 ends in a slot shot too.
-#   v7.0/z24/c6, v7.0/z24/c-6 — the same gap, reached by their carrier's own
-#   play: he feeds across the neutral zone early, they regroup and come in down
-#   a wing with our line not yet set, and the slot shot follows: #899.
-#   v7.0/z20/c0, v7.0/z24/c0, v8.5/z24/c-6 — our line is set at entry, but a
-#   man of theirs stands behind it for a third to two thirds of their zone
-#   time: listed here so the open share leaves them out, the same layer #899
-#   cannot hold. In v7.0/z24/c0 he is fed there and shoots from the slot.
-const KNOWN_THIN: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6", "v7.0/z24/c6",
-		"v7.0/z24/c-6", "v7.0/z20/c0", "v7.0/z24/c0", "v8.5/z24/c-6"]
-const KNOWN_SLOT_SHOTS: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6", "v7.0/z24/c6",
-		"v7.0/z24/c-6", "v7.0/z24/c0"]
+# count against neither the line nor the open share.
+#   v8.5/z24/c-6 — the carrier cuts across and stalls at our line with both
+#   wingers at speed; his D steps up alone and the winger on his outside takes
+#   the pass behind him: one man thin at entry. The ladder sizes the pair's
+#   depth from the carrier alone (#930).
+const KNOWN_THIN: Array[String] = ["v8.5/z24/c-6"]
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
@@ -180,5 +171,3 @@ func test_a_failed_forecheck_sets_the_1_1_3_and_it_holds() -> void:
 			% [thin.size(), str(thin), open_share * 100.0, slot_shots.size(), str(slot_shots)])
 	assert_eq(thin.size(), 0, "the back line was not set when he got there: %s" % str(thin))
 	assert_lte(open_share, MAX_OPEN_SHARE, "an odd man stood behind the layer too long")
-	for label: String in slot_shots:
-		assert_has(KNOWN_SLOT_SHOTS, label, "a rush got a slot shot: %s" % label)

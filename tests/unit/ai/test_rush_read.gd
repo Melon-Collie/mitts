@@ -174,6 +174,98 @@ func test_beaten_peer_does_not_count_as_back() -> void:
 			"a beaten peer is not counted as back")
 
 
+# ── Numbers with the rush in our zone ────────────────────────────────────────
+# With the carrier inside the house the race's gate lies past him toward the
+# boards, so a coverer set up high could never make it; being goal-side of a man
+# is what counts him back.
+
+func test_a_set_three_on_three_with_the_puck_in_our_corner_is_even() -> void:
+	var theirs := {
+		11: [Vector3(10.5, 0.0, 24.8), Vector3(0.0, 0.0, 0.5)],   # carrier, corner
+		12: [Vector3(9.0, 0.0, 13.0), Vector3.ZERO],              # half-wall
+		13: [Vector3(-3.5, 0.0, 15.5), Vector3.ZERO],             # weak high slot
+	}
+	var ours := {
+		1: [Vector3(8.8, 0.0, 23.6), Vector3.ZERO],    # on the carrier
+		2: [Vector3(-1.5, 0.0, 17.0), Vector3.ZERO],   # goal-side of 13
+		3: [Vector3(7.0, 0.0, 15.0), Vector3.ZERO],    # goal-side of 12
+	}
+	var r: AIRushRead = _read(ours, theirs, 11)
+	assert_eq(r.recovery_by_peer.get(3), AIRushRead.Recovery.BEATEN,
+			"scenario check: the half-wall coverer loses the race to the gate")
+	assert_eq(r.back_count, 3, "all three are back")
+	assert_eq(r.numbers, AIRushRead.Numbers.EVEN_OR_UP)
+
+
+func test_a_set_five_on_five_with_the_puck_in_our_corner_is_even() -> void:
+	var theirs := {
+		11: [Vector3(10.5, 0.0, 24.8), Vector3(0.0, 0.0, 0.5)],
+		12: [Vector3(11.0, 0.0, 16.0), Vector3.ZERO],    # half-wall
+		13: [Vector3(1.0, 0.0, 22.5), Vector3.ZERO],     # net front
+		14: [Vector3(7.0, 0.0, 8.5), Vector3.ZERO],      # strong point
+		15: [Vector3(-6.0, 0.0, 8.5), Vector3.ZERO],     # weak point
+	}
+	var ours := {
+		1: [Vector3(9.0, 0.0, 23.8), Vector3.ZERO],
+		2: [Vector3(0.0, 0.0, 24.0), Vector3.ZERO],
+		3: [Vector3(2.0, 0.0, 21.0), Vector3.ZERO],
+		4: [Vector3(8.5, 0.0, 15.5), Vector3.ZERO],
+		5: [Vector3(-3.0, 0.0, 17.5), Vector3.ZERO],
+	}
+	var r: AIRushRead = _read(ours, theirs, 11)
+	assert_eq(r.numbers, AIRushRead.Numbers.EVEN_OR_UP)
+
+
+func test_a_two_on_one_in_our_corner_is_still_down_one() -> void:
+	# Our backchecker is further out than both of them: he is behind the play,
+	# not between a man and our net.
+	var theirs := {
+		11: [Vector3(10.0, 0.0, 24.5), Vector3.ZERO],    # carrier, corner
+		12: [Vector3(-2.0, 0.0, 19.0), Vector3.ZERO],    # in the slot
+	}
+	var ours := {
+		1: [Vector3(1.0, 0.0, 23.5), Vector3.ZERO],      # the D, at the net
+		2: [Vector3(2.0, 0.0, 9.0), Vector3(0.0, 0.0, 6.0)],
+	}
+	var r: AIRushRead = _read(ours, theirs, 11)
+	assert_eq(r.back_count, 1)
+	assert_eq(r.numbers, AIRushRead.Numbers.DOWN_ONE)
+
+
+func test_one_beaten_body_is_goal_side_of_one_man_only() -> void:
+	# Two men high, one beaten body between them and our net: he counts once.
+	var theirs := {
+		11: [Vector3(10.0, 0.0, 24.5), Vector3.ZERO],
+		12: [Vector3(6.0, 0.0, 10.0), Vector3.ZERO],
+		13: [Vector3(-6.0, 0.0, 10.0), Vector3.ZERO],
+	}
+	var ours := {
+		1: [Vector3(8.5, 0.0, 23.5), Vector3.ZERO],
+		2: [Vector3(0.0, 0.0, 14.0), Vector3.ZERO],
+	}
+	var r: AIRushRead = _read(ours, theirs, 11)
+	assert_eq(r.recovery_by_peer.get(2), AIRushRead.Recovery.BEATEN,
+			"scenario check: he loses the race to the gate")
+	assert_eq(r.back_count, 2)
+	assert_eq(r.numbers, AIRushRead.Numbers.DOWN_ONE)
+
+
+func test_the_lone_defender_is_the_only_one_back_goal_side() -> void:
+	var theirs := {
+		11: [Vector3(-3.0, 0.0, 2.0), Vector3(0.0, 0.0, 6.0)],
+		12: [Vector3(3.0, 0.0, 2.0), Vector3(0.0, 0.0, 6.0)],
+	}
+	var ours := {
+		1: [Vector3(0.0, 0.0, 16.0), Vector3.ZERO],
+		2: [Vector3(0.0, 0.0, -26.0), Vector3.ZERO],   # stranded in their end
+	}
+	var r: AIRushRead = _read(ours, theirs, 11)
+	assert_true(r.is_lone_defender(1), "the one back on a 2-on-1")
+	assert_false(r.is_lone_defender(2), "the stranded man is not back at all")
+	ours[2] = [Vector3(1.0, 0.0, 18.0), Vector3.ZERO]
+	assert_false(_read(ours, theirs, 11).is_lone_defender(1), "with two back nobody is alone")
+
+
 # ── Mode ─────────────────────────────────────────────────────────────────────
 
 func test_regroup_when_they_turn_back() -> void:

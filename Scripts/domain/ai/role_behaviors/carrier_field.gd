@@ -49,7 +49,10 @@ var keeper_stance: int = AIShotOdds.Stance.UPRIGHT
 var opponent_vels: Array[Vector3] = []
 var opponent_caps: Array[AISkaterCaps] = []
 var opponents_release: Array[Vector3] = []
-# Their blades (on the ice plane), carried at their skating to the same instant.
+# Their blades (on the ice plane) at the release: where they hold them now. A
+# defender's hands keep his stick where he holds it through the windup, as they
+# keep it on a puck (AIPuckLane.lane_read_delay); his skating moves his body
+# (opponents_release), which bounds where he can still hold it.
 var opponent_blades_release: Array[Vector3] = []
 # Our skaters excluding the carrier (the man who just lost it covers nothing) —
 # the defenders that reduce the opponent's threat in the turnover-cost term —
@@ -118,9 +121,8 @@ func fill(ctx: RoleContext) -> void:
 			opponent_caps.append(ctx.caps_by_peer.get(peer_id))
 			opponents_release.append(AITrajectory.predict_at(
 					s.position, s.velocity, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S))
-			var blade := Vector3(s.blade_contact_world.x, 0.0, s.blade_contact_world.z)
-			opponent_blades_release.append(AITrajectory.predict_at(
-					blade, s.velocity, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S))
+			opponent_blades_release.append(
+					Vector3(s.blade_contact_world.x, 0.0, s.blade_contact_world.z))
 		else:
 			our_defenders.append(s.position)
 			our_defender_caps.append(ctx.caps_by_peer.get(peer_id))

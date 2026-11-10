@@ -49,6 +49,17 @@ func test_a_stick_the_body_cannot_hold_does_not_count() -> void:
 			"a blade on the line further from his body than any stick reaches is not his")
 
 
+func test_a_stick_held_on_the_lane_takes_the_pass_whatever_his_skating() -> void:
+	# He skates across the lane at 3 m/s with his blade on it, inside the catch:
+	# his hands keep it there, so the pass meets it.
+	var body: Array[Vector3] = [Vector3(1.6, 0.0, -3.0)]
+	var across: Array[Vector3] = [Vector3(3.0, 0.0, 0.0)]
+	var blades: Array[Vector3] = [Vector3(0.3, 0.0, -3.0)]
+	assert_eq(AIPuckLane.lane_clear(FROM, TO, body, SPEED, across, [], true, blades), 0.0)
+	var loss: Vector3 = AIPuckLane.lane_loss_point(FROM, TO, body, SPEED, across, [], blades)
+	assert_almost_eq(loss.z, -3.0, 1e-3, "picked off at the stick")
+
+
 func test_a_harder_pass_beats_the_stick_more_often() -> void:
 	var blade := Vector3(1.6, 0.0, -4.0)
 	assert_gt(_lane(blade, 28.0), _lane(blade, 14.0))
