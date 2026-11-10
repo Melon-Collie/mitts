@@ -36,7 +36,9 @@ const _RIM_FLARE_M: float = 0.035
 const TUCK_BLOUSE_M: float = 0.030
 # How far tucked a column is before the rim under it starts to flare.
 const _RIM_FLARE_FROM: float = 0.6
-const _LOOSE_TOP_INSET_M: float = 0.015
+# Drawn in under a loose jersey (_stand_rim): the centre's fold over the dot
+# swings the jersey's back forward onto it by ~5 cm.
+const _LOOSE_TOP_INSET_M: float = 0.025
 # The kidney pads, each side of the spine under the belt: how far each ring
 # stands out at their middles, 45° off the back, easing to none at the spine
 # and the hips. They stand only where the jersey is tucked, as the rim does:

@@ -425,6 +425,22 @@ const POSES: Array = [
 			"from": Vector3(-1.5, 0.0, 7.0), "duration": 1.4, "ticks": 168, "hold": 90,
 			"center": true,
 		}},
+	# The address tucked: the fold over the dot is the deepest the jersey is
+	# pushed against the pants' rim in play (test_tuck_holds_through_the_address.gd).
+	{"name": "faceoff_center_tuck_full", "puck": false, "tuck": GearModelRegistry.TUCK_FULL,
+		"faceoff": {
+			"from": Vector3(-1.5, 0.0, 7.0), "duration": 1.4, "ticks": 168, "hold": 90,
+			"center": true,
+		}},
+	{"name": "faceoff_center_tuck_right", "puck": false, "tuck": GearModelRegistry.TUCK_RIGHT,
+		"faceoff": {
+			"from": Vector3(-1.5, 0.0, 7.0), "duration": 1.4, "ticks": 168, "hold": 90,
+			"center": true,
+		}},
+	{"name": "faceoff_winger_tuck_right", "puck": false, "tuck": GearModelRegistry.TUCK_RIGHT,
+		"faceoff": {
+			"from": Vector3(-1.5, 0.0, 7.0), "duration": 1.4, "ticks": 168, "hold": 90,
+		}},
 	# The same address, and a plain stride, from the seat the game is played
 	# from. Two tiles rather than one because the question they answer is
 	# comparative: the centre is supposed to look like a different pose from up

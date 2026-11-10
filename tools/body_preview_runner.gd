@@ -29,9 +29,10 @@ const PANTS_POSES: Array[String] = [
 const PANTS_FOV: float = 22.0
 # --head: framed on the helmet.
 const HEAD_FOV: float = 7.0
-# --waist: framed on the belt, where a tuck goes in.
+# --waist: framed on the belt, where a tuck goes in, from the WAIST bone, so a
+# crouch keeps it in frame.
 const WAIST_FOV: float = 13.0
-const WAIST_AIM_Y: float = -0.17
+const WAIST_AIM_Y: float = -0.22
 # --shoulders: framed on the yoke, square on from the front, the side, the back
 # and from above behind: where the shoulders meet the trunk.
 const SHOULDERS_FOV: float = 13.0
@@ -143,7 +144,9 @@ func _place_camera() -> void:
 	var aim: Vector3 = _skater.global_position + Vector3(0.0, PANTS_AIM_Y if _pants else -0.1, 0.0)
 	if _waist:
 		_camera.fov = WAIST_FOV
-		aim = _skater.global_position + Vector3(0.0, WAIST_AIM_Y, 0.0)
+		var waist: Skeleton3D = _skater._arms._skeleton
+		aim = waist.global_transform * waist.get_bone_global_pose(
+				SkaterBodySkeleton.WAIST_BONE).origin + Vector3(0.0, WAIST_AIM_Y, 0.0)
 	if _head:
 		var body: Skeleton3D = _skater._arms._skeleton
 		_camera.fov = HEAD_FOV
