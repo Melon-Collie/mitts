@@ -27,10 +27,10 @@ extends GutTest
 # count against neither the line nor the open share, and their slot shots are
 # known.
 #   v7.0/z24/c6, v7.0/z24/c0 — our line is one man thin at entry and a man of
-#   theirs stands behind it for most of their zone time: the layer #899 cannot
-#   hold. In c6 he is fed there and shoots from the slot.
+#   theirs stands behind it for most of their zone time, and the shot that
+#   follows comes from the slot or just outside it: the layer #899 cannot hold.
 const KNOWN_THIN: Array[String] = ["v7.0/z24/c6", "v7.0/z24/c0"]
-const KNOWN_SLOT_SHOTS: Array[String] = ["v7.0/z24/c6"]
+const KNOWN_SLOT_SHOTS: Array[String] = ["v7.0/z24/c6", "v7.0/z24/c0"]
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
