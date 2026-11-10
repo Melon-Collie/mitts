@@ -74,8 +74,25 @@ func _trace(cx: float, fwd_z: float, speed: float, secs: float) -> void:
 			line += " %d%s (%5.1f %5.1f) %4.1fm gs %d |" % [pid, "*" if pid == c else " ",
 					a.x, a.z, a.distance_to(NET), _goal_side_of(duel, a)]
 		gut.p(line)
+		_targets_at(duel)
 		if entering or (entered and t % 6 == 0 and t * DT < 4.2):
 			_election_at(duel, c)
+
+
+# Where each of our back men is sent this tick (his role's target, the velocity
+# it rides at, whether he skates it facing travel), and which back-line slot the
+# brain names the carrier's.
+func _targets_at(duel: Object) -> void:
+	var brain: TeamBrain = duel.brains[1]
+	var row: String = "        owner %-6s |" % AIRoleSlots.label(brain.pressure_slot_override())
+	for pid: int in [14, 15, 13]:
+		var d: RoleDecision = duel._skater(pid).agent._cached_role_decision
+		if d == null:
+			continue
+		row += " %d -> (%5.1f %5.1f) ride(%4.1f %4.1f)%s |" % [pid, d.target_position.x,
+				d.target_position.z, d.target_velocity.x, d.target_velocity.z,
+				" travel" if d.face_travel else ""]
+	gut.p(row)
 
 
 # The back line's election as the brain runs it this tick: each post's target and
