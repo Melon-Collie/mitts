@@ -44,6 +44,7 @@ var posture_speed: float
 var hand_forward: float
 var hand_forward_none: float
 var hand_forward_full: float
+var hand_out_share: float
 var ub_offset: Vector3
 var blade_y: float
 var blade_half: float
@@ -107,6 +108,7 @@ static func capture(skater: Skater, ctrl: SkaterController) -> RefCounted:
 	rig.hand_forward = ctrl.top_hand_forward_m
 	rig.hand_forward_none = ctrl.top_hand_forward_none_m
 	rig.hand_forward_full = ctrl.top_hand_forward_full_m
+	rig.hand_out_share = ctrl.top_hand_out_share
 	rig.stick_length = ik.solve_stick_length()
 	rig.rom_forehand_angle = deg_to_rad(ctrl.rom_forehand_angle_max_deg)
 	rig.rom_backhand_angle = deg_to_rad(ctrl.rom_backhand_angle_max_deg)
@@ -310,6 +312,7 @@ func _level_config(hang_y: float, max_reach: float) -> void:
 	_cfg.hand_forward = hand_forward
 	_cfg.hand_forward_none = hand_forward_none
 	_cfg.hand_forward_full = hand_forward_full
+	_cfg.hand_out_share = hand_out_share
 
 
 # SkaterIKCoordinator.blade_y_lean_corrected under the trunk's pitch and roll.

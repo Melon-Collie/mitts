@@ -45,10 +45,12 @@ func _random_top_cfg() -> TopHandIK.Config:
 	# cases bind it across the CLOSE/FAR boundary so the capped regime split is
 	# fuzzed on both sides.
 	cfg.max_blade_reach = INF if _rng.randf() < 0.67 else _rng.randf_range(0.2, 2.0)
-	# The forehand floor (Config.hand_forward): off in a third of the cases, as
-	# a shot's or the address's solve has it.
+	# The hand's floor (Config.hand_forward): off in a third of the cases, as
+	# a shot's or the address's solve has it, and its share out front off in a
+	# third of the rest.
 	if _rng.randf() < 0.67:
 		cfg.hand_forward = _rng.randf_range(0.0, 0.35)
+		cfg.hand_out_share = 0.0 if _rng.randf() < 0.33 else _rng.randf_range(0.0, 1.0)
 		cfg.hand_forward_none = _rng.randf_range(0.1, 0.5)
 		cfg.hand_forward_full = cfg.hand_forward_none + _rng.randf_range(0.2, 0.8)
 		cfg.hand_forward_none_angle = _rng.randf_range(-0.3, 0.5)
@@ -69,6 +71,7 @@ func _native_top_from(cfg: TopHandIK.Config) -> RefCounted:
 	native.rom_backhand_reach_max = cfg.rom_backhand_reach_max
 	native.max_blade_reach = cfg.max_blade_reach
 	native.hand_forward = cfg.hand_forward
+	native.hand_out_share = cfg.hand_out_share
 	native.hand_forward_none = cfg.hand_forward_none
 	native.hand_forward_full = cfg.hand_forward_full
 	native.hand_forward_none_angle = cfg.hand_forward_none_angle

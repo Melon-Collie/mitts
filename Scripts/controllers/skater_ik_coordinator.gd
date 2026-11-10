@@ -133,12 +133,12 @@ func setup(skater: Skater, controller: SkaterController,
 	if ClassDB.class_exists(&"NativeTopHandIK"):
 		_native_top = ClassDB.instantiate(&"NativeTopHandIK")
 		# Stale-binary guard, one level finer than NativeKernels' class census:
-		# the forehand floor (set_hand_forward) is the newest thing ADDED to an
-		# existing kernel, so a binary predating it still registers the class and
-		# passes that check. Fall back to GDScript, which is slower and correct,
-		# rather than solve without it.
-		if not _native_top.has_method(&"set_hand_forward"):
-			push_warning("NativeTopHandIK predates the forehand floor — "
+		# the floor's share out front (set_hand_out_share) is the newest thing
+		# ADDED to an existing kernel, so a binary predating it still registers
+		# the class and passes that check. Fall back to GDScript, which is slower
+		# and correct, rather than solve without it.
+		if not _native_top.has_method(&"set_hand_out_share"):
+			push_warning("NativeTopHandIK predates the hand's floor out front — "
 					+ "using the GDScript solver. Rebuild native/ (bash native/build.sh).")
 			_native_top = null
 	if ClassDB.class_exists(&"NativeBladeDangle"):
@@ -201,6 +201,7 @@ func _sync_pass_config() -> void:
 		"twist_limit": SkaterSpineRig.TWIST_LIMIT,
 		"top_hand_forward_none_m": c.top_hand_forward_none_m,
 		"top_hand_forward_full_m": c.top_hand_forward_full_m,
+		"top_hand_out_share": c.top_hand_out_share,
 	})
 	if not ok:
 		push_warning("NativeBladePass lacks a tunable — using the GDScript blade pass. "
@@ -1403,6 +1404,7 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 	_cached_top_cfg.hand_forward = _hand_forward()
 	_cached_top_cfg.hand_forward_none = _controller.top_hand_forward_none_m
 	_cached_top_cfg.hand_forward_full = _controller.top_hand_forward_full_m
+	_cached_top_cfg.hand_out_share = _controller.top_hand_out_share
 	if _native_top != null:
 		_native_top.blade_y = blade_y
 		_native_top.max_blade_reach = max_blade_reach
@@ -1411,6 +1413,7 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 		_native_top.hand_forward = _cached_top_cfg.hand_forward
 		_native_top.hand_forward_none = _cached_top_cfg.hand_forward_none
 		_native_top.hand_forward_full = _cached_top_cfg.hand_forward_full
+		_native_top.hand_out_share = _cached_top_cfg.hand_out_share
 	return _cached_top_cfg
 
 # The forehand floor's strength (TopHandIK.Config.hand_forward): the centre's

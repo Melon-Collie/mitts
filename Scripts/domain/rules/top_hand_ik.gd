@@ -61,16 +61,18 @@ class Config:
 	# that a post-hoc clamp then has to drag back. INF = unconstrained.
 	var max_blade_reach: float = INF
 	# The least the hand reaches off its shoulder along the bearing to the blade
-	# (meters) once the blade is round the forehand (forward_floor). Without it
-	# the CLOSE regime holds the hand at the shoulder, on the backhand side: a
-	# stick held round the forehand then runs from the far hip, and the other
-	# hand reaches it only across the chest. All of it from
-	# `hand_forward_full_angle` round the forehand (forehand-signed, radians),
-	# none from `hand_forward_none_angle` back, where a top hand holds its stick
-	# at its own side; all of it with the blade `hand_forward_full` off the
-	# shoulder, none from `hand_forward_none` in, where pulled tight the hand
-	# comes back to the hip.
+	# (meters, forward_floor). Without it the CLOSE regime holds the hand under
+	# the shoulder: against the ribs straight ahead, in the hip round the
+	# backhand, and round the forehand at the far hip, where the other hand
+	# reaches the shaft only across the chest. All of it from
+	# `hand_forward_full_angle` round the forehand (forehand-signed, radians);
+	# `hand_out_share` of it from `hand_forward_none_angle` back, straight ahead
+	# and round the backhand, where the hand is held off the hip in front of
+	# its own side; all of it with the blade `hand_forward_full` off the
+	# shoulder, none from `hand_forward_none` in, where a one-handed reach for a
+	# puck at the skates draws the hand back up under the shoulder.
 	var hand_forward: float = 0.0
+	var hand_out_share: float = 0.0
 	var hand_forward_none: float = 0.3
 	var hand_forward_full: float = 0.9
 	var hand_forward_none_angle: float = deg_to_rad(10.0)
@@ -88,7 +90,7 @@ const _TWO_HAND_BISECTIONS: int = 9
 # speed kinked the hand from vertical travel to horizontal in one tick.
 const REGIME_BAND_M: float = 0.08
 # _blade_for_span's fixed point: it contracts by the floor's slope, at most
-# ~0.63 at the defaults, so twelve steps take the error under a millimetre.
+# ~0.6 at the defaults, so twelve steps take the error under a millimetre.
 const _FLOOR_ITERATIONS: int = 12
 
 # Projects a desired blade target onto the reachable blade region (the ROM
@@ -222,7 +224,8 @@ static func forward_floor(d: float, to_forehand: float, cfg: Config) -> float:
 	if cfg.hand_forward <= 0.0:
 		return 0.0
 	return cfg.hand_forward * smoothstep(cfg.hand_forward_none, cfg.hand_forward_full, d) \
-			* smoothstep(cfg.hand_forward_none_angle, cfg.hand_forward_full_angle, to_forehand)
+			* lerpf(cfg.hand_out_share, 1.0, smoothstep(cfg.hand_forward_none_angle,
+					cfg.hand_forward_full_angle, to_forehand))
 
 
 # The blade distance off the shoulder whose stick spans `span` across the ice

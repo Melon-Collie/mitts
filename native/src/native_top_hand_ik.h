@@ -34,6 +34,7 @@ class NativeTopHandIK : public godot::RefCounted {
 	double max_blade_reach = INFINITY;
 	// TopHandIK.Config.hand_forward and its bands (forward_floor).
 	double hand_forward = 0.0;
+	double hand_out_share = 0.0;
 	double hand_forward_none = 0.3;
 	double hand_forward_full = 0.9;
 	double hand_forward_none_angle = 0.17453292519943295; // deg_to_rad(10)
@@ -123,6 +124,8 @@ public:
 	double get_max_blade_reach() const { return max_blade_reach; }
 	void set_hand_forward(double v) { hand_forward = v; }
 	double get_hand_forward() const { return hand_forward; }
+	void set_hand_out_share(double v) { hand_out_share = v; }
+	double get_hand_out_share() const { return hand_out_share; }
 	void set_hand_forward_none(double v) { hand_forward_none = v; }
 	double get_hand_forward_none() const { return hand_forward_none; }
 	void set_hand_forward_full(double v) { hand_forward_full = v; }

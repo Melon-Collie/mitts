@@ -49,7 +49,7 @@ func _make_carrier() -> SkaterController:
 	return c
 
 
-# Standing, the cursor moved from 1.1 m to `radius_m` along `dir` (a lefty's
+# Standing, the cursor moved from 1.4 m to `radius_m` along `dir` (a lefty's
 # side; mirrored for a righty), and held.
 func _pull_in(c: SkaterController, dir: Vector3, radius_m: float) -> Vector3:
 	var sk: Skater = c.skater
@@ -61,7 +61,7 @@ func _pull_in(c: SkaterController, dir: Vector3, radius_m: float) -> Vector3:
 		input.delta = DT
 		input.host_timestamp += DT
 		input.mouse_world_pos = sk.global_position \
-				+ along * lerpf(1.1, radius_m, clampf((t - 40) / 120.0, 0.0, 1.0))
+				+ along * lerpf(1.4, radius_m, clampf((t - 40) / 120.0, 0.0, 1.0))
 		input.mouse_world_pos.y = 0.0
 		c._process_input(input, DT)
 		sk._physics_process(DT)
@@ -95,7 +95,7 @@ func _rest(sk: Skater) -> Vector2:
 
 func test_the_puck_sits_on_the_cursor() -> void:
 	for dir: Vector3 in [FOREHAND, BACKHAND]:
-		for radius_m: float in [1.1, 0.95, 0.85]:
+		for radius_m: float in [1.4, 1.25, 1.15]:
 			var c: SkaterController = _make_carrier()
 			var cursor: Vector3 = _pull_in(c, dir, radius_m)
 			var pin: Vector3 = c.skater.get_carry_target_global()
@@ -121,7 +121,7 @@ func test_pulled_in_past_the_carrys_floor_the_puck_holds_at_it() -> void:
 
 func test_the_blade_rests_on_the_puck() -> void:
 	for dir: Vector3 in [FOREHAND, BACKHAND]:
-		for radius_m: float in [1.1, 0.75, 0.5, 0.35]:
+		for radius_m: float in [1.4, 1.05, 0.8, 0.65]:
 			var c: SkaterController = _make_carrier()
 			_pull_in(c, dir, radius_m)
 			var rest: Vector2 = _rest(c.skater)
@@ -131,7 +131,7 @@ func test_the_blade_rests_on_the_puck() -> void:
 
 func test_pulled_in_close_the_toe_holds_it() -> void:
 	var flat: SkaterController = _make_carrier()
-	_pull_in(flat, FOREHAND, 1.4)
+	_pull_in(flat, FOREHAND, 1.7)
 	var close: SkaterController = _make_carrier()
 	_pull_in(close, FOREHAND, 0.4)
 	assert_between(_rest(flat.skater).y, 0.4, 0.65, "out at the rim, mid-blade on it")

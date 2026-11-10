@@ -367,9 +367,9 @@ blade in tight cannot be authored that way, and the check commit is the worked
 example.
 
 `TopHandIK` has two regimes. Inside the stick's resting horizontal reach it goes
-CLOSE, which pins the hand's XZ **at the shoulder marker** (or, round the
-forehand, its floor out from it along the aim, `Config.hand_forward`) and
-varies only its height —
+CLOSE, which pins the hand's XZ **at its floor out from the shoulder marker**
+along the aim (`Config.hand_forward`, nothing for a one-handed reach at the
+skates) and varies only its height —
 the blade's authored distance stops mattering entirely, and past the
 `hand_y_max` ceiling the blade overshoots along the aim line instead of landing
 where it was put. Meanwhile the rendered arm roots at the shoulder the trunk
@@ -422,25 +422,32 @@ hand the drawn arm could not reach or barely extended toward:
   fold-then-twist (the bottom shoulder then swings with the twist, and the
   reach limit with it, tick to tick in a dangle). It is a pure function of the
   blade marker and the posture's own fold, which it tops up rather than adds
-  to, so it needs no wire field: full while the puck is ahead and out, none
-  round beside or behind him, none pulled in tight. A shot or the block,
+  to, so it needs no wire field: full while the puck is ahead, however close,
+  none round beside or behind him. Pulled in tight he stays down over it, as
+  coaching has a player protecting the puck get lower, never taller; standing
+  up out of the fold there put the hand at the armpit. A shot or the block,
   posing their own stick, take none. The gait draws exactly that fold on the
   trunk texture, with a crouch under it standing (`GaitCarryLayer`).
   `test_carry_posture_rules.gd`.
-- **Round the forehand the hand comes across the body**
-  (`top_hand_forward_m`, `TopHandIK.Config.hand_forward`). Held at its own
-  shoulder, on the backhand side, the top hand of a stick swept round the
-  forehand sits at the far hip once the two-hand stop draws the blade into
-  CLOSE, and the bottom arm reaches the shaft only across the whole chest, at
-  any skating fold. So CLOSE keeps the hand a floor out along the bearing to
-  the blade: none from straight ahead round the backhand, where a top hand
-  holds its stick at its side, all of it from ~55° round the forehand, and
-  gone as the blade comes in tight, where the hand comes back to the hip. It
-  follows the blade's bearing alone, so it is the same with the puck or
-  without and a pickup or a lost puck moves nothing; it sits under the regime
-  blend, so the FAR regime, the rim and the claim clamp are untouched. A shot,
-  the block and the centre's address keep the floorless solve.
-  `test_top_hand_ik.gd` holds it.
+- **The top hand is held off the body** (`top_hand_forward_m`,
+  `top_hand_out_share`, `TopHandIK.Config.hand_forward`). Held under its own
+  shoulder, the top fist sat in the jersey everywhere (6–8 cm in, measured by
+  `tests/instruments/actors/test_carry_clipping.gd`): against the ribs ahead,
+  in the hip round the backhand, at the far hip round the forehand, where the
+  bottom arm then reached the shaft only across the whole chest. Coaching names
+  both as faults ("top hand glued to the hip", "arms crowding the body") and asks
+  for a gap between the top hand and the midsection. So CLOSE keeps the hand a
+  floor out along the bearing to the blade: all of it from ~55° round the
+  forehand, `top_hand_out_share` of it from ~10° back, straight ahead and round
+  the backhand, and fading in with the blade's distance over
+  `top_hand_forward_none_m`..`full_m`, so a one-handed reach for a puck at the
+  skates comes back up under the shoulder. The chest's fold tips the belly out
+  under a hand hung half a metre below the shoulder, which is what sizes the
+  floor: smaller, the fist is in the belly on every carry ahead. It follows the
+  blade's bearing alone, so it is the same with the puck or without and a
+  pickup or a lost puck moves nothing; it sits under the regime blend, so the
+  FAR regime, the rim and the claim clamp are untouched. A shot, the block and
+  the centre's address keep the floorless solve. `test_top_hand_ik.gd` holds it.
 
 The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
@@ -459,9 +466,12 @@ brings the stick in at the dangle's pace instead of in one tick.
 `test_top_hand_reaches_its_rim.gd` holds all of it.
 
 **A carried puck comes no closer than a floor** (`carry_reach_min_m`,
-`CarryPostureRules.held_out`). Pulled in to his skates, the shaft stands up
-beside him, the top hand rises into his armpit and the bottom arm reaches it
-only through his belly — no arm can be drawn there — so that range is gone: the
+`CarryPostureRules.held_out`). The stick is rigid, so the closer the puck,
+the higher a hand held off the body has to be: from the hips with the puck
+~1.5 m out to the lower chest at the floor, the "hands up and away" coaching
+asks for in tight. Inside it the shaft stands up beside him, the top hand
+rises to his collar and the bottom arm reaches it only through his belly — no
+arm can be drawn there — so that range is gone: the
 cursor is held out to the floor along its bearing from the body's centre,
 across the ice in the facing's frame (the chest's pitches with a skating lean,
 and reads a cursor at his skates as one well out). Never lay the floor from the

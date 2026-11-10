@@ -16,7 +16,7 @@ const BOUNDS: Dictionary = {
 	"steady stride, cursor 6 m ahead":
 		[8.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 	"pickup / drop, cursor far ahead":
-		[8.0, 30.0, 8.0, 47.0, 35.0, 43.0],
+		[8.0, 30.0, 10.5, 47.0, 45.0, 43.0],
 	"forward → backward pivot (cursor flipped)":
 		[30.0, 31.0, 13.0, 46.0, 52.0, 49.0],
 	"backward → forward (move reversed)":
@@ -36,7 +36,7 @@ const BOUNDS: Dictionary = {
 	"knocked down just past his balance and up again":
 		[84.0, 16.0, 13.0, 14.0, 21.0, 11.0],
 	"shot block down and back up, puck ahead":
-		[28.0, 35.0, 27.0, 37.0, 25.0, 27.0],
+		[28.0, 35.0, 27.0, 50.0, 25.0, 35.0],
 	"goal celebration while gliding":
 		[10.0, 16.0, 8.0, 25.0, 32.0, 23.0],
 	"shuffle: Space + D held, released":

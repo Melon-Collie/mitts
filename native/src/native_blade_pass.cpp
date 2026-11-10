@@ -289,6 +289,7 @@ bool NativeBladePass::configure(const Dictionary &t) {
 	twist_limit = read(t, "twist_limit", ok);
 	const double forward_none = read(t, "top_hand_forward_none_m", ok);
 	const double forward_full = read(t, "top_hand_forward_full_m", ok);
+	const double out_share = read(t, "top_hand_out_share", ok);
 	const double fh_angle = read(t, "rom_forehand_angle_max", ok);
 	const double bh_angle = read(t, "rom_backhand_angle_max", ok);
 	const double fh_reach = read(t, "rom_forehand_reach_max", ok);
@@ -301,6 +302,7 @@ bool NativeBladePass::configure(const Dictionary &t) {
 		top->set_rom_backhand_reach_max(bh_reach);
 		top->set_hand_forward_none(forward_none);
 		top->set_hand_forward_full(forward_full);
+		top->set_hand_out_share(out_share);
 	}
 	return ok;
 }

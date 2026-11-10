@@ -213,8 +213,9 @@ double NativeTopHandIK::forward_floor(double d, double tf) const {
 	if (hand_forward <= 0.0) {
 		return 0.0;
 	}
+	const double forehand = smoothstep_gd(hand_forward_none_angle, hand_forward_full_angle, tf);
 	return hand_forward * smoothstep_gd(hand_forward_none, hand_forward_full, d)
-			* smoothstep_gd(hand_forward_none_angle, hand_forward_full_angle, tf);
+			* (hand_out_share + (1.0 - hand_out_share) * forehand);
 }
 
 double NativeTopHandIK::hand_reach(double d, double rest_horiz) {
@@ -316,6 +317,8 @@ void NativeTopHandIK::_bind_methods() {
 			"set_max_blade_reach", "get_max_blade_reach");
 	ClassDB::bind_method(D_METHOD("set_hand_forward", "v"), &NativeTopHandIK::set_hand_forward);
 	ClassDB::bind_method(D_METHOD("get_hand_forward"), &NativeTopHandIK::get_hand_forward);
+	ClassDB::bind_method(D_METHOD("set_hand_out_share", "v"), &NativeTopHandIK::set_hand_out_share);
+	ClassDB::bind_method(D_METHOD("get_hand_out_share"), &NativeTopHandIK::get_hand_out_share);
 	ClassDB::bind_method(D_METHOD("set_hand_forward_none", "v"), &NativeTopHandIK::set_hand_forward_none);
 	ClassDB::bind_method(D_METHOD("get_hand_forward_none"), &NativeTopHandIK::get_hand_forward_none);
 	ClassDB::bind_method(D_METHOD("set_hand_forward_full", "v"), &NativeTopHandIK::set_hand_forward_full);
@@ -329,6 +332,8 @@ void NativeTopHandIK::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_hand_forward_full_angle"),
 			&NativeTopHandIK::get_hand_forward_full_angle);
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_forward"), "set_hand_forward", "get_hand_forward");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_out_share"),
+			"set_hand_out_share", "get_hand_out_share");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_forward_none"),
 			"set_hand_forward_none", "get_hand_forward_none");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_forward_full"),

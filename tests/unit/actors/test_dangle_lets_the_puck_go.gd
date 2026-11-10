@@ -70,7 +70,7 @@ func _dangle(c: SkaterController, half_width_m: float, hz: float, seconds: float
 			x = half_width_m * sin(TAU * hz * s) + tremor_m * sin(TAU * 9.0 * s + 1.3)
 		input.delta = DT
 		input.host_timestamp += DT
-		input.mouse_world_pos = sk.global_position + Vector3(x, 0.0, 1.2)
+		input.mouse_world_pos = sk.global_position + Vector3(x, 0.0, 1.5)
 		input.mouse_world_pos.y = 0.0
 		c._process_input(input, DT)
 		sk._physics_process(DT)

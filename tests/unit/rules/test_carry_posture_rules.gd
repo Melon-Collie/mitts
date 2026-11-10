@@ -1,8 +1,8 @@
 extends GutTest
 
-# CarryPostureRules: the chest folds over a stick held out in front, comes up
-# out of it as the blade goes round beside the skater or is pulled in tight,
-# and tops up the posture's own fold rather than adding to it; a carried puck
+# CarryPostureRules: the chest folds over a stick held out in front, stays down
+# over it pulled in tight, comes up out of it as the blade goes round beside
+# the skater, and tops up the posture's own fold rather than adding to it; a carried puck
 # comes no closer in than a floor off his centre. The facing frame has −y ahead.
 
 const FOLD: float = deg_to_rad(22.0)
@@ -25,10 +25,10 @@ func test_round_beside_or_behind_him_the_chest_stands_up() -> void:
 				"%.0f° off the facing" % bearing)
 
 
-func test_pulled_in_tight_the_chest_stands_up() -> void:
-	assert_eq(CarryPostureRules.fold(_at(0.0, 0.5), 0.0, FOLD), 0.0)
-	assert_lt(CarryPostureRules.fold(_at(0.0, 0.75), 0.0, FOLD), FOLD)
-	assert_almost_eq(CarryPostureRules.fold(_at(0.0, 1.0), 0.0, FOLD), FOLD, 0.0001)
+func test_pulled_in_tight_he_stays_down_over_it() -> void:
+	for out_m: float in [0.3, 0.5, 0.75, 1.0]:
+		assert_almost_eq(CarryPostureRules.fold(_at(0.0, out_m), 0.0, FOLD), FOLD, 0.0001,
+				"%.2f m out" % out_m)
 
 
 func test_the_fold_moves_without_a_jump_as_the_blade_goes_round() -> void:

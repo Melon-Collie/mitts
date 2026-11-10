@@ -37,10 +37,10 @@ const _WIRE_SIDE_LAPSE_TICKS: int = 2
 # Toe-drag read. The shaft only steepens past its lie in TopHandIK's CLOSE
 # regime (the hand rising to shorten the stick's horizontal run) — in the FAR
 # regime the hand rides at rest height and the shaft holds the lie exactly, so
-# the factor is identically 0 there. Onset is ~6° past the lie (blade ≈ 0.87 m
-# from the shoulder); full at 18° past it (≈ 0.65 m), holding full from there
-# in to the carry's floor (SkaterController.carry_reach_min_m, off the body's
-# centre). Carry-only: the wrists roll the
+# the factor is identically 0 there. Onset is ~6° past the lie; full at 18°
+# past it, nearly reached at the carry's floor (SkaterController
+# .carry_reach_min_m, off the body's centre), where the top hand held off the
+# body is up at the lower chest. Carry-only: the wrists roll the
 # face CLOSED over the puck (signed against the elevation scoop, so a drag
 # visibly cups where a loft opens) and curl the toe in around it (the
 # axial-twist sweep).

@@ -18,20 +18,17 @@ class_name CarryPostureRules
 # in front of him, out to ~37° either side, so a dangle across his front never
 # moves it and the fold never feeds back into the strokes; none from ~78° round
 # to behind, where a fold toward the facing carries the shoulders away from the
-# blade. Pulled in tight he stands up out of it, the hands coming back to his
-# hip, as far as the blade comes inside `_OUT_M` (m off his centre: none inside
-# the near end, all of it past the far one, where a standing carry with the
-# fold rests). It tops the posture's own fold up to that, never adds to it: a
-# skater already folded over his skating has his hands out front.
+# blade. However close the puck comes he stays down over it, as a player
+# protecting it in tight gets lower, never taller. It tops the posture's own
+# fold up to that, never adds to it: a skater already folded over his skating
+# has his hands out front.
 const _AHEAD := Vector2(0.2, 0.8)
-const _OUT_M := Vector2(0.55, 0.95)
 
 static func fold(blade_in_facing: Vector2, posture_fold: float, carry_fold: float) -> float:
 	var out: float = blade_in_facing.length()
 	var ahead: float = 1.0
 	if out > 0.01:
 		ahead = smoothstep(_AHEAD.x, _AHEAD.y, -blade_in_facing.y / out)
-	ahead *= smoothstep(_OUT_M.x, _OUT_M.y, out)
 	return maxf(carry_fold * ahead - maxf(-posture_fold, 0.0), 0.0)
 
 

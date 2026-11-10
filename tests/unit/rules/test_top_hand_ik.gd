@@ -766,7 +766,7 @@ func test_round_the_forehand_the_hand_holds_its_floor_along_the_bearing() -> voi
 		assert_almost_eq(r.blade.distance_to(r.hand), GAME_STICK, 0.0001, "a rigid stick")
 
 
-func test_ahead_and_round_the_backhand_the_hand_holds_at_its_side() -> void:
+func test_with_no_share_out_front_ahead_and_round_the_backhand_the_hand_holds_at_its_side() -> void:
 	var shoulder: Vector3 = _lefty_shoulder()
 	for bearing: float in [0.0, 30.0, 70.0]:
 		var target: Vector2 = _target_at(shoulder, bearing, 0.9)
@@ -775,6 +775,35 @@ func test_ahead_and_round_the_backhand_the_hand_holds_at_its_side() -> void:
 		var b: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, _floored(),
 				TopHandIK.Result.new())
 		assert_lt((a.hand - b.hand).length(), 0.01, "%.0f°" % bearing)
+
+
+func test_ahead_and_round_the_backhand_the_hand_holds_its_share_out_toward_the_blade() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var cfg: TopHandIK.Config = _floored()
+	cfg.hand_out_share = 0.7
+	for bearing: float in [0.0, 30.0, 70.0]:
+		var target: Vector2 = _target_at(shoulder, bearing, 1.0)
+		var r: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, cfg,
+				TopHandIK.Result.new())
+		var hand := Vector2(r.hand.x - shoulder.x, r.hand.z - shoulder.z)
+		var share: float = FLOOR * 0.7 * smoothstep(0.3, 0.9, 1.0)
+		assert_almost_eq(hand.length(), share, 0.001, "%.0f°: off the hip" % bearing)
+		assert_almost_eq(hand.angle_to(target - Vector2(shoulder.x, shoulder.z)), 0.0, 0.001,
+				"%.0f°: toward the blade" % bearing)
+		assert_almost_eq(Vector2(r.blade.x, r.blade.z).distance_to(target), 0.0, 0.001,
+				"%.0f°: and the blade on the target" % bearing)
+		assert_almost_eq(r.blade.distance_to(r.hand), GAME_STICK, 0.0001, "a rigid stick")
+
+
+func test_the_share_out_front_never_exceeds_the_forehand_floor() -> void:
+	var cfg: TopHandIK.Config = _floored()
+	cfg.hand_out_share = 0.7
+	var prev: float = TopHandIK.forward_floor(1.0, deg_to_rad(-90.0), cfg)
+	for i: int in range(-89, 91):
+		var now: float = TopHandIK.forward_floor(1.0, deg_to_rad(float(i)), cfg)
+		assert_gte(now, prev - 0.000001, "rising round to the forehand at %d°" % i)
+		assert_lte(now, FLOOR + 0.000001, "at most the forehand's at %d°" % i)
+		prev = now
 
 
 func test_round_the_forehand_the_hand_comes_across_the_body() -> void:
