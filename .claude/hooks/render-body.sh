@@ -4,8 +4,12 @@
 #
 #   .claude/hooks/render-body.sh                 # the whole set
 #   .claude/hooks/render-body.sh --only=stride   # poses whose name contains it
+#   BODY_PREVIEW_RENDERER=forward_plus ...       # on the renderer the game ships
 #
-# Same xvfb / software-GL arrangement as render-poses.sh, and as slow.
+# Same xvfb / software-GL arrangement as render-poses.sh, and as slow. Forward+
+# without a display needs Mesa's software Vulkan (lavapipe, the package
+# mesa-vulkan-drivers); it is the check that a body shader change draws the
+# same on both renderers.
 set -euo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
@@ -31,6 +35,18 @@ if [ -z "${DISPLAY:-}" ] && command -v xvfb-run >/dev/null 2>&1; then
   export LIBGL_ALWAYS_SOFTWARE=1
 fi
 
-exec "${RUNNER[@]}" "$GODOT" --path "$PROJECT_DIR" \
-  --rendering-driver opengl3 --rendering-method gl_compatibility \
+RENDERER=(--rendering-driver opengl3 --rendering-method gl_compatibility)
+if [ "${BODY_PREVIEW_RENDERER:-}" = "forward_plus" ]; then
+  RENDERER=(--rendering-driver vulkan --rendering-method forward_plus)
+  LVP=/usr/share/vulkan/icd.d/lvp_icd.json
+  if [ ${#RUNNER[@]} -gt 0 ]; then
+    if [ ! -f "$LVP" ]; then
+      echo "[render-body] no display and no lavapipe ($LVP): install mesa-vulkan-drivers." >&2
+      exit 1
+    fi
+    export VK_ICD_FILENAMES="$LVP"
+  fi
+fi
+
+exec "${RUNNER[@]}" "$GODOT" --path "$PROJECT_DIR" "${RENDERER[@]}" \
   --audio-driver Dummy -s res://tools/body_preview.gd -- "$@"

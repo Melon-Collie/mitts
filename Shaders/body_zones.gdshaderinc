@@ -27,11 +27,23 @@ uniform float ghost_alpha = 0.3;
 #endif
 
 // 1 on a body whose faces bend as they are skinned (SkaterConnectedMesh): each
-// fragment is then lit by its triangle's own facing as drawn, from the
-// position's screen derivatives, so every face stays flat however the weights
-// across it pull. The vertex normals, set in the bind pose, would be skinned
-// apart from each other and shade a bent face as a smear.
+// fragment is then lit by its face's own facing as drawn, from the position's
+// screen derivatives, so every face stays flat however the weights across it
+// pull. The vertex normals, set in the bind pose, would be skinned apart from
+// each other and shade a bent face as a smear.
 instance uniform float flat_from_position = 0.0;
+
+// A quad's two halves are lit as one facet (ConnectedSkinBuilder): `facet` is
+// each corner's share on the two ends of the quad's split (xy) and 1 on a quad
+// (z); `facet_facing` the quad's normal as skinning carried it at each corner,
+// view space.
+varying vec3 facet;
+varying vec3 facet_facing;
+
+void vertex() {
+	facet = CUSTOM0.xyz;
+	facet_facing = (MODELVIEW_MATRIX * vec4(NORMAL, 0.0)).xyz;
+}
 
 // A source_color albedo: linear where the renderer lights in linear space, left as
 // authored on Compatibility, which does not convert one either.
@@ -70,9 +82,31 @@ void fragment() {
 	}
 	vec4 pbr = zone_pbr[zone];
 	if (flat_from_position > 0.5) {
-		vec3 n = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
+		vec3 px = dFdx(VERTEX);
+		vec3 py = dFdy(VERTEX);
+		vec3 n = normalize(cross(px, py));
 		// Back faces are culled, so the face looks toward the camera at the origin.
-		NORMAL = dot(n, VERTEX) > 0.0 ? -n : n;
+		n = dot(n, VERTEX) > 0.0 ? -n : n;
+		// A quad is lit by one normal across both halves: the skinned one read
+		// where the halves agree on it, at the split's middle, and squared to
+		// the split itself, which is this triangle's own edge and exact from
+		// the position's derivatives against the corner shares'.
+		vec2 sx = dFdx(facet.xy);
+		vec2 sy = dFdy(facet.xy);
+		float det = sx.x * sy.y - sy.x * sx.y;
+		if (facet.z > 0.5 && abs(det) > 1e-12) {
+			vec3 split = py * (sx.x + sx.y) - px * (sy.x + sy.y);
+			vec2 to_middle = vec2(0.5) - facet.xy;
+			vec2 step = vec2(sy.y * to_middle.x - sy.x * to_middle.y,
+					sx.x * to_middle.y - sx.y * to_middle.x) / det;
+			vec3 q = facet_facing + dFdx(facet_facing) * step.x + dFdy(facet_facing) * step.y;
+			q -= split * (dot(q, split) / max(dot(split, split), 1e-30));
+			float len = length(q);
+			if (len > 1e-6) {
+				n = q / len;
+			}
+		}
+		NORMAL = n;
 	}
 	ALBEDO = albedo.rgb;
 	ROUGHNESS = pbr.x;

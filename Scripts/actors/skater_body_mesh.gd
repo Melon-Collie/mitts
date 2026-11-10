@@ -57,6 +57,7 @@ static func _build(skin_mesh: ArrayMesh, top_right: bool, legs: ArrayMesh) -> Ar
 	for a: int in [Mesh.ARRAY_TEX_UV, Mesh.ARRAY_TEX_UV2]:
 		out[a] = PackedVector2Array()
 	out[Mesh.ARRAY_COLOR] = PackedColorArray()
+	out[Mesh.ARRAY_CUSTOM0] = PackedFloat32Array()
 	out[Mesh.ARRAY_BONES] = PackedInt32Array()
 	out[Mesh.ARRAY_WEIGHTS] = PackedFloat32Array()
 	out[Mesh.ARRAY_INDEX] = PackedInt32Array()
@@ -66,7 +67,8 @@ static func _build(skin_mesh: ArrayMesh, top_right: bool, legs: ArrayMesh) -> Ar
 	_append(out, legs.surface_get_arrays(0),
 			upper + SkaterMeshBuilder.UPPER_BONE_COUNT)
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out, [], {},
+			ConnectedSkinBuilder.FACET_FORMAT)
 	return mesh
 
 
@@ -87,9 +89,10 @@ static func _append(out: Array, src: Array, bind_offset: int) -> void:
 	var colors: PackedColorArray = out[Mesh.ARRAY_COLOR]
 	colors.append_array(src[Mesh.ARRAY_COLOR])
 	out[Mesh.ARRAY_COLOR] = colors
-	var weights: PackedFloat32Array = out[Mesh.ARRAY_WEIGHTS]
-	weights.append_array(src[Mesh.ARRAY_WEIGHTS])
-	out[Mesh.ARRAY_WEIGHTS] = weights
+	for a: int in [Mesh.ARRAY_WEIGHTS, Mesh.ARRAY_CUSTOM0]:
+		var floats: PackedFloat32Array = out[a]
+		floats.append_array(src[a])
+		out[a] = floats
 	var bones: PackedInt32Array = out[Mesh.ARRAY_BONES]
 	var src_bones: PackedInt32Array = src[Mesh.ARRAY_BONES]
 	for b: int in src_bones:

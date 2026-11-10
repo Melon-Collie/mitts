@@ -48,9 +48,20 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   bones and tail columns are what cost per frame (the cloth is linear in its
   columns: ~20 µs a skater natively at 20). The pants and legs are
   `SkaterConnectedPants`.
+- **A quad is one facet.** The body is lit flat, and a quad is lit by ONE
+  normal across both its triangles (`ConnectedSkinBuilder.quad`, read by
+  `body_zones.gdshaderinc`), so its split never shows however the weights pull
+  it out of plane. Lit a triangle at a time, every quad that is not planar
+  (the armhole, the yoke, the tail over the pants, any band across a bent
+  joint) shows its diagonal, and the skin reads as triangles there and as
+  facets on the limbs. A bent quad is split along the diagonal that stands
+  proud, so the two sleeves are each other's mirror
+  (`test_skin_quads_are_facets.gd`). The helmet's shell takes the same
+  (`ConnectedSkinBuilder.facet_pairs`); the other rigid parts are lit a
+  triangle at a time.
 - **It is authored in a bind pose**, the body skeleton with HIPS/WAIST/SPINE at
-  identity, the legs straight and the arms out, forward and 35° under level
-  (`bind_arm`). Each bind's inverse rest is its bone's global pose there
+  identity, the legs straight and the arms hung out and forward, about 35° off
+  straight down (`bind_arm`). Each bind's inverse rest is its bone's global pose there
   (`bind_rests`), so it rides the rigs' bones untouched; the torso's rings are
   built round `SkaterMeshBuilder`'s rest stations (`torso_ring`), and its tail
   hangs from the belt on `SkaterHemFlaps`' column bones. Its pants stand their

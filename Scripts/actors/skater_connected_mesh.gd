@@ -62,9 +62,10 @@ const _SOCK_DROP_M: float = 0.19
 
 # The arms' bind hang, right side (the left mirrors it): from the shoulder
 # marker's rest place (Skater.shoulder_offset, shoulder_height) the upper arm
-# out, forward and 35° under level, the forearm bent on toward the front. The
-# middle of the range the IK asks for — hanging at the sides, reaching for the
-# stick, up over the head for a slapshot — so none of it is far from the bind.
+# out and forward, about 35° off straight down, the forearm bent on toward the
+# front. The middle of the range the IK asks for — hanging at the sides,
+# reaching for the stick, up over the head for a slapshot — so none of it is
+# far from the bind.
 const _BIND_SHOULDER := Vector3(0.18, 0.45, 0.0)
 const _BIND_UPPER_DIR := Vector3(0.55, -0.85, -0.3)
 const _BIND_FORE_DIR := Vector3(0.15, -0.45, -0.88)

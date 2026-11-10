@@ -202,6 +202,11 @@ static func _crested(shell: ArrayMesh) -> Array:
 		var n: Vector3 = (verts[indices[t + 2]] - a).cross(verts[indices[t + 1]] - a).normalized()
 		for c: int in 3:
 			normals[indices[t + c]] = n
+	# The shell's grid is laid a quad at a time ahead of its liner, and the
+	# ridge and ribs bend those quads: each is lit as one facet, as the jersey's.
+	if arrays[Mesh.ARRAY_INDEX] == null:
+		arrays[Mesh.ARRAY_CUSTOM0] = ConnectedSkinBuilder.facet_pairs(verts, normals,
+				_HELMET_LON * _HELMET_LAT)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	return arrays
