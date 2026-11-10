@@ -351,15 +351,27 @@ func _elect_zone_carrier_owner(snapshot: WorldSnapshot, prev_assignments: Dictio
 		return
 	_pressure_owner_peer = AIRoleSlots.carrier_owner(snapshot, team_id, _own_goal_z,
 			_team_id_by_peer, _zone_peers, _caps_by_peer, prev_owner)
-	# On the back line the carrier stays with the D who had him while nobody is
-	# elected (no carrier at pace, a pass in flight): the posts mirror whenever
-	# the strong side flips, and handing him on with BACK_STRONG's label turns the
-	# man already on him away and sends his partner across.
-	if _pressure_owner_peer == -1 and state == AIPossessionState.State.TRANS_DEFENSE \
-			and _zone_peers.has(prev_owner):
-		_pressure_owner_peer = prev_owner
+	# On the back line, with no carrier coming at pace, he is the D's whose lane
+	# he is skating into (AIRoleSlots.lane_owner); with the puck in flight, the
+	# D who had him keeps him. Never BACK_STRONG's label: the posts mirror
+	# whenever the strong side flips, and a carrier drifting through the middle
+	# would turn the man already on him away and send his partner across.
+	if _pressure_owner_peer == -1 and state == AIPossessionState.State.TRANS_DEFENSE:
+		_pressure_owner_peer = _back_line_lane_owner(snapshot, prev_owner)
 	if _pressure_owner_peer != -1:
 		_pressure_slot_override = slot_assignments[_pressure_owner_peer]
+
+
+func _back_line_lane_owner(snapshot: WorldSnapshot, prev_owner: int) -> int:
+	var carrier: int = snapshot.puck_state.carrier_peer_id \
+			if snapshot != null and snapshot.puck_state != null else -1
+	if carrier == -1 or _team_id_by_peer.get(carrier, team_id) == team_id:
+		return prev_owner if _zone_peers.has(prev_owner) else -1
+	var i: int = rush_read.attackers.find(carrier)
+	if i == -1 or not snapshot.skater_states.has(carrier):
+		return prev_owner if _zone_peers.has(prev_owner) else -1
+	return AIRoleSlots.lane_owner(snapshot, _own_goal_z, _zone_peers,
+			snapshot.skater_states[carrier].position, rush_read.attacker_leads[i], prev_owner)
 
 
 func pressure_slot_override() -> int:

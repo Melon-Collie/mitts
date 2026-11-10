@@ -288,11 +288,21 @@ drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
   back-line D whose stick gets onto his line farthest out owns him
   (`AIRoleSlots.carrier_owner`, the election DZONE keeps), so a carrier up the
   middle is the D in front of him, and the strong D keeps the strong lane as
-  `BACK_WEAK` keeps the weak one (`AIRoleNeutralZone.decide_back_lane`). While
-  nobody is elected (a carrier not at pace, a pass in flight) the D who had
-  him keeps him: the posts mirror whenever the strong side flips, and handing
-  the carrier on with `BACK_STRONG`'s label turns the man on him away and sends
-  his partner across. Crossing
+  `BACK_WEAK` keeps the weak one (`AIRoleNeutralZone.decide_back_lane`). A
+  carrier not coming at pace is the D's whose lane his skating takes him into
+  (`AIRoleSlots.lane_owner`, off his lead): the D-to-D switch, the D on the side
+  he picks taking him and the other sliding behind; with the puck in flight the
+  D who had him keeps him. Never `BACK_STRONG`'s label: the posts mirror
+  whenever the strong side flips, and a carrier drifting through the middle
+  turned the man on him away and sent his partner across, while keeping him
+  with whoever had him lost the switch. Until the carrier picks a side, while
+  his lead runs between the pair, both D play him
+  (`AIBackLineStands.bracket_side`): the carrier's D on his line at the
+  ladder's gap, his partner a stick off it on his own side, each skated
+  straight to rather than through `depth_first`. That is the coached 3-on-2 —
+  make him pick a side, no seam between the D — and it replaces the one-man
+  cross to the middle, which gave up the crossing D's depth on the wingers and
+  his lane to the pass (`test_five_on_five_set_shape.gd`). Crossing
   to a middle carrier from the strong post leaves the strong lane to the pass,
   and holding the lane instead leaves the seam between the D to the carrier
   (`test_five_on_five_set_shape.gd`). The carrier's D **stands him up at our line**: while even a
@@ -743,8 +753,9 @@ standing D against a carrier down the middle at 9 m/s kept his depth to our line
 and was 6 m wide of him the whole way. He takes the first ice on the carrier's
 line his stick gets to before the carrier does (`AIDefensiveVerbs.cut_off`, the
 same cut-off the level pressurer skates), facing travel, and the ladder takes
-over once he is on it. `test_five_on_five_set_shape.gd` runs it against a
-three-man break.
+over once he is on it. On the 5v5 back line the pair's bracket replaces it
+while the carrier's lead runs between the two D (`BACK_STRONG` above).
+`test_five_on_five_set_shape.gd` runs it against a three-man break.
 
 ### The ladder has a domain: the carrier has to be coming at us
 

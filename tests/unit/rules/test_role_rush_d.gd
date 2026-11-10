@@ -885,3 +885,45 @@ func test_with_no_election_the_strong_d_owns_the_carrier() -> void:
 	assert_false(AIRoleSlots.owns_back_line_carrier(strategy, AIRoleSlots.Slot.BACK_STRONG))
 	assert_true(AIRoleSlots.owns_back_line_carrier(strategy, AIRoleSlots.Slot.BACK_MID))
 	assert_false(AIRoleSlots.owns_back_line_carrier(strategy, AIRoleSlots.Slot.NZ_F1))
+
+
+# A carrier up the middle at the red line, the two D a stick-and-more either
+# side of his line and goal-side of him; me (1) at `self_x`, my partner (12) at
+# -`self_x`, the slots as named, the brain naming `owner_slot`.
+func _pair_ctx(self_x: float, carrier_x: float, self_slot: int,
+		owner_slot: int) -> RoleContext:
+	var ctx: RoleContext = _ctx(Vector3(self_x, 0.0, 10.0), [
+		[10, 1, Vector3(carrier_x, 0.0, 0.0), Vector3(0.0, 0.0, 7.0)],
+		[11, 1, Vector3(8.0, 0.0, -1.5), Vector3(0.0, 0.0, 7.0)],
+		[12, 0, Vector3(-self_x, 0.0, 10.0)],
+	], 10, AIRushRead.Numbers.DOWN_ONE, INF, false)
+	var strategy := StubStrategy.new()
+	strategy.slots = {1: self_slot, 12: AIRoleSlots.Slot.BACK_MID
+			if self_slot == AIRoleSlots.Slot.BACK_STRONG else AIRoleSlots.Slot.BACK_STRONG}
+	strategy.carrier_slot = owner_slot
+	ctx.team_brain = strategy
+	ctx.strong_x = 1.0
+	return ctx
+
+
+func test_a_carrier_between_the_pair_is_bracketed_by_both() -> void:
+	# He has not picked a side: the pair plays him together, each on his own
+	# side of his line, so neither crosses at his depth and there is no seam.
+	var as_owner: RoleContext = _pair_ctx(5.0, 0.0, AIRoleSlots.Slot.BACK_STRONG,
+			AIRoleSlots.Slot.BACK_STRONG)
+	assert_eq(AIBackLineStands.bracket_side(as_owner, AIRoleSlots.Slot.BACK_STRONG), 1.0)
+	var own: Vector3 = AIRoleRushD.decide(as_owner, AIRoleSlots.Slot.BACK_STRONG).target_position
+	assert_lt(absf(own.x), 1.0, "the carrier's D on his line; got %s" % own)
+	assert_gt(own.z, 2.0, "at the ladder's gap, not at his depth; got %s" % own)
+	var partner: RoleContext = _pair_ctx(-5.0, 0.0, AIRoleSlots.Slot.BACK_MID,
+			AIRoleSlots.Slot.BACK_STRONG)
+	var p: Vector3 = AIRoleRushD.decide(partner, AIRoleSlots.Slot.BACK_MID).target_position
+	assert_lt(p.x, -1.0, "his partner a stick off it on his own side; got %s" % p)
+	assert_gt(p.x, -1.0 - STICK * 1.5, "and no wider; got %s" % p)
+
+
+func test_a_carrier_outside_the_pair_is_not_bracketed() -> void:
+	# His lead outside both of them: he has picked a side, and he is one D's.
+	var ctx: RoleContext = _pair_ctx(5.0, 9.0, AIRoleSlots.Slot.BACK_STRONG,
+			AIRoleSlots.Slot.BACK_STRONG)
+	assert_eq(AIBackLineStands.bracket_side(ctx, AIRoleSlots.Slot.BACK_STRONG), 0.0)

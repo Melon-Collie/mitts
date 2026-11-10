@@ -1,7 +1,7 @@
 extends GutTest
 
 # test_five_on_five_set_shape's 3-on-2 off a failed forecheck, traced for the
-# starts it still lists as thin (#899): every few ticks, each of ours with his
+# starts #899 was about: every few ticks, each of ours with his
 # slot, where he is and how fast, his distance off our net, and each of theirs
 # with how many of ours are goal-side of him (by distance to our net, the test's
 # own count) and whether he has the puck. Staged exactly as that test stages it.

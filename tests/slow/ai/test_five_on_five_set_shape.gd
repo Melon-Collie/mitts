@@ -27,10 +27,7 @@ extends GutTest
 #
 # Starts whose back line is beaten at entry today, each with its issue: they
 # count against neither the line nor the open share.
-#   v7.0/z24/c0 — our line is one man thin at entry and a man of theirs stands
-#   behind it for a third of their zone time: the strong D crosses to the
-#   middle carrier and the pass goes to the lane he left (#899).
-const KNOWN_THIN: Array[String] = ["v7.0/z24/c0"]
+const KNOWN_THIN: Array[String] = []
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")

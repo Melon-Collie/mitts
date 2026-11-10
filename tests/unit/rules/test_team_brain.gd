@@ -500,14 +500,14 @@ func test_a_carrier_up_the_middle_is_the_back_line_d_in_front_of_him() -> void:
 			"and the D across from him does not")
 
 
-func test_the_back_line_d_on_a_carrier_keeps_him_when_he_slows() -> void:
+func test_a_slowed_carrier_stays_with_the_d_whose_lane_he_is_in() -> void:
 	# Elected while the carrier comes at pace, the D in front of him keeps him
 	# once he slows and no election runs — not handed to BACK_STRONG's label.
 	var brain: TeamBrain = _entry_brain()
 	brain.force_retick()
 	brain.tick(0.001, _middle_rush_snapshot())
-	var owner_slot: int = brain.pressure_slot_override()
-	assert_eq(owner_slot, brain.slot_assignments[140], "fixture sanity: 140 elected")
+	assert_eq(brain.pressure_slot_override(), brain.slot_assignments[140],
+			"fixture sanity: 140 elected")
 	var slowed: WorldSnapshot = _middle_rush_snapshot()
 	slowed.skater_states[200].velocity = Vector3(-1.0, 0.0, 1.0)
 	brain.force_retick()
@@ -515,6 +515,26 @@ func test_the_back_line_d_on_a_carrier_keeps_him_when_he_slows() -> void:
 	assert_eq(brain.state, AIPossessionState.State.TRANS_DEFENSE, "fixture sanity")
 	assert_true(AIRoleSlots.owns_back_line_carrier(brain, brain.slot_assignments[140]),
 			"the D on him keeps him; slots %s, owner %s" % [str(brain.slot_assignments),
+					AIRoleSlots.label(brain.pressure_slot_override())])
+
+
+func test_a_carrier_cutting_across_is_switched_to_the_d_on_that_side() -> void:
+	# The D-to-D switch: no longer coming at our net, he skates across the ice
+	# toward 130's lane, and he is 130's.
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _middle_rush_snapshot())
+	assert_eq(brain.pressure_slot_override(), brain.slot_assignments[140],
+			"fixture sanity: 140 elected")
+	var across: WorldSnapshot = _middle_rush_snapshot()
+	across.skater_states[200].position = Vector3(3.0, 0.0, 0.0)
+	across.puck_state.position = Vector3(3.0, 0.0, 0.0)
+	across.skater_states[200].velocity = Vector3(8.0, 0.0, 1.0)
+	brain.force_retick()
+	brain.tick(0.001, across)
+	assert_true(AIRoleSlots.owns_back_line_carrier(brain, brain.slot_assignments[130]),
+			"the D on the side he picked takes him; slots %s, owner %s" % [
+					str(brain.slot_assignments),
 					AIRoleSlots.label(brain.pressure_slot_override())])
 
 
