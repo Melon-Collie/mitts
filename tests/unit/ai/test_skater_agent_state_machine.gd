@@ -1004,29 +1004,29 @@ func test_aim_flip_is_debounced_at_the_near_anchor_boundary() -> void:
 			"past the far edge of the band: flips back to the anchor")
 
 
-func test_live_off_puck_aim_tracks_the_carrier_puck_during_a_jab() -> void:
-	# On skipped throttle ticks an ACTIVE poke-jab re-derives its aim from the
-	# CURRENT carrier puck position (the counters advance on dispatch, but the
-	# stab tracks live so the swept blade actually sweeps THROUGH the moving
-	# puck). The helper returns the live puck point while _off_puck_jab_live.
+func test_live_off_puck_aim_tracks_the_carrier_puck_during_a_lift() -> void:
+	# On skipped throttle ticks a held lift re-derives its aim from the CURRENT
+	# carrier puck position once its hook is done (the counters advance on
+	# dispatch, but the dropping blade tracks live so the swept blade actually
+	# comes down THROUGH the moving puck).
 	var self_pos := Vector3.ZERO
 	var s := WorldSnapshot.new()
 	s.puck_state = PuckNetworkState.new()
 	s.puck_state.position = Vector3(1.4, 0, 0)
 	s.puck_state.carrier_peer_id = OPP_ID
 	_add_skater(s, OPP_ID, Vector3(1.6, 0, 0))
-	sm._off_puck_jab_live = true
+	sm._off_puck_lift_live = true
 	var aim: Vector3 = sm._off_puck_live_aim(s, self_pos)
-	assert_almost_eq(aim.x, 1.4, 0.001, "jab aim tracks the live carrier puck")
+	assert_almost_eq(aim.x, 1.4, 0.001, "the lift's aim tracks the live carrier puck")
 	# Puck slides; the live re-derive follows it (a staircased stab would lag).
 	s.puck_state.position = Vector3(1.1, 0, 0.5)
 	aim = sm._off_puck_live_aim(s, self_pos)
 	assert_almost_eq(aim.x, 1.1, 0.001, "…and keeps following as it moves")
 	assert_almost_eq(aim.z, 0.5, 0.001, "…on both axes")
-	# Carrier releases (loose puck) → no carrier to jab → INF, fall to cached.
+	# Carrier releases (loose puck) → no carrier to lift → INF, fall to cached.
 	s.puck_state.carrier_peer_id = -1
 	assert_false(sm._off_puck_live_aim(s, self_pos).is_finite(),
-			"no opposing carrier → no live jab target")
+			"no opposing carrier → no live lift target")
 
 
 func test_man_to_beat_reads_reach_not_proximity() -> void:

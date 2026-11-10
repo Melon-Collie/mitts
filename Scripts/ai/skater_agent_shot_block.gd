@@ -93,10 +93,7 @@ static func _winding_up(shot_state: int) -> bool:
 # body, or one with a second man home, plays the pass on his feet.
 func _dive_point(snapshot: WorldSnapshot, me: SkaterNetworkState, own_goal_dir: float,
 		rush: AIRushRead, stick_reach: float, accel: float) -> Vector3:
-	if rush == null or not rush.is_live or rush.numbers == AIRushRead.Numbers.EVEN_OR_UP \
-			or rush.back_count != 1 \
-			or rush.recovery_by_peer.get(_peer_id, AIRushRead.Recovery.BEATEN) \
-					!= AIRushRead.Recovery.INSIDE:
+	if rush == null or not rush.is_lone_defender(_peer_id):
 		return Vector3.INF
 	var carrier_pid: int = snapshot.puck_state.carrier_peer_id
 	if carrier_pid == -1 or carrier_pid != rush.carrier_peer:

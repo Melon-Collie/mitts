@@ -63,19 +63,19 @@ static func path_point(self_pos: Vector3, self_vel: Vector3, blade_now: Vector3,
 	return Vector3.INF
 
 
-# The carrier's line from the puck to our net where it first comes into `reach`
-# of our body: the ice he has to skate the puck through, at the edge of it
-# nearest him. The puck itself when it is already in reach; INF when the line
-# never passes within reach.
-static func lane_point(self_pos: Vector3, puck_pos: Vector3, our_net: Vector3,
+# The line from the puck to `lane_end` (the carrier's line to our net, or a
+# pass's) where it first comes into `reach` of our body: the ice the puck has to
+# go through, at the edge of it nearest the puck. The puck itself when it is
+# already in reach; INF when the line never passes within reach.
+static func lane_point(self_pos: Vector3, puck_pos: Vector3, lane_end: Vector3,
 		reach: float) -> Vector3:
 	var fx: float = puck_pos.x - self_pos.x
 	var fz: float = puck_pos.z - self_pos.z
 	var c: float = fx * fx + fz * fz - reach * reach
 	if c <= 0.0:
 		return Vector3(puck_pos.x, 0.0, puck_pos.z)
-	var dx: float = our_net.x - puck_pos.x
-	var dz: float = our_net.z - puck_pos.z
+	var dx: float = lane_end.x - puck_pos.x
+	var dz: float = lane_end.z - puck_pos.z
 	var a: float = dx * dx + dz * dz
 	if a < 1e-6:
 		return Vector3.INF
@@ -86,6 +86,46 @@ static func lane_point(self_pos: Vector3, puck_pos: Vector3, our_net: Vector3,
 	var s: float = (-b - sqrt(disc)) / (2.0 * a)
 	if s < 0.0 or s > 1.0:
 		return Vector3.INF
+	return Vector3(puck_pos.x + dx * s, 0.0, puck_pos.z + dz * s)
+
+
+# Where a lone defender holds his blade against a pass from `puck_pos` to
+# `receiver`: where that lane comes into `reach` of our body, nearest the puck,
+# which a pass meets soonest (the puck itself when it is in reach, the lane shut
+# at its source); with the lane out of reach, the edge of reach toward its
+# nearest point, which narrows it as far as the stick can. INF for a degenerate
+# lane.
+static func pass_lane_point(self_pos: Vector3, puck_pos: Vector3, receiver: Vector3,
+		reach: float) -> Vector3:
+	var in_reach: Vector3 = lane_point(self_pos, puck_pos, receiver, reach)
+	if in_reach.is_finite():
+		return in_reach
+	var nearest: Vector3 = _nearest_on_lane(self_pos, puck_pos, receiver)
+	if not nearest.is_finite():
+		return Vector3.INF
+	var to := Vector3(nearest.x - self_pos.x, 0.0, nearest.z - self_pos.z)
+	return self_pos + to * (reach / maxf(to.length(), 1e-4))
+
+
+# How far the lane from `puck_pos` to `receiver` passes from our body: what
+# picks which of a rush's lanes a lone defender can take away. INF for a
+# degenerate lane.
+static func lane_miss_m(self_pos: Vector3, puck_pos: Vector3, receiver: Vector3) -> float:
+	var nearest: Vector3 = _nearest_on_lane(self_pos, puck_pos, receiver)
+	if not nearest.is_finite():
+		return INF
+	return Vector2(nearest.x - self_pos.x, nearest.z - self_pos.z).length()
+
+
+static func _nearest_on_lane(self_pos: Vector3, puck_pos: Vector3,
+		receiver: Vector3) -> Vector3:
+	var dx: float = receiver.x - puck_pos.x
+	var dz: float = receiver.z - puck_pos.z
+	var len_sq: float = dx * dx + dz * dz
+	if len_sq < 1e-6:
+		return Vector3.INF
+	var s: float = clampf(((self_pos.x - puck_pos.x) * dx + (self_pos.z - puck_pos.z) * dz)
+			/ len_sq, 0.0, 1.0)
 	return Vector3(puck_pos.x + dx * s, 0.0, puck_pos.z + dz * s)
 
 

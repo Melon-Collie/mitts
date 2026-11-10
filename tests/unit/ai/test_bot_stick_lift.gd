@@ -116,6 +116,31 @@ func test_only_the_pressurer_puts_his_stick_on_the_puck() -> void:
 	assert_false(sm._carrier_stick_aim(s, me.position, me, sm._cached_role_decision).is_finite())
 
 
+func test_the_lone_defender_puts_his_stick_in_the_passing_lane() -> void:
+	# A 2-on-1: the carrier at the origin, his man out to my right; I am the
+	# only one back, goal-side.
+	var s: WorldSnapshot = _carrier_snap()
+	var mate := SkaterNetworkState.new()
+	mate.position = Vector3(5.0, 0.0, -2.0)
+	s.skater_states[12] = mate
+	sm._team_id_by_peer[12] = 1
+	var rush: AIRushRead = sm._current_strategy.get_rush_read()
+	rush.is_live = true
+	rush.numbers = AIRushRead.Numbers.DOWN_ONE
+	rush.back_count = 1
+	rush.recovery_by_peer[SELF_ID] = AIRushRead.Recovery.INSIDE
+	rush.carrier_peer = OPP_ID
+	rush.attackers.append(OPP_ID)
+	rush.attackers.append(12)
+	var me: SkaterNetworkState = _me_beside(s, Vector3(2.5, 0.0, -3.5), Vector3(2.5, 0.0, -2.5))
+	var aim: Vector3 = sm._carrier_stick_aim(s, me.position, me, sm._cached_role_decision)
+	var lane := Vector2(mate.position.x - s.puck_state.position.x,
+			mate.position.z - s.puck_state.position.z)
+	var off := Vector2(aim.x - s.puck_state.position.x, aim.z - s.puck_state.position.z)
+	assert_lt(absf(lane.normalized().cross(off)), 0.05, "on the lane to his man")
+	sm._team_id_by_peer.erase(12)
+
+
 func test_the_stick_waits_for_a_turn_to_skate() -> void:
 	# Backing in facing the play, told to turn and skate: the route's cursor
 	# turns him first.

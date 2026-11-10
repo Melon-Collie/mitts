@@ -141,6 +141,31 @@ func lane_aim(snapshot: WorldSnapshot, me: SkaterNetworkState, poke_reach: float
 			poke_reach)
 
 
+# The lone defender's blade on a rush (AIRushRead.is_lone_defender): in the
+# lane from the carried puck to whichever of the rush's men he can take away,
+# the one whose lane passes nearest him (AIStickPathRead.pass_lane_point). INF
+# with no man of theirs on the rush.
+func pass_lane_aim(snapshot: WorldSnapshot, me: SkaterNetworkState, rush: AIRushRead,
+		poke_reach: float) -> Vector3:
+	var carrier: SkaterNetworkState = _opposing_carrier(snapshot)
+	if carrier == null or me == null:
+		return Vector3.INF
+	var puck: Vector3 = snapshot.puck_state.position
+	var best: Vector3 = Vector3.INF
+	var best_miss: float = INF
+	for pid: int in rush.attackers:
+		if pid == snapshot.puck_state.carrier_peer_id or not snapshot.skater_states.has(pid):
+			continue
+		var receiver: Vector3 = snapshot.skater_states[pid].position
+		var miss: float = AIStickPathRead.lane_miss_m(me.position, puck, receiver)
+		if miss < best_miss:
+			best_miss = miss
+			best = receiver
+	if not best.is_finite():
+		return Vector3.INF
+	return AIStickPathRead.pass_lane_point(me.position, puck, best, poke_reach)
+
+
 func _opposing_carrier(snapshot: WorldSnapshot) -> SkaterNetworkState:
 	if snapshot.puck_state == null:
 		return null

@@ -107,3 +107,30 @@ func test_a_target_past_the_reach_edge_is_held_on_it() -> void:
 	var beside := Vector3(2.0, 0.0, 0.0)
 	assert_eq(AIStickPathRead.within_reach_edges(Vector3.ZERO, beside, facing, cfg, false), beside,
 			"inside the edges it is left alone")
+
+
+func test_a_pass_lane_in_reach_is_played_where_the_pass_meets_it_first() -> void:
+	# Carrier up the ice on the left, his man on the right: the lane crosses in
+	# front of me, and the blade sits where it comes into reach, carrier side.
+	var puck := Vector3(-4.0, 0.0, 3.0)
+	var receiver := Vector3(4.0, 0.0, 3.0)
+	var q: Vector3 = AIStickPathRead.pass_lane_point(Vector3(0.0, 0.0, 1.5), puck, receiver,
+			REACH)
+	assert_almost_eq(q.z, 3.0, 1e-3, "on the lane")
+	assert_lt(q.x, 0.0, "on the carrier's side of me, where the pass gets first")
+
+
+func test_a_pass_lane_out_of_reach_is_narrowed_from_the_edge_of_reach() -> void:
+	var me := Vector3(0.0, 0.0, 0.0)
+	var q: Vector3 = AIStickPathRead.pass_lane_point(me, Vector3(-4.0, 0.0, 5.0),
+			Vector3(4.0, 0.0, 5.0), REACH)
+	assert_almost_eq(Vector2(q.x, q.z).length(), REACH, 1e-3, "at the edge of reach")
+	assert_almost_eq(q.x, 0.0, 1e-3, "toward the lane's nearest point")
+	assert_gt(q.z, 0.0)
+
+
+func test_the_lane_nearest_me_is_the_one_i_can_take() -> void:
+	var me := Vector3.ZERO
+	var puck := Vector3(0.0, 0.0, 8.0)
+	assert_lt(AIStickPathRead.lane_miss_m(me, puck, Vector3(2.0, 0.0, 0.0)),
+			AIStickPathRead.lane_miss_m(me, puck, Vector3(8.0, 0.0, 6.0)))

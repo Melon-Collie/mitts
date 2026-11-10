@@ -250,6 +250,22 @@ func test_one_beaten_body_is_goal_side_of_one_man_only() -> void:
 	assert_eq(r.numbers, AIRushRead.Numbers.DOWN_ONE)
 
 
+func test_the_lone_defender_is_the_only_one_back_goal_side() -> void:
+	var theirs := {
+		11: [Vector3(-3.0, 0.0, 2.0), Vector3(0.0, 0.0, 6.0)],
+		12: [Vector3(3.0, 0.0, 2.0), Vector3(0.0, 0.0, 6.0)],
+	}
+	var ours := {
+		1: [Vector3(0.0, 0.0, 16.0), Vector3.ZERO],
+		2: [Vector3(0.0, 0.0, -26.0), Vector3.ZERO],   # stranded in their end
+	}
+	var r: AIRushRead = _read(ours, theirs, 11)
+	assert_true(r.is_lone_defender(1), "the one back on a 2-on-1")
+	assert_false(r.is_lone_defender(2), "the stranded man is not back at all")
+	ours[2] = [Vector3(1.0, 0.0, 18.0), Vector3.ZERO]
+	assert_false(_read(ours, theirs, 11).is_lone_defender(1), "with two back nobody is alone")
+
+
 # ── Mode ─────────────────────────────────────────────────────────────────────
 
 func test_regroup_when_they_turn_back() -> void:

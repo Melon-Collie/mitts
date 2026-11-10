@@ -443,6 +443,13 @@ func _lead(pos: Vector3, vel: Vector3) -> Vector3:
 	return Vector3(pos.x + dx, 0.0, pos.z + dz)
 
 
+# The man down on a rush who is its only defender back, goal-side of it: the
+# one who plays the pass rather than the carrier, our goalie taking the shooter.
+func is_lone_defender(peer_id: int) -> bool:
+	return is_live and numbers != Numbers.EVEN_OR_UP and back_count == 1 \
+			and recovery_by_peer.get(peer_id, Recovery.BEATEN) == Recovery.INSIDE
+
+
 func copy_from(other: AIRushRead) -> void:
 	mode = other.mode
 	is_live = other.is_live

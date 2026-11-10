@@ -2657,9 +2657,10 @@ func _lift_target(snapshot: WorldSnapshot) -> Vector3:
 	return _stick_play.lift_target(snapshot)
 
 
-# The pressurer's blade on an opposing carrier's puck (AIStickPathRead): the
-# first point of its path he beats it to, else the carrier's line to our net
-# where it comes into reach, held out of the shooting lane in our house as a
+# The pressurer's blade on an opposing carrier's puck (AIStickPathRead): as the
+# lone defender back on a rush, in the passing lane (our goalie takes the
+# shooter); else the first point of its path he beats it to, else the carrier's
+# line to our net where it comes into reach, held out of the shooting lane in our house as a
 # parked blade is (_deflect_safe_aim_dir), and inside the reach edges of the line
 # his hips are on so it never turns him. INF for any other role, with no such
 # carrier or none of it in reach, and while a turn to skate is still to come (the
@@ -2672,8 +2673,14 @@ func _carrier_stick_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 	var facing: Vector2 = me.facing
 	if decision.face_travel and facing.dot(Vector2(me.velocity.x, me.velocity.z)) < 0.0:
 		return Vector3.INF
-	var target: Vector3 = _stick_play.path_aim(snapshot, me, _poke_reach, _self_blade_speed,
-			_reads_puck_path)
+	var rush: AIRushRead = _current_strategy.get_rush_read() if _current_strategy != null \
+			else _inert_rush_read
+	var target: Vector3 = Vector3.INF
+	if _reads_puck_path and rush.is_lone_defender(_peer_id):
+		target = _stick_play.pass_lane_aim(snapshot, me, rush, _poke_reach)
+	if not target.is_finite():
+		target = _stick_play.path_aim(snapshot, me, _poke_reach, _self_blade_speed,
+				_reads_puck_path)
 	if not target.is_finite() and _reads_puck_path:
 		target = _stick_play.lane_aim(snapshot, me, _poke_reach,
 				Vector3(0.0, 0.0, _own_goal_dir * GameRules.GOAL_LINE_Z))
