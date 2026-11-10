@@ -27,7 +27,11 @@ extends GutTest
 #
 # Starts whose back line is beaten at entry today, each with its issue: they
 # count against neither the line nor the open share.
-const KNOWN_THIN: Array[String] = []
+#   v8.5/z24/c-6 — the carrier cuts across and stalls at our line with both
+#   wingers at speed; his D steps up alone and the winger on his outside takes
+#   the pass behind him: one man thin at entry. The ladder sizes the pair's
+#   depth from the carrier alone (#930).
+const KNOWN_THIN: Array[String] = ["v8.5/z24/c-6"]
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")

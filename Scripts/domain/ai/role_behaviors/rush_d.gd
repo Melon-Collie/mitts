@@ -52,10 +52,15 @@ static func decide(ctx: RoleContext, slot: int) -> RoleDecision:
 	var bracket: float = AIBackLineStands.bracket_side(ctx, slot)
 	var owner: bool = AIRoleSlots.owns_back_line_carrier(ctx.team_brain, slot)
 	if bracket != 0.0 or owner:
-		return _decide_d1(ctx, bracket, owner)
+		return _decide_d1(ctx, bracket, owner, slot)
+	return _decide_off_carrier(ctx, slot)
+
+
+# The back-line D the carrier is not: BACK_MID holds the middle; BACK_STRONG with
+# the carrier BACK_MID's keeps the strong lane, as BACK_WEAK keeps the weak one.
+static func _decide_off_carrier(ctx: RoleContext, slot: int) -> RoleDecision:
 	if slot == AIRoleSlots.Slot.BACK_MID:
 		return _decide_d2(ctx)
-	# BACK_STRONG with the carrier BACK_MID's: the strong lane, as BACK_WEAK keeps the weak one.
 	return AIRoleNeutralZone.decide_back_lane(ctx, ctx.strong_x)
 
 
@@ -64,9 +69,11 @@ static func decide(ctx: RoleContext, slot: int) -> RoleDecision:
 # `bracket`: ±1 while the carrier has not picked a side of the pair
 # (AIBackLineStands.bracket_side), and the pair plays him straight to its stands, with no cross
 # at his depth: the carrier's D (`owner`) on his line at the ladder's gap, his
-# partner a stick off it to that side. 0 for the carrier's D alone.
+# partner a stick off it to that side — until the ladder steps up on him: one D
+# steps up, and the partner goes back to his own job and keeps his depth on the
+# men still at speed. 0 for the carrier's D alone.
 static func _decide_d1(ctx: RoleContext, bracket: float = 0.0,
-		owner: bool = true) -> RoleDecision:
+		owner: bool = true, slot: int = AIRoleSlots.Slot.BACK_STRONG) -> RoleDecision:
 	var d := RoleDecision.new()
 	var read: AIRushRead = ctx.rush_read
 
@@ -91,6 +98,8 @@ static func _decide_d1(ctx: RoleContext, bracket: float = 0.0,
 	# stand (see _settable_gap); a riding route is bounded instead by
 	# set_advance_cap.
 	var gapping_up: bool = should_gap_up(ctx, read, ap, cushion)
+	if gapping_up and bracket != 0.0 and not owner:
+		return _decide_off_carrier(ctx, slot)
 	var ride: Vector3 = AIRoleReads.stand_ride_velocity(ctx)
 	if gapping_up:
 		gap = minf(stick_m(ctx) * GAP_MIN_STICKS, dist)

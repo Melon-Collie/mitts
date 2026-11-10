@@ -299,7 +299,11 @@ drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
   his lead runs between the pair, both D play him
   (`AIBackLineStands.bracket_side`): the carrier's D on his line at the
   ladder's gap, his partner a stick off it on his own side, each skated
-  straight to rather than through `depth_first`. That is the coached 3-on-2 —
+  straight to rather than through `depth_first`. Once the ladder steps up on a
+  stalled carrier, one D steps up and the partner goes back to his own job: two
+  stepping up together leave the men still at speed behind them. The depth the
+  pair holds is still sized from the carrier alone, so a stalled carrier with
+  a winger at speed on the stepping D's outside beats the step-up (#930). That is the coached 3-on-2 —
   make him pick a side, no seam between the D — and it replaces the one-man
   cross to the middle, which gave up the crossing D's depth on the wingers and
   his lane to the pass (`test_five_on_five_set_shape.gd`). Crossing

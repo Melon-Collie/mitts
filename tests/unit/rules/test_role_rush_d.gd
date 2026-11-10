@@ -891,9 +891,9 @@ func test_with_no_election_the_strong_d_owns_the_carrier() -> void:
 # side of his line and goal-side of him; me (1) at `self_x`, my partner (12) at
 # -`self_x`, the slots as named, the brain naming `owner_slot`.
 func _pair_ctx(self_x: float, carrier_x: float, self_slot: int,
-		owner_slot: int) -> RoleContext:
+		owner_slot: int, carrier_vel: Vector3 = Vector3(0.0, 0.0, 7.0)) -> RoleContext:
 	var ctx: RoleContext = _ctx(Vector3(self_x, 0.0, 10.0), [
-		[10, 1, Vector3(carrier_x, 0.0, 0.0), Vector3(0.0, 0.0, 7.0)],
+		[10, 1, Vector3(carrier_x, 0.0, 0.0), carrier_vel],
 		[11, 1, Vector3(8.0, 0.0, -1.5), Vector3(0.0, 0.0, 7.0)],
 		[12, 0, Vector3(-self_x, 0.0, 10.0)],
 	], 10, AIRushRead.Numbers.DOWN_ONE, INF, false)
@@ -927,3 +927,21 @@ func test_a_carrier_outside_the_pair_is_not_bracketed() -> void:
 	var ctx: RoleContext = _pair_ctx(5.0, 9.0, AIRoleSlots.Slot.BACK_STRONG,
 			AIRoleSlots.Slot.BACK_STRONG)
 	assert_eq(AIBackLineStands.bracket_side(ctx, AIRoleSlots.Slot.BACK_STRONG), 0.0)
+
+
+func test_on_a_stalled_carrier_one_d_steps_up_and_his_partner_keeps_his_depth() -> void:
+	# The ladder steps up on a carrier with no pace: the carrier's D goes, and
+	# his partner, whose bracket that was, goes back to holding the middle deep
+	# rather than stepping up beside him with men still at speed.
+	var stalled := Vector3.ZERO
+	var owner_ctx: RoleContext = _pair_ctx(5.0, 0.0, AIRoleSlots.Slot.BACK_STRONG,
+			AIRoleSlots.Slot.BACK_STRONG, stalled)
+	var own: Vector3 = AIRoleRushD.decide(owner_ctx, AIRoleSlots.Slot.BACK_STRONG).target_position
+	assert_lt(own.z, 5.0, "the carrier's D steps up toward him; got %s" % own)
+	var partner: RoleContext = _pair_ctx(-5.0, 0.0, AIRoleSlots.Slot.BACK_MID,
+			AIRoleSlots.Slot.BACK_STRONG, stalled)
+	assert_eq(AIBackLineStands.bracket_side(partner, AIRoleSlots.Slot.BACK_MID), -1.0,
+			"fixture sanity: he is between the pair")
+	var p: Vector3 = AIRoleRushD.decide(partner, AIRoleSlots.Slot.BACK_MID).target_position
+	assert_gt(p.z, own.z + 2.0,
+			"his partner holds the middle deep, not up beside him; got %s vs %s" % [p, own])
