@@ -90,13 +90,33 @@ func _trace(z: float, d_x: float, secs: float) -> void:
 				var rb: Vector3 = carrier._field.opponent_blades_release[i] - duel.puck_pos
 				rb.y = 0.0
 				read_off = (rb - u * rb.dot(u)).length()
-		gut.p("%5.2f %5.1f %5.1f %5.1f | %5.3f %5.3f(%d) %5.3f | %-6s | %4.2f %4.2f %4.2f %4.2f | %5.1f %5.1f  %5.2f %5.1f/%4.1f | %4.2f | %4.1f %4.1f | %5.2f" % [
+		# The read's own lane (the puck to the spot the best pass is led to) and the
+		# D's blade on it, as the read holds it: off that lane, along it, and the
+		# blade term's block.
+		var spot: Vector3 = carrier._pass.debug_spot
+		var probe: String = ""
+		if spot.is_finite():
+			var lane2: Vector3 = spot - duel.puck_pos
+			lane2.y = 0.0
+			var l2: float = lane2.length()
+			var u2: Vector3 = lane2 / maxf(l2, 1e-4)
+			var rb2: Vector3 = dd.blade - duel.puck_pos
+			rb2.y = 0.0
+			var read_len: float = maxf(l2 - AIPuckLane.LANE_RECEIVER_REACH_M, 0.0)
+			var caps: AISkaterCaps = duel.caps_by_peer.get(D)
+			var blk: Vector2 = AIPuckLane._blade_block(duel.puck_pos.x, duel.puck_pos.z,
+					u2.x, u2.z, read_len, 14.0, dd.blade.x, dd.blade.z, dd.pos.x, dd.pos.z,
+					dd.vel.x, dd.vel.z, caps.max_blade_reach, AIPuckLane.LANE_LATERAL_FRACTION * caps.max_speed,
+					caps.blade_speed)
+			probe = " | read lane %.1f m (read to %.1f) stick off %.2f along %.1f -> blade block %.2f" % [
+					l2, read_len, (rb2 - u2 * rb2.dot(u2)).length(), rb2.dot(u2), blk.x]
+		gut.p(("%5.2f %5.1f %5.1f %5.1f | %5.3f %5.3f(%d) %5.3f | %-6s | %4.2f %4.2f %4.2f %4.2f | %5.1f %5.1f  %5.2f %5.1f/%4.1f | %4.2f | %4.1f %4.1f | %5.2f" % [
 				t * DT, c.pos.x, c.pos.z, Vector2(c.pos.x, c.pos.z - GOAL_Z).length(),
 				carrier.debug_shoot_score, carrier.debug_pass_score, carrier.debug_pass_peer_id,
 				carrier.debug_carry_score, INTENTS.get(carrier.intended_action, "?"),
 				completion.x, completion.y, completion.z, completion.w,
 				dd.pos.x, dd.pos.z, off, along, lane_len, dd.blade.distance_to(duel.puck_pos),
-				dd.vel.x, dd.vel.z, read_off])
+				dd.vel.x, dd.vel.z, read_off]) + probe)
 
 
 func test_trace_two_on_one_z8_d15() -> void:

@@ -438,6 +438,12 @@ static func _friction_traverse_time(dist: float, v0: float) -> float:
 # the blade as it closes, so within that and the catch of the puck's path (see
 # LANE_BLADE_CATCH_M). `blade_delay` and `body_delay` are when
 # his hands and his body start closing, from the moment the puck is at (fx, fz).
+#
+# A stick already on the lane — inside the catch of the puck's line, at a point
+# the read reaches — is held there: his hands are on it throughout, as on a puck
+# they reach, so it stays where it is whatever his skating does, and the pass
+# meets a blade inside the pickup. Where his body can still hold the stick there
+# when the puck arrives, that is a certain block.
 static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 		line_len: float, eff_speed: float, bx: float, bz: float, px: float, pz: float,
 		vx: float, vz: float, hold_reach: float, close_speed: float,
@@ -445,6 +451,14 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 		body_delay: float = LANE_REACTION_DELAY_S) -> Vector2:
 	var pvx: float = dirx * eff_speed
 	var pvz: float = dirz * eff_speed
+	var u_held: float = (bx - fx) * dirx + (bz - fz) * dirz
+	if u_held >= 0.0 and u_held <= line_len:
+		var ox: float = bx - (fx + dirx * u_held)
+		var oz: float = bz - (fz + dirz * u_held)
+		if ox * ox + oz * oz <= LANE_BLADE_CATCH_M * LANE_BLADE_CATCH_M \
+				and lane_block_at(fx, fz, pvx, pvz, u_held / eff_speed, px, pz, vx, vz,
+						hold_reach + LANE_BLADE_CATCH_M, close_speed, body_delay) > 0.0:
+			return Vector2(1.0, u_held)
 	var best := Vector2.ZERO
 	var t_raw: float = _lane_closest_approach_t(fx, fz, pvx, pvz, bx, bz, vx, vz)
 	if t_raw <= line_len / eff_speed:

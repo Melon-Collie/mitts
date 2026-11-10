@@ -143,8 +143,11 @@ func lane_aim(snapshot: WorldSnapshot, me: SkaterNetworkState, poke_reach: float
 
 # The lone defender's blade on a rush (AIRushRead.is_lone_defender): in the
 # lane from the carried puck to whichever of the rush's men he can take away,
-# the one whose lane passes nearest him (AIStickPathRead.pass_lane_point). INF
-# with no man of theirs on the rush.
+# the one whose lane passes nearest him (AIStickPathRead.pass_lane_point). Each
+# man is led to where a pass fired now meets him — his skating over its flight
+# at the pace a pass is expected at (AIPuckLane.expected_pass_speed) — since a
+# feed is led to a man skating onto it, and a stick in the lane to where he is
+# now sits off the line the puck travels. INF with no man of theirs on the rush.
 func pass_lane_aim(snapshot: WorldSnapshot, me: SkaterNetworkState, rush: AIRushRead,
 		poke_reach: float) -> Vector3:
 	var carrier: SkaterNetworkState = _opposing_carrier(snapshot)
@@ -156,7 +159,11 @@ func pass_lane_aim(snapshot: WorldSnapshot, me: SkaterNetworkState, rush: AIRush
 	for pid: int in rush.attackers:
 		if pid == snapshot.puck_state.carrier_peer_id or not snapshot.skater_states.has(pid):
 			continue
-		var receiver: Vector3 = snapshot.skater_states[pid].position
+		var man: SkaterNetworkState = snapshot.skater_states[pid]
+		var flight_s: float = puck.distance_to(man.position) \
+				/ maxf(AIPuckLane.expected_pass_speed(puck, man.position), 0.1)
+		var receiver: Vector3 = man.position + Vector3(man.velocity.x, 0.0, man.velocity.z) \
+				* flight_s
 		var miss: float = AIStickPathRead.lane_miss_m(me.position, puck, receiver)
 		if miss < best_miss:
 			best_miss = miss
