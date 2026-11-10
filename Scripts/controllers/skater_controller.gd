@@ -1071,12 +1071,10 @@ var _prev_carry_pin: Vector3 = Vector3.ZERO
 # escapes _collide_pinned_puck_with_net.
 var _net_pin_result := PuckGeometryCollision.Result.new()
 var _has_prev_carry_pin: bool = false
-# True on frames where a special locked-phase path posed the body itself this
-# tick — faceoff-prep blade aim, the faceoff skate-in approach, and replay
-# playback. Those paths run their own gait / head / off-hand (they're brief and
-# not the per-tick × N hot path), so the render-rate cosmetic hook yields to them
-# to avoid a double gait pass. The main live path (_process_input) clears it and
-# delegates cosmetics to the render hook.
+# True while replay playback poses the body itself (apply_replay_state), which
+# runs its own gait / head / off-hand, so the render-rate cosmetic hook yields to
+# it rather than pose twice. Every live path (_process_input and the two
+# faceoff-prep paths) clears it and delegates cosmetics to the render hook.
 var _self_posing: bool = false
 # Body-check stagger: seconds of thrust/grip-penalty recovery remaining. Set
 # host-authoritatively when this skater absorbs a check (_on_body_check_received),
@@ -2199,18 +2197,17 @@ func apply_blade_aim_only(input: InputState, delta: float) -> void:
 	var blade_world_pre: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var hand_world_pre: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
 	_pose.apply_upper_body(delta)
-	_pose.apply_head_tracking(delta)
 	skater.set_top_hand_position(skater.upper_body_to_local(hand_world_pre))
 	skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
-	# This locked-phase path poses its own gait ready-stance + off-hand (a brief
-	# countdown, not the hot path); the render hook yields to it (see _self_posing).
-	_self_posing = true
-	_skating.apply(delta)
+	# The gait's ready stance, the head and the off hand are the render hook's,
+	# as in live play: on the tick they read the previous frame's animation LOD
+	# and the post-tick markers, so the legs of everyone but the local skater
+	# went stale and the bottom glove slid along the shaft.
+	_self_posing = false
 	# apply_facing doesn't run here, so this is the only publisher of the lower
 	# body's yaw for the whole countdown — the skate-in's hip-to-travel
 	# alignment unwinds under the set skater instead of freezing at arrival.
 	_pose.apply_lower_body_yaw(delta)
-	_ik.update_bottom_hand(delta)
 
 
 # ── Network State ─────────────────────────────────────────────────────────────
@@ -2785,19 +2782,16 @@ func _render_approach_pose(facing: Vector2, delta: float) -> void:
 	var blade_world_pre: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var hand_world_pre: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
 	_pose.apply_upper_body(delta)
-	_pose.apply_head_tracking(delta)
 	skater.set_top_hand_position(skater.upper_body_to_local(hand_world_pre))
 	skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
-	# This intro-skate path poses its own gait + off-hand (a brief locked phase,
-	# not the hot path); the render hook yields to it (see _self_posing).
-	_self_posing = true
-	_skating.apply(delta)
+	# The stride, the head and the off hand are the render hook's (see
+	# apply_blade_aim_only).
+	_self_posing = false
 	# Publish the gait's lower-body yaw (hip-to-travel alignment) — normally
 	# written inside _pose.apply_facing, which this path replaces. Going through
 	# the coordinator also decays the facing turn lag the pre-whistle play left
 	# behind, which a bare set_lower_body_lag froze for the length of the walk-in.
 	_pose.apply_lower_body_yaw(delta)
-	_ik.update_bottom_hand(delta)
 
 
 # Drops any non-skating shot state — a wrister/slapper wind-up, a one-timer
