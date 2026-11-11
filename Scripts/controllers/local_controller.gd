@@ -829,7 +829,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			# During the celebration the raised-stick pose owns the hands;
 			# re-IKing to the mouse here would pop the blade down for a frame
 			# on every reconcile. Skip — the next real tick re-applies it.
-			if not is_celebrating():
+			if is_fighting():
+				lay_fight_hands()
+			elif not is_celebrating():
 				_ik.apply_blade_from_mouse(_current_input, 0.0)
 	_apply_down_pose()
 	var blade_reconcile_delta: float = skater.get_blade_contact_global().distance_to(pre_reconcile_blade)
@@ -982,6 +984,32 @@ func _find_press_partner(host_ts: float, out: PressPartner) -> bool:
 	out.posture = SkaterMovementRules.posture_of(best["stance"], best["hit"])
 	out.stagger = best["stagger"]
 	return true
+
+
+# A client reads the man it fights where the press reads its partner: in the
+# snapshot sampled at the input's stamp, never the drawn node.
+func _read_fight_partner(host_ts: float) -> void:
+	if _is_host or not _historical_others_provider.is_valid():
+		super._read_fight_partner(host_ts)
+		return
+	_fight_partner = null
+	if not is_fighting():
+		return
+	var team: int = skater.get_team_id()
+	var best_d2: float = INF
+	var others: Array = _historical_others_provider.call(skater, host_ts)
+	for rec: Dictionary in others:
+		var other: Skater = rec["skater"]
+		if other == null or other == skater or other.fight_role != FightRules.Role.FIGHTING \
+				or other.get_team_id() == team:
+			continue
+		var pos: Vector3 = rec["position"]
+		var d2: float = pos.distance_squared_to(skater.global_position)
+		if d2 < best_d2:
+			best_d2 = d2
+			_fight_partner = other
+			_fight_partner_pos = pos
+			_fight_partner_vel = rec["velocity"]
 
 
 func _press_candidate_near() -> bool:

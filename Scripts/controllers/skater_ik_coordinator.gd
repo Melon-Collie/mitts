@@ -71,6 +71,9 @@ var _bh_release_vel: float = 0.0
 # where, and by how much.
 var _held_free_hand := Vector3.ZERO
 var _held_free_weight: float = 0.0
+# How far the off hand is off the stick and onto its fist in a fight, 0 to 1,
+# eased at render rate off the replicated fight role.
+var _guard: float = 0.0
 var _pump_hold: float = 1.0
 # The drawn top hand's swing round the blade that holds the drawn shaft out of
 # the body (_shaft_clearance; UpperBody's frame), its rate, and the legs' joints
@@ -1015,10 +1018,14 @@ const _CLEAR_OMEGA: float = 12.0
 const _SHAFT_RADIUS_M: float = 0.015
 
 func update_bottom_hand(delta: float = -1.0) -> void:
+	var guard: float = _ease_guard(delta)
 	var blade_local: Vector3 = _skater.drawn_blade().origin
-	var pump: Vector3 = _stride_pump(delta)
+	# Out of the stick's hands the stroke pumps no stick and no shaft needs
+	# keeping out of the body.
+	var pump: Vector3 = _stride_pump(delta) * (1.0 - guard)
 	_skater.set_hand_pump(pump)
-	_skater.set_hand_pump(pump + _shaft_clearance(_skater.drawn_top_hand(), blade_local, delta))
+	_skater.set_hand_pump(pump + _shaft_clearance(_skater.drawn_top_hand(), blade_local, delta)
+			* (1.0 - guard))
 	var hand_local: Vector3 = _skater.drawn_top_hand()
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length
@@ -1056,11 +1063,26 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	var bh: Vector3 = Vector3(grip_target_xz.x, grip_y, grip_target_xz.y).lerp(rest, _bh_release)
 	if _held_free_weight > 0.0:
 		bh = bh.lerp(_held_free_hand, _held_free_weight)
+	if guard > 0.0:
+		# The bottom arm's fist rides the stick's blade marker, freed by the
+		# stick on the ice (SkaterFightHands).
+		bh = bh.lerp(blade_local, guard)
 	# Off the stick, the hand hangs where the arm can put it.
 	var span: Vector3 = bh - shoulder
 	if span.length() > reach:
 		bh = shoulder + span.normalized() * reach
 	_skater.set_bottom_hand_position(bh)
+
+# The off hand's share of its fight fist, eased toward the replicated role
+# over FightGuardRules.EASE_S; landed at once with no clock.
+func _ease_guard(delta: float) -> float:
+	var target: float = 1.0 if _skater.fight_role == FightRules.Role.FIGHTING else 0.0
+	if delta < 0.0:
+		_guard = target
+	else:
+		_guard = move_toward(_guard, target, delta / FightGuardRules.EASE_S)
+	return smoothstep(0.0, 1.0, _guard)
+
 
 func _shooting() -> bool:
 	var state: State = _controller.get_shot_state() as State

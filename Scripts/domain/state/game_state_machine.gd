@@ -34,6 +34,8 @@ var period_duration: float = GameRules.PERIOD_DURATION
 var ot_enabled: bool       = GameRules.OT_ENABLED
 var ot_duration: float     = GameRules.OT_DURATION
 var rule_set: int          = GameRules.DEFAULT_RULE_SET
+# The lobby's Fighting toggle (FightRules.allowed reads it with the rule set).
+var fighting_enabled: bool = GameRules.FIGHTING_ENABLED
 # Live roster size per team (3 or 5), latched at puck drop like rule_set.
 # Every active-roster gate (slot allocation, join/promote caps, swap
 # validation) reads this; PlayerRules.MAX_PER_TEAM is only the capacity.
@@ -104,6 +106,8 @@ var _crease_dwell: Dictionary[int, float] = {}
 enum FaceoffReason { NONE, ICING, OFFSIDE }
 var pending_faceoff_dot: Vector2 = Vector2.ZERO
 var pending_faceoff_reason: int = FaceoffReason.NONE
+# Where the faceoff after a fight is taken: chosen as the whistle went.
+var fight_resume_dot: Vector2 = GameRules.CENTER_ICE_DOT
 
 
 func _init() -> void:
@@ -604,7 +608,8 @@ func reset_all() -> void:
 
 func apply_config(p_num_periods: int, p_period_duration: float, p_ot_enabled: bool, p_ot_duration: float,
 		p_rule_set: int = GameRules.DEFAULT_RULE_SET,
-		p_team_size: int = GameRules.DEFAULT_TEAM_SIZE) -> void:
+		p_team_size: int = GameRules.DEFAULT_TEAM_SIZE,
+		p_fighting_enabled: bool = GameRules.FIGHTING_ENABLED) -> void:
 	infinite_time    = (p_period_duration <= 0.0)
 	num_periods      = p_num_periods
 	period_duration  = p_period_duration
@@ -612,6 +617,7 @@ func apply_config(p_num_periods: int, p_period_duration: float, p_ot_enabled: bo
 	ot_duration      = p_ot_duration
 	rule_set         = p_rule_set
 	team_size        = p_team_size
+	fighting_enabled = p_fighting_enabled
 	time_remaining   = 0.0 if infinite_time else p_period_duration
 	period_scores    = _make_period_scores(num_periods)
 
@@ -633,6 +639,26 @@ func begin_faceoff_prep(dot_xz: Vector2 = GameRules.CENTER_ICE_DOT,
 	active_faceoff_dot = dot_xz
 	_set_phase(GamePhase.Phase.FACEOFF_PREP)
 	_prep_extra_time = maxf(extra_prep_time, 0.0)
+
+
+# Whistles the play dead for a fight (host); the faceoff after it is taken at
+# `resume_dot`. Returns false (and changes nothing) in a phase a fight can't
+# start in.
+func begin_fight(resume_dot: Vector2) -> bool:
+	if not FightRules.phase_allows(current_phase):
+		return false
+	fight_resume_dot = resume_dot
+	_set_phase(GamePhase.Phase.FIGHT)
+	return true
+
+
+# The last fight is over: play restarts with a faceoff (host). Returns false
+# outside a fight.
+func end_fight() -> bool:
+	if current_phase != GamePhase.Phase.FIGHT:
+		return false
+	begin_faceoff_prep(fight_resume_dot)
+	return true
 
 
 # ── Remote state application (clients) ──────────────────────────────────────

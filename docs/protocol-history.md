@@ -477,3 +477,27 @@ here whenever you bump, in the same format.
 #      before confirming a snapshot within the box tolerance. A v97 peer would
 #      read the digest as bits past the blob's end, so mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged.
+# v99: fighting, phase 1. The input record grows 24 -> 25 bytes (a second flag
+#      byte, fight_pressed in bit 0); the lobby settings and game-config RPCs
+#      carry the Fighting toggle; new reliable RPCs notify_fight_challenge,
+#      notify_fight_called and notify_fight_challenge_lapsed shift the RPC
+#      index set; GamePhase gains FIGHT (ordinal 7) on the world-state phase
+#      byte. Replay FORMAT_VERSION unchanged: the recorders store snapshots,
+#      not inputs, and FIGHT is appended so every older file's phases still
+#      read the same.
+# v100: fighting, phase 2. The skater's body-lock byte carries fight_role
+#      (FightRules.Role) in bits 4-5, which every machine draws a fighter's
+#      gear off and guard up from. A v99 peer reads the bits as zero and draws
+#      a fighter holding his stick, so mixed builds must be refused. Replay
+#      FORMAT_VERSION unchanged: the byte was there, and an older file's bits
+#      are zero.
+# v101: fighting, phase 3. The skater block grows 58 -> 59 bytes: a fight
+#      byte with what the holding hand holds (FightHoldRules.Grip, 2 bits) and
+#      which arm punches (FightHoldRules.Side, 1 bit). The fists ride the
+#      existing hand and blade markers. Replay FORMAT_VERSION 20 -> 21, since
+#      the recorded frames carry the block.
+# v102: fighting, phase 4. The skater block's fight byte carries the rattle
+#      (FightPunchRules, seconds @0.1 s) in bits 3-7, and the new reliable RPC
+#      notify_punch_landed shifts the RPC index set. Replay FORMAT_VERSION
+#      unchanged at 21: the bits were zero, and still are in a file older
+#      than this.

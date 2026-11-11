@@ -127,7 +127,8 @@ pose to `.preview/body/` (`tools/body_preview_runner.gd`); `--pants` draws the
 pants alone, and `--audit` skins the body on the CPU per pose and counts the
 faces folded inside out, by paint zone — what shows as a hole; `--head` frames
 the helmet, `--shoulders` the yoke square on, `--waist` the belt, where a tuck
-goes in, and `--skate` the near skate; `--tile=900` draws each view that many
+goes in, `--skate` the near skate and `--hands` the top hand (a glove, or a
+fighter's bare fist); `--tile=900` draws each view that many
 pixels square, which is what a seam needs. `BODY_PREVIEW_RENDERER=forward_plus`
 draws it on the renderer the game ships instead (software Vulkan here): the
 check for a change to the body's shader.

@@ -10,7 +10,7 @@ extends RefCounted
 # 1. World state  (STATE_RATE = 45 Hz, unreliable_ordered) — single flat
 #    PackedByteArray, sized once and written at offsets (see encode_world_state):
 #      u16 ws_sequence, u32 host_capture_time (0.1ms units), u8 num_skaters
-#      [u32 peer_id, skater_bytes(58), u8 queue_depth] × num_skaters
+#      [u32 peer_id, skater_bytes(59), u8 queue_depth] × num_skaters
 #      puck_bytes(13)
 #      u8 num_goalies, [goalie_bytes(142)] × num_goalies
 #      u8 score0, u8 score1, u8 phase, u8 period, u16 time_remaining
@@ -37,8 +37,12 @@ extends RefCounted
 #                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63),
 #                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v70),
 #                      body lock u8 (pin_role[1:0] BoardPinRules.Role (v74) + diving[2] (v75)
-#                                    + slapshot_pinned[3] (v91)),
-#                      pin_strength u8@1/255 (v74)
+#                                    + slapshot_pinned[3] (v91)
+#                                    + fight_role[5:4] FightRules.Role (v100)),
+#                      pin_strength u8@1/255 (v74),
+#                      fight u8 (grip[1:0] FightHoldRules.Grip + punch_side[2]
+#                                FightHoldRules.Side (v101) + rattle[7:3] @0.1 s
+#                                (v102))
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie (142 B): root (12 B) + the keeper's pose (KeeperPoseCodec, 130 B).
 #                      Root: pos_x/z s16@1cm, rot_y s16@π/32767, state u8,
@@ -75,7 +79,7 @@ const WS_SEQUENCE_OFFSET: int = 0     # u16
 const WS_HOST_TIME_OFFSET: int = 2    # u32, 0.1 ms units
 const WS_SKATER_COUNT_OFFSET: int = 6  # u8
 const WS_HEADER_SIZE: int = 7
-const SKATER_STATE_BYTES: int = 58  # inner skater state block; every encode/decode
+const SKATER_STATE_BYTES: int = 59  # inner skater state block; every encode/decode
                                     # site must read it from here, or a grown block
                                     # silently truncates instead of failing
 # Wire range of the balance lean's spring rate, rad/s.
@@ -470,7 +474,7 @@ func decode_stats(data: Array) -> void:
 
 # ── Quantization helpers ──────────────────────────────────────────────────────
 
-# Skater: SKATER_STATE_BYTES (58) bytes
+# Skater: SKATER_STATE_BYTES (59) bytes
 # Offsets: pos(0..4) vel(5..10) blade(11..16) top_hand(17..22)
 #          facing(23..24) ubrot(25..26) fav(27..28) ubav(29..30) lp_ts(31..34)
 #          flags(35) charge(36) stagger(37) knockdown(38) intent(39)
@@ -558,8 +562,10 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	b.encode_u8(o, posmod(roundi(atan2(s.recoil_dir.x, s.recoil_dir.y) / TAU * 256.0), 256)); o += 1
 	b.encode_u8(o, StickCheckRules.pack(s.stick_check_phase, s.stick_check_elapsed)); o += 1
 	b.encode_u8(o, (s.pin_role & 0x03) | (0x04 if s.diving else 0)
-			| (0x08 if s.slapshot_pinned else 0)); o += 1
+			| (0x08 if s.slapshot_pinned else 0) | ((s.fight_role & 0x03) << 4)); o += 1
 	b.encode_u8(o, clampi(roundi(s.pin_strength * 255.0), 0, 255)); o += 1
+	b.encode_u8(o, (s.fight_grip & 0x03) | ((s.fight_punch_side & 0x01) << 2)
+			| (clampi(roundi(s.fight_rattle * 10.0), 0, 31) << 3)); o += 1
 	return o
 
 
@@ -649,7 +655,13 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	s.pin_role = lock & 0x03 if (lock & 0x03) <= BoardPinRules.Role.PINNED else 0
 	s.diving = (lock & 0x04) != 0
 	s.slapshot_pinned = (lock & 0x08) != 0
-	s.pin_strength = b.decode_u8(o) / 255.0
+	var fight: int = (lock >> 4) & 0x03
+	s.fight_role = fight if fight <= FightRules.Role.FIGHTING else FightRules.Role.NONE
+	s.pin_strength = b.decode_u8(o) / 255.0; o += 1
+	var fight_hands: int = b.decode_u8(o)
+	s.fight_grip = fight_hands & 0x03
+	s.fight_punch_side = (fight_hands >> 2) & 0x01
+	s.fight_rattle = float((fight_hands >> 3) & 0x1F) / 10.0
 	return s
 
 

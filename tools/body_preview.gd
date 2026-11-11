@@ -12,6 +12,7 @@ extends SceneTree
 #   .claude/hooks/render-body.sh --waist         # framed on the belt: the tuck
 #   .claude/hooks/render-body.sh --shoulders     # the yoke square on: front, side, back
 #   .claude/hooks/render-body.sh --skate         # framed on the near skate
+#   .claude/hooks/render-body.sh --hands         # framed on the top hand: a glove or a bare fist
 #   .claude/hooks/render-body.sh --tile=900      # each view that many px square
 #   BODY_PREVIEW_KIT=1,1 ...                     # in slot 1's away kit
 #
@@ -45,4 +46,4 @@ func _on_frame() -> void:
 			only = a.trim_prefix("--only=")
 	runner.call("begin_preview", only, args.has("--pants"),
 			args.has("--audit"), args.has("--head"), args.has("--waist"),
-			args.has("--skate"), args.has("--shoulders"))
+			args.has("--skate"), args.has("--shoulders"), args.has("--hands"))

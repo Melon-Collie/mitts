@@ -282,6 +282,10 @@ func apply_facing(input: InputState, delta: float) -> void:
 			mouse_world.x - _skater.global_position.x,
 			mouse_world.z - _skater.global_position.z
 		)
+		# A fighter squares up to the man, not the cursor, which throws his fist.
+		var fight_dir: Vector2 = _controller.fight_facing_dir()
+		if fight_dir != Vector2.ZERO:
+			to_mouse = fight_dir
 		if to_mouse.length() > _controller.move_deadzone:
 			var cursor_dir: Vector2 = to_mouse.normalized()
 			if s == State.FOLLOW_THROUGH:
@@ -289,10 +293,11 @@ func apply_facing(input: InputState, delta: float) -> void:
 			var lefty: bool = _skater.is_left_handed
 			var rules: FacingRules.Config = _empty_stick_rules(input)
 			# A carrier's hips pivot where its blade stops on the backhand, and
-			# yield to the puck before it stops on the forehand.
+			# yield to the puck before it stops on the forehand. A fighter squares
+			# up to the cursor the way the stance does.
 			FacingRules.solve(_facing_rule, facing, cursor_dir,
 					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
-					_controller.stance_active, lefty,
+					_controller.stance_active or _controller.is_fighting(), lefty,
 					_controller.carry_facing_rules if _controller.has_puck else rules)
 			var facing_target: Vector2 = _facing_rule.target
 			var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed

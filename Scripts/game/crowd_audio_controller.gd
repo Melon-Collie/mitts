@@ -46,6 +46,8 @@ const _ARENA_BUS: StringName = &"Arena"
 # The goal's cheer and horn fade under the replay's incoming wipe: the replay
 # re-runs the play before the goal, and the crowd sounds the way it did then.
 const _REPLAY_FADE_S: float = 0.4
+# A punch this hard (FightPunchRules.intensity) swells the crowd.
+const _PUNCH_SWELL_MIN: float = 0.5
 
 var _ambient_player: AudioStreamPlayer = null
 var _cheer_pool: Array[AudioStreamPlayer] = []
@@ -83,6 +85,14 @@ func _ready() -> void:
 			gm.goal_replay_frame_changed.connect(_on_goal_replay_frame)
 		if gm.has_signal("replay_stopped"):
 			gm.replay_stopped.connect(_on_goal_replay_stopped)
+		# The gloves dropping is the loudest the crowd gets short of a goal; a
+		# punch that lands hard swells it again.
+		if gm.has_signal("fight_called"):
+			gm.connect("fight_called", func(_a: int, _b: int) -> void: _cheer())
+		if gm.has_signal("punch_landed"):
+			gm.connect("punch_landed", func(_v: int, intensity: float) -> void:
+				if intensity >= _PUNCH_SWELL_MIN:
+					settle())
 		# Whistle stoppages — a small crowd murmur so the dead-play beat has life.
 		for sig: String in ["icing_called", "offside_called", "puck_out_of_play"]:
 			if gm.has_signal(sig):
