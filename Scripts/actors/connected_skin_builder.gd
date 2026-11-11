@@ -67,6 +67,14 @@ func reweight(id: int, binds: Array, weights: Array) -> void:
 		_weights[id * MAX_INFLUENCES + i] = float(weights[i]) / total if i < weights.size() else 0.0
 
 
+# A vertex's weight on `bind`, or none.
+func weight_on(id: int, bind: int) -> float:
+	for i: int in MAX_INFLUENCES:
+		if _bones[id * MAX_INFLUENCES + i] == bind:
+			return _weights[id * MAX_INFLUENCES + i]
+	return 0.0
+
+
 # Moves a vertex before any face round it is laid (a face takes its winding and
 # normal from where its corners are when it is laid).
 func move(id: int, p: Vector3) -> void:

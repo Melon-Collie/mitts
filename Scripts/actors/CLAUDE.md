@@ -89,13 +89,30 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   leans forward with the arm and is narrower fore and aft than the seam, and
   the band between them folds in when the arm swings forward.
 - **The shoulder splits the arm's turn off the chest into swing and twist.** The
-  girdle (the armhole and the top of the shoulder) takes a share of the swing
+  girdle (the armhole's top and the shoulder's cap) takes a share of the swing
   that rises as the arm lifts, as the collarbone and shoulder blade do (the
-  scapulohumeral rhythm), the shoulder's middle (half of the upper arm's
-  first ring) two thirds, the upper arm all of it and half
-  the twist, the elbow the rest. Blending the chest straight into the arm
-  collapses the pad into a fin past ~90°; putting the whole twist on one ring
-  pinches the sleeve shut.
+  scapulohumeral rhythm), the shoulder's middle two thirds, the upper arm all
+  of it and half the twist, the elbow the rest. Blending the chest straight
+  into the arm collapses the pad into a fin past ~90°; putting the whole twist
+  on one ring pinches the sleeve shut.
+- **The sleeve is cloth hung between the armhole and the elbow, not a tube on
+  the arm.** Round from over the arm to under it, each column of it is laid
+  toward the straight line from the seam to the elbow and hung from the chest:
+  wholly at the seam, less by the way down to the elbow. A raised arm then
+  draws the underside out straight from the flank, and the armhole's bottom
+  stays on the chest (`test_raised_sleeve_hangs_straight.gd`). Three things
+  that came out of getting there:
+  - Riding the shoulder's bones, the armhole's bottom and the sleeve's first
+    rings swing up with the arm as a ball and the arm steps out of it, since
+    all of the turn left over falls between the last ring on the shoulder and
+    the first on the arm.
+  - The underside is laid straight because the tube's own underside is buried
+    in the chest at the bind: anything hung from the chest starts out folded
+    there, and unfolds inside out.
+  - The armhole's top turns with the girdle and its bottom does not, so the
+    loop shears. That hand-off is spread the whole way round it; taken between
+    two neighbouring columns it twists the faces between them inside out. The
+    chest under the armhole rides the chest alone for the same reason.
 - **Each sleeve is painted whole** (`SleeveDecal`): the kit's `sleeve`
   (`SleevePaint`, one base and stripes from the shoulder to the cuff, each
   straight round the arm or peaked, with an optional fill below it,
