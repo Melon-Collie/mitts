@@ -82,6 +82,35 @@ func test_easy_never_blocks() -> void:
 	assert_false(_block(_shot_snap(Vector3(0.3, 0.0, 18.0), ShotMechanics.ELEVATION_FLAT)).block_held)
 
 
+# OPP charges a one-timer at z 12 with no puck; OPP_MATE holds it out wide.
+func _one_timer_snap(me_pos: Vector3) -> WorldSnapshot:
+	var s: WorldSnapshot = _shot_snap(me_pos, ShotMechanics.ELEVATION_FLAT)
+	var shooter: SkaterNetworkState = s.skater_states[OPP_ID]
+	shooter.shot_state = State.SLAPPER_CHARGE_WITHOUT_PUCK
+	shooter.blade_contact_world = Vector3(0.0, 0.0, 12.5)
+	s.skater_states[OPP_MATE_ID] = _state(Vector3(-8.0, 0.0, 14.0))
+	s.puck_state.position = Vector3(-7.6, 0.0, 14.0)
+	s.puck_state.carrier_peer_id = OPP_MATE_ID
+	return s
+
+
+func test_a_one_timer_with_no_feed_coming_is_not_blocked() -> void:
+	var s: WorldSnapshot = _one_timer_snap(Vector3(0.3, 0.0, 18.0))
+	assert_false(_block(s).block_held, "the passer still has it")
+	s.puck_state.carrier_peer_id = -1
+	s.puck_state.velocity = Vector3(0.0, 0.0, 15.0)
+	assert_false(_block(s).block_held, "the puck is loose, going up the wall")
+
+
+func test_a_one_timer_is_blocked_once_the_feed_is_on_its_way() -> void:
+	var s: WorldSnapshot = _one_timer_snap(Vector3(0.3, 0.0, 18.0))
+	s.puck_state.carrier_peer_id = -1
+	s.puck_state.velocity = Vector3(7.6, 0.0, -1.5).normalized() * 15.0
+	assert_true(_block(s).block_held, "the feed reaches his blade")
+	assert_false(_block(_one_timer_snap(Vector3(3.0, 0.0, 18.0))).block_held,
+			"the control: out of his lane it stays up")
+
+
 func test_it_stays_down_while_the_shot_comes_through() -> void:
 	var s: WorldSnapshot = _shot_snap(Vector3(0.3, 0.0, 18.0), ShotMechanics.ELEVATION_FLAT)
 	assert_true(_block(s).block_held)
