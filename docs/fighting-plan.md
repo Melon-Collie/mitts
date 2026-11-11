@@ -19,7 +19,7 @@ faceoff, and both stay on.
 | When, and the whistle | **In live play**, the dropped puck included: the whistle goes the instant both have agreed, and a faceoff follows every fight. Not in a faceoff's set-up (a press there does nothing, and is not held for the drop; revised 2026-11-11), and not in the goal celebration (see *Phase 1 as built*). |
 | Afterwards | **No penalty.** Both stay on. |
 | Controls | **The cursor drives the fist, and a button grabs.** The fist uses the stick's IK, reach and speed limits; punch power is the fist's speed at contact. Holding a button grabs with the other hand and keeps the grip. A key swaps the hands. |
-| Bots | **Never challenge, and accept every challenge at once**, for now, so a fight can be tested against them. How a bot decides to fight comes later. |
+| Bots | A **grudge** per bot per opponent, filled by his body checks: past one level the bot accepts, past a higher one it challenges (2026-11-11, below). Before that, bots accepted every challenge and never challenged. |
 | Setting | **A lobby toggle, "Fighting: On / Off".** Fights are **never** possible in free play or in the `OFF` ruleset, even if free play ever goes multiplayer. |
 | Stat | **Deferred.** No "Fights" column yet. |
 
@@ -178,8 +178,8 @@ the existing rails:
 
 ## 6. Bots and the HUD
 
-- **Bots**: accept at once and never challenge (the decisions table). How a
-  bot fights is phase 5, below; when one would challenge is still open.
+- **Bots**: accept and challenge by their grudge (the decisions table; "The
+  grudge", below). How a bot fights is phase 5, below.
 - **HUD**: "⟨name⟩ wants to fight — V to drop the gloves" over the
   challenger, for the challenged player only. On the challenger's own screen
   a draining ring shows the window. A `FIGHT` toast at the whistle. All
@@ -398,8 +398,35 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   punch, hold shoot to grab, slapshot to swap hands), with the keys of the
   device in use.
 - **Tested by** `test_ai_fight_brain.gd`.
-- **Not yet**: bots challenging, the tutorial line, a bot that skates off to
+- **Not yet**: the tutorial line, a bot that skates off to
   disengage or presses the band, and a body-shot aim.
+
+## The grudge
+
+- **A grudge per bot per opponent** (`FightGrudges`, host-only, by peer id;
+  `FightGrudgeRules` holds the numbers, all feel tunables). Every credited
+  body check (`HitTracker.impact_landed`, so committed, cross-team and on a
+  carrier or a man just off the puck) adds to it through
+  `FightTracker.note_check`: to the hit bot's grudge against the hitter by
+  the check's force (`GAIN_PER_FULL_CHECK` a full check), and
+  `TEAMMATE_SHARE` of that to each of its teammates'. It drains at
+  `DECAY_PER_S`, a whole accept level in three minutes, and caps at
+  `MAX_LEVEL`. There is no knockdown term: a knockdown is decided in the
+  victim's tick after the check is credited, so force alone carries it, and a
+  check hard enough to floor a man counts about 1.4 full ones.
+- **At `ACCEPT_LEVEL`** (two full checks on the bot) it answers that man's
+  challenge at once; below it, the challenge lapses unanswered.
+- **At `CHALLENGE_LEVEL`** (four) it calls him out (`FightTracker._bots_call_out`):
+  the nearest man in front of it within challenge reach it holds that grudge
+  against, past any nearer man, never while it carries the puck, and on the
+  same cooldown a lapsed challenge gives a human. It does not skate to him: it
+  calls him out when play brings them face to face.
+- **Bots hold grudges against bots** too, so two bot teams can fight with no
+  human involved. A grudge is one way round, so the hit man's grudge is the
+  one that rises: a bot it calls out answers only if it holds one back.
+- **A fight spends the pair's grudges** against each other; their teammates'
+  stand. A new match or a rematch clears them all.
+- **Tested by** `test_fight_grudges.gd` and `test_fight_tracker.gd`.
 
 ## The fight camera
 

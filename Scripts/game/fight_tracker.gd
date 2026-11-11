@@ -11,8 +11,11 @@ extends RefCounted
 # within FightRules.ACCEPT_RANGE_M of the challenger. Any other press challenges
 # the opponent nearest in front of the presser (FightRules.can_challenge), unless
 # he already has a challenge open, is cooling down from one that lapsed, or is
-# carrying the puck. A bot never challenges, and answers every challenge at once.
-# Nobody already fighting, down or ghosted takes part.
+# carrying the puck. A bot has no press: it answers a challenge at once if its
+# grudge against the challenger has reached FightGrudgeRules.ACCEPT_LEVEL (else
+# the challenge lapses unanswered), and calls out the nearest man in front of it
+# its grudge against has reached CHALLENGE_LEVEL. A fight spends the pair's
+# grudges. Nobody already fighting, down or ghosted takes part.
 #
 # A fight ends when either man goes down, when the pair have been apart long
 # enough or at the linesmen's cap (FightRules.end_of), or when either man is gone.
@@ -29,6 +32,7 @@ class Challenge:
 var _registry: PlayerRegistry = null
 var _now_getter: Callable = Callable()        # () -> float, host seconds
 var _carrier_getter: Callable = Callable()    # () -> Skater, the host's carrier or null
+var _grudges: FightGrudges = null             # null: no bot ever wants to fight
 var _challenges: Dictionary = {}              # challenger Skater -> Challenge
 var _cooling_until: Dictionary = {}           # Skater -> host seconds
 var _partner: Dictionary = {}                 # Skater -> Skater, both ways round
@@ -36,10 +40,29 @@ var _started_at: Dictionary = {}              # Skater -> host seconds, both of 
 var _apart_s: Dictionary = {}                 # Skater -> seconds, both of a pair
 
 
-func setup(registry: PlayerRegistry, now_getter: Callable, carrier_getter: Callable) -> void:
+func setup(registry: PlayerRegistry, now_getter: Callable, carrier_getter: Callable,
+		grudges: FightGrudges = null) -> void:
 	_registry = registry
 	_now_getter = now_getter
 	_carrier_getter = carrier_getter
+	_grudges = grudges
+
+
+# A credited body check (HitTracker.impact_landed): every bot on the hit man's
+# team holds it against the hitter, the hit man most.
+func note_check(hitter_pid: int, victim_pid: int, force: float) -> void:
+	if _grudges == null or _registry == null:
+		return
+	var team: int = _registry.team_id_by_peer.get(victim_pid, -1)
+	if team == -1 or _registry.team_id_by_peer.get(hitter_pid, -1) == team:
+		return
+	var now: float = _now()
+	for pid: int in _registry.bot_peers:
+		if pid == hitter_pid or _registry.team_id_by_peer.get(pid, -1) != team:
+			continue
+		var gain: float = FightGrudgeRules.victim_gain(force) if pid == victim_pid \
+				else FightGrudgeRules.teammate_gain(force)
+		_grudges.raise(pid, hitter_pid, gain, now)
 
 
 # `allowed` is FightRules.allowed for this match; `phase` the game phase. A
@@ -61,6 +84,8 @@ func tick(delta: float, allowed: bool, phase: int) -> void:
 		skater.fight_press_pending = false
 		if open:
 			_on_press(skater)
+	if open:
+		_bots_call_out()
 	_step_fights(delta)
 
 
@@ -99,19 +124,40 @@ func _on_press(skater: Skater) -> void:
 		if FightRules.can_accept(_xz(skater), _xz(challenger)):
 			_start(challenger, skater)
 		return
-	if _challenges.has(skater) or _now() < float(_cooling_until.get(skater, -INF)) \
-			or _is_bot(skater) or _carries_puck(skater):
+	if not _may_call_out(skater):
 		return
 	var target: Skater = _nearest_in_front(skater)
-	if target == null:
+	if target != null:
+		_challenge(skater, target)
+
+
+func _bots_call_out() -> void:
+	if _grudges == null:
 		return
+	var now: float = _now()
+	for skater: Skater in _registry.skaters():
+		if not _is_bot(skater) \
+				or _grudges.peak(_registry.resolve_peer_id(skater), now) < FightGrudgeRules.CHALLENGE_LEVEL \
+				or not _can_take_part(skater) or not _may_call_out(skater):
+			continue
+		var target: Skater = _nearest_in_front(skater, FightGrudgeRules.CHALLENGE_LEVEL)
+		if target != null:
+			_challenge(skater, target)
+
+
+func _may_call_out(skater: Skater) -> bool:
+	return not _challenges.has(skater) and not _carries_puck(skater) \
+			and _now() >= float(_cooling_until.get(skater, -INF))
+
+
+func _challenge(skater: Skater, target: Skater) -> void:
 	var c := Challenge.new()
 	c.target = target
 	c.expires_at = _now() + FightRules.CHALLENGE_WINDOW_S
 	_challenges[skater] = c
 	skater.fight_role = FightRules.Role.CHALLENGING
 	challenge_made.emit(skater, target)
-	if _is_bot(target):
+	if _is_bot(target) and _grudge(target, skater) >= FightGrudgeRules.ACCEPT_LEVEL:
 		_start(skater, target)
 
 
@@ -128,7 +174,8 @@ func _challenger_aimed_at(target: Skater) -> Skater:
 	return null
 
 
-func _nearest_in_front(skater: Skater) -> Skater:
+# With `min_grudge`, only a man the skater's grudge against has reached it.
+func _nearest_in_front(skater: Skater, min_grudge: float = -1.0) -> Skater:
 	var team: int = _registry.team_id_by_skater.get(skater, -1)
 	var from: Vector2 = _xz(skater)
 	var facing: Vector2 = skater.get_facing()
@@ -142,6 +189,8 @@ func _nearest_in_front(skater: Skater) -> Skater:
 			continue
 		var to: Vector2 = _xz(other)
 		if not FightRules.can_challenge(from, facing, to):
+			continue
+		if min_grudge >= 0.0 and _grudge(skater, other) < min_grudge:
 			continue
 		var d2: float = from.distance_squared_to(to)
 		if d2 < best_d2:
@@ -162,6 +211,11 @@ func _start(a: Skater, b: Skater) -> void:
 	_apart_s[b] = 0.0
 	a.fight_role = FightRules.Role.FIGHTING
 	b.fight_role = FightRules.Role.FIGHTING
+	if _grudges != null:
+		var pa: int = _registry.resolve_peer_id(a)
+		var pb: int = _registry.resolve_peer_id(b)
+		_grudges.settle(pa, pb)
+		_grudges.settle(pb, pa)
 	fight_started.emit(a, b)
 
 
@@ -233,6 +287,12 @@ func _end(a: Variant, b: Variant) -> void:
 	_started_at.erase(b)
 	_apart_s.erase(a)
 	_apart_s.erase(b)
+
+
+func _grudge(holder: Skater, target: Skater) -> float:
+	if _grudges == null:
+		return 0.0
+	return _grudges.level(_registry.resolve_peer_id(holder), _registry.resolve_peer_id(target), _now())
 
 
 func _is_bot(skater: Skater) -> bool:

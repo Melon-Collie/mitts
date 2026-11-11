@@ -309,6 +309,9 @@ var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
 var _board_pins: BoardPinTracker = null
 var _fights: FightTracker = null
+# Host: every bot's grudge (FightGrudges), kept across stoppages, cleared for
+# each new match and rematch.
+var _grudges := FightGrudges.new()
 var _punches: FightPunchJudge = null
 # A punch's smack is the check's thud played short and bright: a fist on a face
 # is a smaller, sharper sound than a body on a body, and lighter than a check.
@@ -1841,9 +1844,10 @@ func _wire_subsystems() -> void:
 	_board_pins.setup(_registry, NetworkManager.local_time, _strip_pinned_carrier)
 	if _fights != null:
 		_fights.clear()
+	_grudges.clear()
 	_fights = FightTracker.new()
 	_fights.setup(_registry, NetworkManager.local_time,
-			func() -> Skater: return puck.carrier if puck != null else null)
+			func() -> Skater: return puck.carrier if puck != null else null, _grudges)
 	_fights.challenge_made.connect(_on_fight_challenge_made)
 	_fights.challenge_lapsed.connect(_on_fight_challenge_lapsed)
 	_fights.fight_started.connect(_on_fight_started)
@@ -4366,6 +4370,7 @@ func _on_hit_landed(hitter_peer_id: int, victim: Skater, impulse_magnitude: floa
 # still gets the impact).
 func _on_impact_landed(hitter_peer_id: int, victim_peer_id: int,
 		force: float, hit_dir: Vector3) -> void:
+	_fights.note_check(hitter_peer_id, victim_peer_id, force)
 	NetworkManager.send_body_check_to_all(hitter_peer_id, victim_peer_id, force, hit_dir)
 	_on_body_check_landed(hitter_peer_id, victim_peer_id, force, hit_dir)
 
@@ -4984,6 +4989,7 @@ func _apply_reset() -> void:
 		_turnover_tracker.reset()
 	if _possession_tracker != null:
 		_possession_tracker.reset()
+	_grudges.clear()
 	stats_updated.emit()
 	# A rematch is a fresh match for ranking purposes: re-derive the two-human
 	# latch from who's actually still here.

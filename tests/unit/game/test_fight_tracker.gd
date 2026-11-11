@@ -2,7 +2,8 @@ extends GutTest
 
 # Fights on the host (FightTracker): a press of the fight button challenges the
 # opponent nearest in front of the presser, and a press by that man inside the
-# window starts the fight; a bot answers at once and never challenges. A fight
+# window starts the fight. A bot answers only a man it holds a grudge against
+# (his checks on its team), and calls out one it holds a big one against. A fight
 # ends when the pair have been apart long enough or at the linesmen's cap, and
 # everything goes when fighting is not allowed.
 # Real Skater scenes, never ticked; positions, facings and presses by hand.
@@ -12,6 +13,7 @@ const PLAYING := GamePhase.Phase.PLAYING
 const TICK: float = 1.0 / 90.0
 
 var _registry: PlayerRegistry = null
+var _grudges: FightGrudges = null
 var _fights: FightTracker = null
 var _home: Skater = null     # team 0, peer 1
 var _away: Skater = null     # team 1, peer 2
@@ -32,6 +34,8 @@ func before_each() -> void:
 	_registry._skaters_cache = [_home, _away, _mate] as Array[Skater]
 	_registry.team_id_by_skater = {_home: 0, _away: 1, _mate: 0}
 	_registry.peer_id_by_skater = {_home: 1, _away: 2, _mate: 3}
+	_registry.team_id_by_peer = {1: 0, 2: 1, 3: 0}
+	_grudges = FightGrudges.new()
 	_carrier = null
 	_now = 100.0
 	_made.clear()
@@ -39,7 +43,8 @@ func before_each() -> void:
 	_started.clear()
 	_over = 0
 	_fights = FightTracker.new()
-	_fights.setup(_registry, func() -> float: return _now, func() -> Skater: return _carrier)
+	_fights.setup(_registry, func() -> float: return _now, func() -> Skater: return _carrier,
+			_grudges)
 	_fights.challenge_made.connect(func(c: Skater, t: Skater) -> void: _made.append([c, t]))
 	_fights.challenge_lapsed.connect(func(c: Skater) -> void: _lapsed.append(c))
 	_fights.fight_started.connect(func(a: Skater, b: Skater) -> void: _started.append([a, b]))
@@ -121,12 +126,91 @@ func test_an_answer_from_too_far_does_not_start_it() -> void:
 	assert_true(_started.is_empty())
 
 
-func test_a_bot_answers_at_once_and_never_calls_anyone_out() -> void:
+# `n` full-strength checks by `hitter` on `victim`.
+func _checks(hitter: int, victim: int, n: int) -> void:
+	for i: int in n:
+		_fights.note_check(hitter, victim, HitRules.FULL_CHECK_IMPULSE)
+
+
+func test_a_bot_holding_nothing_against_him_lets_his_challenge_lapse() -> void:
 	_registry.bot_peers[2] = true
-	_press(_away)
-	assert_true(_made.is_empty(), "a bot never challenges")
 	_press(_home)
-	assert_eq(_started, [[_home, _away]], "and accepts on the challenge's own tick")
+	assert_eq(_made, [[_home, _away]])
+	assert_true(_started.is_empty(), "no answer")
+	_now += FightRules.CHALLENGE_WINDOW_S + 0.01
+	_fights.tick(TICK, true, PLAYING)
+	assert_eq(_lapsed, [_home] as Array[Skater])
+
+
+func test_hit_enough_a_bot_answers_at_once() -> void:
+	_registry.bot_peers[2] = true
+	_checks(1, 2, 2)
+	_press(_home)
+	assert_eq(_started, [[_home, _away]], "on the challenge's own tick")
+
+
+func test_checks_on_its_teammate_count_for_less() -> void:
+	_registry.bot_peers[2] = true
+	var fourth: Skater = _spawn_skater()
+	_registry._skaters_cache.append(fourth)
+	_registry.team_id_by_skater[fourth] = 1
+	_registry.peer_id_by_skater[fourth] = 4
+	_registry.team_id_by_peer[4] = 1
+	_put(fourth, Vector2(5.0, 5.0), Vector2(0.0, -1.0))
+	_checks(1, 4, 2)
+	assert_almost_eq(_grudges.level(2, 1, _now),
+			FightGrudgeRules.ACCEPT_LEVEL * FightGrudgeRules.TEAMMATE_SHARE, 1e-4)
+	_press(_home)
+	assert_true(_started.is_empty(), "two hits on his mate are not enough")
+
+
+func test_a_bot_never_holds_its_own_teammate_s_check() -> void:
+	_registry.bot_peers[3] = true
+	_checks(1, 3, 4)
+	assert_eq(_grudges.level(3, 1, _now), 0.0)
+
+
+func test_hit_more_a_bot_calls_out_the_man() -> void:
+	_registry.bot_peers[2] = true
+	_checks(1, 2, 3)
+	_fights.tick(TICK, true, PLAYING)
+	assert_true(_made.is_empty(), "short of the challenge level")
+	_checks(1, 2, 1)
+	_fights.tick(TICK, true, PLAYING)
+	assert_eq(_made, [[_away, _home]])
+	assert_eq(_away.fight_role, FightRules.Role.CHALLENGING)
+	_press(_home)
+	assert_eq(_started, [[_away, _home]], "and his press answers it")
+
+
+func test_a_bot_calls_out_only_the_man_it_holds_it_against() -> void:
+	_registry.bot_peers[2] = true
+	_checks(3, 2, 4)  # the teammate did the hitting, and is off to the side
+	_put(_mate, Vector2(-4.0, 0.0), Vector2(0.0, 1.0))
+	_fights.tick(TICK, true, PLAYING)
+	assert_true(_made.is_empty(), "the man in front never touched him")
+	_put(_mate, Vector2(0.4, 0.2), Vector2(0.0, 1.0))
+	_fights.tick(TICK, true, PLAYING)
+	assert_eq(_made, [[_away, _mate]], "past a nearer man, to the one it wants")
+
+
+func test_a_bot_with_the_puck_does_not_call_anyone_out() -> void:
+	_registry.bot_peers[2] = true
+	_checks(1, 2, 4)
+	_carrier = _away
+	_fights.tick(TICK, true, PLAYING)
+	assert_true(_made.is_empty())
+
+
+func test_a_fight_spends_both_grudges() -> void:
+	_registry.bot_peers[1] = true
+	_registry.bot_peers[2] = true
+	_checks(1, 2, 4)
+	_checks(2, 1, 2)
+	_fights.tick(TICK, true, PLAYING)
+	assert_eq(_started, [[_away, _home]], "a bot calls out a bot, which answers")
+	assert_eq(_grudges.level(2, 1, _now), 0.0)
+	assert_eq(_grudges.level(1, 2, _now), 0.0)
 
 
 func test_a_carrier_cannot_challenge_but_can_be_challenged() -> void:
