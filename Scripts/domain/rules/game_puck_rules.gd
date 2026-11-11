@@ -29,6 +29,8 @@ static func game_dict(stats: PlayerStats) -> Dictionary:
 		"one_timer_goals": stats.one_timer_goals,
 		"tip_goals": stats.tip_goals,
 		"ot_goals": stats.ot_goals,
+		"fights": stats.fights,
+		"fight_wins": stats.fight_wins,
 	}
 
 
@@ -41,7 +43,7 @@ static func earned_game(game: Dictionary, ctx: Dictionary) -> Array[String]:
 		var cond: Dictionary = entry["cond"]
 		match String(cond.get("kind", "")):
 			"game":
-				if int(game.get(cond["field"], 0)) >= int(cond["min"]):
+				if _meets_mins(game, GamePucks.game_mins(entry)):
 					out.append(String(entry["id"]))
 			"special":
 				if _special_met(String(cond["key"]), ctx):
@@ -179,6 +181,15 @@ static func _met(req: String, totals: Dictionary, ledger: TrophyLedger, depth: i
 				return false
 		return true
 	return not entry.is_empty() and ledger != null and ledger.has(String(entry["id"]))
+
+
+static func _meets_mins(game: Dictionary, mins: Dictionary) -> bool:
+	if mins.is_empty():
+		return false
+	for field: Variant in mins:
+		if int(game.get(field, 0)) < int(mins[field]):
+			return false
+	return true
 
 
 static func _special_met(key: String, ctx: Dictionary) -> bool:

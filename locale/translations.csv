@@ -494,6 +494,15 @@ PUCK_STRIP_AND_FINISH_DESC,Score on the possession your own takeaway started.,Ma
 PUCK_ONE_TIMER_DOT,The Office,La oficina
 PUCK_ONE_TIMER_DOT_DESC,Score a one-timer from inside an offensive-zone faceoff circle.,Marca con un tiro a la primera desde dentro de un círculo de saque ofensivo.
 PUCK_BREADMAN,Breadman,Breadman
+PUCK_DROPPED_GLOVES,Dropped the Gloves,Guantes al suelo
+PUCK_DROPPED_GLOVES_DESC,Get into a fight.,Métete en una pelea.
+PUCK_WON_FIGHT,Won the Fight,Pelea ganada
+PUCK_WON_FIGHT_DESC,Win a fight: stay on your feet when your opponent goes down.,Gana una pelea: sigue en pie cuando tu rival caiga.
+PUCK_GORDIE_HOWE,Gordie Howe Hat Trick,Hat trick Gordie Howe
+PUCK_GORDIE_HOWE_DESC,"Score a goal, record an assist and fight in a single game.","Marca un gol, da una asistencia y pelea en un mismo partido."
+PUCK_FIGHT_WINS,Heavyweight,Peso pesado
+PUCK_FIGHT_WINS_DESC,Win %d fights.,Gana %d peleas.
+PUCK_ENFORCER,Enforcer,Matón
 PUCK_THREE_HELPERS,Three Helpers,Tres asistencias
 PUCK_THREE_HELPERS_DESC,Record 3 assists in a single game.,Da 3 asistencias en un partido.
 PUCK_POWER_FORWARD,Power Forward,Delantero de potencia
@@ -508,6 +517,7 @@ TROPHY_UNLOCKS_COLOR,Unlocks %s,Desbloquea %s
 TROPHY_TIER_UNLOCK,%s: %s,%s: %s
 TITLE_PLAYMAKER,Playmaker,Organizador
 TITLE_SNIPER,Sniper,Francotirador
+TITLE_ENFORCER,Enforcer,Matón
 TAPE_COLOR_TEAM_SECOND,Team color 2,Color del equipo 2
 TAPE_COLOR_TEAM_SECOND_SHORT,Team 2,Equipo 2
 TAPE_SPAN_SPACED,Spaced,Espaciada

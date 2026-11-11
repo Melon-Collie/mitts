@@ -44,6 +44,7 @@ values via read-modify-write, not increments) — then **publish**.
 | `STAT_GIVEAWAYS`       | INT  | self-inflicted turnovers        |
 | `STAT_FACEOFF_WINS`    | INT  | faceoffs won (as centre)        |
 | `STAT_INTERCEPTIONS`   | INT  | passes picked off               |
+| `STAT_FIGHT_WINS`      | INT  | fights won (opponent put down)  |
 
 These names must match `SteamStats.ALL` exactly. The GUT test
 `test_every_ladder_has_a_backing_stat` fails the build if a Game Puck ladder ever

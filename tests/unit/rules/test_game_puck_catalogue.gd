@@ -45,8 +45,10 @@ func test_one_game_conditions_read_real_fields() -> void:
 	var fields: Dictionary = GamePuckRules.game_dict(PlayerStats.new())
 	for entry: Dictionary in GamePucks.ALL:
 		if GamePucks.kind_of(entry) == "game":
-			var field: String = String((entry["cond"] as Dictionary)["field"])
-			assert_true(fields.has(field), "%s reads unknown field %s" % [entry["id"], field])
+			var mins: Dictionary = GamePucks.game_mins(entry)
+			assert_false(mins.is_empty(), "%s asks for nothing" % entry["id"])
+			for field: Variant in mins:
+				assert_true(fields.has(field), "%s reads unknown field %s" % [entry["id"], field])
 
 
 func test_every_requirement_names_a_real_puck_and_tier() -> void:

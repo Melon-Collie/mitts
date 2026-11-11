@@ -503,8 +503,8 @@ here whenever you bump, in the same format.
 #      than this.
 # v103: Game Pucks (docs/game-pucks-plan.md), one bump for the branch's
 #      wire changes, none of which shipped on its own:
-#      - PlayerStats gained `interceptions` (appended to to_array), one value
-#        more in the stats player record.
+#      - PlayerStats gained `interceptions`, `fights` and `fight_wins`
+#        (appended to to_array), three values more in the stats player record.
 #      - Titles: request_join and spawn_remote_skater carry the Titles id the
 #        player wears as a trailing String; the lobby roster entry's look
 #        (PlayerLook.cosmetics_to_wire) appends it, and the existing-player

@@ -17,8 +17,8 @@ class_name GamePucks
 ##   "count"   — a ladder: the lifetime counter `field` (a SteamStats key, or
 ##               "points") reaching each of `tiers`, ascending. Derived from the
 ##               Steam User Stats totals every time, never stored.
-##   "game"    — one game's stat `field` (a GamePuckRules.game_dict key) reached
-##               `min`.
+##   "game"    — one game's stats reached every minimum in `mins` (keyed by
+##               GamePuckRules.game_dict keys).
 ##   "special" — a compound game-over condition named by `key`, decided in
 ##               GamePuckRules._special_met.
 ##   "event"   — a moment named by `key`, fired by a TrophyService hook; `min`,
@@ -59,31 +59,36 @@ const ALL: Array[Dictionary] = [
 		"tiers": [25, 100, 500, 2000]},
 	{"id": "wins", "cond": {"kind": "count", "field": "wins"},
 		"tiers": [5, 25, 100, 250]},
+	{"id": "fight_wins", "cond": {"kind": "count", "field": "fight_wins"},
+		"tiers": [5, 10, 25, 50]},
 	{"id": "games_played", "cond": {"kind": "count", "field": "games_played"},
 		"tiers": [10, 25, 100, 250, 500], "steam_tiers": {25: "ACH_VETERAN"}},
 	# ── One game ─────────────────────────────────────────────────────────────
 	{"id": "first_goal", "steam": "ACH_FIRST_GOAL",
-		"cond": {"kind": "game", "field": "goals", "min": 1}},
+		"cond": {"kind": "game", "mins": {"goals": 1}}},
 	{"id": "hat_trick", "steam": "ACH_HAT_TRICK",
-		"cond": {"kind": "game", "field": "goals", "min": 3}},
+		"cond": {"kind": "game", "mins": {"goals": 3}}},
 	{"id": "three_helpers", "steam": "ACH_THREE_HELPERS",
-		"cond": {"kind": "game", "field": "assists", "min": 3}},
+		"cond": {"kind": "game", "mins": {"assists": 3}}},
 	{"id": "big_night", "steam": "ACH_BIG_NIGHT",
-		"cond": {"kind": "game", "field": "points", "min": 5}},
+		"cond": {"kind": "game", "mins": {"points": 5}}},
 	# 3, not 5: a block is a crouch into a live puck with no auto-block, so five
 	# in one game is a grind.
 	{"id": "brick_wall", "steam": "ACH_BRICK_WALL",
-		"cond": {"kind": "game", "field": "shots_blocked", "min": 3}},
+		"cond": {"kind": "game", "mins": {"shots_blocked": 3}}},
 	{"id": "one_timer", "steam": "ACH_ONE_TIMER",
-		"cond": {"kind": "game", "field": "one_timer_goals", "min": 1}},
+		"cond": {"kind": "game", "mins": {"one_timer_goals": 1}}},
 	{"id": "tip_in", "steam": "ACH_TIP_IN",
-		"cond": {"kind": "game", "field": "tip_goals", "min": 1}},
+		"cond": {"kind": "game", "mins": {"tip_goals": 1}}},
 	{"id": "overtime_hero", "steam": "ACH_OVERTIME_HERO",
-		"cond": {"kind": "game", "field": "ot_goals", "min": 1}},
+		"cond": {"kind": "game", "mins": {"ot_goals": 1}}},
 	{"id": "faceoff_boss", "steam": "ACH_FACEOFF_BOSS",
-		"cond": {"kind": "game", "field": "faceoff_wins", "min": 5}},
+		"cond": {"kind": "game", "mins": {"faceoff_wins": 5}}},
 	{"id": "pickpocket", "steam": "ACH_PICKPOCKET",
-		"cond": {"kind": "game", "field": "takeaways", "min": 5}},
+		"cond": {"kind": "game", "mins": {"takeaways": 5}}},
+	{"id": "dropped_gloves", "cond": {"kind": "game", "mins": {"fights": 1}}},
+	{"id": "won_fight", "cond": {"kind": "game", "mins": {"fight_wins": 1}}},
+	{"id": "gordie_howe", "cond": {"kind": "game", "mins": {"goals": 1, "assists": 1, "fights": 1}}},
 	{"id": "shutout", "steam": "ACH_SHUTOUT",
 		"cond": {"kind": "special", "key": "shutout"}},
 	{"id": "first_win", "steam": "ACH_FIRST_WIN",
@@ -119,6 +124,7 @@ const ALL: Array[Dictionary] = [
 	{"id": "playmaker", "cond": {"kind": COMBO, "needs": ["assists@250", "one_timer_feed"]}},
 	{"id": "sniper", "cond": {"kind": COMBO, "needs": ["goals@250", "snipe"]}},
 	{"id": "breadman", "cond": {"kind": COMBO, "needs": ["assists@50", "three_helpers"]}},
+	{"id": "enforcer", "cond": {"kind": COMBO, "needs": ["hits@100", "fight_wins@10"]}},
 ]
 
 
@@ -158,6 +164,11 @@ static func requirement_puck(req: String) -> String:
 
 static func requirement_target(req: String) -> int:
 	return int(req.get_slice("@", 1)) if req.contains("@") else 0
+
+
+# A "game" puck's minimums, stat key -> least; empty for anything else.
+static func game_mins(entry: Dictionary) -> Dictionary:
+	return (entry.get("cond", {}) as Dictionary).get("mins", {})
 
 
 static func tiers_of(entry: Dictionary) -> Array[int]:

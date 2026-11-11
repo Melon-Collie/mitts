@@ -1036,8 +1036,22 @@ func _on_fight_started(a: Skater, b: Skater) -> void:
 	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
 	var pa: int = _registry.resolve_peer_id(a)
 	var pb: int = _registry.resolve_peer_id(b)
+	for pid: int in [pa, pb]:
+		var rec: PlayerRecord = _registry.get_record(pid)
+		if rec != null and rec.stats != null:
+			rec.stats.fights += 1
+	_stats_sync_gate.mark_dirty()
 	fight_called.emit(pa, pb)
 	NetworkManager.notify_fight_called_to_all(pa, pb)
+
+
+# Host: a fight ended with `winner` standing over `loser` (FightRules.result_of).
+func _on_fight_won(winner: Skater, _loser: Skater) -> void:
+	var rec: PlayerRecord = _registry.get_record(_registry.resolve_peer_id(winner))
+	if rec == null or rec.stats == null:
+		return
+	rec.stats.fight_wins += 1
+	_stats_sync_gate.mark_dirty()
 
 
 # Host: a punch landed (FightPunchJudge). The victim takes it (Δv along the
@@ -1891,6 +1905,7 @@ func _wire_subsystems() -> void:
 	_fights.challenge_made.connect(_on_fight_challenge_made)
 	_fights.challenge_lapsed.connect(_on_fight_challenge_lapsed)
 	_fights.fight_started.connect(_on_fight_started)
+	_fights.fight_won.connect(_on_fight_won)
 	_fights.fights_over.connect(_on_fights_over)
 	_fights.hunt_started.connect(_on_hunt_started)
 	_fights.hunt_ended.connect(_on_hunt_ended)

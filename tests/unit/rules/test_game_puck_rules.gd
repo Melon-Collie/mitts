@@ -348,3 +348,36 @@ func _meet_all(reqs: Array[String], totals: Dictionary, ledger: TrophyLedger) ->
 			_meet_all(GamePucks.needs_of(entry), totals, ledger)
 		else:
 			ledger.earn(req, 1)
+
+
+# ── fights ───────────────────────────────────────────────────────────────────
+func test_a_gordie_howe_needs_a_goal_an_assist_and_a_fight_in_one_game() -> void:
+	var stats := PlayerStats.new()
+	stats.goals = 1
+	stats.assists = 1
+	assert_does_not_have(GamePuckRules.earned_game(GamePuckRules.game_dict(stats), {}),
+			"gordie_howe", "no fight")
+	stats.fights = 1
+	var earned: Array[String] = GamePuckRules.earned_game(GamePuckRules.game_dict(stats), {})
+	assert_has(earned, "gordie_howe")
+	assert_has(earned, "dropped_gloves")
+	assert_does_not_have(earned, "won_fight", "a fight is not a win")
+	stats.assists = 0
+	assert_does_not_have(GamePuckRules.earned_game(GamePuckRules.game_dict(stats), {}),
+			"gordie_howe", "no assist")
+
+
+func test_a_won_fight_earns_its_puck_and_climbs_its_ladder() -> void:
+	var stats := PlayerStats.new()
+	stats.fights = 1
+	stats.fight_wins = 1
+	assert_has(GamePuckRules.earned_game(GamePuckRules.game_dict(stats), {}), "won_fight")
+	assert_eq(GamePuckRules.crossed_tiers({"fight_wins": 9}, {"fight_wins": 10}),
+			[{"id": "fight_wins", "target": 10}] as Array[Dictionary])
+
+
+func test_the_enforcer_hits_and_wins_fights() -> void:
+	var ledger := TrophyLedger.new()
+	assert_false(GamePuckRules.requirement_met("enforcer", {"hits": 100, "fight_wins": 9}, ledger))
+	assert_eq(GamePuckRules.earned_titles({"hits": 100, "fight_wins": 10}, ledger),
+			["enforcer"] as Array[String])

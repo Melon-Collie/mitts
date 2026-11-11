@@ -40,6 +40,7 @@ const TAKEAWAYS := "STAT_TAKEAWAYS"
 const GIVEAWAYS := "STAT_GIVEAWAYS"
 const FACEOFF_WINS := "STAT_FACEOFF_WINS"
 const INTERCEPTIONS := "STAT_INTERCEPTIONS"
+const FIGHT_WINS := "STAT_FIGHT_WINS"
 
 # `key` is the career-totals column name these map to — the SAME names a Game
 # Puck ladder's `field` reads, so the goals ladder is backed by the stat whose
@@ -57,4 +58,5 @@ const ALL: Array[Dictionary] = [
 	{"id": GIVEAWAYS, "key": "giveaways", "inc": {"kind": "stat", "field": "giveaways"}},
 	{"id": FACEOFF_WINS, "key": "faceoff_wins", "inc": {"kind": "stat", "field": "faceoff_wins"}},
 	{"id": INTERCEPTIONS, "key": "interceptions", "inc": {"kind": "stat", "field": "interceptions"}},
+	{"id": FIGHT_WINS, "key": "fight_wins", "inc": {"kind": "stat", "field": "fight_wins"}},
 ]

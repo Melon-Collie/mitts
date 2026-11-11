@@ -167,7 +167,10 @@ The rows live in `GamePucks.ALL`. The title combos:
 | Playmaker | `assists@250` + `one_timer_feed` | Playmaker |
 | Sniper | `goals@250` + `snipe` | Sniper |
 
-The last two arrived with the feats in Phase 3. Phase 5's cosmetic pricing is
+| Enforcer | `hits@100` + `fight_wins@10` | Enforcer |
+
+Playmaker and Sniper arrived with the feats in Phase 3, Enforcer with the
+fight pucks. Phase 5's cosmetic pricing is
 below, under *Phases*.
 
 Ladders: goals, assists, points, hits, interceptions, takeaways, blocks, faceoff
@@ -193,6 +196,28 @@ The shot's loft level and hand are recorded on the host at release
 since the shot was not the scorer's. A won possession (`FeatTracker`) lasts
 until the other team establishes one or play stops. A Transition title waits on
 a carried-zone-entry counter, which nothing records yet.
+
+### Fight pucks
+
+Fighting (`docs/fighting-plan.md`) counts per game on the host: `fights`, every
+fight a player was in, and `fight_wins`, those he won. A fight is won by the
+man left standing when the other goes down (`FightRules.result_of`); a fight
+that ends with both down, a disengage or the linesmen is a draw. Both stats
+ride the broadcast `PlayerStats`, so the player's own machine reads them at
+game-over like any game puck. Bots fight, so these are earned against bots
+too.
+
+| puck | kind | earned by |
+|---|---|---|
+| Dropped the Gloves (`dropped_gloves`) | game | a fight |
+| Won the Fight (`won_fight`) | game | a fight won |
+| Gordie Howe Hat Trick (`gordie_howe`) | game | a goal, an assist and a fight in one game |
+| Heavyweight (`fight_wins`) | ladder | 5 / 10 / 25 / 50 fights won (`STAT_FIGHT_WINS`) |
+| Enforcer | combo | `hits@100` + `fight_wins@10`: the Enforcer title |
+
+The ladder counts wins, not fights: there is no penalty for fighting, so a
+ladder on fights would pay for starting them. A game puck's condition is a
+`mins` map of game stats, so one puck can ask for several at once.
 
 ## Architecture
 

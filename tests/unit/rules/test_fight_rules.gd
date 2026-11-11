@@ -102,3 +102,10 @@ func test_no_fight_in_the_goal_celebration() -> void:
 	sm.on_goal_scored(1)
 	assert_false(sm.begin_fight(Vector2.ZERO))
 	assert_eq(sm.current_phase, GamePhase.Phase.GOAL_CELEBRATION)
+
+
+func test_the_man_left_standing_wins_the_fight() -> void:
+	assert_eq(FightRules.result_of(false, true), FightRules.Result.A_WON)
+	assert_eq(FightRules.result_of(true, false), FightRules.Result.B_WON)
+	assert_eq(FightRules.result_of(true, true), FightRules.Result.DRAW, "both down")
+	assert_eq(FightRules.result_of(false, false), FightRules.Result.DRAW, "nobody down")
