@@ -588,6 +588,19 @@ func test_skater_fight_hands_ride_their_own_byte() -> void:
 			assert_almost_eq(dec.pin_strength, 0.5, 1.0 / 255.0)
 
 
+func test_skater_rattle_rides_the_fight_byte_beside_the_hands() -> void:
+	for rattle: float in [0.0, 0.4, 1.7, FightPunchRules.RATTLE_MAX_S]:
+		var s := SkaterNetworkState.new()
+		s.fight_grip = FightHoldRules.Grip.ARM_BOTTOM
+		s.fight_punch_side = FightHoldRules.Side.BOTTOM
+		s.fight_rattle = rattle
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_almost_eq(dec.fight_rattle, rattle, 0.051)
+		assert_eq(dec.fight_grip, FightHoldRules.Grip.ARM_BOTTOM)
+		assert_eq(dec.fight_punch_side, FightHoldRules.Side.BOTTOM)
+
+
 func test_skater_stagger_round_trips() -> void:
 	# stagger_timer was never on the wire, so a client victim's predicted stagger
 	# was wiped to 0 on the next reconcile. u8 @0.01s must now round-trip it.

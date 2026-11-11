@@ -294,3 +294,42 @@ func test_the_stick_and_gloves_drop_and_lie_on_the_ice_until_the_fight_is_over()
 	assert_true(_skater.stick_mesh.visible, "and back in his hands")
 	assert_eq(_skater.fight_grip, Grip.NONE)
 	assert_eq(_skater.fight_punch_side, Side.TOP, "the next fight starts with the top hand")
+
+
+func test_a_punch_rattles_him_and_a_full_rattle_puts_him_down() -> void:
+	_fight()
+	_tick(5)
+	var back: Vector3 = _skater.global_transform.basis.z.normalized()
+	var dv: Vector3 = back * FightPunchRules.impulse_dv(FightFistRules.MAX_SPEED_M_S,
+			_skater.weight * FightPunchRules.NEUTRAL_MASS_KG)
+	_controller.absorb_punch(dv, FightPunchRules.Hit.HEAD, FightFistRules.MAX_SPEED_M_S)
+	assert_almost_eq(_skater.fight_rattle, FightPunchRules.RATTLE_HEAD_S, 1e-4)
+	assert_eq(_controller.knockdown_timer, 0.0, "a sound man rides a punch")
+	assert_gt(_controller.stagger_timer, 0.0, "and reels from it")
+	_skater.fight_rattle = FightPunchRules.RATTLE_MAX_S
+	_controller.absorb_punch(dv, FightPunchRules.Hit.HEAD, FightFistRules.MAX_SPEED_M_S)
+	assert_gt(_controller.knockdown_timer, 0.0, "rattled to the full, a clean shot drops him")
+
+
+func test_the_rattle_wears_off_on_the_host() -> void:
+	_fight()
+	_skater.fight_rattle = 1.0
+	_tick(roundi(1.0 / DT))
+	assert_almost_eq(_skater.fight_rattle, 1.0 - FightPunchRules.RATTLE_DECAY_PER_S, 0.02)
+
+
+func test_a_rattled_fist_is_slower() -> void:
+	_fight()
+	_skater.fight_rattle = FightPunchRules.RATTLE_MAX_S
+	_tick(40)
+	_aim(Vector3(0.0, 0.0, -3.0))
+	var top: float = 0.0
+	var prev: Vector3 = _skater.get_top_hand_position()
+	for i: int in 30:
+		_tick()
+		_skater.fight_rattle = FightPunchRules.RATTLE_MAX_S
+		var now: Vector3 = _skater.get_top_hand_position()
+		top = maxf(top, now.distance_to(prev) / DT)
+		prev = now
+	assert_lte(top, FightFistRules.MAX_SPEED_M_S
+			* FightPunchRules.fist_scale(FightPunchRules.RATTLE_MAX_S) + 0.01)

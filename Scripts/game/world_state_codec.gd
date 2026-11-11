@@ -41,7 +41,8 @@ extends RefCounted
 #                                    + fight_role[5:4] FightRules.Role (v100)),
 #                      pin_strength u8@1/255 (v74),
 #                      fight u8 (grip[1:0] FightHoldRules.Grip + punch_side[2]
-#                                FightHoldRules.Side (v101))
+#                                FightHoldRules.Side (v101) + rattle[7:3] @0.1 s
+#                                (v102))
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie (142 B): root (12 B) + the keeper's pose (KeeperPoseCodec, 130 B).
 #                      Root: pos_x/z s16@1cm, rot_y s16@π/32767, state u8,
@@ -563,7 +564,8 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	b.encode_u8(o, (s.pin_role & 0x03) | (0x04 if s.diving else 0)
 			| (0x08 if s.slapshot_pinned else 0) | ((s.fight_role & 0x03) << 4)); o += 1
 	b.encode_u8(o, clampi(roundi(s.pin_strength * 255.0), 0, 255)); o += 1
-	b.encode_u8(o, (s.fight_grip & 0x03) | ((s.fight_punch_side & 0x01) << 2)); o += 1
+	b.encode_u8(o, (s.fight_grip & 0x03) | ((s.fight_punch_side & 0x01) << 2)
+			| (clampi(roundi(s.fight_rattle * 10.0), 0, 31) << 3)); o += 1
 	return o
 
 
@@ -659,6 +661,7 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	var fight_hands: int = b.decode_u8(o)
 	s.fight_grip = fight_hands & 0x03
 	s.fight_punch_side = (fight_hands >> 2) & 0x01
+	s.fight_rattle = float((fight_hands >> 3) & 0x1F) / 10.0
 	return s
 
 

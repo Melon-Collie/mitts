@@ -496,3 +496,8 @@ here whenever you bump, in the same format.
 #      which arm punches (FightHoldRules.Side, 1 bit). The fists ride the
 #      existing hand and blade markers. Replay FORMAT_VERSION 20 -> 21, since
 #      the recorded frames carry the block.
+# v102: fighting, phase 4. The skater block's fight byte carries the rattle
+#      (FightPunchRules, seconds @0.1 s) in bits 3-7, and the new reliable RPC
+#      notify_punch_landed shifts the RPC index set. Replay FORMAT_VERSION
+#      unchanged at 21: the bits were zero, and still are in a file older
+#      than this.

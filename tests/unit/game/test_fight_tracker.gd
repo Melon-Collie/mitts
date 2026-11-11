@@ -226,3 +226,12 @@ func test_clear_stands_everyone_down() -> void:
 	_fights.clear()
 	for s: Skater in [_home, _away, _mate]:
 		assert_eq(s.fight_role, FightRules.Role.NONE)
+
+
+func test_a_man_put_down_ends_the_fight() -> void:
+	_press(_home)
+	_press(_away)
+	_away.is_knocked_down = true
+	_fights.tick(TICK, true, GamePhase.Phase.FIGHT)
+	assert_false(_fights.is_fighting(_home))
+	assert_eq(_over, 1)

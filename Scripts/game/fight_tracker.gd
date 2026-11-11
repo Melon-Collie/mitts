@@ -14,8 +14,8 @@ extends RefCounted
 # carrying the puck. A bot never challenges, and answers every challenge at once.
 # Nobody already fighting, down or ghosted takes part.
 #
-# A fight ends when the pair have been apart long enough or at the linesmen's cap
-# (FightRules.end_of), or when either man is gone.
+# A fight ends when either man goes down, when the pair have been apart long
+# enough or at the linesmen's cap (FightRules.end_of), or when either man is gone.
 
 signal challenge_made(challenger: Skater, target: Skater)
 signal challenge_lapsed(challenger: Skater)
@@ -199,6 +199,9 @@ func _step_fights(delta: float) -> void:
 			continue
 		var a: Skater = key as Skater
 		var b: Skater = other as Skater
+		if a.is_knocked_down or b.is_knocked_down:
+			_end(a, b)  # put down: that is the fight
+			continue
 		var apart: float = FightRules.step_apart(float(_apart_s.get(a, 0.0)),
 				_xz(a).distance_to(_xz(b)), delta)
 		_apart_s[a] = apart

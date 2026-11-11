@@ -1647,7 +1647,9 @@ func _on_body_check_received(impulse: Vector3, stagger_strength: float = -1.0) -
 # his body was driven, so the boards behind him add to the stagger and not to
 # the fall. Committed to a check, he leans into it
 # (BodyBalanceRules.leaned_into), whichever body's resolver landed it.
-func _absorb_hit(impulse: Vector3, stagger_strength: float) -> void:
+# `balance_scale` grows the Δv his balance reads (a rattled fighter's,
+# FightPunchRules.balance_scale) without moving him or reeling him more.
+func _absorb_hit(impulse: Vector3, stagger_strength: float, balance_scale: float = 1.0) -> void:
 	var felt: Vector3 = impulse
 	if skater.delivers_checks():
 		var leaned: Vector2 = BodyBalanceRules.leaned_into(Vector2(impulse.x, impulse.z),
@@ -1670,7 +1672,7 @@ func _absorb_hit(impulse: Vector3, stagger_strength: float) -> void:
 		return
 	var cfg: BodyCheckRules.Config = _body_check_config()
 	var knockdown_add: float = 0.0
-	var overshoot: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z),
+	var overshoot: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z) * balance_scale,
 			skater.get_facing(), _balance_posture(), _build_height_mult, _balance_config())
 	if overshoot > 1.0:
 		knockdown_add = KnockdownFallRules.first_impact_time(
@@ -1775,6 +1777,18 @@ func is_fighting() -> bool:
 	return skater.fight_role == FightRules.Role.FIGHTING
 
 
+# Host: a punch landed on this fighter (FightPunchJudge). It moves him by its
+# Δv, rattles him (FightPunchRules), reels him as a check of its reel's strength
+# would, and puts him down where his balance, shrunk by the rattle, cannot ride
+# it — which ends the fight.
+func absorb_punch(dv: Vector3, hit: int, speed: float) -> void:
+	skater.velocity += dv
+	skater.fight_rattle = minf(skater.fight_rattle + FightPunchRules.rattle_added(hit, speed),
+			FightPunchRules.RATTLE_MAX_S)
+	_absorb_hit(dv, FightPunchRules.reel(hit, speed),
+			FightPunchRules.balance_scale(skater.fight_rattle))
+
+
 # The fists as the last live tick left them (SkaterFightHands), for a reconcile
 # to lay back on after its replay.
 func lay_fight_hands() -> void:
@@ -1868,6 +1882,10 @@ func _process_input(input: InputState, delta: float) -> void:
 	_current_aim_world = input.mouse_world_pos
 	note_fight_press(input)
 	_read_fight_partner(input.host_timestamp)
+	# The rattle is the host's: it wears off here, and every machine adopts it.
+	if _is_host and not is_replaying and skater.fight_rattle > 0.0:
+		skater.fight_rattle = maxf(skater.fight_rattle
+				- FightPunchRules.RATTLE_DECAY_PER_S * delta, 0.0)
 	skater.stick_jarred = BodyCheckRules.is_rocked(stagger_timer, _body_check_config())
 	_settle.read(input, has_puck and _sm.get_state() == State.SKATING_WITH_PUCK)
 
@@ -2331,6 +2349,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.fight_role = skater.fight_role
 	state.fight_grip = skater.fight_grip
 	state.fight_punch_side = skater.fight_punch_side
+	state.fight_rattle = skater.fight_rattle
 	state.pin_strength = skater.pin_strength
 	state.diving = skater.is_diving
 	state.slapshot_pinned = skater.is_slapshot_pinning()
@@ -2427,6 +2446,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.fight_role = state.fight_role
 	skater.fight_grip = state.fight_grip
 	skater.fight_punch_side = state.fight_punch_side
+	skater.fight_rattle = state.fight_rattle
 	# Intent feeds the gait's input-driven reads below (glide / dig-in /
 	# crossovers / brake stop) — stamp it like the live controllers do, so
 	# playback strides match live play instead of reading zero (file viewer)
@@ -3686,6 +3706,7 @@ func _adopt_pin(state: SkaterNetworkState) -> void:
 	skater.pin_role = state.pin_role
 	skater.pin_strength = state.pin_strength
 	skater.fight_role = state.fight_role
+	skater.fight_rattle = state.fight_rattle
 
 
 # Locked in a pin, the body slides along the wall no faster than its role's cap.

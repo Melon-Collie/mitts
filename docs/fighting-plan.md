@@ -1,7 +1,8 @@
 # Fighting — design plan
 
-Status: **approved; phases 1 (lifecycle), 2 (gloves off) and 3 (the fist and
-the grab) built**; phase 3 awaits a local playtest. Phases 4–5 are not started. Where what is built
+Status: **approved; phases 1–4 built** (lifecycle, gloves off, the fist and
+the grab, punches landing) plus the fight camera; phase 4 awaits a local
+playtest. Phase 5 is not started. Where what is built
 differs from the text below, the "as built" sections say how.
 
 Two skaters can fight. Both must agree to it, the referee blows the play
@@ -333,3 +334,54 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
 - **Seen with** `render-poses.sh --only=fight` (the guard, a jab in flight and
   at reach, a hook, the sweater held, an arm caught, the hands swapped).
   **Tested by** `test_fight_hands.gd` and `test_fight_fist_and_hold_rules.gd`.
+
+## Phase 4 as built
+
+- **The judge** (`FightPunchJudge`, host-only, ticked by `GameManager` after
+  the tracker) sweeps each fighter's punching fist from last tick to this one
+  through the other man's head (a ball over his chin), his chest (a ball under
+  his shoulders) and both his arms (capsules from shoulder to fist).
+  `FightPunchRules` has the volumes and sweeps. The first volume the fist meets
+  is the hit, and an arm is a **block**. A fist closing slower than
+  `MIN_LAND_M_S` (2.5 m/s) is a hand on him, not a punch. A landed fist lands
+  nothing more for `HIT_COOLDOWN_S`. It's judged on the host's copy of both
+  bodies and both fists at the host's present, as a body check is.
+- **What a punch does** (`SkaterController.absorb_punch`, host):
+  - It moves him by its `Δv`: the arm's striking mass on his body's, ~0.4 m/s
+    at full speed.
+  - It adds **rattle**: a timer, the head's at full speed `RATTLE_HEAD_S`, the
+    chest's a share of that, a block's a sliver, capped at `RATTLE_MAX_S`. The
+    rattle wears off at `RATTLE_DECAY_PER_S` on the host and is adopted every
+    broadcast by every machine. It's replicated in the fight byte's bits 3–7
+    (protocol v102).
+  - It reels him as a check of strength `REEL_HEAD_M_S` would (the stagger,
+    with its recoil and wobble).
+  - It **puts him down** through the check's own absorb path
+    (`_absorb_hit`), with the `Δv` his balance reads grown by
+    `FightPunchRules.balance_scale` (his balance shrunk by the rattle). A punch
+    never drops a sound man: a full-speed one is a sixth of what his balance
+    rides. Fully rattled, a clean head shot does
+    (`test_fight_punch_rules.gd` holds both). So a knockdown is
+    wobbled-then-dropped.
+- **A rattled fist** is slower (`FightPunchRules.fist_scale`).
+- **A man put down ends the fight** (`FightTracker._step_fights`).
+- **Feedback** on every peer (`notify_punch_landed`, reliable): the check's
+  thud played shorter and brighter at his head, a half-size impact burst, a
+  remote victim's knockback lead, and a crowd swell on a hard one
+  (`GameManager.punch_landed`). The crowd roars as the gloves drop
+  (`fight_called`). There's no new audio file: the punch is the check's thud
+  pitched up.
+- **Not modelled**: the grip's tug on balance (dragging a man doesn't topple
+  him), lag compensation for a remote attacker's punch, and an uppercut or
+  body-shot aim (the fist's height comes from its extension alone).
+
+## The fight camera
+
+Through the stoppage, `GameCamera` leaves the puck and circles the fight:
+`GameManager.fight_focus` (the player's own fight, or the nearest one), 5.5 m
+out and 3.2 m up, looking at the pair's chests, orbiting at 12°/s. It eases in
+from the live framing over 0.8 s and back out when play restarts. The orbit is
+slow on purpose: a fighter's cursor is unprojected through this camera onto the
+ice, where it places his fist, so the orbit drifts a still mouse's fist target
+round the pair, by ~0.2 m/s at a metre out. Spectator cameras
+(`CameraDirector`) are unchanged.

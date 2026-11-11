@@ -78,6 +78,7 @@ signal goalie_freeze_called_received
 signal fight_challenge_received(challenger_peer_id: int, target_peer_id: int)
 signal fight_challenge_lapsed_received(challenger_peer_id: int)
 signal fight_called_received(a_peer_id: int, b_peer_id: int)
+signal punch_landed_received(victim_peer_id: int, intensity: float, dir_x: float, dir_z: float)
 signal puck_frozen_called_received
 signal offside_called_received
 signal faceoff_positions_received(positions: Array, preroll: float)
@@ -2298,6 +2299,17 @@ func notify_fight_called(a_peer_id: int, b_peer_id: int) -> void:
 	NetworkSimManager.send(
 		func(a: int, b: int) -> void: fight_called_received.emit(a, b),
 		[a_peer_id, b_peer_id], true)
+
+func notify_punch_landed_to_all(victim_peer_id: int, intensity: float, dir_x: float,
+		dir_z: float) -> void:
+	for peer_id: int in connected_peer_ids():
+		notify_punch_landed.rpc_id(peer_id, victim_peer_id, intensity, dir_x, dir_z)
+
+@rpc("authority", "reliable")
+func notify_punch_landed(victim_peer_id: int, intensity: float, dir_x: float, dir_z: float) -> void:
+	NetworkSimManager.send(
+		func(v: int, t: float, x: float, z: float) -> void: punch_landed_received.emit(v, t, x, z),
+		[victim_peer_id, intensity, dir_x, dir_z], true)
 
 func notify_offside_called_to_all() -> void:
 	for peer_id: int in connected_peer_ids():

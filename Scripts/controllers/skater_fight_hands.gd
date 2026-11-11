@@ -71,8 +71,9 @@ func step(input: InputState, delta: float, partner: Skater, partner_pos: Vector3
 	if partner != null:
 		chin_y = _skater.upper_body_to_local(chin_world(partner) + at).y
 		tied = FightHoldRules.tied(_skater.fight_punch_side, partner.fight_grip)
-	var speed: float = FightFistRules.MAX_SPEED_M_S
-	var accel: float = FightFistRules.MAX_ACCEL_M_S2
+	var rattled: float = FightPunchRules.fist_scale(_skater.fight_rattle)
+	var speed: float = FightFistRules.MAX_SPEED_M_S * rattled
+	var accel: float = FightFistRules.MAX_ACCEL_M_S2 * rattled
 	var punch_reach: float = reach
 	if tied:
 		speed *= FightFistRules.TIED_SPEED_SHARE

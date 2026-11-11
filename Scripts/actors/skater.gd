@@ -730,6 +730,9 @@ var fight_role: int = FightRules.Role.NONE
 # simulated; a remote takes them off the wire.
 var fight_grip: int = FightHoldRules.Grip.NONE
 var fight_punch_side: int = FightHoldRules.Side.TOP
+# How rattled a fighter is by the punches he has taken (FightPunchRules),
+# seconds; the host's alone, replicated and adopted every broadcast.
+var fight_rattle: float = 0.0
 # The stick-check button as this skater's last input held it, stamped by the
 # controller. Read only by the host's StickTieTracker (either player holding keeps
 # a tie); never replicated.

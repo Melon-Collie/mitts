@@ -137,6 +137,9 @@ signal offside_called()
 signal fight_challenged(challenger_peer_id: int, target_peer_id: int)
 signal fight_challenge_lapsed(challenger_peer_id: int)
 signal fight_called(a_peer_id: int, b_peer_id: int)
+# A punch landed on `victim_peer_id` (FightPunchJudge), on every peer:
+# `intensity` 0..1 how hard (FightPunchRules.intensity).
+signal punch_landed(victim_peer_id: int, intensity: float)
 # Emitted on every peer when an NHL icing race opens (icing_team_id) or ends
 # (-1, waved_off saying how). Hosts emit from _announce_icing_race; clients
 # from the RPC handler.
@@ -306,6 +309,17 @@ var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
 var _board_pins: BoardPinTracker = null
 var _fights: FightTracker = null
+var _punches: FightPunchJudge = null
+# A punch's smack is the check's thud played short and bright: a fist on a face
+# is a smaller, sharper sound than a body on a body, and lighter than a check.
+const _PUNCH_VOL_MIN_DB: float = -16.0
+const _PUNCH_VOL_MAX_DB: float = -4.0
+const _PUNCH_PITCH_LIGHT: float = 1.5
+const _PUNCH_PITCH_HEAVY: float = 1.2
+# A punch's burst and knockback lead, as a share of a check's of the same
+# intensity.
+const _PUNCH_BURST_SHARE: float = 0.5
+var _fighters_scratch: Array[Skater] = []
 var _stick_tie_draw := StickTieDraw.new()
 var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
@@ -560,6 +574,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.fight_challenge_received.connect(_on_fight_challenge_received)
 	NetworkManager.fight_challenge_lapsed_received.connect(fight_challenge_lapsed.emit)
 	NetworkManager.fight_called_received.connect(_on_fight_called_received)
+	NetworkManager.punch_landed_received.connect(_play_punch)
 	NetworkManager.faceoff_positions_received.connect(_on_faceoff_positions_received)
 	NetworkManager.game_reset_received.connect(on_game_reset)
 	NetworkManager.stats_received.connect(_on_stats_received)
@@ -727,6 +742,11 @@ func _physics_process(delta: float) -> void:
 	_board_pins.tick(not _state_machine.is_movement_locked())
 	_stick_ties.tick(not _state_machine.is_movement_locked())
 	_fights.tick(delta, _fights_allowed(), _state_machine.current_phase)
+	_fighters_scratch.clear()
+	for s: Skater in _registry.skaters():
+		if s.fight_role == FightRules.Role.FIGHTING:
+			_fighters_scratch.append(s)
+	_punches.tick(_fighters_scratch, delta)
 	_possession_tracker.tick(delta)
 	# Release before _pickup_claim.tick so a claim coming due this frame can still
 	# arm the contest window on the frame it lands.
@@ -979,6 +999,46 @@ func _on_fight_started(a: Skater, b: Skater) -> void:
 	var pb: int = _registry.resolve_peer_id(b)
 	fight_called.emit(pa, pb)
 	NetworkManager.notify_fight_called_to_all(pa, pb)
+
+
+# Host: a punch landed (FightPunchJudge). The victim takes it (Δv along the
+# punch, flat on the ice, rattle, reel, maybe the knockdown), and every peer
+# hears and sees it land.
+func _on_punch_landed(attacker: Skater, victim: Skater, hit: int, speed: float,
+		toward: Vector3) -> void:
+	var flat := Vector3(toward.x, 0.0, toward.z)
+	if flat.length_squared() < 1e-6:
+		flat = victim.global_position - attacker.global_position
+		flat.y = 0.0
+	flat = flat.normalized()
+	var victim_peer: int = _registry.resolve_peer_id(victim)
+	var rec: PlayerRecord = _registry.get_record(victim_peer)
+	if rec != null and rec.controller != null:
+		rec.controller.absorb_punch(flat * FightPunchRules.impulse_dv(speed,
+				victim.weight * FightPunchRules.NEUTRAL_MASS_KG), hit, speed)
+	var t: float = FightPunchRules.intensity(hit, speed)
+	_play_punch(victim_peer, t, flat.x, flat.z)
+	NetworkManager.notify_punch_landed_to_all(victim_peer, t, flat.x, flat.z)
+
+
+# Every peer: the smack of a punch on `victim_peer_id`'s head or body, harder
+# and duller the harder it lands, with the check's burst and, on a client's
+# remote victim, the check's knockback lead.
+func _play_punch(victim_peer_id: int, intensity: float, dir_x: float, dir_z: float) -> void:
+	var rec: PlayerRecord = _registry.get_record(victim_peer_id) if _registry != null else null
+	if rec == null or rec.skater == null:
+		return
+	var dir := Vector3(dir_x, 0.0, dir_z)
+	SoundManager.play_world(SoundManager.Sound.BODY_CHECK, FightPunchJudge.head_center(rec.skater),
+			lerpf(_PUNCH_VOL_MIN_DB, _PUNCH_VOL_MAX_DB, intensity), 0.06,
+			lerpf(_PUNCH_PITCH_LIGHT, _PUNCH_PITCH_HEAVY, intensity))
+	var vfx: SkaterVFX = rec.skater.get_node_or_null("VFX") as SkaterVFX
+	if vfx != null:
+		vfx.fire_impact_burst(rec.skater, intensity * _PUNCH_BURST_SHARE, dir)
+	var rc: RemoteController = rec.controller as RemoteController
+	if rc != null:
+		rc.start_knockback_lead(dir, intensity * _PUNCH_BURST_SHARE)
+	punch_landed.emit(victim_peer_id, intensity)
 
 
 # Host: the last fight is over; play restarts with a faceoff.
@@ -1788,6 +1848,11 @@ func _wire_subsystems() -> void:
 	_fights.challenge_lapsed.connect(_on_fight_challenge_lapsed)
 	_fights.fight_started.connect(_on_fight_started)
 	_fights.fights_over.connect(_on_fights_over)
+	if _punches != null:
+		_punches.clear()
+	_punches = FightPunchJudge.new()
+	_punches.setup(_fights.partner_of, NetworkManager.local_time)
+	_punches.punch_landed.connect(_on_punch_landed)
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
 
@@ -4803,6 +4868,9 @@ func on_scene_exit() -> void:
 	if _fights != null:
 		_fights.clear()
 	_fights = null
+	if _punches != null:
+		_punches.clear()
+	_punches = null
 	_phase_coord = null
 	_swap_coord = null
 	if _debug_overlay:
@@ -5530,6 +5598,37 @@ func is_contact_suspended() -> bool:
 # The fight's stoppage (GamePhase.Phase.FIGHT). Read by the bots, who stand down.
 func is_in_fight() -> bool:
 	return _state_machine != null and _state_machine.current_phase == GamePhase.Phase.FIGHT
+
+
+# Every peer: the middle of the fight nearest `near` (each fighter and the
+# nearest fighter of the other team, from the replicated roles), on the ice;
+# Vector3.INF with no one fighting. The fight camera centres on it.
+func fight_focus(near: Vector3) -> Vector3:
+	if _registry == null:
+		return Vector3.INF
+	var best := Vector3.INF
+	var best_d2: float = INF
+	for a: Skater in _registry.skaters():
+		if a.fight_role != FightRules.Role.FIGHTING:
+			continue
+		var partner: Skater = null
+		var partner_d2: float = INF
+		for b: Skater in _registry.skaters():
+			if b == a or b.fight_role != FightRules.Role.FIGHTING or b.get_team_id() == a.get_team_id():
+				continue
+			var d2: float = a.global_position.distance_squared_to(b.global_position)
+			if d2 < partner_d2:
+				partner_d2 = d2
+				partner = b
+		if partner == null:
+			continue
+		var mid: Vector3 = (a.global_position + partner.global_position) * 0.5
+		mid.y = 0.0
+		var d: float = mid.distance_squared_to(Vector3(near.x, 0.0, near.z))
+		if d < best_d2:
+			best_d2 = d
+			best = mid
+	return best
 
 
 # True during the FACEOFF_PREP countdown. Read by SkaterController's gait
