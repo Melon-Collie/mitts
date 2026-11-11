@@ -89,9 +89,9 @@ var _cached_hold_cfg: StickHoldRules.Config = null
 # how far the arm is out, which the reach lean reads. The marker's is the held
 # one (_held_hand).
 var reach_hand_local := Vector3.ZERO
-# The ready fold's ease (ready_fold), which the skater steps on the tick and a
-# replay plays back.
-var ready := SkaterReadyFold.new(_ready_fold_target)
+# The hold's eased state (ready_fold, the grip), which the skater steps on the
+# tick and a replay plays back.
+var hold := SkaterHoldEase.new(_hold_targets)
 var _cached_bottom_cfg: BottomHandIK.Config = null
 var _two_hand_scratch := TopHandIK.Result.new()
 var _ik_result := TopHandIK.Result.new()
@@ -128,7 +128,7 @@ enum PassS {
 	CHECK_LEAD, HAS_PUCK_NODE, PURPOSE_RIM, BLADE_LENGTH, CARRY_BLADE_OFFSET,
 	CARRY_TRANSIT_LIFT, WALL_SQUEEZE_THRESHOLD, WALL_PIN_INWARD_BIAS, BOTTOM_REACH,
 	GLOVE_SPACING, HAS_NET_ANCHOR, REACH_PURPOSE, CHEST_FOLD, REACH_FLOOR, HAND_FORWARD,
-	HOLD_SHARE, LAY_FOLD, READY_FOLD, COUNT,
+	HOLD_SHARE, LAY_FOLD, READY_FOLD, GRIP, COUNT,
 }
 enum PassV {
 	TARGET, SHOULDER, BOTTOM_SHOULDER, BLADE_MARKER, BLADE_FORWARD, PREV_CONTACT,
@@ -265,7 +265,7 @@ func _blade_speed_cap() -> float:
 # baseline rather than carrying the live smoothed value across the snap.
 func reset_blade_smoothing() -> void:
 	_smoothed_blade_initialized = false
-	ready.unseed()
+	hold.unseed()
 	_blade_dangle_vel = Vector3.ZERO
 	if _native_dangle != null:
 		_native_dangle.reset_smoothing()
@@ -383,17 +383,19 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 		# where the arm is").
 		var target_reach: float = _board_reach_limit(target_blade_xz, shoulder_world)
 		reach_purpose = _reach_purpose(skater_pos)
-		# The blade lies along the shaft from the hand that holds it, not along
-		# the shoulder's aim the first target was laid on: laid again along the
-		# held shaft where that one landed, mid-blade, and the puck pinned
-		# beside it, come to rest on the cursor. Held under the carry's settled
-		# fold whoever has the puck (_lay_fold): the blade is a function of the
-		# tick's state, and a pickup does not step it.
-		var aimed: TopHandIK.Result = _solve_top_hand(
-				target_blade_xz, blade_side_sign, target_reach, true)
-		var held: Vector3 = _held_hand(aimed.hand, aimed.blade, _lay_fold())
-		target_blade_xz = _blade_target_along(cursor_xz,
-				Vector2(aimed.blade.x - held.x, aimed.blade.z - held.z))
+		if _controller.has_puck:
+			# A carrier's blade lies along the shaft from the pocket his hand
+			# holds it in, not along the shoulder's aim the first target was
+			# laid on: laid again along the held shaft where that one landed,
+			# mid-blade, and the puck pinned beside it, come to rest on the
+			# cursor. Held under the carry's settled fold and its whole grip
+			# (_lay_fold), so the blade is a function of the tick's state. An
+			# empty stick's hand is on the shoulder's line already.
+			var aimed: TopHandIK.Result = _solve_top_hand(
+					target_blade_xz, blade_side_sign, target_reach, true)
+			var held: Vector3 = _held_hand(aimed.hand, aimed.blade, _lay_fold(), 1.0)
+			target_blade_xz = _blade_target_along(cursor_xz,
+					Vector2(aimed.blade.x - held.x, aimed.blade.z - held.z))
 		var target_blade_local: Vector3 = _solve_top_hand(
 				target_blade_xz, blade_side_sign, target_reach, true).blade
 		if _controller.has_puck:
@@ -542,7 +544,7 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 			_board_reach_limit(capped_blade_xz, _skater.upper_body_to_global(arm_shoulder())))
 	reach_hand_local = ik.hand
 	var blade_local: Vector3 = ik.blade
-	var hand_local: Vector3 = _held_hand(reach_hand_local, blade_local, ready_fold())
+	var hand_local: Vector3 = _held_hand(reach_hand_local, blade_local, ready_fold(), hold.grip())
 	if commit_t > 0.0:
 		var posed: TopHandIK.Result = _commit_hand_pose(
 				hand_local, blade_local, blade_side_sign, commit_t)
@@ -619,7 +621,7 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 	# solve there, so it would only redo work.
 	if wall_clamped != intended_blade:
 		var arm: TopHandIK.Result = _arm_for_clamped_blade(wall_clamped, blade_side_sign)
-		hand_local = _held_hand(arm.hand, arm.blade, ready_fold())
+		hand_local = _held_hand(arm.hand, arm.blade, ready_fold(), hold.grip())
 		# The rebuilt hand turns the blade along its new shaft, and the toe with it,
 		# which can swing it into the goalie the first resolve held it off.
 		for _settle: int in GOALIE_SETTLE_PASSES:
@@ -630,7 +632,7 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 				break
 			arm = _arm_for_clamped_blade(_skater.upper_body_to_local(settled_heel + more),
 					blade_side_sign)
-			hand_local = _held_hand(arm.hand, arm.blade, ready_fold())
+			hand_local = _held_hand(arm.hand, arm.blade, ready_fold(), hold.grip())
 		reach_hand_local = arm.hand
 		wall_clamped = arm.blade
 
@@ -683,6 +685,7 @@ func _native_blade_toward(target_world: Vector3, delta: float, hold_blade: bool,
 	s[PassS.HOLD_SHARE] = _hold_share()
 	s[PassS.LAY_FOLD] = _lay_fold()
 	s[PassS.READY_FOLD] = ready_fold()
+	s[PassS.GRIP] = hold.grip()
 	if _native_hold_cfg != _hold_config():
 		_sync_hold_config()
 	var v: PackedVector3Array = _pass_vectors
@@ -759,9 +762,9 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 					origin, unit, _controller.blade_height,
 					_controller.net_blade_half_thickness))
 
-# The cursor (on the ice) no closer in than the stick is held (_reach_floor),
-# measured across the ice in the facing's frame: the chest's pitches with a
-# lean, and reads a cursor at his skates as one well out.
+# The cursor (on the ice) no closer in than a carried puck is held
+# (_reach_floor), measured across the ice in the facing's frame: the chest's
+# pitches with a lean, and reads a cursor at his skates as one well out.
 func _held_out(cursor_world: Vector3) -> Vector3:
 	var facing: Transform3D = _skater.global_transform
 	var local: Vector3 = facing.affine_inverse() * cursor_world
@@ -771,11 +774,9 @@ func _held_out(cursor_world: Vector3) -> Vector3:
 	return world
 
 
-# A centre's address is set over a dot wherever the placement put it.
+# An empty stick, the top hand's alone, comes in as close as its solve lets it.
 func _reach_floor() -> float:
-	if _controller.has_puck:
-		return carry_reach_floor()
-	return _controller.stick_reach_min_m * (1.0 - _address_blend())
+	return carry_reach_floor() if _controller.has_puck else 0.0
 
 
 # How close in a carried puck comes (m off his centre), from his skating fold:
@@ -1010,6 +1011,8 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	if held.y > 0.0:
 		release = 1.0 - (1.0 - release) \
 				* (1.0 - smoothstep(0.0, _controller.bh_reach_release_band_m, held.y))
+	if _defends_one_handed():
+		release = 1.0
 	if delta < 0.0:
 		_bh_release = release
 		_bh_release_vel = 0.0
@@ -1030,6 +1033,25 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	if span.length() > reach:
 		bh = shoulder + span.normalized() * reach
 	_skater.set_bottom_hand_position(bh)
+
+# Whether the bottom hand is off a tracked stick for its reach: the other team
+# has the puck on a stick, and nothing he is doing asks for both hands (a
+# lift, a tie, the check commit, the centre's address). Defending, the stick
+# is carried in the top hand, which reaches further and leaves an arm for
+# balance; a loose puck, or his own team's, has both hands ready for it.
+func _defends_one_handed() -> bool:
+	var puck: Puck = _controller.puck
+	if puck == null or not tracking() or _skater.stick_tied:
+		return false
+	var carrier: Skater = puck.get_carrier()
+	if carrier == null or carrier == _skater:
+		return false
+	var mine: int = _skater.get_team_id()
+	if mine < 0 or carrier.get_team_id() == mine:
+		return false
+	return _skater.get_blade_lift_blend() <= 0.0 and _skater.get_commit_lift_blend() <= 0.0 \
+			and _address_blend() <= 0.0
+
 
 # Takes the free hand to `pos` (upper-body local) by `weight`; 0 hands it back.
 func hold_free_hand(pos: Vector3, weight: float) -> void:
@@ -1089,12 +1111,18 @@ const _HOLD_REACH_BAND: float = 0.1
 # `blade_local` with its own hand at `reach_hand` (both UpperBody's frame),
 # under a chest folded `fold`: where a player holds it (StickHoldRules), turned
 # there round the blade so the stick keeps the length the solve gave it, and no
-# further off its shoulder than the arm reaches. The solve's hand says where
-# the blade may go and how long the stick is; this one is the marker's, so the
-# stick every peer draws and every claim reads is the held one.
-func _held_hand(reach_hand: Vector3, blade_local: Vector3, fold: float) -> Vector3:
-	var share: float = _hold_share()
-	if share <= 0.0:
+# further off its shoulder than the arm reaches. `grip` is how much of that
+# two-handed hold the puck has brought on; without it the stick is the top
+# hand's alone, on the line from its shoulder to the blade, which is
+# `reach_hand` itself. The solve's hand says where the blade may go and how
+# long the stick is; this one is the marker's, so the stick every peer draws
+# and every claim reads is the held one.
+func _held_hand(reach_hand: Vector3, blade_local: Vector3, fold: float, grip: float) -> Vector3:
+	var share: float = _hold_share() * grip
+	# The chest folds over a carried stick the tick the puck arrives, the grip
+	# after: until it has, the top hand alone is the one the empty stick had.
+	var folded: bool = chest_fold() > 0.0
+	if share <= 0.0 and not folded:
 		return reach_hand
 	var tilt: Basis = _level_tilt()
 	var blade: Vector3 = tilt * blade_local
@@ -1102,6 +1130,9 @@ func _held_hand(reach_hand: Vector3, blade_local: Vector3, fold: float) -> Vecto
 	var length: float = reached.distance_to(blade)
 	if length < 0.01:
 		return reach_hand
+	var free: Vector3 = _free_hand(tilt, blade, length) if folded else reached
+	if share <= 0.0:
+		return tilt.transposed() * free
 	var shoulder: Vector3 = tilt * CarryPostureRules.folded_shoulder(_trunk_shoulder(), fold)
 	var arm: float = _arm_reach()
 	var held: Vector3 = StickHoldRules.top_hand(shoulder, blade, length,
@@ -1110,11 +1141,26 @@ func _held_hand(reach_hand: Vector3, blade_local: Vector3, fold: float) -> Vecto
 			length + arm * _HOLD_REACHING_OF_ARM.x, length + arm * _HOLD_REACHING_OF_ARM.y)
 	held = StickHoldRules.within_reach(held, blade, shoulder, arm, _HOLD_REACH_BAND)
 	if share < 1.0:
-		held = blade + ((reached - blade) / length).slerp((held - blade) / length, share) * length
+		held = blade + ((free - blade) / length).slerp((held - blade) / length, share) * length
 	return tilt.transposed() * held
 
 
-# How much of the hold a tracked stick takes, before its reach: none of it at
+# The top hand alone on a stick `length` long whose blade is at `blade` (the
+# level frame `tilt` turns into): the reach solve's hand off the shoulder as it
+# is before the chest folds over a carried stick, through the solve's inverse.
+# A pickup folds the chest in a tick, and the hand the grip eases out of is
+# the one the empty stick had.
+func _free_hand(tilt: Basis, blade: Vector3, length: float) -> Vector3:
+	var hand: Vector3 = TopHandIK.hand_for_clamped_blade(
+			tilt * address_shoulder(_trunk_shoulder()), Vector2(blade.x, blade.z), blade.y,
+			-1.0 if _skater.is_left_handed else 1.0,
+			_level_config((tilt * _trunk_shoulder()).y, blade_y_local(), INF))
+	var stick: Vector3 = hand - blade
+	var span: float = stick.length()
+	return blade + stick * (length / span) if span > 0.0001 else hand
+
+
+# How much of the two-handed hold a gripped stick takes, before its reach: none of it at
 # the centre's address or on the ice in a knockdown, which pose their own
 # hands, and none on a blade lifted off the ice.
 func _hold_share() -> float:
@@ -1242,7 +1288,7 @@ func chest_fold() -> float:
 
 
 # How far the chest is folded over a tracked stick, as the hands hold it and
-# the body is drawn: eased on the tick (SkaterReadyFold), so a pickup, a shot
+# the body is drawn: eased on the tick (SkaterHoldEase), so a pickup, a shot
 # taking the stick and the blade coming in all move the hands and the trunk
 # together. Deeper than the fold the reach solve measures its shoulders at
 # (chest_fold), which is the reach the tick allows: shoulders ahead of the
@@ -1252,12 +1298,18 @@ func ready_fold() -> float:
 		return 0.0
 	# A celebration and the centre's address take it off on their own ramps:
 	# their hands are posed off shoulders this has not folded.
-	return ready.value() * (1.0 - _controller.celebration_share()) * (1.0 - _address_blend())
+	return hold.fold() * (1.0 - _controller.celebration_share()) * (1.0 - _address_blend())
+
+
+# Where the hold's ease settles, as (fold, grip): both hands and the pocket
+# with the puck, the top hand alone without.
+func _hold_targets() -> Vector2:
+	if _controller == null:
+		return Vector2.ZERO
+	return Vector2(_ready_fold_target(), 1.0 if _controller.has_puck else 0.0)
 
 
 func _ready_fold_target() -> float:
-	if _controller == null:
-		return 0.0
 	return _settled_fold(_controller.hold_fold_deg if _controller.has_puck
 			else _controller.ready_fold_deg)
 

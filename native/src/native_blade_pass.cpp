@@ -403,10 +403,14 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 		reach_purpose = purpose(skater_pos);
 		Vector3 r_hand;
 		Vector3 r_blade;
-		// Laid again along the held shaft where the first target landed.
-		solve_top_hand(target_xz, target_reach, true, r_hand, r_blade);
-		const Vector3 held = held_hand(r_hand, r_blade, s[S_LAY_FOLD]);
-		target_xz = blade_target_along(cursor_xz, Vector2(r_blade.x - held.x, r_blade.z - held.z));
+		if (has_puck) {
+			// A carrier's, laid again along the held shaft where the first
+			// target landed.
+			solve_top_hand(target_xz, target_reach, true, r_hand, r_blade);
+			const Vector3 held = held_hand(r_hand, r_blade, s[S_LAY_FOLD], 1.0);
+			target_xz = blade_target_along(cursor_xz,
+					Vector2(r_blade.x - held.x, r_blade.z - held.z));
+		}
 		solve_top_hand(target_xz, target_reach, true, r_hand, r_blade);
 		if (has_puck) {
 			solve_top_hand(Vector2(r_blade.x, r_blade.z), target_reach, true, r_hand, r_blade);
@@ -427,7 +431,7 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 	Vector3 blade;
 	solve_top_hand(capped_xz, board_reach_limit(capped_xz, ub_xf.xform(arm_shoulder)), false,
 			reach_hand, blade);
-	hand = held_hand(reach_hand, blade, s[S_READY_FOLD]);
+	hand = held_hand(reach_hand, blade, s[S_READY_FOLD], s[S_GRIP]);
 	if (commit_t > 0.0) {
 		commit_hand_pose(hand, blade, commit_t);
 	}
@@ -506,9 +510,9 @@ void NativeBladePass::resume(bool p_has_puck) {
 // fold, then the chest's over the stick.
 void NativeBladePass::place_arm_shoulder() {
 	const double fold = Math::deg_to_rad(faceoff_center_lean_deg) * s[S_ADDRESS];
-	arm_shoulder = folded(fold < 0.001 ? trunk_shoulder
-									   : Basis::from_euler(Vector3(-fold, 0.0, 0.0)).xform(trunk_shoulder),
-			s[S_CHEST_FOLD]);
+	unfolded_shoulder = fold < 0.001 ? trunk_shoulder
+									 : Basis::from_euler(Vector3(-fold, 0.0, 0.0)).xform(trunk_shoulder);
+	arm_shoulder = folded(unfolded_shoulder, s[S_CHEST_FOLD]);
 }
 
 void NativeBladePass::release(const Vector3 &dir, double power) {
@@ -560,7 +564,7 @@ void NativeBladePass::arm_for_clamped_blade() {
 			level_config(tilt.xform(trunk_shoulder).y, blade_y_local, INFINITY)));
 	enforce_rigid_stick(arm_shoulder, reach_hand, wall_clamped,
 			ik_config(wall_clamped.y, INFINITY));
-	hand = held_hand(reach_hand, wall_clamped, s[S_READY_FOLD]);
+	hand = held_hand(reach_hand, wall_clamped, s[S_READY_FOLD], s[S_GRIP]);
 }
 
 // ── The body ───────────────────────────────────────────────────────────────────
@@ -661,9 +665,10 @@ Vector3 NativeBladePass::folded(const Vector3 &marker, double fold) const {
 
 // SkaterIKCoordinator._held_hand.
 Vector3 NativeBladePass::held_hand(const Vector3 &p_reach_hand, const Vector3 &blade_local,
-		double fold) const {
-	const double share = s[S_HOLD_SHARE];
-	if (share <= 0.0) {
+		double fold, double grip) const {
+	const double share = s[S_HOLD_SHARE] * grip;
+	const bool chest_folded = s[S_CHEST_FOLD] > 0.0;
+	if (share <= 0.0 && !chest_folded) {
 		return p_reach_hand;
 	}
 	const Vector3 blade = tilt.xform(blade_local);
@@ -672,6 +677,20 @@ Vector3 NativeBladePass::held_hand(const Vector3 &p_reach_hand, const Vector3 &b
 	if (length < 0.01) {
 		return p_reach_hand;
 	}
+	Vector3 free = reached;
+	if (chest_folded) {
+		// SkaterIKCoordinator._free_hand.
+		free = hand_for_clamped_blade(tilt.xform(unfolded_shoulder), Vector2(blade.x, blade.z),
+				blade.y, level_config(tilt.xform(trunk_shoulder).y, blade_y_local, INFINITY));
+		const Vector3 stick = free - blade;
+		const double span = stick.length();
+		if (span > 0.0001) {
+			free = blade + stick * (real_t)(length / span);
+		}
+	}
+	if (share <= 0.0) {
+		return tilt.transposed().xform(free);
+	}
 	const Vector3 shoulder = tilt.xform(folded(trunk_shoulder, fold));
 	const double arm = s[S_BOTTOM_REACH];
 	Vector3 held = hold_top_hand(shoulder, blade, length, sgn(v[V_SHOULDER].x));
@@ -679,7 +698,7 @@ Vector3 NativeBladePass::held_hand(const Vector3 &p_reach_hand, const Vector3 &b
 			length + arm * hold_reaching_to);
 	held = hold_within_reach(held, blade, shoulder, arm, hold_reach_band);
 	if (share < 1.0) {
-		held = blade + ((reached - blade) / (real_t)length).slerp((held - blade) / (real_t)length,
+		held = blade + ((free - blade) / (real_t)length).slerp((held - blade) / (real_t)length,
 							   (real_t)share)
 						* (real_t)length;
 	}

@@ -66,11 +66,13 @@ public:
 		S_REACH_FLOOR,
 		S_HAND_FORWARD,
 		// The hold (SkaterIKCoordinator._held_hand): _hold_share, the fold the
-		// target is laid by (_lay_fold) and the one the hand is held under
-		// (ready_fold).
+		// target is laid by (_lay_fold), the one the hand is held under
+		// (ready_fold) and how much of it is the two-handed pocket
+		// (SkaterHoldEase.grip).
 		S_HOLD_SHARE,
 		S_LAY_FOLD,
 		S_READY_FOLD,
+		S_GRIP,
 		S_COUNT,
 	};
 	// run()'s vector inputs, by index.
@@ -175,6 +177,8 @@ private:
 	godot::Basis tilt;
 	godot::Vector3 trunk_shoulder;
 	godot::Vector3 arm_shoulder;
+	// The same before the chest's fold over a carried stick.
+	godot::Vector3 unfolded_shoulder;
 	godot::Vector3 bottom_trunk_shoulder;
 	godot::Vector3 wall_normal;
 	godot::Vector3 net_anchor;
@@ -225,7 +229,7 @@ private:
 	godot::Vector3 held_out(const godot::Vector3 &cursor_world) const;
 	godot::Vector3 folded(const godot::Vector3 &marker, double fold) const;
 	godot::Vector3 held_hand(const godot::Vector3 &p_reach_hand, const godot::Vector3 &blade_local,
-			double fold) const;
+			double fold, double grip) const;
 
 	// StickHoldRules.
 	godot::Vector3 hold_top_hand(const godot::Vector3 &shoulder, const godot::Vector3 &blade,
@@ -235,6 +239,7 @@ private:
 	godot::Vector3 hold_within_reach(const godot::Vector3 &p_hand, const godot::Vector3 &blade,
 			const godot::Vector3 &shoulder, double arm, double band) const;
 	double hold_reach(const godot::Vector2 &dir, double own_side) const;
+
 	void place_arm_shoulder();
 	double board_reach_limit(const godot::Vector2 &target_xz, const godot::Vector3 &shoulder_world) const;
 	double purpose(const godot::Vector3 &skater_pos) const;

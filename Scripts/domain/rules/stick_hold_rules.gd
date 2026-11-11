@@ -1,6 +1,9 @@
 class_name StickHoldRules
 
-# Where the top hand holds a stick whose blade is already placed.
+# Where the top hand holds a stick whose blade is already placed, with both
+# hands on it: a carrier's. (A stick without the puck is the top hand's alone,
+# on the line from its shoulder to the blade, which is the reach solve's own
+# hand; SkaterIKCoordinator._held_hand blends the two by the grip.)
 #
 # The stick is rigid and its blade is on the ice, so the hand is somewhere on a
 # sphere about the blade; which point of it is the player's choice, and players

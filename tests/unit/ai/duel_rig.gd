@@ -5,8 +5,8 @@ extends RefCounted
 # over the skating lean and the trunk's fold it makes (apply_velocity_lean), and
 # the blade resolved from the cursor through the top hand's range of motion,
 # the carry's two hands and backhand stop, and the rest reach without a puck to
-# reach for, laid along the shaft the hands hold (StickHoldRules, under the
-# ready fold), then chased at the hands' speed (SkaterIKCoordinator
+# reach for, a carrier's laid along the shaft his hands hold (StickHoldRules,
+# under the ready fold and the grip), then chased at the hands' speed (SkaterIKCoordinator
 # .apply_blade_toward). Every number is read once off a set-up body (capture) and
 # the solves are the controller's own pure ones (TopHandIK), the chest folded
 # over a carried stick as the controller folds it (CarryPostureRules, off the
@@ -32,6 +32,8 @@ class Arm:
 	var reach_local := Vector3.ZERO # the reach solve's own, which the lean reads
 	var fold: float = 0.0           # the ready fold, eased
 	var fold_rate: float = 0.0
+	var grip: float = 0.0           # how much of the hold is the two-handed pocket
+	var grip_rate: float = 0.0
 	var contact := Vector3.ZERO     # the blade's contact point, world (on the ice)
 	var hand := Vector3.ZERO        # the top hand, world
 	var speed_cap: float = INF      # under the hands' own (a tie's)
@@ -44,7 +46,6 @@ var carry_reach_fold: float
 var hold_fold: float
 var ready_fold: float
 var hold_cfg: StickHoldRules.Config
-var empty_reach_min: float
 var posture_full_speed: float
 var posture_forward_max_deg: float
 var posture_back_max_deg: float
@@ -103,7 +104,6 @@ static func capture(skater: Skater, ctrl: SkaterController) -> RefCounted:
 	rig.hold_fold = deg_to_rad(ctrl.hold_fold_deg)
 	rig.ready_fold = deg_to_rad(ctrl.ready_fold_deg)
 	rig.hold_cfg = ik._hold_config()
-	rig.empty_reach_min = ctrl.stick_reach_min_m
 	rig.posture_full_speed = ctrl.gait_full_speed * ctrl._skating.leg_scale
 	rig.posture_forward_max_deg = ctrl.velocity_lean_forward_max_deg
 	rig.posture_back_max_deg = ctrl.velocity_lean_back_max_deg
@@ -182,6 +182,7 @@ func step(arm: Arm, pos: Vector3, facing: Vector2, cursor: Vector3, carrying: bo
 		arm.prev_pos = pos
 		arm.started = true
 		arm.fold = _settled_fold(arm, body, pos, hold_fold if carrying else ready_fold)
+		arm.grip = 1.0 if carrying else 0.0
 	arm.heel += Vector3(pos.x - arm.prev_pos.x, 0.0, pos.z - arm.prev_pos.z)
 	arm.prev_pos = pos
 	if held:
@@ -193,15 +194,22 @@ func step(arm: Arm, pos: Vector3, facing: Vector2, cursor: Vector3, carrying: bo
 	var ik: TopHandIK.Result = _solve(arm, Vector2(local.x, local.z), side, INF, false,
 			carrying, purpose, ub, body, pos)
 	arm.reach_local = ik.hand
-	arm.hand_local = _held_hand(arm, ik.hand, ik.blade, arm.fold)
+	arm.hand_local = _held_hand(arm, ik.hand, ik.blade, arm.fold, arm.grip,
+			chest_fold(arm, body, pos, carrying) > 0.0)
 	arm.hand = ub * arm.hand_local
-	# SkaterReadyFold.advance, after the blade as the skater's tick steps it.
+	# SkaterHoldEase.advance, after the blade as the skater's tick steps it.
 	var settled: float = _settled_fold(arm, body, pos, hold_fold if carrying else ready_fold)
 	var fold_was: float = arm.fold
 	arm.fold = maxf(EaseRules.critical_x(fold_was, arm.fold_rate, settled,
-			SkaterReadyFold.OMEGA, dt), 0.0)
+			SkaterHoldEase.FOLD_OMEGA, dt), 0.0)
 	arm.fold_rate = EaseRules.critical_v(fold_was, arm.fold_rate, settled,
-			SkaterReadyFold.OMEGA, dt)
+			SkaterHoldEase.FOLD_OMEGA, dt)
+	var grip_to: float = 1.0 if carrying else 0.0
+	var grip_was: float = arm.grip
+	arm.grip = clampf(EaseRules.critical_x(grip_was, arm.grip_rate, grip_to,
+			SkaterHoldEase.GRIP_OMEGA, dt), 0.0, 1.0)
+	arm.grip_rate = EaseRules.critical_v(grip_was, arm.grip_rate, grip_to,
+			SkaterHoldEase.GRIP_OMEGA, dt)
 	var shaft := Vector2(arm.heel.x - arm.hand.x, arm.heel.z - arm.hand.z)
 	if shaft.length() < 0.001:
 		shaft = facing
@@ -249,14 +257,13 @@ func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vecto
 		carrying: bool, purpose: float, side: float, carry_factor: float) -> Vector3:
 	var mouse := Vector3(cursor.x, 0.0, cursor.z)
 	# SkaterIKCoordinator._held_out: a carrier's floor moved out with the skating
-	# fold (carry_reach_floor), an empty stick's its own.
-	var rel: Vector3 = body.inverse() * (mouse - pos)
-	var floor_m: float = empty_reach_min
+	# fold (carry_reach_floor).
 	if carrying:
-		floor_m = reach_min + carry_reach_fold * clampf(
-				-arm.posture / deg_to_rad(posture_forward_max_deg), 0.0, 1.0)
-	var held_out: Vector2 = CarryPostureRules.held_out(Vector2(rel.x, rel.z), floor_m)
-	mouse = pos + body * Vector3(held_out.x, 0.0, held_out.y)
+		var rel: Vector3 = body.inverse() * (mouse - pos)
+		var held_out: Vector2 = CarryPostureRules.held_out(Vector2(rel.x, rel.z),
+				reach_min + carry_reach_fold * clampf(
+						-arm.posture / deg_to_rad(posture_forward_max_deg), 0.0, 1.0))
+		mouse = pos + body * Vector3(held_out.x, 0.0, held_out.y)
 	var shoulder_world: Vector3 = ub * shoulder
 	shoulder_world.y = 0.0
 	if (mouse - shoulder_world).length() < 0.01:
@@ -264,16 +271,16 @@ func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vecto
 	var mouse_local: Vector3 = ub.affine_inverse() * mouse
 	var cursor_xz := Vector2(mouse_local.x, mouse_local.z)
 	var lay: float = carry_factor if carrying else 0.0
-	var aimed: TopHandIK.Result = _solve(arm, _laid_along(cursor_xz,
-			cursor_xz - Vector2(shoulder.x, shoulder.z), lay), side, INF, true, carrying,
-			purpose, ub, body, pos)
-	var aimed_blade: Vector3 = aimed.blade
-	var held: Vector3 = _held_hand(arm, aimed.hand, aimed_blade,
-			_settled_fold(arm, body, pos, hold_fold))
 	var blade: Vector3 = _solve(arm, _laid_along(cursor_xz,
-			Vector2(aimed_blade.x - held.x, aimed_blade.z - held.z), lay), side, INF, true,
-			carrying, purpose, ub, body, pos).blade
+			cursor_xz - Vector2(shoulder.x, shoulder.z), lay), side, INF, true, carrying,
+			purpose, ub, body, pos).blade
 	if carrying:
+		# Laid again along the shaft the carrier's pocket holds it by.
+		var held: Vector3 = _held_hand(arm, _ik.hand, blade,
+				_settled_fold(arm, body, pos, hold_fold), 1.0)
+		blade = _solve(arm, _laid_along(cursor_xz,
+				Vector2(blade.x - held.x, blade.z - held.z), lay), side, INF, true,
+				carrying, purpose, ub, body, pos).blade
 		blade = _solve(arm, Vector2(blade.x, blade.z), side, INF, true, carrying, purpose,
 				ub, body, pos).blade
 	var world: Vector3 = ub * blade
@@ -294,13 +301,27 @@ func _laid_along(cursor_xz: Vector2, shaft: Vector2, lay: float) -> Vector2:
 
 # SkaterIKCoordinator._held_hand, the whole hold: a duel's blade stays on the
 # ice and nobody is at a faceoff or down.
-func _held_hand(arm: Arm, reach_hand: Vector3, blade_local: Vector3, fold: float) -> Vector3:
+func _held_hand(arm: Arm, reach_hand: Vector3, blade_local: Vector3, fold: float,
+		puck_grip: float, folded_reach: bool = false) -> Vector3:
+	if puck_grip <= 0.0 and not folded_reach:
+		return reach_hand
 	var tilt: Basis = _tilt(arm)
 	var blade: Vector3 = tilt * blade_local
 	var reached: Vector3 = tilt * reach_hand
 	var length: float = reached.distance_to(blade)
 	if length < 0.01:
 		return reach_hand
+	# SkaterIKCoordinator._free_hand, where the chest has folded over the stick.
+	var free: Vector3 = reached
+	if folded_reach:
+		_level_config((tilt * _shoulder_of(arm, shoulder, 0.0)).y, INF)
+		free = TopHandIK.hand_for_clamped_blade(tilt * _shoulder_of(arm, shoulder, 0.0),
+				Vector2(blade.x, blade.z), blade.y, -signf(shoulder.x), _cfg)
+		var stick: Vector3 = free - blade
+		if stick.length() > 0.0001:
+			free = blade + stick * (length / stick.length())
+	if puck_grip <= 0.0:
+		return tilt.transposed() * free
 	var sh: Vector3 = tilt * _shoulder_of(arm, shoulder, fold)
 	var held: Vector3 = StickHoldRules.top_hand(sh, blade, length, signf(shoulder.x), hold_cfg)
 	held = StickHoldRules.reaching(held, reached, blade, sh,
@@ -308,6 +329,8 @@ func _held_hand(arm: Arm, reach_hand: Vector3, blade_local: Vector3, fold: float
 			length + bottom_reach * SkaterIKCoordinator._HOLD_REACHING_OF_ARM.y)
 	held = StickHoldRules.within_reach(held, blade, sh, bottom_reach,
 			SkaterIKCoordinator._HOLD_REACH_BAND)
+	if puck_grip < 1.0:
+		held = blade + ((free - blade) / length).slerp((held - blade) / length, puck_grip) * length
 	return tilt.transposed() * held
 
 

@@ -456,10 +456,6 @@ var ready_fold_deg: float = 24.0
 # to the chest: at this floor the shaft is ~12° past its lie, and closer the
 # stick cannot be held as a stick is.
 var carry_reach_min_m: float = 0.97
-# And the least an empty stick's blade comes in: nearer than a carry's, to
-# reach a loose puck lying at his skates (a puck is picked up 0.5 m off the
-# blade's middle, and lies no nearer than his body lets it).
-var stick_reach_min_m: float = 0.8
 # And this much further out with his chest folded over his skating by
 # velocity_lean_forward_max_deg: the fold brings his shoulder down to the
 # hands, and held as close as standing, the top hand rises level with it, the
@@ -1301,7 +1297,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	# the blade world frame. RemoteController overrides _render_pose_update to
 	# drop head tracking (a wire-fed body has no cursor aim).
 	skater.render_pose_update = _render_pose_update
-	skater.tick_pose_update = _ik.ready.advance
+	skater.tick_pose_update = _ik.hold.advance
 
 # Reach ROM is derived from arm length, not an independent tunable. The
 # forehand side is shoulder-joint-limited (about 56% of arm length — the top
@@ -1362,7 +1358,6 @@ var loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH
 var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
 var _base_carry_reach_min_m:            float = 0.0
-var _base_stick_reach_min_m:            float = 0.0
 var _base_carry_reach_fold_m:           float = 0.0
 
 
@@ -1537,7 +1532,6 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	hand_rest_y = _base_hand_rest_y * m_height
 	hand_y_max  = _base_hand_y_max  * m_height
 	carry_reach_min_m = _base_carry_reach_min_m * m_height
-	stick_reach_min_m = _base_stick_reach_min_m * m_height
 	carry_reach_fold_m = _base_carry_reach_fold_m * m_height
 	# The gait's crouch drop rides the same leg scale the appearance pass
 	# applies to the leg pivot chain, so flexed knees sink a tall build
@@ -1622,7 +1616,6 @@ func _capture_attribute_bases() -> void:
 	_base_hand_rest_y                  = hand_rest_y
 	_base_hand_y_max                   = hand_y_max
 	_base_carry_reach_min_m            = carry_reach_min_m
-	_base_stick_reach_min_m            = stick_reach_min_m
 	_base_carry_reach_fold_m           = carry_reach_fold_m
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length

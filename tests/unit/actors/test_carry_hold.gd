@@ -132,10 +132,11 @@ func test_a_blade_lifted_off_the_ice_is_held_as_the_reach_has_it() -> void:
 	var reach: Vector3 = c._ik.reach_hand_local
 	var blade: Vector3 = c.skater.get_blade_position()
 	var fold: float = c._ik.ready_fold()
-	assert_gt(c._ik._held_hand(reach, blade, fold).distance_to(reach), 0.05,
+	assert_gt(c._ik._held_hand(reach, blade, fold, 1.0).distance_to(reach), 0.05,
 			"on the ice it is held")
 	c.skater._blade_lift_blend = 1.0
-	assert_eq(c._ik._held_hand(reach, blade, fold), reach, "lifted, the hands turn the stick up")
+	assert_eq(c._ik._held_hand(reach, blade, fold, 1.0), c._ik._held_hand(reach, blade, fold, 0.0),
+			"lifted, the pocket is gone and the hands turn the stick up")
 
 
 # The cup rolls the whole stick, so the fist that grips it turns by as much:
