@@ -138,3 +138,4 @@ static func zero_input(input: InputState, delta: float, host_timestamp: float) -
 	input.bot_wrister_aim_dir = Vector3.ZERO
 	input.bot_slapper_aim_dir = Vector3.ZERO
 	input.bot_shuffle = false
+	input.bot_cursor_turns = false

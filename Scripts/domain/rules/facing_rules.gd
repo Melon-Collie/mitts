@@ -14,7 +14,8 @@ class_name FacingRules
 # too, but only below stance_square_max_speed — opening up to a man or a pass is
 # a low-speed move, and at speed squaring would swing the hips off the line and
 # turn the stride into a shuffle. Standing or moving, a skater turns round to a
-# target behind the body (turn_round_angle).
+# target behind the body (turn_round_angle), at the widest turn a tick makes
+# (turned_toward).
 #
 # Stateless: the line and the band are read off whichever way the body faces now,
 # so reconcile replay agrees. A pivot under way commits (pivot_commit), so a
@@ -45,6 +46,17 @@ class Config:
 	# hips yield to it (yield_on_forehand); INF for an empty stick, which reaches
 	# round to the edge.
 	var forehand_yield_rad: float = INF
+
+	func assign(from: Config) -> void:
+		engage_min_speed = from.engage_min_speed
+		engage_full_speed = from.engage_full_speed
+		hold_min_speed = from.hold_min_speed
+		hold_full_speed = from.hold_full_speed
+		forehand_edge_rad = from.forehand_edge_rad
+		backhand_edge_rad = from.backhand_edge_rad
+		stance_square_max_speed = from.stance_square_max_speed
+		pivot_commit_rad = from.pivot_commit_rad
+		forehand_yield_rad = from.forehand_yield_rad
 
 
 # Caller-owned result, filled each call.
@@ -134,6 +146,32 @@ static func turn_round_angle(facing: Vector2, target: Vector2, cursor_dir: Vecto
 	if turn * facing.angle_to(cursor_dir) < 0.0:
 		turn -= signf(turn) * TAU
 	return turn
+
+
+# Where the body heads after one tick's turn toward `target`, before its
+# wind-up (turn_rate). `step` is the drag over the tick. The body closes that
+# share of the chord to its target, which turns it fastest toward one a little
+# past square and eases it in from there; toward a target further round it
+# turns at that fastest rate, the way round turn_round_angle picks when the
+# cursor or the target is past the reach edge. A chord alone barely turns a
+# body toward a target behind it, and turned there by a share of the angle
+# instead, the turn whips while the target is past the edge and all but stops
+# the tick it comes inside.
+static func turned_toward(cfg: Config, facing: Vector2, target: Vector2, cursor_dir: Vector2,
+		is_left_handed: bool, step: float) -> Vector2:
+	var turn: float = facing.angle_to(target)
+	if absf(facing.angle_to(cursor_dir)) >= reach_edge(cfg, facing, cursor_dir, is_left_handed) \
+			or absf(turn) >= reach_edge(cfg, facing, target, is_left_handed):
+		turn = turn_round_angle(facing, target, cursor_dir)
+	# The chord's turn is widest, asin(ratio), toward a target acos(-ratio)
+	# round; half the chord or more reaches any target in one step.
+	var ratio: float = step / (1.0 - step) if step < 0.5 else 1.0
+	if absf(turn) > acos(-ratio):
+		return facing.rotated(signf(turn) * minf(asin(ratio), absf(turn)))
+	var chord: Vector2 = facing.lerp(target, step)
+	if chord.length_squared() < 0.00000001:
+		return facing.rotated(turn * minf(step, 1.0))
+	return chord.normalized()
 
 
 # The body's turn rate after this tick (rad/s, either sense), from last tick's

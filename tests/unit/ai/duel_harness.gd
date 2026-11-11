@@ -190,7 +190,8 @@ class SimSkater:
 	var wrister_active: bool = false
 	# The blade's contact off the body as the charge starts: the pin the release
 	# loads from (SkaterController._solve_wrister_load's wrister_origin, latched
-	# on entering WRISTER_AIM), never the blade the hold walks after it.
+	# on entering WRISTER_AIM), never the blade's contact after it, which swings
+	# with the torso's wind-up.
 	var wrister_pin: Vector3 = Vector3.ZERO
 	# ≥ 0 marks a scripted puppet container (no agent); the gap it holds.
 	var puppet_hold_gap: float = -1.0
@@ -935,14 +936,7 @@ func _turn(s: SimSkater) -> void:
 					Vector2(s.pos.x, s.pos.z), _caps.board_shield_probe), _caps.board_shield_max_rad)
 		var drag: float = _caps.facing_drag_speed_braking if s.input.brake \
 				else _caps.facing_drag_speed
-		if absf(s.facing.angle_to(cursor_dir)) >= FacingRules.reach_edge(
-				_facing_cfg, s.facing, cursor_dir, lefty) \
-				or absf(s.facing.angle_to(target)) >= FacingRules.reach_edge(
-						_facing_cfg, s.facing, target, lefty):
-			turned = s.facing.rotated(FacingRules.turn_round_angle(s.facing, target,
-					cursor_dir) * minf(drag * DT, 1.0))
-		else:
-			turned = s.facing.lerp(target, drag * DT).normalized()
+		turned = FacingRules.turned_toward(_facing_cfg, s.facing, target, cursor_dir, lefty, drag * DT)
 		if carrying:
 			turned = FacingRules.yield_on_forehand(turned, cursor_dir, lefty, _carry_facing_cfg)
 	else:

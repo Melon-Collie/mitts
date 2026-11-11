@@ -352,7 +352,8 @@ double NativeArmRig::ease(Vector2 &held, double delta, double target) {
 
 int NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector3 &grip,
 		const Transform3D &frame, const Basis &trunk_texture,
-		const Vector3 &pole, const Vector4 &lengths, const Vector3 &load, const Vector3 &motion) {
+		const Vector3 &pole, const Vector4 &lengths, const Vector3 &load, const Vector3 &motion,
+		double stick_roll) {
 	Skeleton3D *skeleton = Object::cast_to<Skeleton3D>(ObjectDB::get_instance(skeleton_id));
 	if (skeleton == nullptr || bone_upper < 0) {
 		return DEGENERATE;
@@ -414,6 +415,7 @@ int NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector3
 		}
 		roll_angle = ease(roll, delta, target);
 	}
+	roll_angle += stick_roll;
 	const Basis glove = glove_basis(forearm_dir, shaft_s, grip_angle, ulnar_max, radial_max, roll_angle);
 	skeleton->set_bone_pose(bone_glove, Transform3D(glove.scaled_local(thick_glove), hand_s));
 	return settling ? SETTLING : POSED;
@@ -428,7 +430,7 @@ void NativeArmRig::_bind_methods() {
 								 "z_scale", "sleeve_radius", "steer_contact"),
 			&NativeArmRig::configure_torso);
 	ClassDB::bind_method(D_METHOD("pose", "marker", "hand", "grip", "frame", "trunk_texture", "pole",
-								 "lengths", "load", "motion"),
+								 "lengths", "load", "motion", "stick_roll"),
 			&NativeArmRig::pose);
 }
 

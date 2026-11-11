@@ -141,20 +141,26 @@ and enlarge it.
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`
 skates scripted inputs (a start, a stride, a reach for a loose puck, a held arc,
-keyboard turns, taps, a stop, backward, a dive)
-through the real controller and captures a frame every few ticks from behind,
-beside and ahead, printing the locomotion mix per frame — which state the legs
-skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot
-show a stroke or a state firing at the wrong time.
+keyboard turns, taps, a stop, backward, a dive, a slapshot, a wrister flat and
+lofted) through the real controller and captures a frame every few ticks from
+behind (a dangle and a wrister from over the blade instead), beside and ahead,
+printing the locomotion mix per frame — which state the legs skated, and when
+it came on (`tools/gait_strip_runner.gd`). A held pose cannot show a stroke or
+a state firing at the wrong time. `--tile=560` draws each view that many
+pixels square, which is what a blade's roll needs.
 
 **To see the ARMS round the body, sweep them.** `.claude/hooks/render-arms.sh
 [scenarios]` walks the cursor round a carrier (the facing held, so the blade
 goes round the body; standing; skating with the puck round each side) and draws
 each step from the chest, both sides and overhead to `user://arm_sweep`,
 printing per frame each arm's closest approach to the torso
-(`SkaterArmRig.torso_clearance`) and how the shaft sits in each glove, and for
-the moving scenarios the blade against the cursor tick by tick — where a turn
-that catches shows (`tools/arm_sweep_runner.gd`; `--list` prints the names).
+(`SkaterArmRig.torso_clearance`), how the shaft sits in each glove and how the
+stick is held (the hands' and shoulder's heights, the shaft's angle, the
+elbows), and for the moving scenarios the blade against the cursor tick by
+tick — where a turn that catches shows (`tools/arm_sweep_runner.gd`; `--list`
+prints the names). The `dangle` scenarios swing the cursor across his front a
+frame every 1/30 s, which is where the wrist's roll shows; `--tile=512` draws
+each view that many pixels square.
 
 **To see the PUCK's tilt and spin, render a strip.** `.claude/hooks/render-puck.sh
 [scenarios]` drives the real `Puck` through the host's analytic drive (a board

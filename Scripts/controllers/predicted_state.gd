@@ -44,6 +44,9 @@ var check_lead: float
 # Recorded live only: the replay plays them back rather than re-deriving them.
 var carry_side_smoothed: float
 var carry_hop: float
+# The hold's fold and grip as this live tick left them (SkaterHoldEase.state),
+# played back the same way.
+var hold_ease: Vector2
 # The blade smoother's dangle velocity after this input: the reconcile seeds the
 # smoother from the host's blade at the ack moving at this, since the wire
 # carries the blade's place but not its motion.

@@ -111,10 +111,13 @@ public:
 	// (check lead, shoulder half-width, cuff back of the hand), `motion`
 	// (the frame's delta, below 0 to land the eased angles at once; the way the
 	// fist rolls, 0 for none, SkaterArmPoses.knuckles_forward; the pole's side).
+	// `stick_roll` turns the fist on round the shaft with the stick it grips
+	// (Skater.stick_roll), past the eased roll.
 	int pose(const godot::Vector3 &marker, const godot::Vector3 &hand,
 			const godot::Vector3 &grip, const godot::Transform3D &frame,
 			const godot::Basis &trunk_texture, const godot::Vector3 &pole,
-			const godot::Vector4 &lengths, const godot::Vector3 &load, const godot::Vector3 &motion);
+			const godot::Vector4 &lengths, const godot::Vector3 &load, const godot::Vector3 &motion,
+			double stick_roll);
 };
 
 } // namespace mitts

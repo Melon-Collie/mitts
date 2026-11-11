@@ -298,6 +298,12 @@ var top_hand_forward_full_m: float = 0.9
 # limited across the body, full extension out to the backhand side.
 var rom_forehand_angle_max_deg: float = 90.0
 var rom_backhand_angle_max_deg: float = 90.0
+# The backhand limit of a stick without the puck reaching for a cursor placed
+# near him (reach_behind_for), which is the top hand's alone: with nothing
+# across the body to hold, the arm carries it back past its own shoulder. The
+# forehand side gains nothing, the arm crosses the chest there, so the range
+# is wider on the top hand's side.
+var rom_backhand_angle_empty_deg: float = 110.0
 # Reach caps are DERIVED in apply_attributes (see _ROM_FOREHAND_OF_ARM).
 var rom_forward_reach_max: float = 0.51
 var rom_forehand_reach_max: float = 0.39
@@ -427,6 +433,14 @@ var upper_body_lean_return_speed: float = 8.0
 var reach_purpose_lookahead_s: float = 0.35
 var reach_purpose_near_m: float = 0.3
 var reach_purpose_far_m: float = 1.8
+# And the cursor's own say (ReachPurposeRules.intent), by how far past that rim
+# it lies: within `near` he is placing his blade or asking for the reach, from
+# `far` out he is looking somewhere, and the stick rests whatever its bearing.
+# The rim is the build's farthest reach, folded and leaning (~2.4 m off his
+# centre against ~1.8 m standing), so these read as ~0.6 m and ~2.1 m past the
+# blade of a man standing.
+var reach_intent_near_m: float = 0.0
+var reach_intent_far_m: float = 1.5
 
 # ── Velocity Lean / Skating Posture Tuning ────────────────────────────────────
 # Trunk lean INTO travel, eased toward a target from velocity on the simulating
@@ -443,10 +457,19 @@ var velocity_lean_speed: float = 6.0
 # standing or skating — its shoulders, and with them his hands, out in front of
 # his hips where both can hold it.
 var carry_fold_deg: float = 22.0
+# How far the chest folds over a carried puck as the hands hold the stick and
+# the body is drawn (SkaterIKCoordinator.ready_fold): a trunk ~40° off upright
+# with the hips sat back under it brings the shoulders down to a stick whose
+# top hand rides at the waist, so both elbows bend. And over an empty stick on
+# the ice, the ready stance a skater off the puck stands in.
+var hold_fold_deg: float = 36.0
+var ready_fold_deg: float = 24.0
 # The least a carried puck comes off the centre of his body (m; CarryPostureRules
-# .held_out): pulled in closer, the shaft stands up beside him, the top hand rises
-# into his armpit and the bottom arm reaches it only through his belly.
-var carry_reach_min_m: float = 0.8
+# .held_out). A stick spans ~1 m of ice at its lie from a hand held off the
+# hip, so a blade nearer than that stands the shaft up and brings the top hand
+# to the chest: at this floor the shaft is ~12° past its lie, and closer the
+# stick cannot be held as a stick is.
+var carry_reach_min_m: float = 0.97
 # And this much further out with his chest folded over his skating by
 # velocity_lean_forward_max_deg: the fold brings his shoulder down to the
 # hands, and held as close as standing, the top hand rises level with it, the
@@ -674,7 +697,8 @@ var stance_sit_gain: float = 0.35        # extra stroke crouch in the stance
 var stance_crouch: float = 1.7           # crouch floor in the stance (× stance_hip_deg)
 var stance_width_m: float = 0.125        # each skate set out from under its hip
 var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
-var carry_crouch: float = 1.7            # crouch floor under the full chest fold over the stick (× stance_hip_deg), the loaded stance's
+var carry_crouch: float = 2.3            # crouch floor carrying, standing (× stance_hip_deg): the hips ~0.12 m under rest
+var ready_crouch: float = 1.2            # and off the puck with the stick on the ice, short of the loaded stance's
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
 # glide (speed is power per stride, not faster turnover). cruise_gear (fast AND
@@ -747,7 +771,7 @@ var head_track_max_deg: float = 60.0
 # less as the skater picks up speed: eyes up on open ice.
 var head_puck_nod_deg: float = 28.0
 var head_puck_hands_band: Vector2 = Vector2(1.0, 3.5)
-var head_puck_close_band: Vector2 = Vector2(1.05, 0.85)
+var head_puck_close_band: Vector2 = Vector2(1.3, 1.05)
 var head_puck_skate_band: Vector2 = Vector2(3.0, 7.0)
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
@@ -862,11 +886,11 @@ var slapper_follow_through_time_max: float = 1.0
 # The slapper finish's opening beat, wind-up to contact. Seconds, not a share of
 # the timer, so a longer finish holds longer rather than swinging down slower.
 var slapper_downswing_time: float = 0.11
-# Every finish SNAPS out over this, then holds and relaxes over the last
+# Every finish goes out over this, then holds and relaxes over the last
 # wrister_whip_release_frac of its timer (SkaterShotPoseCoordinator
-# .finish_envelope). Five ticks: shorter and a stick crossing a metre between
-# frames reads as a teleport, not a whip.
-var whip_attack_time: float = 0.04
+# .finish_envelope). About what a stick takes from the puck leaving it to the
+# arms' full extension; two thirds of the way is covered in the first 0.04 s.
+var whip_attack_time: float = 0.09
 # Last fraction of the wrister/quick/slapper FT spent easing the finish aim (torso
 # twist + blade) from the shot line back to the LIVE cursor, so the pose ends
 # where the mouse actually is and hands off to blade-tracking without re-rotating
@@ -878,6 +902,9 @@ var wrister_follow_through_min_power: float = 0.55  # amplitude floor at zero ch
 var quick_pass_follow_through_power: float = 0.5
 var wrister_follow_through_hand_y: float = 0.35
 var wrister_follow_through_blade_lift: float = 0.55  # high-finish blade height off the ice
+# How high a shot along the ice finishes, as a share of a high one's: the
+# finish is as high as the shot, so the heights above are the top rung's.
+var wrister_follow_through_flat_share: float = 0.45
 var wrister_follow_through_reach: float = 0.5  # forward hand CARRY along the shot line (= arm extension; the blade reaches a full stick beyond it)
 # Last fraction of every finish's timer spent relaxing out of the held pose
 # (the snap is whip_attack_time).
@@ -1193,6 +1220,14 @@ func has_celebration_window() -> bool:
 	return _celebration_timer > 0.0
 
 
+# How much of the celebration's raised stick is on (0 when idle).
+func celebration_share() -> float:
+	if not is_celebrating():
+		return 0.0
+	return SkaterShotPoseCoordinator.celebration_ramp(
+			_celebration_total - _celebration_timer, _celebration_timer)
+
+
 # 0..1 progress through the celebration window (0 when idle).
 func celebration_progress() -> float:
 	if not is_celebrating():
@@ -1279,6 +1314,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	# the blade world frame. RemoteController overrides _render_pose_update to
 	# drop head tracking (a wire-fed body has no cursor aim).
 	skater.render_pose_update = _render_pose_update
+	skater.tick_pose_update = _ik.hold.advance
 
 # Reach ROM is derived from arm length, not an independent tunable. The
 # forehand side is shoulder-joint-limited (about 56% of arm length — the top
@@ -1382,9 +1418,11 @@ func build_ai_caps() -> AISkaterCaps:
 	# exactly the lever ratio (attributes v4 — reach + stick length), so a
 	# longer lever protects the puck further out. _base is captured on the
 	# first apply_attributes (always run before this).
+	# No nearer than a carried puck comes (carry_reach_min_m): a hold the bot
+	# prices inside the floor is one its blade is held out of.
 	if _base_max_blade_speed > 0.001:
-		caps.handle_reach = AIBotMechanics.EVADE_CARRY_HANDLE_M \
-				* (max_blade_speed / _base_max_blade_speed)
+		caps.handle_reach = maxf(AIBotMechanics.EVADE_CARRY_HANDLE_M
+				* (max_blade_speed / _base_max_blade_speed), carry_reach_min_m)
 	# Blade reach cone: the exact IK gate SkaterPoseCoordinator.apply_facing
 	# enforces (ROM backhand + torso twist), so the bot models the same off-facing
 	# reach the body actually has. Fixed geometry — not attribute-scaled.
@@ -2292,9 +2330,45 @@ func reach_purpose() -> float:
 	return _ik.reach_purpose
 
 
+# How much of the wider swing behind on the top hand's side this input's cursor
+# asks for, 0..1 (rom_backhand_angle_empty_deg; ReachPurposeRules.intent). A
+# cursor is read two ways by its distance: far off he is looking there, and
+# behind him it turns him round; near, he is placing his blade, and there it
+# reaches back without turning him. So the blade's range and the edge his hips
+# pivot at both go out by this, and a stick with the puck or a bot's cursor,
+# which turns it from near (InputState.bot_cursor_turns), takes none.
+func reach_behind_for(input: InputState) -> float:
+	if has_puck or input.bot_cursor_turns:
+		return 0.0
+	var at: Vector3 = skater.global_position
+	return ReachPurposeRules.intent(Vector2(at.x, at.z), _ik.full_blade_reach(),
+			Vector2(input.mouse_world_pos.x, input.mouse_world_pos.z),
+			reach_intent_near_m, reach_intent_far_m)
+
+
 # How far the chest folds over the stick (SkaterIKCoordinator.chest_fold).
 func chest_fold() -> float:
 	return _ik.chest_fold()
+
+
+func ready_fold() -> float:
+	return _ik.ready_fold()
+
+
+func tracking() -> bool:
+	return _ik.tracking()
+
+
+# The crouch floor a skater standing with his stick on the ice sits at.
+func ready_sit() -> float:
+	if not _ik.tracking() and _sm.get_state() != State.FOLLOW_THROUGH:
+		return 0.0
+	return (carry_crouch if has_puck else ready_crouch) * (1.0 - celebration_share())
+
+
+# The reach solve's own top hand (SkaterIKCoordinator.reach_hand_local).
+func reach_hand() -> Vector3:
+	return _ik.reach_hand_local
 
 
 # The gait's (stop weight as the scrape hears it, skid weight, turn load) this
@@ -3169,10 +3243,15 @@ func _release_wrister(input: InputState) -> void:
 			_wrister_sweep_speed(input), _wrister_config())
 	release_power_t = minf(release_power_t, wrister_load.load_share)
 	_sm.follow_through_power = lerpf(wrister_follow_through_min_power, 1.0, release_power_t)
+	_sm.follow_through_loft = _release_loft()
 	var finish_s: float = wrister_follow_through_time(skater.shot_charge)
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = finish_s
 	_sm.follow_through_duration_total = finish_s
+
+func _release_loft() -> float:
+	return float(_elevation_level) / float(ShotMechanics.ELEVATION_HIGH)
+
 
 # Folds the skater's motion into a wrist shot's or quick pass's release
 # (ReleaseMomentum): the puck keeps the body's velocity, the hands correcting it
@@ -3210,6 +3289,7 @@ func _fire_quick_pass(input: InputState) -> void:
 
 	_sm.follow_through_is_slapper = false
 	_sm.follow_through_power = quick_pass_follow_through_power
+	_sm.follow_through_loft = _release_loft()
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = quick_pass_follow_through_duration
 	_sm.follow_through_duration_total = quick_pass_follow_through_duration

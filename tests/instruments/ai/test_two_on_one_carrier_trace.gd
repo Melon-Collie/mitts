@@ -125,6 +125,6 @@ func test_trace_two_on_one_z8_d15() -> void:
 
 
 func test_trace_two_on_one_z8_d0() -> void:
-	# The start beside it that still ends in a shot, to read against.
+	# The start beside it, lost the same way (#928), to read against.
 	_trace(-8.0, 0.0, 2.0)
 	assert_true(true)

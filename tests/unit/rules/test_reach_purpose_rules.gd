@@ -39,3 +39,33 @@ func test_a_puck_coming_is_reached_for_sooner_than_one_going() -> void:
 func test_a_puck_crossing_in_front_counts_at_its_nearest() -> void:
 	var crossing: float = _purpose(Vector2(-3.0, -(RIM + 0.2)), Vector2(10.0, 0.0))
 	assert_eq(crossing, 1.0)
+
+
+# ── intent ────────────────────────────────────────────────────────────────────
+
+const INTENT_NEAR: float = 0.5
+const INTENT_FAR: float = 2.0
+
+
+func _intent(cursor_m: float) -> float:
+	return ReachPurposeRules.intent(Vector2.ZERO, RIM, Vector2(0.0, -cursor_m), INTENT_NEAR,
+			INTENT_FAR)
+
+
+func test_a_cursor_within_reach_or_just_past_it_is_meant() -> void:
+	assert_eq(_intent(0.4), 1.0, "a blade placed at his skates")
+	assert_eq(_intent(RIM), 1.0)
+	assert_eq(_intent(RIM + INTENT_NEAR), 1.0, "a reach asked for")
+
+
+func test_a_cursor_far_off_is_where_he_is_looking() -> void:
+	assert_almost_eq(_intent(RIM + INTENT_FAR), 0.0, 0.000001)
+	assert_almost_eq(_intent(20.0), 0.0, 0.000001)
+
+
+func test_intent_falls_with_the_cursors_distance() -> void:
+	var last: float = 1.0
+	for i: int in 30:
+		var meant: float = _intent(RIM + 0.1 * i)
+		assert_true(meant <= last, "intent rose as the cursor went farther")
+		last = meant

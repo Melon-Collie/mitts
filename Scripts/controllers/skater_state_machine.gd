@@ -124,6 +124,10 @@ var follow_through_is_slapper: bool = false
 # restored through reconcile in LocalController alongside the timer.
 var follow_through_duration_total: float = 0.25
 var follow_through_power: float = 1.0
+# The loft a wrister or a pass left with, 0 (along the ice) to 1 (the high
+# rung): its finish is as high as the shot. Latched at release and restored
+# through reconcile with the rest.
+var follow_through_loft: float = 0.0
 var shot_dir: Vector3 = Vector3.ZERO
 # World XZ lines a wrist shot's finish turns the hips and swings the stick
 # along: as far round onto shot_dir as the torso drove it. ZERO is shot_dir.
