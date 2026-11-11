@@ -73,3 +73,42 @@ func test_the_registry_reads_a_jersey_stripes_shape_but_not_a_socks() -> void:
 			"stripes": [{"pos": 0.9, "width": 0.1, "color": "#000000",
 					"peak": {"depth": 0.1, "count": 3, "shape": "sine"}}]}})
 	assert_eq(wave.jersey.stripes[0].peak.shape, "sine")
+
+
+# Whether `stripe` paints the sleeve at (u round the arm, `down_m` down it).
+func _painted(stripe: Dictionary, u: float, down_m: float) -> bool:
+	var at := Vector2(u, SleevePaint.pos_of(down_m))
+	for piece: PackedVector2Array in SleevePaint.stripe_polygons(stripe):
+		if Geometry2D.is_point_in_polygon(at, piece):
+			return true
+	return false
+
+
+func test_a_square_yoke_is_cut_off_at_the_cap_above_the_number() -> void:
+	var yoke: Dictionary = SleevePaint.yoke_stripe(SleevePaint.YOKE_SQUARE, Color.RED)
+	for u: float in [0.05, 0.25, 0.5, 0.75]:
+		assert_true(_painted(yoke, u, 0.002), "u %.2f: the sleeve's top is the yoke's" % u)
+		assert_true(_painted(yoke, u, SleevePaint.YOKE_CAP_M - 0.004), "u %.2f: down to the cap" % u)
+		assert_false(_painted(yoke, u, SleevePaint.YOKE_CAP_M + 0.004), "u %.2f: and no further" % u)
+	# The number's glyphs stand about 0.7 of their em.
+	assert_lt(SleevePaint.YOKE_CAP_M, SleevePaint.NUMBER_CENTER_M - 0.35 * SleeveDecal.NUMBER_EM_M,
+			"the number sits on the sleeve below it")
+
+
+func test_a_round_yoke_runs_past_the_number_and_rounds_up_under_the_arm() -> void:
+	var yoke: Dictionary = SleevePaint.yoke_stripe(SleevePaint.YOKE_ROUND, Color.RED)
+	assert_true(_painted(yoke, 0.5, SleevePaint.YOKE_ROUND_TIP_M - 0.004),
+			"on the outside of the arm it reaches its tip")
+	assert_false(_painted(yoke, 0.5, SleevePaint.YOKE_ROUND_TIP_M + 0.004), "and stops there")
+	assert_true(_painted(yoke, 0.02, SleevePaint.YOKE_CAP_M - 0.006),
+			"under the arm it comes down to the cap's line")
+	assert_false(_painted(yoke, 0.02, SleevePaint.YOKE_CAP_M + 0.006), "and no further")
+	for i: int in 21:
+		assert_true(_painted(yoke, 0.02 + 0.048 * float(i), 0.002),
+				"u %.2f: none of the sleeve shows over the yoke" % (0.02 + 0.048 * float(i)))
+	# Two digits across, each about 0.55 of the em wide.
+	var half_u: float = 0.55 * SleeveDecal.NUMBER_EM_M / SleevePaint.GIRTH_M
+	for u: float in [0.5 - half_u, 0.5, 0.5 + half_u]:
+		for down: float in [-0.35, 0.35]:
+			assert_true(_painted(yoke, u, SleevePaint.NUMBER_CENTER_M + down * SleeveDecal.NUMBER_EM_M),
+					"the number's box at u %.2f is on the yoke" % u)

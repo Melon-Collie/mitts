@@ -319,6 +319,13 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 				SleevePaint.pos_of(SleevePaint.NUMBER_CENTER_M))
 	else:
 		sleeve = SleevePaint.from_legacy(arms, shoulder_color)
+	# The yoke runs on over the shoulders' caps, which are the sleeve's: under
+	# the kit's own sleeve stripes, so a shoulder band of its own covers it.
+	var yoke: Variant = _parse_optional_color(jersey_raw.get("yoke", null))
+	var yoke_shape: String = SleevePaint.YOKE_ROUND \
+			if jersey_raw.get("yoke_shape") == SleevePaint.YOKE_ROUND else SleevePaint.YOKE_SQUARE
+	if yoke is Color:
+		(sleeve.stripes as Array[Dictionary]).push_front(SleevePaint.yoke_stripe(yoke_shape, yoke))
 	return {
 		"helmet":      _parse_color(raw.get("helmet", "#FFFFFF")),
 		"shoulders": {
@@ -328,7 +335,8 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 		},
 		"jersey": {
 			"base":    _parse_color(jersey_raw.get("base",    "#FFFFFF")),
-			"yoke":    _parse_optional_color(jersey_raw.get("yoke", null)),
+			"yoke":    yoke,
+			"yoke_shape": yoke_shape,
 			"collar":  _parse_optional_color(jersey_raw.get("collar", null)),
 			"stripes": _parse_stripes(jersey_raw.get("stripes", []), true),
 		},
