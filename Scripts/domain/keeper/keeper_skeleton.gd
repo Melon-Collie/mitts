@@ -130,8 +130,12 @@ static func limb_basis(up_bone: Vector3, front: Vector3) -> Basis:
 		f = Vector3.FORWARD - y * Vector3.FORWARD.dot(y)
 		if f.length_squared() < 1e-8:
 			f = Vector3.UP - y * Vector3.UP.dot(y)
-	var z: Vector3 = -f.normalized()
-	return Basis(y.cross(z), y, z)
+	# A front nearly along the bone leaves `f` the difference of two near-equal
+	# vectors, square to y only as closely as its rounding over its length. The
+	# crosses are square to their operands whatever f's error, and a caller may
+	# need a rotation to the engine's tolerance (Basis.slerp).
+	var x: Vector3 = f.cross(y).normalized()
+	return Basis(x, y, x.cross(y))
 
 
 func _pose_leg(side: int, hip: Vector3, leg: KeeperPose.Leg) -> void:
