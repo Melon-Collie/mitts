@@ -7,7 +7,7 @@ extends GutTest
 # out, goalie ~0.6 m off its line (a representative depth — this exercises the AI
 # motion model, which reads the goalie's LIVE position, not the depth_base const).
 
-const GOAL := Vector3(0, 0, -GameRules.GOAL_LINE_Z)   # z = -26.65
+const GOAL := Vector3(0, 0, -GameRules.GOAL_LINE_Z)   # z = -GOAL_LINE_Z
 const GOALIE_Z := -GameRules.GOAL_LINE_Z + 0.6        # 0.6 m off the line
 const SHOOTER := Vector3(2.0, 0, -20.0)               # 2 m lateral, ~6.65 m out
 

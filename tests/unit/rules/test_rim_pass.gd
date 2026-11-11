@@ -23,7 +23,7 @@ func test_no_rims_from_centre_ice() -> void:
 func test_a_corner_rim_runs_up_the_wall() -> void:
 	# From behind our own net, out toward the strong corner: some launch must
 	# come round the corner and run up the boards past the hash marks.
-	var n: int = _build(Vector3(3.0, 0.0, 28.0))
+	var n: int = _build(Vector3(3.0, 0.0, GameRules.GOAL_LINE_Z + 1.35))
 	assert_gt(n, 0)
 	var up_the_wall: bool = false
 	for k: int in n:
@@ -35,7 +35,7 @@ func test_a_corner_rim_runs_up_the_wall() -> void:
 
 
 func test_no_rim_leg_runs_through_a_net() -> void:
-	var n: int = _build(Vector3(-2.0, 0.0, 28.5))
+	var n: int = _build(Vector3(-2.0, 0.0, GameRules.GOAL_LINE_Z + 1.85))
 	for k: int in n:
 		var path: Array[Vector3] = AIRimPass.paths[k]
 		var prev: Vector3 = AIRimPass.origin
@@ -46,12 +46,12 @@ func test_no_rim_leg_runs_through_a_net() -> void:
 
 
 func test_a_defender_on_the_wall_wins_the_race() -> void:
-	var from := Vector3(3.0, 0.0, 28.0)
+	var from := Vector3(3.0, 0.0, GameRules.GOAL_LINE_Z + 1.35)
 	var clear: int = _build(from)
 	var clear_t: Array[float] = []
 	for k: int in clear:
 		clear_t.append(AIRimPass.opp_time(k))
-	var on_wall: Array[Vector3] = [Vector3(12.0, 0.0, 20.0)]
+	var on_wall: Array[Vector3] = [Vector3(12.0, 0.0, GameRules.GOAL_LINE_Z - 6.65)]
 	var n: int = _build(from, on_wall)
 	assert_eq(n, clear)
 	var beaten: int = 0
@@ -63,10 +63,10 @@ func test_a_defender_on_the_wall_wins_the_race() -> void:
 
 
 func test_a_receiver_up_the_wall_meets_the_rim() -> void:
-	var n: int = _build(Vector3(3.0, 0.0, 28.0))
+	var n: int = _build(Vector3(3.0, 0.0, GameRules.GOAL_LINE_Z + 1.35))
 	var best_t: float = INF
 	for k: int in n:
-		best_t = minf(best_t, AIRimPass.meet_time(k, Vector3(11.5, 0.0, 14.0),
+		best_t = minf(best_t, AIRimPass.meet_time(k, Vector3(11.5, 0.0, GameRules.GOAL_LINE_Z - 12.65),
 				Vector3.ZERO, AIArrival.SKATER_REF_SPEED_M_S))
 	assert_lt(best_t, INF, "the half-wall winger can meet a rim")
 

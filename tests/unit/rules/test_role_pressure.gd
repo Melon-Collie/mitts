@@ -136,7 +136,7 @@ func test_pressures_loose_puck_instead_of_freezing() -> void:
 
 func test_chosen_target_is_goal_side_of_carrier() -> void:
 	# Team 0 defends +Z. Carrier at (0, 0, 22) deep in our DZ. Our
-	# net at (0, 0, 26.65). PRESSURE must pick a candidate with
+	# net at (0, 0, GOAL_LINE_Z). PRESSURE must pick a candidate with
 	# z >= 22 (goal-side, between carrier and our net).
 	var carrier_pos := Vector3(0, 0, 22)
 	var skaters: Array = [

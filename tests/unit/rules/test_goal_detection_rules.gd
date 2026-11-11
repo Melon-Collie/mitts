@@ -11,7 +11,7 @@ extends GutTest
 # are |x| <= 0.820, y <= 1.1725, and "fully across" = center >= 0.065 past the
 # goal line's far edge (CLEAR past its centre).
 
-const GOAL_Z: float = GameRules.GOAL_LINE_Z          # 26.65
+const GOAL_Z: float = GameRules.GOAL_LINE_Z          # GOAL_LINE_Z
 const HALF_W: float = 0.915   # POST_HALF_WIDTH (post centerline)
 const NET_H: float = 1.220    # NET_HEIGHT (crossbar centerline)
 const POST_R: float = 0.030   # POST_RADIUS

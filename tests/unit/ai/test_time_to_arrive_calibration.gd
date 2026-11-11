@@ -184,8 +184,8 @@ func test_open_ice_route_is_exactly_the_direct_model() -> void:
 func test_cross_cage_route_costs_more_than_the_straight_fiction() -> void:
 	# Front of the net to behind it, straight through the cage: the honest
 	# route rounds a post and must cost strictly more than the fiction.
-	var from := Vector3(2.0, 0, 24.5)
-	var dest := Vector3(-1.5, 0, 28.4)
+	var from := Vector3(2.0, 0, GameRules.GOAL_LINE_Z - 2.15)
+	var dest := Vector3(-1.5, 0, GameRules.GOAL_LINE_Z + 1.75)
 	var t: float = AIArrival.time_to_arrive(from, dest, Vector3.ZERO)
 	var fiction: float = AIArrival._time_to_arrive_direct(
 			from, dest, Vector3.ZERO)
@@ -197,8 +197,8 @@ func test_cross_cage_route_costs_more_than_the_straight_fiction() -> void:
 func test_behind_net_traverse_prices_the_alley() -> void:
 	# Both endpoints in the behind-net alley: the honest route is the tiny
 	# dip through the alley's center, not a trip around a post.
-	var from := Vector3(2.0, 0, 28.0)
-	var dest := Vector3(-2.0, 0, 28.0)
+	var from := Vector3(2.0, 0, GameRules.GOAL_LINE_Z + 1.35)
+	var dest := Vector3(-2.0, 0, GameRules.GOAL_LINE_Z + 1.35)
 	var t: float = AIArrival.time_to_arrive(from, dest, Vector3.ZERO)
 	var fiction: float = AIArrival._time_to_arrive_direct(
 			from, dest, Vector3.ZERO)

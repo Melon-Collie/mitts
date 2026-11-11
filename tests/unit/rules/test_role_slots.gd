@@ -236,7 +236,7 @@ func test_assign_forecheck_f1_pressures_puck_f3_is_high() -> void:
 	# the puck deep (z = -22). F3 = closest to the opp blue line (highest
 	# / least deep), F1 = closest to the puck of the rest, F2 = leftover.
 	var skaters: Array = [
-			[100, 0, Vector3(0.0, 0.0, -8.0)],   # high, near opp blue (-7.29) → F3
+			[100, 0, Vector3(0.0, 0.0, -8.0)],   # high, near opp blue (-BLUE_LINE_Z) → F3
 			[110, 0, Vector3(2.0, 0.0, -21.0)],  # deep, near puck → F1
 			[120, 0, Vector3(-3.0, 0.0, -14.0)], # mid → F2
 			[200, 1, Vector3(0.0, 0.0, -22.0)],  # opp carrier, deep

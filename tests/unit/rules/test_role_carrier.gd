@@ -1243,7 +1243,7 @@ func test_in_motion_toward_slot_scores_higher_than_stationary() -> void:
 	# from — meaning a moving bot OUT of slot range should outscore a
 	# stationary bot at the same current pos.
 	#
-	# Both bots stand at z = -15 (~12 m from opp goal at z = -26.65 —
+	# Both bots stand at z = -15 (~12 m from opp goal at z = -GOAL_LINE_Z —
 	# outside ideal but inside SHOT_RANGE_FALLOFF_M). The moving bot
 	# travels toward the goal at 8 m/s. With BOT_WRISTER_LOOKAHEAD_S
 	# = 0.25, the projected release pos is z ≈ -17 → ~10 m from goal,
@@ -1265,7 +1265,7 @@ func test_in_motion_toward_slot_scores_higher_than_stationary() -> void:
 
 func test_zero_value_fire_does_not_win_in_own_zone() -> void:
 	# Carrier buried deep in its own end (z = +22, ~48 m from the opp
-	# goal at z = -26.65). Shoot/quick-shot score 0 (far past
+	# goal at z = -GOAL_LINE_Z). Shoot/quick-shot score 0 (far past
 	# SHOT_RANGE_FALLOFF_M) and there are no teammates to pass to, so
 	# every fire option is 0. Before the positive-value gate the bot
 	# fired on the 0-0 fire-vs-carry tie (FIRE WINS TIES); now a zero
@@ -1806,7 +1806,7 @@ func test_sharp_angle_shot_along_the_ice_into_an_rvh_seal_is_never_worth_firing(
 # blue-line slop can't turn a completed play into a zone exit / offside.
 
 func test_oz_valve_prunes_carry_candidates_in_the_blue_line_band() -> void:
-	# Carrier established in the OZ (team 0 attacks -Z; OZ is z < -7.29).
+	# Carrier established in the OZ (team 0 attacks -Z; OZ is z < -BLUE_LINE_Z).
 	# A retreat candidate INSIDE the keep-out band (on the zone side of the
 	# line but within windup reach of it) is pruned outright; a candidate
 	# past the band scores normally.
@@ -2285,12 +2285,12 @@ func test_behind_net_carrier_wheels_to_the_far_wall_in_5v5() -> void:
 	# on his chaser, who trails in his wake (committed to the same line —
 	# the escape gate reads him as beaten). The strong-side front is
 	# covered, so turning up the near side means the wall battle.
-	var self_pos := Vector3(2.0, 0, 27.6)
+	var self_pos := Vector3(2.0, 0, GameRules.GOAL_LINE_Z + 0.95)
 	var self_vel := Vector3(-4.0, 0, 0.4)
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos, false, self_vel],
-		[3, 1, Vector3(4.6, 0, 27.4), false, Vector3(-4.2, 0, 0)],
-		[4, 1, Vector3(4.5, 0, 22.0)],
+		[3, 1, Vector3(4.6, 0, GameRules.GOAL_LINE_Z + 0.75), false, Vector3(-4.2, 0, 0)],
+		[4, 1, Vector3(4.5, 0, GameRules.GOAL_LINE_Z - 4.65)],
 	]
 	var ctx := _make_ctx(self_pos, skaters)
 	ctx.self_velocity = self_vel
@@ -2442,15 +2442,15 @@ func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 # rimmed round the corner, the puck reaches the winger before anybody of theirs.
 
 func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
-	var self_pos := Vector3(3.0, 0, 28.0)
+	var self_pos := Vector3(3.0, 0, GameRules.GOAL_LINE_Z + 1.35)
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos],
-		[2, TEAM_ID, Vector3(11.5, 0, 14.0)],      # strong half-wall winger
-		[3, 1, Vector3(1.5, 0, 28.5)],             # on the D's hip
-		[5, 1, Vector3(-3.0, 0, 18.0)],
+		[2, TEAM_ID, Vector3(11.5, 0, GameRules.GOAL_LINE_Z - 12.65)],      # strong half-wall winger
+		[3, 1, Vector3(1.5, 0, GameRules.GOAL_LINE_Z + 1.85)],             # on the D's hip
+		[5, 1, Vector3(-3.0, 0, GameRules.GOAL_LINE_Z - 8.65)],
 	]
 	if lane_blocked:
-		skaters.append([4, 1, Vector3(7.0, 0, 21.0)])   # in the straight lane
+		skaters.append([4, 1, Vector3(7.0, 0, GameRules.GOAL_LINE_Z - 5.65)])   # in the straight lane
 	return _make_ctx(self_pos, skaters)
 
 

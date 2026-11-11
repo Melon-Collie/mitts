@@ -3,7 +3,7 @@ extends GutTest
 # AIPossessionState is pure-function. Tests verify the 4-state table
 # and sticky-possession (loose puck retains last team).
 
-# Team 0 defends +Z (own_net_z = +26.65), attacks -Z.
+# Team 0 defends +Z (own_net_z = GOAL_LINE_Z), attacks -Z.
 const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 const TEAM_ID: int = 0
 

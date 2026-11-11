@@ -533,7 +533,7 @@ func test_the_back_man_waits_for_him_on_our_line() -> void:
 	# A carrier coming up the middle at the red line: the ladder would put the
 	# stand out in the neutral zone. The back line does not go out to him.
 	var carrier := Vector3(2.0, 0.0, 0.0)
-	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 7.0),
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, GameRules.BLUE_LINE_Z - 0.29),
 			[[10, 1, carrier, Vector3(0.0, 0.0, 3.0)]], 10)
 	var d: RoleDecision = AIRoleRushD.decide(ctx, AIRoleSlots.Slot.BACK_STRONG)
 	assert_almost_eq(OUR_NET_Z - d.target_position.z, AIRoleNeutralZone.line_depth_m(),
@@ -545,7 +545,7 @@ func test_the_line_stand_stays_inside_the_dots() -> void:
 	# A carrier up the wall at the red line: protect the middle, give him the
 	# outside — the stand on the line does not follow him out to the boards.
 	var carrier := Vector3(GameRules.INNER_HALF_WIDTH - 1.0, 0.0, 0.0)
-	var ctx: RoleContext = _ctx(Vector3(5.0, 0.0, 7.0),
+	var ctx: RoleContext = _ctx(Vector3(5.0, 0.0, GameRules.BLUE_LINE_Z - 0.29),
 			[[10, 1, carrier, Vector3(0.0, 0.0, 5.0)]], 10)
 	var d: RoleDecision = AIRoleRushD.decide(ctx, AIRoleSlots.Slot.BACK_STRONG)
 	assert_lte(absf(d.target_position.x), GameRules.END_ZONE_FACEOFF_DOT_X + 0.01,
