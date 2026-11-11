@@ -421,6 +421,26 @@ thing that measures how far the arm is out, the reach lean.
   frame it leans with the body, which at speed tucks the hand back under the
   chest and puts the blade at a height read for another span.
   `test_wrister_finish.gd`.
+- **A shot is both hands' work.** Three things keep the bottom hand on, from
+  the press to the end of the finish. The wound-up blade is held at the pass's
+  own fixed point, the smoothed blade carried with the skater
+  (`_frozen_blade`): never the `Blade` marker read back, which the hand solve
+  lands past the blade it was given once the body leans, so a target read from
+  it walks out to the one-handed rim, 0.4 m in a third of a second skating.
+  The wrister's finish comes in toward the bottom shoulder as far as that hand
+  needs to keep hold (`BottomHandIK.drawn_in`, eased in before the reach runs
+  out). And the drawn hand does not let go for reach while a shot has the
+  stick (`_shooting`): short of its grip, the arm reaches as far as it goes.
+- **He stays over the stick through a finish** (`_finishing`,
+  `SkaterController.ready_sit`): the ready fold and sit hold their empty-stick
+  values through `FOLLOW_THROUGH`, the same on every peer. Released to nothing
+  there, he stands up through the finish and sits down again after it.
+- **The finish's stick leaves at speed and eases into its hold**
+  (`SkaterShotPoseCoordinator.whip_envelope`): the pose bridge eases its
+  start, so an attack that eases in as well goes nowhere for the bridge's
+  ticks and stops dead after them. What has no bridge (the trunk's
+  through-twist and lean, the legs' kick, the slapper's blade leaving contact)
+  rides `finish_envelope`, eased at both ends, over the same `whip_attack_time`.
 - **What is still only drawn is small.** The stride's pump and the shaft's
   clearance ride `Skater.drawn_top_hand()`, and the stroke's cup rolls the
   blade about the hosel line (`Scripts/actors/CLAUDE.md`), which curls the

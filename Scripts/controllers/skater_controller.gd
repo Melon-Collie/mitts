@@ -886,11 +886,11 @@ var slapper_follow_through_time_max: float = 1.0
 # The slapper finish's opening beat, wind-up to contact. Seconds, not a share of
 # the timer, so a longer finish holds longer rather than swinging down slower.
 var slapper_downswing_time: float = 0.11
-# Every finish SNAPS out over this, then holds and relaxes over the last
+# Every finish goes out over this, then holds and relaxes over the last
 # wrister_whip_release_frac of its timer (SkaterShotPoseCoordinator
-# .finish_envelope). Five ticks: shorter and a stick crossing a metre between
-# frames reads as a teleport, not a whip.
-var whip_attack_time: float = 0.04
+# .finish_envelope). About what a stick takes from the puck leaving it to the
+# arms' full extension; two thirds of the way is covered in the first 0.04 s.
+var whip_attack_time: float = 0.09
 # Last fraction of the wrister/quick/slapper FT spent easing the finish aim (torso
 # twist + blade) from the shot line back to the LIVE cursor, so the pose ends
 # where the mouse actually is and hands off to blade-tracking without re-rotating
@@ -2358,7 +2358,7 @@ func tracking() -> bool:
 
 # The crouch floor a skater standing with his stick on the ice sits at.
 func ready_sit() -> float:
-	if not _ik.tracking():
+	if not _ik.tracking() and _sm.get_state() != State.FOLLOW_THROUGH:
 		return 0.0
 	return (carry_crouch if has_puck else ready_crouch) * (1.0 - celebration_share())
 

@@ -392,8 +392,9 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 		target_blade_world.y = 0.0;
 		out_last_target = target_blade_world;
 	} else if (hold_blade) {
-		target_blade_world = ub_xf.xform(v[V_BLADE_MARKER]);
-		target_blade_world.y = 0.0;
+		Vector3 marker = ub_xf.xform(v[V_BLADE_MARKER]);
+		marker.y = 0.0;
+		target_blade_world = dangle->carried_to(skater_pos, marker);
 		out_last_target = target_blade_world;
 	} else {
 		mouse_world = held_out(mouse_world);

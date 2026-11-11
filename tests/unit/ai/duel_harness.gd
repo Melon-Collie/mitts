@@ -190,7 +190,8 @@ class SimSkater:
 	var wrister_active: bool = false
 	# The blade's contact off the body as the charge starts: the pin the release
 	# loads from (SkaterController._solve_wrister_load's wrister_origin, latched
-	# on entering WRISTER_AIM), never the blade the hold walks after it.
+	# on entering WRISTER_AIM), never the blade's contact after it, which swings
+	# with the torso's wind-up.
 	var wrister_pin: Vector3 = Vector3.ZERO
 	# ≥ 0 marks a scripted puppet container (no agent); the gap it holds.
 	var puppet_hold_gap: float = -1.0

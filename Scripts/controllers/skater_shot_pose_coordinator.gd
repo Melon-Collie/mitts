@@ -7,7 +7,7 @@ extends RefCounted
 # these states because the blade pose is choreographed, not player-aimed.
 #
 # All clamp helpers (net exclusion, goalie body / butterfly) and the small
-# geometry utilities (blade_y_local, stick_horiz) live on SkaterIKCoordinator
+# geometry utilities (blade_y_local, solve_stick_length) live on SkaterIKCoordinator
 # because they are also used by the per-tick IK pipeline.
 
 const State = SkaterStateMachine.State
@@ -264,7 +264,7 @@ func apply_wrister_follow_through() -> void:
 # SNAPS to the extended finish, HOLDS it, then comes back down to the ice with
 # the hand in its pocket, which is where the tracked stick takes it from.
 func _apply_wrister_whip(t: float, aim_world: Vector3, stick_world: Vector3) -> void:
-	var env: float = finish_envelope(t, _sm.follow_through_duration_total,
+	var env: float = whip_envelope(t, _sm.follow_through_duration_total,
 			_controller.whip_attack_time, _controller.wrister_whip_release_frac) \
 			* _sm.follow_through_power
 	var axis: Vector3 = aim_world
@@ -293,7 +293,9 @@ func _apply_wrister_whip(t: float, aim_world: Vector3, stick_world: Vector3) -> 
 	var stick: float = _ik.solve_stick_length()
 	var blade: Vector3 = hand + stick_dir * sqrt(maxf(stick * stick - drop * drop, 0.0001))
 	blade.y = blade_y
-	_place_finish(tilt.transposed() * hand, tilt.transposed() * blade, blade_side_sign)
+	var both: Vector3 = _ik.drawn_in_to_both_hands(hand, blade)
+	_place_finish(tilt.transposed() * (hand + both), tilt.transposed() * (blade + both),
+			blade_side_sign)
 
 # ── Slapper Follow-Through ────────────────────────────────────────────────────
 # A real swing in two phases. Downswing (the first slapper_downswing_time of
@@ -354,15 +356,27 @@ func apply_slapper_follow_through() -> void:
 
 
 # Attack-hold-release, 0..1 at `t` (0..1 through a finish `span` seconds long):
-# SNAPS up over `attack_s` seconds, HOLDS, then relaxes over the last
-# `release_frac` of the span. Never a symmetric bell: it eases the stick out and
-# straight back, never commits to the finish, and reads as delayed. The attack
-# is seconds, not a share, so a longer finish holds longer rather than snapping
+# out over `attack_s` seconds, HELD, then relaxed over the last `release_frac`
+# of the span. Never a symmetric bell: it eases the stick out and straight
+# back, never commits to the finish, and reads as delayed. The attack is
+# seconds, not a share, so a longer finish holds longer rather than snapping
 # slower, and eased at both ends, so the motion starts rather than appears.
 static func finish_envelope(t: float, span: float, attack_s: float, release_frac: float) -> float:
 	var attack: float = smoothstep(0.0, maxf(attack_s, 0.001), t * span)
-	var release_start: float = 1.0 - clampf(release_frac, 0.0, 1.0)
-	return attack * (1.0 - smoothstep(release_start, 1.0, t))
+	return attack * _finish_release(t, release_frac)
+
+
+# finish_envelope for a pose the bridge eases in (SkaterPoseBridge): it leaves
+# at full speed and eases into the hold, as a stick let go of a shot does.
+# Eased in as well, it spends the bridge's ticks going nowhere and the rest
+# stopping dead.
+static func whip_envelope(t: float, span: float, attack_s: float, release_frac: float) -> float:
+	var left: float = 1.0 - clampf(t * span / maxf(attack_s, 0.001), 0.0, 1.0)
+	return (1.0 - left * left) * _finish_release(t, release_frac)
+
+
+static func _finish_release(t: float, release_frac: float) -> float:
+	return 1.0 - smoothstep(1.0 - clampf(release_frac, 0.0, 1.0), 1.0, t)
 
 
 # ── The finish, shared ────────────────────────────────────────────────────────

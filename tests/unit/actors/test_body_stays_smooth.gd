@@ -30,7 +30,7 @@ const BOUNDS: Dictionary = {
 	"stop and restart":
 		[30.0, 8.0, 8.0, 8.0, 9.0, 8.0],
 	"wrister: carry, charge, release, skating":
-		[23.0, 8.0, 11.0, 52.0, 36.0, 100.0],
+		[11.0, 8.0, 8.0, 39.0, 28.0, 63.0],
 	"crossovers into and out of a held turn":
 		[13.0, 8.0, 8.0, 14.0, 14.0, 17.0],
 	"knocked down from the side and up again":
