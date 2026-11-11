@@ -178,8 +178,8 @@ the existing rails:
 
 ## 6. Bots and the HUD
 
-- **Bots**: accept at once and never challenge (the decisions table); how a
-  bot fights once fists exist is phase 5.
+- **Bots**: accept at once and never challenge (the decisions table). How a
+  bot fights is phase 5, below; when one would challenge is still open.
 - **HUD**: "⟨name⟩ wants to fight — V to drop the gloves" over the
   challenger, for the challenged player only. On the challenger's own screen
   a draining ring shows the window. A `FIGHT` toast at the whistle. All
@@ -327,10 +327,8 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   law twice. So a client's own fists and the host's copy of them can differ by
   the time the role took to reach the client. That matters in phase 4, where
   the host judges punches from its own copy.
-- **Fighting bots** hold a guard: the AI runs the fight tick off an idle
-  input, its cursor just in front of the bot (`AIController._hold_guard`).
-  This also fixes a phase-2 bug where a bot fighter's top fist never came up,
-  because the fight tick never ran for bots.
+- **Fighting bots** run the fight tick too, which fixed a phase-2 bug where a
+  bot fighter's top fist never came up. What they do with it is phase 5.
 - **Seen with** `render-poses.sh --only=fight` (the guard, a jab in flight and
   at reach, a hook, the sweater held, an arm caught, the hands swapped).
   **Tested by** `test_fight_hands.gd` and `test_fight_fist_and_hold_rules.gd`.
@@ -374,6 +372,34 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
 - **Not modelled**: the grip's tug on balance (dragging a man doesn't topple
   him), lag compensation for a remote attacker's punch, and an uppercut or
   body-shot aim (the fist's height comes from its extension alone).
+
+## Phase 5 as built
+
+- **A bot fights with the human's three controls** (`AIFightBrain`, in
+  `Scripts/domain/ai/`, engine-free; fed each fight tick by
+  `AIController._fight_tick`, which reads his head and fists off the partner's
+  markers and the grips through `FightHoldRules`). It sets the cursor, the
+  grab and the swap, brakes, and the fight tick does the rest, so a bot's fist
+  obeys the same reach, speed and grip rules a human's does.
+- **Between punches** the cursor rests `GUARD_AHEAD_M` in front of it, the
+  fist up in a guard, and the grab holds his sweater.
+- **A punch** drives the cursor `THROUGH_M` past his head, `AROUND_M` round
+  the side his guard leaves open (away from whichever of his fists sits
+  nearer the line to his head), for `THROW_S`, then back for `RECOVER_S`. The
+  gap between punches rides `check_aggression` (`GAP_PASSIVE_S` at none,
+  `GAP_AGGRESSIVE_S` at full), so Easy throws every 2 s and Hard every 0.6 s.
+  Bots' cadences are staggered by peer id. It doesn't throw while he holds its
+  punching arm.
+- **Reads, a reaction late** (`carrier_reaction_delay_s`): his punching arm
+  thrown, which it catches by letting the grab go for a tick so it takes
+  again on the arm; and its own punching arm held, which it frees with the
+  swap. Both are the `ties_up_arms` cognition gate, closed on Easy.
+- **The fight controls** are toasted to a human whose fight is called (aim to
+  punch, hold shoot to grab, slapshot to swap hands), with the keys of the
+  device in use.
+- **Tested by** `test_ai_fight_brain.gd`.
+- **Not yet**: bots challenging, the tutorial line, a bot that skates off to
+  disengage or presses the band, and a body-shot aim.
 
 ## The fight camera
 

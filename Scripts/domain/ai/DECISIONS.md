@@ -186,6 +186,7 @@ Functions in `skater_agent_state_machine.gd` unless named.
 | shot block / lone-defender dive | `skater_agent_shot_block.gd:apply`, `_shot_coming`, `_dive_point`; `shot_block_read.gd` | opponent windup in our end on my line (without the puck, only with a loose puck's path reaching his blade) / numbers ≠ EVEN, `back_count` 1 and me INSIDE, the carrier inside shooting range in front of our goal line | `blocks_shots`; never while CARRY | `test_bot_shot_block.gd`, `test_shot_block_read.gd` |
 | body check commit | `defensive_verbs.gd:evaluate_body_check` → `body_check.gd:evaluate`; SM holds `hit_held` | PRESSURE (support behind only) / NZ_F1's backcheck | `check_aggression`, own weight/transfer | `test_body_check.gd`, `test_role_pressure.gd` |
 | stand up a carrier | `skater_agent_stand_up.gd:apply` → `stand_up_read.gd:meets` (holds `hit_held`) | every tick after dispatch: an opponent carrier skating into us inside `MEET_S` of contact, and the hit rocks him | `check_aggression` (0 never) | `test_stand_up_read.gd` |
+| fight | `ai_controller.gd:_fight_tick` → `ai_fight_brain.gd:decide` (guard and the sweater held; a throw every gap through his head round `_through_his_guard`; his thrown arm caught by `_let_go`; a held arm freed by the swap) | `is_fighting()`, the FIGHT phase | his head and fists, the grips (`FightHoldRules.tied` / `thrown`); `carrier_reaction_delay_s`, `check_aggression`, `ties_up_arms` | `test_ai_fight_brain.gd` |
 | dispatch throttle | `dispatch` (skip counter, live re-aim on skipped ticks, far-play ×2), `_stagger_cadence_phases` | non-press states | `dispatch_period_ticks` | `test_skater_agent_state_machine.gd`; `benchmarks/` |
 | role-argmax throttle | `_state_off_puck` (`must_recompute`, `_is_reactive_slot`) | OFF_PUCK | `ROLE_DECISION_PERIOD_TICKS`, `FAR_PLAY_LOD_RADIUS_M`, `FINISHER_FLIGHT_NEAR_M` | `test_skater_agent_state_machine.gd` |
 
@@ -199,7 +200,7 @@ Plumbing: `skater_agent_state_machine.gd:apply_profile` → SM field → (roles)
 
 | field | axis | E / N / H | read at |
 |---|---|---|---|
-| `carrier_reaction_delay_s` | precision | 0.34 / 0.22 / 0.05 | `game_manager.gd:_apply_bot_carrier_reaction_delay` (team shape); `_should_chase_loose_puck` (own chase clock) |
+| `carrier_reaction_delay_s` | precision | 0.34 / 0.22 / 0.05 | `game_manager.gd:_apply_bot_carrier_reaction_delay` (team shape); `_should_chase_loose_puck` (own chase clock); `ai_fight_brain.gd:setup` (reading his arm thrown, its own held) |
 | `dispatch_period_ticks` | precision | 9 / 6 / 2 | `dispatch`, `_stagger_cadence_phases`, `_state_off_puck`, `_state_carry`; `carrier.gd:decide`; `skater_agent_stick_play.gd:lift_aim` |
 | `shot_aim_error_rad` | precision | 0.055 / 0.04 / 0.01 | `_set_state` (sample); execution only |
 | `pass_aim_error_rad` | precision | 0.0225 / 0.015 / 0.01 | `_set_state`; `carrier_pass_search.gd:_pass_variant_ev`, `carrier_rim_search.gd:launch_for`, `carrier_field.gd:pass_option_from` (`pass_miss_prob`) |
@@ -207,7 +208,7 @@ Plumbing: `skater_agent_state_machine.gd:apply_profile` → SM field → (roles)
 | `settle_penalty_frac` / `_tau_s` | precision | 0.85, 0.55 / 0.60, 0.30 / 0.0, 0.25 | `carrier.gd:_settle_penalty` → `_pick_commit_phase` bars |
 | `pursuit_standoff_m` | pace (space) | 3.0 / 0.75 / 0.0 | `pressure.gd:decide` |
 | `pass_speed_scale` | pace | 0.75 / 0.85 / 1.0 | `carrier_pass_search.gd:search`, `_pick_commit_phase`, `carrier_field.gd:pass_option_from`, `carrier_pass_search.gd:developing_feed_value`, `carrier_pass_search.gd:_developing_outlet_feed` |
-| `check_aggression` | pace (threat) | 0.0 / 0.65 / 1.0 | `defensive_verbs.gd:evaluate_body_check`; `skater_agent_board_play.gd:apply` |
+| `check_aggression` | pace (threat) | 0.0 / 0.65 / 1.0 | `defensive_verbs.gd:evaluate_body_check`; `skater_agent_board_play.gd:apply`; `ai_fight_brain.gd:setup` (the gap between punches) |
 | `defensive_anticipation_scale` | pace (space) | 0.2 / 0.6 / 1.0 | `role_reads.gd:collect_opp_team_excluding_carrier`, `collect_opponents` |
 | `reads_goalie_motion` | cognition | F / T / T | `_shot_aim_point`; `carrier_field.gd:goalie_unsettled_at`, `carrier_carry_search.gd:_score_move_candidate_base` |
 | `holds_for_developing_feeds` | cognition | F / T / T | `carrier_pass_search.gd:developing_feed_value` |
@@ -219,6 +220,7 @@ Plumbing: `skater_agent_state_machine.gd:apply_profile` → SM field → (roles)
 | `reads_puck_path` | cognition | F / T / T | `_carrier_stick_aim`; `skater_agent_stick_play.gd:path_aim` (velocities zeroed when off) |
 | `ties_sticks` | cognition | F / T / T | `skater_agent_stick_play.gd:tie_aim`, `tie_yank_aim` |
 | `blocks_shots` | cognition | F / T / T | `apply_shot_block` |
+| `ties_up_arms` | cognition | F / T / T | `ai_fight_brain.gd:decide` (catching his punch, swapping out of a tie) |
 
 Not tier knobs: aim slew (`apply_capabilities` → `_apply_aim_slew`, real blade speed); every `AISkaterCaps` build number.
 

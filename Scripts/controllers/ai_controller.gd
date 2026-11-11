@@ -41,9 +41,8 @@ var _faceoff_input: InputState = InputState.new()
 var _celebration_input: InputState = InputState.new()
 const _CELEBRATION_REST_AHEAD_M: float = 1.0
 var _fight_input: InputState = InputState.new()
-# How far ahead of a fighting bot his idle cursor rests: inside the arm's
-# reach, so the punching fist stays up in its guard.
-const _GUARD_AHEAD_M: float = 0.35
+var _fight_brain := AIFightBrain.new()
+var _fight_view := AIFightBrain.View.new()
 
 # Bot draw swing. A center bot loads its blade on the dot through the countdown,
 # then in the final bot_draw_swing_time before the drop yanks the blade-aim target
@@ -131,6 +130,9 @@ func setup_agent(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: 
 		# the perfect-bot defaults. Perception delay is applied globally by
 		# GameManager, not here.
 		_agent.apply_profile(profile)
+	# Its fights: the tier's reaction and aggression, its cadence staggered by
+	# its peer id so two bots never throw in step.
+	_fight_brain.setup(profile, float(peer_id) * 0.37)
 	if SHOW_DEBUG_LABEL and skater != null:
 		_debug_label = Label3D.new()
 		_debug_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -222,7 +224,7 @@ func begin_tick(delta: float) -> bool:
 		# fists up, which the fight's tick does off an idle input.
 		_stale_pending = true
 		if is_fighting():
-			_hold_guard(delta)
+			_fight_tick(delta)
 		return false
 	# Deliberately NO is_input_blocked() gate here: that flag means the LOCAL
 	# human's menu is open, and bots run only on the host — gating on it froze
@@ -250,15 +252,35 @@ func _celebrate(delta: float) -> void:
 	skater.current_shot_state = _sm.get_state() as int
 
 
-# A fighting bot throws nothing and holds nothing yet: the cursor rests just
-# in front of him, where his punching fist keeps the guard.
-func _hold_guard(delta: float) -> void:
-	var facing: Vector2 = skater.get_facing()
+# A fighting bot works the three controls a human fights with (AIFightBrain),
+# off what it can see of the man it fights, read at last tick's start.
+func _fight_tick(delta: float) -> void:
+	var v: AIFightBrain.View = _fight_view
+	v.me = skater.global_position
+	v.facing = skater.get_facing()
+	v.my_grip = skater.fight_grip
+	v.my_arm_held = false
+	v.his_arm_thrown = false
+	var man: Skater = _fight_partner
+	if man != null and is_instance_valid(man):
+		v.head = FightPunchJudge.head_center(man)
+		v.his_top_fist = man.upper_body_to_global(man.get_top_hand_position())
+		v.his_bottom_fist = man.upper_body_to_global(man.get_blade_position())
+		v.my_arm_held = FightHoldRules.tied(skater.fight_punch_side, man.fight_grip)
+		var top: bool = man.fight_punch_side == FightHoldRules.Side.TOP
+		v.his_arm_thrown = FightHoldRules.thrown(
+				man.shoulder.position if top else man.bottom_shoulder.position,
+				man.get_top_hand_position() if top else man.get_blade_position(),
+				SkaterFightHands.arm_reach(man))
+	else:
+		v.head = v.me + Vector3(v.facing.x, 0.0, v.facing.y)
+	var d: AIFightBrain.Decision = _fight_brain.decide(v, delta)
 	_fight_input.delta = delta
 	_fight_input.host_timestamp = NetworkManager.estimated_host_time()
-	_fight_input.mouse_world_pos = Vector3(
-			skater.global_position.x + facing.x * _GUARD_AHEAD_M, 0.0,
-			skater.global_position.z + facing.y * _GUARD_AHEAD_M)
+	_fight_input.mouse_world_pos = d.aim
+	_fight_input.shoot_held = d.grab
+	_fight_input.slap_pressed = d.swap
+	_fight_input.brake = true
 	_process_input(_fight_input, delta)
 	skater.current_shot_state = _sm.get_state() as int
 

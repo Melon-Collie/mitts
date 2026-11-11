@@ -689,9 +689,17 @@ func _on_fight_challenge_lapsed(challenger_peer_id: int) -> void:
 
 
 func _on_fight_called(a_peer_id: int, b_peer_id: int) -> void:
-	if _toast_stack != null:
-		_toast_stack.push(tr(&"TOAST_FIGHT") % [_peer_name(a_peer_id), _peer_name(b_peer_id)],
-				MenuStyle.BROADCAST_CREAM)
+	if _toast_stack == null:
+		return
+	_toast_stack.push(tr(&"TOAST_FIGHT") % [_peer_name(a_peer_id), _peer_name(b_peer_id)],
+			MenuStyle.BROADCAST_CREAM)
+	var local: int = NetworkManager.local_peer_id()
+	if local == a_peer_id or local == b_peer_id:
+		var grab: String = ControllerGlyphs.prompt(PlayerPrefs.action_display(&"shoot"),
+				ControllerGlyphs.trigger_label(true))
+		var swap: String = ControllerGlyphs.prompt(PlayerPrefs.action_display(&"slapshot"),
+				ControllerGlyphs.trigger_label(false))
+		_toast_stack.push(tr(&"TOAST_FIGHT_CONTROLS") % [grab, swap], MenuStyle.BROADCAST_CREAM)
 
 
 func _peer_name(peer_id: int) -> String:
