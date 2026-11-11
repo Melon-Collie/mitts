@@ -282,6 +282,10 @@ func apply_facing(input: InputState, delta: float) -> void:
 			mouse_world.x - _skater.global_position.x,
 			mouse_world.z - _skater.global_position.z
 		)
+		# A fighter squares up to the man, not the cursor, which throws his fist.
+		var fight_dir: Vector2 = _controller.fight_facing_dir()
+		if fight_dir != Vector2.ZERO:
+			to_mouse = fight_dir
 		if to_mouse.length() > _controller.move_deadzone:
 			var cursor_dir: Vector2 = to_mouse.normalized()
 			if s == State.FOLLOW_THROUGH:

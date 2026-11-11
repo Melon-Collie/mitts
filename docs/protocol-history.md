@@ -491,3 +491,8 @@ here whenever you bump, in the same format.
 #      a fighter holding his stick, so mixed builds must be refused. Replay
 #      FORMAT_VERSION unchanged: the byte was there, and an older file's bits
 #      are zero.
+# v101: fighting, phase 3. The skater block grows 58 -> 59 bytes: a fight
+#      byte with what the holding hand holds (FightHoldRules.Grip, 2 bits) and
+#      which arm punches (FightHoldRules.Side, 1 bit). The fists ride the
+#      existing hand and blade markers. Replay FORMAT_VERSION 20 -> 21, since
+#      the recorded frames carry the block.

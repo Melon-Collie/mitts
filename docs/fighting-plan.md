@@ -1,7 +1,7 @@
 # Fighting — design plan
 
-Status: **approved; phases 1 (lifecycle) and 2 (gloves off) built**; phase 2
-awaits a local playtest. Phases 3–5 are not started. Where what is built
+Status: **approved; phases 1 (lifecycle), 2 (gloves off) and 3 (the fist and
+the grab) built**; phase 3 awaits a local playtest. Phases 4–5 are not started. Where what is built
 differs from the text below, the "as built" sections say how.
 
 Two skaters can fight. Both must agree to it, the referee blows the play
@@ -274,3 +274,62 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   `test_fight_guard.gd`.
 - **Not yet**: a challenger's squared-up pose (CHALLENGING), and a pair whose
   fight ends while another goes on picks its gear up at once.
+
+## Phase 3 as built
+
+- **The fists are `SkaterFightHands`**, a `SkaterController` collaborator. Each
+  arm's fist rides its own marker: the top hand's on `TopHand`, the bottom
+  hand's on the stick's `Blade` marker, which the stick on the ice frees. So
+  the wire carries both fists, and the bottom arm is drawn to the blade marker
+  (`SkaterIKCoordinator.update_bottom_hand`). This replaces phase 2's parked
+  blade and `apply_fight_guard`.
+- **The punching fist** (`FightFistRules`): the cursor's point on the ice,
+  held within the arm's reach (`SkaterFightHands.arm_reach`) and at least
+  `MIN_FORWARD_M` in front of the shoulder. Its height rises from the guard's
+  to the other man's chin as the arm straightens. It chases that target on an
+  arrive law capped at `MAX_SPEED_M_S` (9 m/s) and `MAX_ACCEL_M_S2`. With the
+  cursor close in, the fist sits up in a guard; driven out at him, it's a
+  punch.
+- **The holding hand** keeps the guard (`FightGuardRules.guard_hand`) until
+  the grab button (shoot, held) takes a grip (`FightHoldRules.choose`). The
+  grip is his sweater at the chest, or his punching arm, but **only while that
+  arm is thrown** (fist past `ARM_THROWN_SHARE` of its reach). Without that
+  rule, two guards an arm apart always grabbed the forearm in front of the
+  hand. So catching the punch is a timing skill, and from a guard you take
+  the sweater. A held arm reaches `TIED_REACH_SHARE` and moves at
+  `TIED_SPEED_SHARE` (`FightHoldRules.tied`). A grip is torn away past
+  `TEAR_SLACK_M`.
+- **The swap** (slap button) changes which arm punches
+  (`Skater.fight_punch_side`) and lets the grip go. After a swap, or a torn
+  grip, the grab waits for the button to come up before it takes hold again.
+  Swapping is also how a fighter whose punching arm is held frees it: the held
+  arm is no longer the one punching.
+- **The band** (`FightHoldRules.band_along`, `SkaterController._apply_fight_band`):
+  a velocity post-step along the line between the pair, after the movement
+  and the press. The pair never come closer than touching. While either holds
+  the other, they're never further apart than the holder's reach plus
+  `BAND_BODY_M`. The change is shared by mass. **Deviation from §3**: this is
+  a mass-shared band, not a `PressRules` force contest with edges. A held man
+  can be dragged by skating away, and the heavier man moves less, but bracing
+  on the edges doesn't resist yet. The tug's effect on balance is phase 4.
+- **Facing squares up to the man**, not the cursor, which now throws the fist
+  (`SkaterController.fight_facing_dir`).
+- **The partner read** follows the press's: the host reads the partner's live
+  body, and a client reads him in the snapshot sampled at the input's stamp
+  (`LocalController._read_fight_partner`). The partner is the nearest fighter
+  on the other team.
+- **The wire**: one new skater byte (grip type, 2 bits, and punching side, 1
+  bit; protocol v101, replay format 21). A client keeps its own grip and side,
+  as it predicts them, and a remote takes his off the wire.
+- **The fists are stepped on live ticks only.** A reconcile replay lays the
+  fists the live tick left (`lay_fight_hands`) rather than playing the arrive
+  law twice. So a client's own fists and the host's copy of them can differ by
+  the time the role took to reach the client. That matters in phase 4, where
+  the host judges punches from its own copy.
+- **Fighting bots** hold a guard: the AI runs the fight tick off an idle
+  input, its cursor just in front of the bot (`AIController._hold_guard`).
+  This also fixes a phase-2 bug where a bot fighter's top fist never came up,
+  because the fight tick never ran for bots.
+- **Seen with** `render-poses.sh --only=fight` (the guard, a jab in flight and
+  at reach, a hook, the sweater held, an arm caught, the hands swapped).
+  **Tested by** `test_fight_hands.gd` and `test_fight_fist_and_hold_rules.gd`.

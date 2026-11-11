@@ -40,6 +40,10 @@ var _faceoff_input: InputState = InputState.new()
 # The same, for a bot scorer's celebration (_celebrate).
 var _celebration_input: InputState = InputState.new()
 const _CELEBRATION_REST_AHEAD_M: float = 1.0
+var _fight_input: InputState = InputState.new()
+# How far ahead of a fighting bot his idle cursor rests: inside the arm's
+# reach, so the punching fist stays up in its guard.
+const _GUARD_AHEAD_M: float = 0.35
 
 # Bot draw swing. A center bot loads its blade on the dot through the countdown,
 # then in the final bot_draw_swing_time before the drop yanks the blade-aim target
@@ -214,8 +218,11 @@ func begin_tick(delta: float) -> bool:
 		return false
 	if _game_state_has_fight and _game_state.is_in_fight():
 		# The fight's stoppage: the puck is dead and nobody may touch the fighters,
-		# so bots, fighting or not, coast like the celebration's.
+		# so the bots coast like the celebration's — and one fighting holds his
+		# fists up, which the fight's tick does off an idle input.
 		_stale_pending = true
+		if is_fighting():
+			_hold_guard(delta)
 		return false
 	# Deliberately NO is_input_blocked() gate here: that flag means the LOCAL
 	# human's menu is open, and bots run only on the host — gating on it froze
@@ -240,6 +247,19 @@ func _celebrate(delta: float) -> void:
 			skater.global_position.x + facing.x * _CELEBRATION_REST_AHEAD_M, 0.0,
 			skater.global_position.z + facing.y * _CELEBRATION_REST_AHEAD_M)
 	_process_input(_celebration_input, delta)
+	skater.current_shot_state = _sm.get_state() as int
+
+
+# A fighting bot throws nothing and holds nothing yet: the cursor rests just
+# in front of him, where his punching fist keeps the guard.
+func _hold_guard(delta: float) -> void:
+	var facing: Vector2 = skater.get_facing()
+	_fight_input.delta = delta
+	_fight_input.host_timestamp = NetworkManager.estimated_host_time()
+	_fight_input.mouse_world_pos = Vector3(
+			skater.global_position.x + facing.x * _GUARD_AHEAD_M, 0.0,
+			skater.global_position.z + facing.y * _GUARD_AHEAD_M)
+	_process_input(_fight_input, delta)
 	skater.current_shot_state = _sm.get_state() as int
 
 

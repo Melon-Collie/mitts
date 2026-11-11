@@ -193,16 +193,6 @@ func apply_celebration_pose(elapsed: float, left: float) -> void:
 					_controller.celebration_fist_reach_low, pump), ramp)
 
 
-# The fight's guard (FightGuardRules): the gloves and stick are on the ice, so
-# the top fist comes up in front of the chin and the blade marker is parked
-# under it. Pure in the frame and the shoulder, so a replay lays the same one;
-# SkaterPoseBridge eases the hands up into it and back down out of it.
-func apply_fight_guard() -> void:
-	var hand: Vector3 = FightGuardRules.guard_hand(_ik.arm_shoulder())
-	_skater.set_top_hand_position(hand)
-	_skater.set_blade_position(FightGuardRules.parked_blade(hand))
-
-
 # 0..1 ease with no step in its rate or its acceleration at either end.
 static func _smootherstep(x: float) -> float:
 	var t: float = clampf(x, 0.0, 1.0)

@@ -82,11 +82,13 @@ arguments and clears its own outputs at the top.
 
 ## SkaterController
 
-`SkaterController` delegates to seven `RefCounted` collaborators —
+`SkaterController` delegates to eight `RefCounted` collaborators —
 `SkaterAimingBehavior`, `SkaterIKCoordinator`, `SkaterPoseCoordinator`,
 `SkaterShotPoseCoordinator`, `SkaterSkatingCoordinator`, `SkaterStickCheck`,
-and `SkaterSettleGate` (the settle lock a hard catch leaves; its deadline
-contract is in `Scripts/networking/CLAUDE.md`). `GameManager` calls
+`SkaterSettleGate` (the settle lock a hard catch leaves; its deadline
+contract is in `Scripts/networking/CLAUDE.md`), and `SkaterFightHands` (a
+fighter's two fists and what the holding hand holds, stepped on live ticks
+only and laid back on a replay, like the pose bridge). `GameManager` calls
 methods on the controller and never pokes collaborator internals.
 
 **Attributes, one line each.** Skating splits three ways: top speed rides the
@@ -307,13 +309,15 @@ physics rate.
 ### A change of who poses the stick is eased, not cut
 
 The tracked IK, the slapper's wind-up, the follow-throughs, the shot block and
-a fighter's guard (`FightGuardRules`, the stick down and the fists up) each
-place the hand and blade from their own geometry, and none starts where the
+a fighter's fists (`SkaterFightHands`, the stick down and the top and bottom
+fists on the hand and blade markers) each place the hand and blade from their
+own geometry, and none starts where the
 last left off — a change of owner moved the stick up to 1.8 m in a tick.
 `SkaterPoseBridge` runs after the tick's last write: on a change of owner it
 holds the stick last drawn and eases the new owner's pose in from it (0.15 s;
-0.05 s into a follow-through, which is the shot's own whip; `FightGuardRules.EASE_S`
-into or out of the guard). It advances on live
+0.05 s into a follow-through, which is the shot's own whip; none into a fight,
+whose fists ease themselves off the stick, and `FightGuardRules.EASE_S` out of
+one). It advances on live
 ticks only — reconcile treats the live tick as the truth, and a bridge advanced
 through a replay would play its ease twice — and its effect rides the hand and
 blade the wire already carries. The same rule shapes the rest of the

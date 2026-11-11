@@ -1057,6 +1057,12 @@ var _aiming: SkaterAimingBehavior = SkaterAimingBehavior.new()
 var _pose: SkaterPoseCoordinator = SkaterPoseCoordinator.new()
 var _shot_pose: SkaterShotPoseCoordinator = SkaterShotPoseCoordinator.new()
 var _pose_bridge := SkaterPoseBridge.new()
+var _fight := SkaterFightHands.new()
+# The man being fought, read at the tick's start the way the press reads its
+# partner (_read_fight_partner): his node, and his body's place and velocity.
+var _fight_partner: Skater = null
+var _fight_partner_pos := Vector3.ZERO
+var _fight_partner_vel := Vector3.ZERO
 var _skating: SkaterSkatingCoordinator = SkaterSkatingCoordinator.new()
 var _ik: SkaterIKCoordinator = SkaterIKCoordinator.new()
 var _stick_check: SkaterStickCheck = SkaterStickCheck.new()
@@ -1257,6 +1263,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 		skater.contact_suspended_provider = game_state.is_movement_locked
 	_ik.setup(skater, self, _skating)
 	_shot_pose.setup(skater, _sm, _aiming, _ik, self)
+	_fight.setup(skater, _ik)
 	var _cb := SkaterStateMachine.Callbacks.new()
 	_cb.apply_blade_from_mouse = _ik.apply_blade_from_mouse
 	_cb.apply_wrister_aim_blade = _apply_wrister_aim_blade
@@ -1768,6 +1775,68 @@ func is_fighting() -> bool:
 	return skater.fight_role == FightRules.Role.FIGHTING
 
 
+# The fists as the last live tick left them (SkaterFightHands), for a reconcile
+# to lay back on after its replay.
+func lay_fight_hands() -> void:
+	_fight.lay_markers()
+
+
+# Where a fighter squares up to: the man he is fighting, read at the tick's
+# start (XZ, unit), or ZERO for none.
+func fight_facing_dir() -> Vector2:
+	if not is_fighting() or _fight_partner == null:
+		return Vector2.ZERO
+	var d := Vector2(_fight_partner_pos.x - skater.global_position.x,
+			_fight_partner_pos.z - skater.global_position.z)
+	return d.normalized() if d.length_squared() > 0.0001 else Vector2.ZERO
+
+
+# The man being fought, nearest of the other team's fighters, at the instant the
+# press reads its partner (_find_press_partner): the host from his live body, a
+# client from the snapshot sampled at the input's stamp (LocalController).
+func _read_fight_partner(_host_ts: float) -> void:
+	_fight_partner = null
+	if not is_fighting():
+		return
+	var team: int = skater.get_team_id()
+	var best_d2: float = INF
+	for other: Skater in skater.contact_others():
+		if other == null or other == skater or other.fight_role != FightRules.Role.FIGHTING \
+				or other.get_team_id() == team:
+			continue
+		var d2: float = other.global_position.distance_squared_to(skater.global_position)
+		if d2 < best_d2:
+			best_d2 = d2
+			_fight_partner = other
+	if _fight_partner != null:
+		_fight_partner_pos = _fight_partner.global_position
+		_fight_partner_vel = _fight_partner.velocity
+
+
+# The pair is held in a band (FightHoldRules.band_along): never through each
+# other, and while either holds the other no further apart than the holder's
+# arm. Each body lays its own share, after the movement, as the press does.
+func _apply_fight_band() -> void:
+	if _fight_partner == null or not is_fighting():
+		return
+	var d: Vector3 = _fight_partner_pos - skater.global_position
+	d.y = 0.0
+	var dist: float = d.length()
+	if dist < 0.0001:
+		return
+	var n: Vector3 = d / dist
+	var max_d: float = INF
+	if skater.fight_grip != FightHoldRules.Grip.NONE:
+		max_d = FightHoldRules.band_max(SkaterFightHands.arm_reach(skater))
+	if _fight_partner.fight_grip != FightHoldRules.Grip.NONE:
+		max_d = minf(max_d, FightHoldRules.band_max(SkaterFightHands.arm_reach(_fight_partner)))
+	var u: float = skater.velocity.dot(n)
+	var u_new: float = FightHoldRules.band_along(dist, u, _fight_partner_vel.dot(n),
+			skater.collision_radius() + _fight_partner.collision_radius(), max_d,
+			skater.weight, _fight_partner.weight)
+	skater.velocity += n * (u_new - u)
+
+
 # Hands the fight button's press to the host's FightTracker. Live inputs only: a
 # replay re-reads presses the tracker already took. A locked phase never gets
 # here, so a press in the faceoff's set-up is dropped.
@@ -1798,6 +1867,7 @@ func _process_input(input: InputState, delta: float) -> void:
 	skater.elevation_level = _elevation_level
 	_current_aim_world = input.mouse_world_pos
 	note_fight_press(input)
+	_read_fight_partner(input.host_timestamp)
 	skater.stick_jarred = BodyCheckRules.is_rocked(stagger_timer, _body_check_config())
 	_settle.read(input, has_puck and _sm.get_state() == State.SKATING_WITH_PUCK)
 
@@ -1830,6 +1900,7 @@ func _process_input(input: InputState, delta: float) -> void:
 	skater.in_stance = stance_active
 	skater.stagger_left = stagger_timer
 	_apply_press(input, delta, tick_start_velocity)
+	_apply_fight_band()
 	# The frame this tick's IK and twist solve in tilts with the fall: every tick
 	# lays its own, replay included (Scripts/networking/CLAUDE.md).
 	_apply_fall_tilt(knockdown_getup_left())
@@ -2258,6 +2329,8 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.stick_tied = skater.stick_tied
 	state.pin_role = skater.pin_role
 	state.fight_role = skater.fight_role
+	state.fight_grip = skater.fight_grip
+	state.fight_punch_side = skater.fight_punch_side
 	state.pin_strength = skater.pin_strength
 	state.diving = skater.is_diving
 	state.slapshot_pinned = skater.is_slapshot_pinning()
@@ -2352,6 +2425,8 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.pin_role = state.pin_role
 	skater.pin_strength = state.pin_strength
 	skater.fight_role = state.fight_role
+	skater.fight_grip = state.fight_grip
+	skater.fight_punch_side = state.fight_punch_side
 	# Intent feeds the gait's input-driven reads below (glide / dig-in /
 	# crossovers / brake stop) — stamp it like the live controllers do, so
 	# playback strides match live play instead of reading zero (file viewer)
@@ -2844,10 +2919,15 @@ func _reset_to_skating_state() -> void:
 func _apply_state(input: InputState, delta: float) -> void:
 	if is_fighting():
 		# The stick is on the ice: no shot, pass or block is begun, and none in
-		# hand when the gloves came off goes on.
+		# hand when the gloves came off goes on. The fists are live state, so a
+		# replay lays the ones the live tick left.
 		_reset_to_skating_state()
-		_shot_pose.apply_fight_guard()
+		if is_replaying:
+			_fight.lay_markers()
+		else:
+			_fight.step(input, delta, _fight_partner, _fight_partner_pos)
 		return
+	_fight.leave()
 	if _settle.settling:
 		if skater.is_slapshot_pinning():
 			# A called-off slapshot: the blade comes down onto the held puck.

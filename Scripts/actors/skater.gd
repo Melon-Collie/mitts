@@ -725,6 +725,11 @@ var fight_press_pending: bool = false
 # In a fight or calling one (FightRules.Role; FightTracker, host-only writer;
 # replicated). FIGHTING draws the stick and gloves off and the hands up.
 var fight_role: int = FightRules.Role.NONE
+# A fighter's hands (FightHoldRules.Grip / Side; replicated): what the holding
+# hand holds and which arm punches. Written by his own controller where he is
+# simulated; a remote takes them off the wire.
+var fight_grip: int = FightHoldRules.Grip.NONE
+var fight_punch_side: int = FightHoldRules.Side.TOP
 # The stick-check button as this skater's last input held it, stamped by the
 # controller. Read only by the host's StickTieTracker (either player holding keeps
 # a tie); never replicated.

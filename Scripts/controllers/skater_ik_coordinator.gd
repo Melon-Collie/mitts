@@ -68,7 +68,7 @@ var _bh_release_vel: float = 0.0
 # where, and by how much.
 var _held_free_hand := Vector3.ZERO
 var _held_free_weight: float = 0.0
-# How far the off hand is into the fight's guard (FightGuardRules), 0 to 1,
+# How far the off hand is off the stick and onto its fist in a fight, 0 to 1,
 # eased at render rate off the replicated fight role.
 var _guard: float = 0.0
 var _pump_hold: float = 1.0
@@ -974,14 +974,16 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	if _held_free_weight > 0.0:
 		bh = bh.lerp(_held_free_hand, _held_free_weight)
 	if guard > 0.0:
-		bh = bh.lerp(FightGuardRules.guard_hand(shoulder), guard)
+		# The bottom arm's fist rides the stick's blade marker, freed by the
+		# stick on the ice (SkaterFightHands).
+		bh = bh.lerp(blade_local, guard)
 	# Off the stick, the hand hangs where the arm can put it.
 	var span: Vector3 = bh - shoulder
 	if span.length() > reach:
 		bh = shoulder + span.normalized() * reach
 	_skater.set_bottom_hand_position(bh)
 
-# The off hand's share of the fight's guard, eased toward the replicated role
+# The off hand's share of its fight fist, eased toward the replicated role
 # over FightGuardRules.EASE_S; landed at once with no clock.
 func _ease_guard(delta: float) -> float:
 	var target: float = 1.0 if _skater.fight_role == FightRules.Role.FIGHTING else 0.0
