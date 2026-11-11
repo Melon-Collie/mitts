@@ -208,7 +208,6 @@ func _audit_folds() -> void:
 	var mesh: ArrayMesh = SkaterConnectedMesh.shared_mesh(_skater.gear_style.jersey_tuck)
 	var a: Array = mesh.surface_get_arrays(0)
 	var verts: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-	var normals: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
 	var bones: PackedInt32Array = a[Mesh.ARRAY_BONES]
 	var weights: PackedFloat32Array = a[Mesh.ARRAY_WEIGHTS]
 	var zones: PackedVector2Array = a[Mesh.ARRAY_TEX_UV2]
@@ -236,7 +235,9 @@ func _audit_folds() -> void:
 		var n: Vector3 = (p[2] - p[0]).cross(p[1] - p[0])
 		if n.length_squared() < 1e-12:
 			continue
-		var expected: Vector3 = (turn * normals[t]).normalized()
+		# Its own bind facing: the normal it carries may be its quad's.
+		var bind: Vector3 = (verts[t + 2] - verts[t]).cross(verts[t + 1] - verts[t])
+		var expected: Vector3 = (turn * bind).normalized()
 		if n.normalized().dot(expected) < 0.0:
 			var zone: int = int(round(zones[t].x))
 			flipped[zone] = int(flipped.get(zone, 0)) + 1
