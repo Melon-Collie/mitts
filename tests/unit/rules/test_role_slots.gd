@@ -6,7 +6,7 @@ extends GutTest
 # (time_to_arrive at each peer's Speed cap); stationary peers with
 # default caps reduce to distance ordering, which most tests use.
 
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 const TEAM_ID: int = 0
 
 

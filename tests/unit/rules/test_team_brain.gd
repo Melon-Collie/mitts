@@ -7,7 +7,7 @@ extends GutTest
 #   - After a forced tick, the natural cadence resumes (next tick
 #     fires TICK_PERIOD seconds later, not earlier).
 
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 const TEAM_ID: int = 0
 
 

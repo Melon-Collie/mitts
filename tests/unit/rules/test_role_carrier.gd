@@ -11,7 +11,7 @@ extends GutTest
 
 const Snapshot := preload("res://tests/snapshot.gd")
 const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/carrier.txt"
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 const OPP_NET_Z: float = -OUR_NET_Z
 const TEAM_ID: int = 0
 
@@ -743,7 +743,7 @@ func test_in_the_zone_the_keep_discounts_the_shot() -> void:
 func _fresh_entry_keeper_ctx() -> RoleContext:
 	var ctx := _make_ctx(Vector3(0, 0, -9))
 	var g := GoalieNetworkState.new()
-	g.position_z = -24.65
+	g.position_z = -GameRules.GOAL_LINE_Z - 2.0
 	_place_keeper(ctx, g)
 	return ctx
 
@@ -1473,7 +1473,7 @@ func _fresh_entry_finisher_ctx() -> RoleContext:
 			[13, 1, Vector3(0.5, 0, -11.3)]])
 	var g := GoalieNetworkState.new()
 	g.position_x = 0.45
-	g.position_z = -26.65 + 1.3
+	g.position_z = -GameRules.GOAL_LINE_Z + 1.3
 	_place_keeper(ctx, g)
 	var brain := TeamBrain.new(TEAM_ID, ctx.team_id_by_peer)
 	brain.slot_assignments[2] = AIRoleSlots.Slot.FINISHER
@@ -1757,12 +1757,12 @@ func test_post_seal_x_sign_decodes_the_wire_convention() -> void:
 	# sign(−goal_z). Both nets, both stance families.
 	var g := GoalieNetworkState.new()
 	g.state_enum = GoalieStateMachine.State.VH_LEFT as int
-	assert_eq(g.post_seal_x_sign(-26.65), 1.0, "net at −z: LEFT seals the +x post")
-	assert_eq(g.post_seal_x_sign(26.65), -1.0, "net at +z: LEFT seals the −x post")
+	assert_eq(g.post_seal_x_sign(-GameRules.GOAL_LINE_Z), 1.0, "net at −z: LEFT seals the +x post")
+	assert_eq(g.post_seal_x_sign(GameRules.GOAL_LINE_Z), -1.0, "net at +z: LEFT seals the −x post")
 	g.state_enum = GoalieStateMachine.State.RVH_RIGHT as int
-	assert_eq(g.post_seal_x_sign(-26.65), -1.0, "net at −z: RIGHT seals the −x post")
+	assert_eq(g.post_seal_x_sign(-GameRules.GOAL_LINE_Z), -1.0, "net at −z: RIGHT seals the −x post")
 	g.state_enum = GoalieStateMachine.State.READY as int
-	assert_eq(g.post_seal_x_sign(-26.65), 0.0, "no post stance, no seal")
+	assert_eq(g.post_seal_x_sign(-GameRules.GOAL_LINE_Z), 0.0, "no post stance, no seal")
 
 
 func test_sharp_angle_shot_along_the_ice_into_an_rvh_seal_is_never_worth_firing() -> void:

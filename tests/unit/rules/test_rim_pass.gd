@@ -3,7 +3,7 @@ extends GutTest
 # AIRimPass — the rim's path half: which launches are rims, where each goes,
 # and who reaches it first. Team 0 defends +Z.
 
-const OUR_GOAL_Z: float = 26.65
+const OUR_GOAL_Z: float = GameRules.GOAL_LINE_Z
 const PACE: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 var NONE: Array[Vector3] = []
 var NO_CAPS: Array[AISkaterCaps] = []

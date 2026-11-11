@@ -4,7 +4,7 @@ extends GutTest
 # and sticky-possession (loose puck retains last team).
 
 # Team 0 defends +Z (own_net_z = +26.65), attacks -Z.
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 const TEAM_ID: int = 0
 
 

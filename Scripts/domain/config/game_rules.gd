@@ -70,8 +70,10 @@ const OT_ENABLED: bool             = true
 const OT_DURATION: float           = 4.0 * 60.0   # 240 s per OT period
 
 # ── Rink Geometry ─────────────────────────────────────────────────────────────
-const GOAL_LINE_Z: float = 26.65  # rink_length / 2 - distance_from_end (30 - 3.35)
-const BLUE_LINE_Z: float = 7.29  # centre of the line; its far edge is 64 ft from the goal line's back edge
+const GOAL_LINE_Z: float = 27.1272  # rink_length / 2 - distance_from_end (11 ft)
+# Centre of the line: the two lines' neutral-zone edges are 50 ft apart, each
+# 64 ft from its goal line's back edge.
+const BLUE_LINE_Z: float = 7.77
 # Net frame. HockeyGoal draws the same frame from its own constants; every pair
 # is pinned by test_net_geometry_mirrors.
 # The rulebook's 72" x 48" opening is clear of the pipes, so the centerlines sit
@@ -112,7 +114,7 @@ const OFFSIDE_LINE_SLACK: float = 0.35
 # Rink dimensions. HockeyRink's export defaults mirror these — pinned by
 # test_rink_geometry_mirrors.
 const RINK_HALF_WIDTH: float     = 13.0   # half of 26 m
-const RINK_HALF_LENGTH: float    = 30.0   # half of 60 m
+const RINK_HALF_LENGTH: float    = 30.48  # half of 200 ft
 const CORNER_RADIUS: float       = 8.53  # 28 ft
 const WALL_THICKNESS: float      = 0.3
 # The kickplate's inward lip sticks 1 cm inside the boards' inner face, so the
@@ -131,10 +133,10 @@ const BOARD_TOP_HEIGHT: float = 1.07
 # collision at the kickplate lip), so physics, blade clamp, AI trajectory
 # reflection, and the OOB check all share one boundary.
 const INNER_HALF_WIDTH: float    = RINK_HALF_WIDTH  - WALL_THICKNESS * 0.5 - KICKPLATE_INWARD_LIP  # 12.84
-const INNER_HALF_LENGTH: float   = RINK_HALF_LENGTH - WALL_THICKNESS * 0.5 - KICKPLATE_INWARD_LIP  # 29.84
+const INNER_HALF_LENGTH: float   = RINK_HALF_LENGTH - WALL_THICKNESS * 0.5 - KICKPLATE_INWARD_LIP  # 30.32
 const INNER_CORNER_RADIUS: float = CORNER_RADIUS    - WALL_THICKNESS * 0.5 - KICKPLATE_INWARD_LIP  # 8.37
 const CORNER_CENTER_X: float     = INNER_HALF_WIDTH  - INNER_CORNER_RADIUS  # 4.47
-const CORNER_CENTER_Z: float     = INNER_HALF_LENGTH - INNER_CORNER_RADIUS  # 21.47
+const CORNER_CENTER_Z: float     = INNER_HALF_LENGTH - INNER_CORNER_RADIUS  # 21.95
 
 # Returns world_xz projected onto the inner rink boundary (rounded rectangle).
 # If the point is already inside, returns it unchanged.
@@ -431,7 +433,7 @@ const CREASE_DWELL_DURATION: float = 0.6  # seconds in the crease before ghostin
 # line; X is 22' (6.7056m) from the centre line. The icing race re-uses the Z
 # value as the dot players sprint toward in hybrid icing.
 const END_ZONE_FACEOFF_DOT_X: float = 6.7056
-const ICING_FACEOFF_DOT_Z: float = GOAL_LINE_Z - 6.096   # 20.554
+const ICING_FACEOFF_DOT_Z: float = GOAL_LINE_Z - 6.096   # 21.031
 # Neutral-zone faceoff dots — NHL spec. Painted 5' (1.524m) from each blue
 # line's neutral-zone edge. Used as the faceoff spot when an offside is
 # called and as candidates when the puck goes out of play in the neutral zone.

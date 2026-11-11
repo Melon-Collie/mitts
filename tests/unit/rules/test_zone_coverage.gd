@@ -3,7 +3,7 @@ extends GutTest
 # AIZoneCoverage — the 5v5 D-zone geometry (plan §3/§5). Team 0 defends +Z
 # (own_goal_z = +26.65); depths are metres off that goal line into the zone.
 
-const NET_Z: float = 26.65
+const NET_Z: float = GameRules.GOAL_LINE_Z
 
 
 func _pt(x: float, depth: float) -> Vector3:

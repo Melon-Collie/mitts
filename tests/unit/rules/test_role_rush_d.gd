@@ -95,9 +95,9 @@ func test_gap_tightens_as_the_carrier_approaches_our_blue_line() -> void:
 	# The doctrine ladder: ~3 sticks at their blue line, 2 at the red line, 1 at
 	# ours. The old model was a function of PACE, so a carrier at full flight
 	# held a ~3-stick gap all the way to our net — that is the sag.
-	var far_carrier := Vector3(0.0, 0.0, -7.29)   # their blue line
+	var far_carrier := Vector3(0.0, 0.0, -GameRules.BLUE_LINE_Z)   # their blue line
 	var mid_carrier := Vector3(0.0, 0.0, 0.0)     # red line
-	var near_carrier := Vector3(0.0, 0.0, 7.29)   # our blue line
+	var near_carrier := Vector3(0.0, 0.0, GameRules.BLUE_LINE_Z)   # our blue line
 	var vel := Vector3(0.0, 0.0, 7.0)
 	var gaps: Array[float] = []
 	for c: Vector3 in [far_carrier, mid_carrier, near_carrier]:

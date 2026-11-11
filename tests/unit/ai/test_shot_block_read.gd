@@ -15,7 +15,7 @@ func test_the_block_cylinder_is_the_skaters() -> void:
 
 func test_in_the_lane_is_on_the_line_between_release_and_net() -> void:
 	var release := Vector3(0.0, 0.0, 10.0)
-	var goal := Vector3(0.0, 0.0, 26.65)
+	var goal := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
 	assert_true(AIShotBlockRead.in_lane(Vector3(0.5, 0.0, 18.0), release, goal))
 	assert_false(AIShotBlockRead.in_lane(Vector3(2.0, 0.0, 18.0), release, goal), "wide")
 	assert_false(AIShotBlockRead.in_lane(Vector3(0.0, 0.0, 8.0), release, goal), "behind him")

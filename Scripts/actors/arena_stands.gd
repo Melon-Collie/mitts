@@ -17,7 +17,7 @@ extends Node3D
 # child order — and with it the draw order the opaque passes settle into and the
 # order a test reads the bowl back in.
 
-@export var rink_length: float = 60.0:
+@export var rink_length: float = 60.96:
 	set(v):
 		rink_length = v
 		_request_rebuild()

@@ -7,7 +7,7 @@ extends GutTest
 #
 # Team 0 defends +Z (net at +26.65).
 
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 
 
 # ── The pure predicate ───────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ extends GutTest
 # covered in test_ai_action_scoring; we don't re-test them here.
 
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65   # Team 0 defends +Z
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z   # Team 0 defends +Z
 const OPP_NET_Z: float = -OUR_NET_Z
 
 

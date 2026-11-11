@@ -2,7 +2,7 @@
 class_name HockeyRink
 extends Node3D
 
-@export var rink_length: float = 60.0:
+@export var rink_length: float = 60.96:
 	set(v):
 		rink_length = v
 		_rebuild()

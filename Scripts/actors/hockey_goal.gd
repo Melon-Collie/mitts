@@ -75,11 +75,11 @@ func goal_line_z() -> float:
 	set(v):
 		facing = v
 		_rebuild()
-@export var distance_from_end: float = 3.35:
+@export var distance_from_end: float = 3.3528:
 	set(v):
 		distance_from_end = v
 		_rebuild()
-@export var rink_length: float = 60.0:
+@export var rink_length: float = 60.96:
 	set(v):
 		rink_length = v
 		_rebuild()

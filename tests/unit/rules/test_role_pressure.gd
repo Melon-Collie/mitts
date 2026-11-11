@@ -332,8 +332,8 @@ func test_the_ladder_tightens_as_the_carrier_gets_deeper() -> void:
 	# ~3 sticks at their blue line, 1 stick at ours. The old fixed stand-off could
 	# not express this at all, which is why the bot held an O-zone gap at its own
 	# net.
-	var far: Dictionary = _rush_ctx_at(Vector3(0.0, 0.0, -7.29), 7.0)
-	var near: Dictionary = _rush_ctx_at(Vector3(0.0, 0.0, 7.29), 7.0)
+	var far: Dictionary = _rush_ctx_at(Vector3(0.0, 0.0, -GameRules.BLUE_LINE_Z), 7.0)
+	var near: Dictionary = _rush_ctx_at(Vector3(0.0, 0.0, GameRules.BLUE_LINE_Z), 7.0)
 	assert_gt(_stand_depth(AIRolePressure.decide(far["ctx"]), far["carrier"]),
 			_stand_depth(AIRolePressure.decide(near["ctx"]), near["carrier"]),
 			"the gap must tighten as the carrier eats the ice")
