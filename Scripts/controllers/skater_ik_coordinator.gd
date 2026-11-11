@@ -60,6 +60,9 @@ var _seat_held: bool = false
 # target solve: the blade rests in at two hands, and the trunk stays out of the
 # reach lean, as it falls.
 var reach_purpose: float = 1.0
+# How much of the wider swing behind the cursor of the blade pass under way
+# asks for (SkaterController.reach_behind_for); none outside one.
+var _reach_behind: float = 0.0
 var _purpose_rim: float = -1.0
 # The bottom hand's eased release off the shaft, 0 held to 1 at rest, and its rate.
 var _bh_release: float = 0.0
@@ -128,7 +131,7 @@ enum PassS {
 	CHECK_LEAD, HAS_PUCK_NODE, PURPOSE_RIM, BLADE_LENGTH, CARRY_BLADE_OFFSET,
 	CARRY_TRANSIT_LIFT, WALL_SQUEEZE_THRESHOLD, WALL_PIN_INWARD_BIAS, BOTTOM_REACH,
 	GLOVE_SPACING, HAS_NET_ANCHOR, REACH_PURPOSE, CHEST_FOLD, REACH_FLOOR, HAND_FORWARD,
-	HOLD_SHARE, LAY_FOLD, READY_FOLD, GRIP, COUNT,
+	HOLD_SHARE, LAY_FOLD, READY_FOLD, GRIP, REACH_BEHIND, COUNT,
 }
 enum PassV {
 	TARGET, SHOULDER, BOTTOM_SHOULDER, BLADE_MARKER, BLADE_FORWARD, PREV_CONTACT,
@@ -199,6 +202,9 @@ func _sync_pass_config() -> void:
 		"rom_backhand_reach_max": c.rom_backhand_reach_max,
 		"rom_forehand_angle_max": deg_to_rad(c.rom_forehand_angle_max_deg),
 		"rom_backhand_angle_max": deg_to_rad(c.rom_backhand_angle_max_deg),
+		"rom_backhand_angle_empty": deg_to_rad(c.rom_backhand_angle_empty_deg),
+		"reach_intent_near_m": c.reach_intent_near_m,
+		"reach_intent_far_m": c.reach_intent_far_m,
 		"net_blade_half_thickness": c.net_blade_half_thickness,
 		"blade_height": c.blade_height, "blade_lift_height": c.blade_lift_height,
 		"hit_commit_blade_lift_m": c.hit_commit_blade_lift_m,
@@ -298,7 +304,9 @@ func blade_dangle_velocity() -> Vector3:
 # consequence, clamped to an asymmetric ROM. See domain/rules/top_hand_ik.gd.
 func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = false,
 		hold_seat: bool = false) -> void:
+	_reach_behind = _controller.reach_behind_for(input)
 	apply_blade_toward(input.mouse_world_pos, delta, hold_blade, hold_seat)
+	_reach_behind = 0.0
 
 
 # The tracked blade reaching for `target_world` as it would for a cursor there —
@@ -382,7 +390,7 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 		# the hand reaches (Scripts/controllers/CLAUDE.md, "The top hand is solved
 		# where the arm is").
 		var target_reach: float = _board_reach_limit(target_blade_xz, shoulder_world)
-		reach_purpose = _reach_purpose(skater_pos)
+		reach_purpose = _reach_purpose(skater_pos, mouse_world)
 		if _controller.has_puck:
 			# A carrier's blade lies along the shaft from the pocket his hand
 			# holds it in, not along the shoulder's aim the first target was
@@ -666,9 +674,7 @@ func _native_blade_toward(target_world: Vector3, delta: float, hold_blade: bool,
 	s[PassS.GRIP_CHOKE] = _skater.grip_choke()
 	s[PassS.CHECK_LEAD] = _skater.get_check_lead()
 	s[PassS.HAS_PUCK_NODE] = 1.0 if puck != null else 0.0
-	if puck != null and not has_puck and _purpose_rim < 0.0:
-		_purpose_rim = full_blade_reach()
-	s[PassS.PURPOSE_RIM] = _purpose_rim
+	s[PassS.PURPOSE_RIM] = full_blade_reach()
 	s[PassS.BLADE_LENGTH] = _skater.blade_length
 	s[PassS.CARRY_BLADE_OFFSET] = _skater.carry_blade_offset
 	s[PassS.CARRY_TRANSIT_LIFT] = _skater.carry_transit_lift
@@ -686,6 +692,7 @@ func _native_blade_toward(target_world: Vector3, delta: float, hold_blade: bool,
 	s[PassS.LAY_FOLD] = _lay_fold()
 	s[PassS.READY_FOLD] = ready_fold()
 	s[PassS.GRIP] = hold.grip()
+	s[PassS.REACH_BEHIND] = _reach_behind
 	if _native_hold_cfg != _hold_config():
 		_sync_hold_config()
 	var v: PackedVector3Array = _pass_vectors
@@ -887,30 +894,35 @@ func _rest_reach(tilt: Basis, shoulder: Vector3, target_xz: Vector2,
 	return lerpf(held, arm, reach_purpose)
 
 
-func _reach_purpose(skater_pos: Vector3) -> float:
+func _reach_purpose(skater_pos: Vector3, cursor_world: Vector3) -> float:
 	var puck: Puck = _controller.puck
 	if puck == null or _controller.has_puck:
 		return 1.0
-	if _purpose_rim < 0.0:
-		_purpose_rim = full_blade_reach()
+	var body := Vector2(skater_pos.x, skater_pos.z)
 	var at: Vector3 = puck.global_position
 	var vel: Vector3 = puck.linear_velocity
-	return ReachPurposeRules.purpose(Vector2(skater_pos.x, skater_pos.z), _purpose_rim,
+	return maxf(ReachPurposeRules.purpose(body, full_blade_reach(),
 			Vector2(at.x, at.z), Vector2(vel.x, vel.z), _controller.reach_purpose_lookahead_s,
-			_controller.reach_purpose_near_m, _controller.reach_purpose_far_m)
+			_controller.reach_purpose_near_m, _controller.reach_purpose_far_m),
+			ReachPurposeRules.intent(body, full_blade_reach(),
+			Vector2(cursor_world.x, cursor_world.z), _controller.reach_intent_near_m,
+			_controller.reach_intent_far_m))
 
 
 # This build's farthest blade off its body origin (TopHandIK.full_reach): the
 # host's claim clamp, the bots' max_blade_reach and the rim the purpose measures
 # a puck against.
 func full_blade_reach() -> float:
+	if _purpose_rim >= 0.0:
+		return _purpose_rim
 	var c: SkaterController = _controller
-	return TopHandIK.full_reach(_skater.shoulder.position,
+	_purpose_rim = TopHandIK.full_reach(_skater.shoulder.position,
 			deg_to_rad(maxf(c.velocity_lean_forward_max_deg, c.carry_fold_deg)
 					+ c.upper_body_lean_forward_max_deg),
 			GameRules.FACEOFF_SPAWN_HEIGHT + _skater.upper_body.position.y,
 			_skater.shoulder.position.y - c.hand_rest_y, c.rom_forward_reach_max, c.stick_length,
 			c.blade_height, _skater.blade_length * 0.5, GameRules.FACEOFF_SPAWN_HEIGHT)
+	return _purpose_rim
 
 
 # How far down the shaft the bottom hand must hold to clear the top glove: the
@@ -1627,7 +1639,6 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 		_cached_top_cfg.hand_rest_y = _controller.hand_rest_y
 		_cached_top_cfg.hand_y_max = _controller.hand_y_max
 		_cached_top_cfg.rom_forehand_angle_max = deg_to_rad(_controller.rom_forehand_angle_max_deg)
-		_cached_top_cfg.rom_backhand_angle_max = deg_to_rad(_controller.rom_backhand_angle_max_deg)
 		_cached_top_cfg.rom_forward_reach_max = _controller.rom_forward_reach_max
 		_cached_top_cfg.rom_forehand_reach_max = _controller.rom_forehand_reach_max
 		_cached_top_cfg.rom_backhand_reach_max = _controller.rom_backhand_reach_max
@@ -1636,9 +1647,14 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 			_native_top.hand_rest_y = _cached_top_cfg.hand_rest_y
 			_native_top.hand_y_max = _cached_top_cfg.hand_y_max
 			_native_top.rom_forehand_angle_max = _cached_top_cfg.rom_forehand_angle_max
-			_native_top.rom_backhand_angle_max = _cached_top_cfg.rom_backhand_angle_max
 			_native_top.rom_forehand_reach_max = _cached_top_cfg.rom_forehand_reach_max
 			_native_top.rom_backhand_reach_max = _cached_top_cfg.rom_backhand_reach_max
+	# A cursor placed near him swings an empty stick further back (_reach_behind).
+	_cached_top_cfg.rom_backhand_angle_max = deg_to_rad(lerpf(
+			_controller.rom_backhand_angle_max_deg, _controller.rom_backhand_angle_empty_deg,
+			_reach_behind))
+	if _native_top != null:
+		_native_top.rom_backhand_angle_max = _cached_top_cfg.rom_backhand_angle_max
 	# All three per-tick fields are written on EVERY call, never left to carry
 	# over: max_blade_reach is a property of the aim line being solved, so a stale
 	# one would silently constrain an unrelated later solve this tick, and the

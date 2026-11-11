@@ -98,9 +98,11 @@ static func _inside_section(p: Vector3, size: Vector2) -> bool:
 # The forearm's sleeve on the arm whose upper arm is `upper`, skinned as drawn,
 # skeleton space.
 func _skinned_sleeve(body: Skeleton3D, upper: int) -> PackedVector3Array:
-	var shoulder: Vector3 = body.get_bone_pose(upper) * Vector3(0.0, 0.0, 0.5)
+	# By the shoulder's marker: the bone's own side swaps under a hard twist.
+	var marker: Node3D = _skater.shoulder if upper == UpperBone.TOP_UPPER_ARM \
+			else _skater.bottom_shoulder
 	var zone: int = SkaterConnectedMesh.zone(SkaterConnectedMesh.sleeve_surface(
-			signf(shoulder.x)))
+			signf(marker.position.x)))
 	var skin: Skin = SkaterConnectedMesh.shared_skin()
 	var xforms: Array[Transform3D] = []
 	for i: int in skin.get_bind_count():

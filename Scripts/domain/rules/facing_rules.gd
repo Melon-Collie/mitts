@@ -47,6 +47,17 @@ class Config:
 	# round to the edge.
 	var forehand_yield_rad: float = INF
 
+	func assign(from: Config) -> void:
+		engage_min_speed = from.engage_min_speed
+		engage_full_speed = from.engage_full_speed
+		hold_min_speed = from.hold_min_speed
+		hold_full_speed = from.hold_full_speed
+		forehand_edge_rad = from.forehand_edge_rad
+		backhand_edge_rad = from.backhand_edge_rad
+		stance_square_max_speed = from.stance_square_max_speed
+		pivot_commit_rad = from.pivot_commit_rad
+		forehand_yield_rad = from.forehand_yield_rad
+
 
 # Caller-owned result, filled each call.
 class Result:

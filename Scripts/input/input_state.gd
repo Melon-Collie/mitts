@@ -100,6 +100,13 @@ var bot_slapper_aim_dir: Vector3 = Vector3.ZERO
 # a stop (AIBotMechanics.braked_stick): a one-timer man stepping his circle onto
 # the feed's line while wound up. Set by ONE_TIMER_PRESSED and nothing else.
 var bot_shuffle: bool = false
+# BOT-ONLY, runtime, NOT serialized. A bot faces and turns by a cursor placed
+# near its body (SkaterAgentStateMachine._face_ring_point), which a human's
+# near cursor never means: his is a blade placed, and behind him on his top
+# hand's side it reaches back without turning him
+# (SkaterController.reach_behind_for). A bot's keeps the turn: AIController
+# sets this on every decision it applies.
+var bot_cursor_turns: bool = false
 
 
 # The one-tick edges. An input applied on more ticks than its own (the host's

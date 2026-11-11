@@ -73,6 +73,8 @@ public:
 		S_LAY_FOLD,
 		S_READY_FOLD,
 		S_GRIP,
+		// SkaterIKCoordinator._reach_behind.
+		S_REACH_BEHIND,
 		S_COUNT,
 	};
 	// run()'s vector inputs, by index.
@@ -130,6 +132,10 @@ private:
 	double reach_purpose_lookahead_s = 0.0;
 	double reach_purpose_near_m = 0.0;
 	double reach_purpose_far_m = 0.0;
+	double reach_intent_near_m = 0.0;
+	double reach_intent_far_m = 0.0;
+	double rom_backhand_angle_carry = 0.0;
+	double rom_backhand_angle_empty = 0.0;
 	double hit_commit_hand_local_x = 0.0;
 	double hit_commit_hand_local_y = 0.0;
 	double hit_commit_hand_local_z = 0.0;
@@ -242,7 +248,7 @@ private:
 
 	void place_arm_shoulder();
 	double board_reach_limit(const godot::Vector2 &target_xz, const godot::Vector3 &shoulder_world) const;
-	double purpose(const godot::Vector3 &skater_pos) const;
+	double purpose(const godot::Vector3 &skater_pos, const godot::Vector3 &cursor_world) const;
 	godot::Vector2 carry_backhand_stop(const godot::Vector2 &target_xz) const;
 	void apply_cfg(const Cfg &cfg) const;
 	double two_hand_reach(const godot::Vector3 &shoulder, const godot::Vector2 &target_xz, const Cfg &cfg);

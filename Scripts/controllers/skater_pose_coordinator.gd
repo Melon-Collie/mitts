@@ -287,7 +287,7 @@ func apply_facing(input: InputState, delta: float) -> void:
 			if s == State.FOLLOW_THROUGH:
 				cursor_dir = _finish_facing_dir(cursor_dir)
 			var lefty: bool = _skater.is_left_handed
-			var rules: FacingRules.Config = _controller.facing_rules
+			var rules: FacingRules.Config = _empty_stick_rules(input)
 			# A carrier's hips pivot where its blade stops on the backhand, and
 			# yield to the puck before it stops on the forehand.
 			FacingRules.solve(_facing_rule, facing, cursor_dir,
@@ -366,6 +366,21 @@ func _turn_toward(turned: Vector2, delta: float) -> void:
 
 # Where facing heads this tick (FacingRules); a caller-owned scratch.
 var _facing_rule: FacingRules.Result = FacingRules.Result.new()
+var _reaching_rules: FacingRules.Config = FacingRules.Config.new()
+
+
+# An empty stick's facing rules under this input: the controller's, their
+# backhand edge out by as much of the wider swing behind as its cursor asks
+# for (SkaterController.reach_behind_for), so the hips pivot where that blade
+# stops. A caller-owned scratch when it differs.
+func _empty_stick_rules(input: InputState) -> FacingRules.Config:
+	var behind: float = _controller.reach_behind_for(input)
+	if behind <= 0.0:
+		return _controller.facing_rules
+	_reaching_rules.assign(_controller.facing_rules)
+	_reaching_rules.backhand_edge_rad += behind * deg_to_rad(
+			_controller.rom_backhand_angle_empty_deg - _controller.rom_backhand_angle_max_deg)
+	return _reaching_rules
 
 
 # Sole writer of the lower body's yaw. Decays the facing-driven turn lag and

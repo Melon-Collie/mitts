@@ -278,6 +278,9 @@ bool NativeBladePass::configure(const Dictionary &t) {
 	reach_purpose_lookahead_s = read(t, "reach_purpose_lookahead_s", ok);
 	reach_purpose_near_m = read(t, "reach_purpose_near_m", ok);
 	reach_purpose_far_m = read(t, "reach_purpose_far_m", ok);
+	reach_intent_near_m = read(t, "reach_intent_near_m", ok);
+	reach_intent_far_m = read(t, "reach_intent_far_m", ok);
+	rom_backhand_angle_empty = read(t, "rom_backhand_angle_empty", ok);
 	hit_commit_hand_local_x = read(t, "hit_commit_hand_local_x", ok);
 	hit_commit_hand_local_y = read(t, "hit_commit_hand_local_y", ok);
 	hit_commit_hand_local_z = read(t, "hit_commit_hand_local_z", ok);
@@ -295,6 +298,7 @@ bool NativeBladePass::configure(const Dictionary &t) {
 	const double bh_reach = read(t, "rom_backhand_reach_max", ok);
 	if (ok && top.is_valid()) {
 		top->set_rom_forehand_angle_max(fh_angle);
+		rom_backhand_angle_carry = bh_angle;
 		top->set_rom_backhand_angle_max(bh_angle);
 		top->set_rom_forward_reach_max(rom_forward_reach_max);
 		top->set_rom_forehand_reach_max(fh_reach);
@@ -363,6 +367,10 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 	const Vector3 rot = v[V_UB_ROTATION];
 	tilt = Basis::from_euler(Vector3(rot.x, 0.0, rot.z));
 	top->set_hand_forward(s[S_HAND_FORWARD]);
+	// SkaterIKCoordinator._ik_config: a cursor placed near him swings an empty
+	// stick further back.
+	top->set_rom_backhand_angle_max(lerpd(rom_backhand_angle_carry, rom_backhand_angle_empty,
+			s[S_REACH_BEHIND]));
 	trunk_shoulder = shoulder_in_frame(v[V_SHOULDER]);
 	place_arm_shoulder();
 	bottom_trunk_shoulder = shoulder_in_frame(v[V_BOTTOM_SHOULDER]);
@@ -400,7 +408,7 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 		Vector2 target_xz = blade_target_along(cursor_xz,
 				cursor_xz - Vector2(v[V_SHOULDER].x, v[V_SHOULDER].z));
 		const double target_reach = board_reach_limit(target_xz, shoulder_world);
-		reach_purpose = purpose(skater_pos);
+		reach_purpose = purpose(skater_pos, mouse_world);
 		Vector3 r_hand;
 		Vector3 r_blade;
 		if (has_puck) {
@@ -832,7 +840,7 @@ double NativeBladePass::board_reach_limit(const Vector2 &target_xz, const Vector
 }
 
 // SkaterIKCoordinator._reach_purpose through ReachPurposeRules.purpose.
-double NativeBladePass::purpose(const Vector3 &skater_pos) const {
+double NativeBladePass::purpose(const Vector3 &skater_pos, const Vector3 &cursor_world) const {
 	if (s[S_HAS_PUCK_NODE] == 0.0 || has_puck) {
 		return 1.0;
 	}
@@ -846,7 +854,11 @@ double NativeBladePass::purpose(const Vector3 &skater_pos) const {
 		t = CLAMP((double)(body - puck_xz).dot(path) / len_sq, 0.0, 1.0);
 	}
 	const double gap = (double)(puck_xz + path * (real_t)t - body).length() - s[S_PURPOSE_RIM];
-	return 1.0 - smoothstepd(reach_purpose_near_m, reach_purpose_far_m, gap);
+	// ReachPurposeRules.intent.
+	const double cursor_gap = (double)(Vector2(cursor_world.x, cursor_world.z) - body).length()
+			- s[S_PURPOSE_RIM];
+	return MAX(1.0 - smoothstepd(reach_purpose_near_m, reach_purpose_far_m, gap),
+			1.0 - smoothstepd(reach_intent_near_m, reach_intent_far_m, cursor_gap));
 }
 
 // SkaterIKCoordinator._carry_backhand_stop.

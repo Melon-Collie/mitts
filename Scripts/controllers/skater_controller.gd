@@ -298,6 +298,12 @@ var top_hand_forward_full_m: float = 0.9
 # limited across the body, full extension out to the backhand side.
 var rom_forehand_angle_max_deg: float = 90.0
 var rom_backhand_angle_max_deg: float = 90.0
+# The backhand limit of a stick without the puck reaching for a cursor placed
+# near him (reach_behind_for), which is the top hand's alone: with nothing
+# across the body to hold, the arm carries it back past its own shoulder. The
+# forehand side gains nothing, the arm crosses the chest there, so the range
+# is wider on the top hand's side.
+var rom_backhand_angle_empty_deg: float = 110.0
 # Reach caps are DERIVED in apply_attributes (see _ROM_FOREHAND_OF_ARM).
 var rom_forward_reach_max: float = 0.51
 var rom_forehand_reach_max: float = 0.39
@@ -427,6 +433,14 @@ var upper_body_lean_return_speed: float = 8.0
 var reach_purpose_lookahead_s: float = 0.35
 var reach_purpose_near_m: float = 0.3
 var reach_purpose_far_m: float = 1.8
+# And the cursor's own say (ReachPurposeRules.intent), by how far past that rim
+# it lies: within `near` he is placing his blade or asking for the reach, from
+# `far` out he is looking somewhere, and the stick rests whatever its bearing.
+# The rim is the build's farthest reach, folded and leaning (~2.4 m off his
+# centre against ~1.8 m standing), so these read as ~0.6 m and ~2.1 m past the
+# blade of a man standing.
+var reach_intent_near_m: float = 0.0
+var reach_intent_far_m: float = 1.5
 
 # ── Velocity Lean / Skating Posture Tuning ────────────────────────────────────
 # Trunk lean INTO travel, eased toward a target from velocity on the simulating
@@ -2311,6 +2325,22 @@ func get_shot_state() -> int:
 # Whether the stick has the puck to reach for this tick (ReachPurposeRules).
 func reach_purpose() -> float:
 	return _ik.reach_purpose
+
+
+# How much of the wider swing behind on the top hand's side this input's cursor
+# asks for, 0..1 (rom_backhand_angle_empty_deg; ReachPurposeRules.intent). A
+# cursor is read two ways by its distance: far off he is looking there, and
+# behind him it turns him round; near, he is placing his blade, and there it
+# reaches back without turning him. So the blade's range and the edge his hips
+# pivot at both go out by this, and a stick with the puck or a bot's cursor,
+# which turns it from near (InputState.bot_cursor_turns), takes none.
+func reach_behind_for(input: InputState) -> float:
+	if has_puck or input.bot_cursor_turns:
+		return 0.0
+	var at: Vector3 = skater.global_position
+	return ReachPurposeRules.intent(Vector2(at.x, at.z), _ik.full_blade_reach(),
+			Vector2(input.mouse_world_pos.x, input.mouse_world_pos.z),
+			reach_intent_near_m, reach_intent_far_m)
 
 
 # How far the chest folds over the stick (SkaterIKCoordinator.chest_fold).

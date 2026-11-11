@@ -86,6 +86,8 @@ var lean_return: float
 var purpose_lookahead: float
 var purpose_near: float
 var purpose_far: float
+var intent_near: float
+var intent_far: float
 var rim: float
 
 var _cfg := TopHandIK.Config.new()
@@ -145,6 +147,8 @@ static func capture(skater: Skater, ctrl: SkaterController) -> RefCounted:
 	rig.purpose_lookahead = ctrl.reach_purpose_lookahead_s
 	rig.purpose_near = ctrl.reach_purpose_near_m
 	rig.purpose_far = ctrl.reach_purpose_far_m
+	rig.intent_near = ctrl.reach_intent_near_m
+	rig.intent_far = ctrl.reach_intent_far_m
 	rig.rim = ik.full_blade_reach()
 	return rig
 
@@ -167,9 +171,11 @@ func step(arm: Arm, pos: Vector3, facing: Vector2, cursor: Vector3, carrying: bo
 	arm.posture = lerpf(arm.posture, SkaterPoseCoordinator.compute_velocity_lean_target(
 			vel, body, posture_full_speed, posture_forward_max_deg, posture_back_max_deg),
 			posture_speed * dt)
-	var purpose: float = 1.0 if carrying else ReachPurposeRules.purpose(
+	var purpose: float = 1.0 if carrying else maxf(ReachPurposeRules.purpose(
 			Vector2(pos.x, pos.z), rim, Vector2(puck_pos.x, puck_pos.z),
-			Vector2(puck_vel.x, puck_vel.z), purpose_lookahead, purpose_near, purpose_far)
+			Vector2(puck_vel.x, puck_vel.z), purpose_lookahead, purpose_near, purpose_far),
+			ReachPurposeRules.intent(Vector2(pos.x, pos.z), rim, Vector2(cursor.x, cursor.z),
+			intent_near, intent_far))
 	var ub: Transform3D = ub_transform(arm, pos, body)
 	var target: Vector3
 	if held:

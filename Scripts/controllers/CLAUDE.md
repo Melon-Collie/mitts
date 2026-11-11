@@ -452,7 +452,7 @@ into `_sync_pass_config` too, and the hold's config and bands go over each
 time the config is rebuilt (`_sync_hold_config`). What the pass reads live from
 the controller and the skater mid-tick comes in as a scalar the GDScript
 computes (`chest_fold`, `_reach_floor`, `_hand_forward`, `_hold_share`,
-`_lay_fold`, `ready_fold`, the grip), so the two paths share one definition; the one the GDScript re-reads after a release — the chest's
+`_lay_fold`, `ready_fold`, the grip, `_reach_behind`), so the two paths share one definition; the one the GDScript re-reads after a release — the chest's
 fold, on `has_puck` — the port drops when it resumes without the puck.
 
 ### Pose the hand, not the blade
@@ -542,9 +542,34 @@ hand the drawn arm could not reach or barely extended toward:
 The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
 
-**A carrier keeps both hands on the stick.** An empty stick reaches one-handed
-to the rim when there is a puck to reach for (`ReachPurposeRules`) and rests in
-both hands, where a carry would, when there is not; with the puck the blade stops where the bottom hand could no longer
+**An empty stick reaches when it is meant to, and rests when it is not**
+(`ReachPurposeRules`, `SkaterIKCoordinator.reach_purpose`). Two things mean it:
+the puck is coming within reach (`purpose`), or the cursor is placed where the
+stick can go (`intent`: within the rim of the build's reach, fading out by
+`reach_intent_far_m` past it). A cursor far off is where the player is
+looking, which it is most of the time, so there the blade rests where both
+hands would hold it and the trunk keeps out of the reach lean, whatever the
+bearing; nobody skates the length of the ice lunging at a far cursor. Inside
+that, the whole range is the player's: the blade goes to a cursor placed
+anywhere in it with no puck about.
+
+**The same reading widens the swing behind on the top hand's side, and moves
+the pivot with it** (`SkaterController.reach_behind_for`,
+`rom_backhand_angle_empty_deg`). The top hand alone carries the stick back
+past its own shoulder, 110° against the 90° a carrier has; the forehand side
+gains nothing, the arm crosses the chest there, so the range is handed. The
+hips pivot between the two skating lines where the blade stops
+(`FacingRules.reach_edge`), so that edge goes out with it
+(`SkaterPoseCoordinator._empty_stick_rules`): a cursor placed near, behind on
+that side, reaches back without turning him, and a far one there still turns
+him round at the old edge. Never widen the blade's range without the edge, or
+the edge without the cursor's distance: at 177° flat, a backward skater who
+flicks the cursor ahead on that side never turns. A bot turns by a cursor
+placed near its body, so its input opts out (`InputState.bot_cursor_turns`,
+set by `AIController`) and its turning is unchanged.
+`test_top_hand_reaches_its_rim.gd`, `test_facing_follows_travel.gd`.
+
+**A carrier keeps both hands on the stick.** With the puck the blade stops where the bottom hand could no longer
 hold the shaft (`TopHandIK.two_hand_reach`, from the bottom shoulder read the
 way `arm_shoulder` reads the top one) and, on the backhand, at the angle past
 which it lets go (`bh_release_angle_deg`, `_carry_backhand_stop`) — the puck

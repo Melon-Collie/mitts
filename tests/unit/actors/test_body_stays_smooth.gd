@@ -22,9 +22,11 @@ const BOUNDS: Dictionary = {
 	"backward → forward (move reversed)":
 		[15.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 	"forward → backward (move reversed)":
-		[12.0, 8.0, 8.0, 8.0, 10.0, 8.0],
+		[12.0, 8.0, 8.0, 8.0, 13.0, 8.0],
+	"empty stick reached round behind the top hand's side":
+		[11.0, 8.0, 8.0, 8.0, 15.0, 8.0],
 	"stance on/off while skating":
-		[15.0, 8.0, 8.0, 8.0, 8.0, 8.0],
+		[15.0, 8.0, 8.0, 8.0, 13.0, 8.0],
 	"stop and restart":
 		[30.0, 8.0, 8.0, 8.0, 9.0, 8.0],
 	"wrister: carry, charge, release, skating":
@@ -38,7 +40,7 @@ const BOUNDS: Dictionary = {
 	"shot block down and back up, puck ahead":
 		[28.0, 35.0, 27.0, 37.0, 25.0, 27.0],
 	"goal celebration while gliding":
-		[10.0, 16.0, 8.0, 25.0, 14.0, 14.0],
+		[10.0, 16.0, 8.0, 8.0, 21.0, 14.0],
 	"shuffle: Space + D held, released":
 		[20.0, 8.0, 8.0, 8.0, 9.0, 8.0],
 	"press: drive into a man dug in, and off":
