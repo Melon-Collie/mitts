@@ -18,7 +18,7 @@ const BOUNDS: Dictionary = {
 	"pickup / drop, cursor far ahead":
 		[8.0, 30.0, 8.0, 47.0, 35.0, 43.0],
 	"forward → backward pivot (cursor flipped)":
-		[30.0, 31.0, 25.0, 82.0, 65.0, 87.0],
+		[23.0, 8.0, 8.0, 71.0, 50.0, 66.0],
 	"backward → forward (move reversed)":
 		[15.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 	"forward → backward (move reversed)":

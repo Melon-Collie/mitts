@@ -295,8 +295,6 @@ func apply_facing(input: InputState, delta: float) -> void:
 					_controller.stance_active, lefty,
 					_controller.carry_facing_rules if _controller.has_puck else rules)
 			var facing_target: Vector2 = _facing_rule.target
-			var behind: bool = absf(facing.angle_to(cursor_dir)) \
-					>= FacingRules.reach_edge(rules, facing, cursor_dir, lefty)
 			var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed
 			# Re-square hard through the follow-through: the coil left facing stale
 			# at the wind-up cursor, and a lazy drag can't square it to the shot
@@ -317,15 +315,8 @@ func apply_facing(input: InputState, delta: float) -> void:
 								Vector2(_skater.global_position.x, _skater.global_position.z),
 								_controller.board_shield_probe),
 						deg_to_rad(_controller.board_shield_max_deg))
-			var turned: Vector2
-			if behind or absf(facing.angle_to(facing_target)) \
-					>= FacingRules.reach_edge(rules, facing, facing_target, lefty):
-				# Turning round to a cursor or a target behind, standing or moving: a
-				# chord lerp toward a near-opposed vector barely moves, so turn by angle.
-				turned = facing.rotated(FacingRules.turn_round_angle(
-						facing, facing_target, cursor_dir) * minf(drag * delta, 1.0))
-			else:
-				turned = facing.lerp(facing_target, drag * delta).normalized()
+			var turned: Vector2 = FacingRules.turned_toward(rules, facing, facing_target, cursor_dir,
+					lefty, drag * delta)
 			if _controller.has_puck:
 				turned = FacingRules.yield_on_forehand(turned, cursor_dir, lefty,
 						_controller.carry_facing_rules)
