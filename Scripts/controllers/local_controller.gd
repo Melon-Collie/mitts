@@ -636,7 +636,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# its impulse-seeded metadata (timer extension only grows the window total).
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = server_state.knockdown_timer
-	_set_down_flags(server_state.diving)
+	_set_down_flags(server_state.diving, server_state.stumbling)
 	_sync_knockdown_meta(prev_kd)
 	# Snap facing for replay accuracy — facing drives the direction of travel,
 	# so the replay must start from the server's facing to reproduce the trajectory.

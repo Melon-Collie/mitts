@@ -730,6 +730,9 @@ var pin_strength: float = 0.0
 # knockdown, but until the get-up (`dive_laid_out`) its stick knocks the puck
 # away and its body blocks low along `dive_layout` (world XZ, unit).
 var is_diving: bool = false
+# Down in a stumble (BodyCheckRules: past his balance, short of flat), set and
+# replicated as is_diving is: down like a knockdown, on a knee instead of lying.
+var is_stumbling: bool = false
 var dive_laid_out: bool = false
 var dive_layout: Vector2 = Vector2(0.0, -1.0)
 # Deliberate-deflect intent: holding the deflect button (stick_lift, Q) WITHOUT

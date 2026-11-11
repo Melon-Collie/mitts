@@ -179,7 +179,10 @@ var balance_vulnerable_mult: float = 0.73  # ... mid-shot: a wind-up, a load, a 
 var balance_checker_front_share: float = 0.4  # a committed checker takes his own hit at this
 var balance_checker_control_speed: float = 4.0  # ... arriving up to this fast (m/s)
 var balance_checker_wild_speed: float = 8.0     # ... and whole from this
-var knockdown_ref_overshoot: float = 1.7   # past his balance by this, the longest knockdown
+var knockdown_flat_overshoot: float = 1.5   # past his balance by this he is knocked flat; short of it, a stumble
+var stumble_min_seconds: float = 0.55      # down on a knee, just past his balance
+var stumble_max_seconds: float = 0.85      # ... at knockdown_flat_overshoot
+var knockdown_ref_overshoot: float = 2.2   # past his balance by this, the longest knockdown
 var knockdown_lie_min_seconds: float = 0.15  # on the ice before the get-up, just past his balance
 var knockdown_lie_max_seconds: float = 0.7   # ... at knockdown_ref_overshoot: ~1.9 s down in all
 var knockdown_friction: float = 2.0  # m/s² a downed body sheds sliding on its gear: μ ≈ 0.2, padded nylon on ice
@@ -200,17 +203,20 @@ var knockdown_friction: float = 2.0  # m/s² a downed body sheds sliding on its 
 var knockdown_pose_drop_m: float = 0.3     # buckle sink — the tilt does the lying-down
 var knockdown_fold_deg: float = 20.0       # airborne torso curl; resolves to lie-flat on landing
 var knockdown_getup_seconds: float = 0.8
-# Back on his skates he finds his legs: a stagger this long, leaning forward.
+# Back on his skates, off the ice or off a stumble's knee, he finds his legs: a
+# stagger this long, leaning forward. Its wobble reads its phase off the timer
+# (GaitStaggerLayer) and starts at rest from this value.
 var knockdown_getup_stagger_seconds: float = 0.5
 # Fall model tunables (KnockdownFallRules.Config — units and physical
 # justifications live on the fields there).
 var knockdown_fall_buckle_seconds: float = 0.1
 var knockdown_fall_accel: float = 6.0
 var knockdown_fall_settle_deg: float = 84.0
-var knockdown_fall_restitution: float = 0.3
+var knockdown_fall_restitution: float = 0.1
 var knockdown_fall_rest_omega: float = 0.7
 var knockdown_fall_com_height_m: float = 0.95
 var knockdown_fall_max_entry_omega: float = 4.2
+var knockdown_fall_pivot_height_m: float = 0.75
 # Head-ward extent of the tipped body (height + a little stick/arm slack): both
 # the obstacle probe distance and the reach the deflection budgets against
 # (KnockdownFallRules.wall_safe_fall_dir), so a fall near the glass or the goal
@@ -1667,14 +1673,21 @@ func _absorb_hit(impulse: Vector3, stagger_strength: float) -> void:
 	var knockdown_add: float = 0.0
 	var overshoot: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z),
 			skater.get_facing(), _balance_posture(), _build_height_mult, _balance_config())
-	if overshoot > 1.0:
+	var flat: bool = BodyCheckRules.is_flat(overshoot, cfg)
+	if flat:
 		knockdown_add = KnockdownFallRules.first_impact_time(
 				Vector2(impulse.x, impulse.z).length(), _fall_config()) \
 				+ BodyCheckRules.lie_seconds_from_overshoot(overshoot, cfg) \
 				+ knockdown_getup_seconds
+	elif overshoot > 1.0:
+		knockdown_add = BodyCheckRules.stumble_seconds_from_overshoot(overshoot, cfg)
 	var stagger_add: float = BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg,
 			knockdown_add > 0.0)
-	_set_knockdown_from_impulse(knockdown_add, impulse)
+	# A stumble is shorter than the hit's own stagger: the reel is spent by the
+	# time he starts up off the knee, into the stagger he finds his legs in.
+	if knockdown_add > 0.0 and not flat:
+		stagger_add = minf(stagger_add, knockdown_add - KnockdownFallRules.STUMBLE_RISE_S)
+	_set_knockdown_from_impulse(knockdown_add, impulse, not flat)
 	stagger_timer = maxf(stagger_timer, stagger_add)
 
 
@@ -1689,13 +1702,18 @@ func _balance_posture() -> BodyBalanceRules.Posture:
 # from the transfer impulse's horizontal shove speed (the recoil direction was
 # captured from the same vector by the caller); a follow-up hit that extends an
 # in-flight window grows the total by the timer delta, so the elapsed clock
-# (_knockdown_total − knockdown_timer) never restarts mid-fall.
-func _set_knockdown_from_impulse(add_seconds: float, impulse: Vector3) -> void:
+# (_knockdown_total − knockdown_timer) never restarts mid-fall. `stumble` is
+# what a fresh entry is: a stumbling man hit flat starts the fall from the
+# knee, on a clock of its own, and a man lying flat is never stood up onto one.
+func _set_knockdown_from_impulse(add_seconds: float, impulse: Vector3,
+		stumble: bool = false) -> void:
 	var prev: float = knockdown_timer
 	knockdown_timer = maxf(knockdown_timer, add_seconds)
 	if knockdown_timer <= prev:
 		return
-	if prev <= 0.0:
+	var floored: bool = skater.is_stumbling and not stumble
+	if prev <= 0.0 or floored:
+		skater.is_stumbling = stumble
 		_knockdown_total = knockdown_timer
 		_knockdown_entry_speed = Vector2(impulse.x, impulse.z).length()
 	else:
@@ -1997,8 +2015,9 @@ func _apply_fall_tilt(kd_t: float) -> bool:
 	if _diving():
 		carry = -d * DiveRules.com_carry_m(tilt)
 	else:
-		var roll: Vector2 = KnockdownFallRules.bulk_roll(tilt, _fall_config())
-		carry = d * roll.x + Vector3.UP * roll.y
+		var fall_cfg: KnockdownFallRules.Config = _fall_config()
+		var roll: Vector2 = KnockdownFallRules.bulk_roll(tilt, fall_cfg)
+		carry = d * (roll.x - KnockdownFallRules.feet_out(tilt, fall_cfg)) + Vector3.UP * roll.y
 	skater.set_knockdown_fall(Vector3.UP.cross(d), tilt, carry)
 	return true
 
@@ -2014,6 +2033,8 @@ func knockdown_elapsed() -> float:
 # The get-up tail left (0..1): 1 while fully down, 0 upright — the clock every
 # get-up envelope in KnockdownFallRules takes.
 func knockdown_getup_left() -> float:
+	if _stumbling():
+		return KnockdownFallRules.stumble_getup_left(knockdown_timer)
 	return clampf(knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
 
 
@@ -2030,6 +2051,9 @@ func knockdown_pose_weight() -> float:
 	var kd_t: float = knockdown_getup_left()
 	if kd_t <= 0.0:
 		return 0.0
+	if _stumbling():
+		return KnockdownFallRules.stand_hold(kd_t) \
+				* KnockdownFallRules.stumble_entry(knockdown_elapsed())
 	return KnockdownFallRules.stand_hold(kd_t) \
 			* KnockdownFallRules.entry_ramp(knockdown_elapsed(), _fall_config())
 
@@ -2129,9 +2153,10 @@ func _start_dive(input: InputState) -> void:
 # The down flags off the timer. A diver's stick and low block play only while he
 # lies laid out; getting up he is down like anyone (DiveRules: the timer holds at
 # the get-up's start while block is held).
-func _set_down_flags(diving: bool) -> void:
+func _set_down_flags(diving: bool, stumbling: bool) -> void:
 	skater.is_knocked_down = knockdown_timer > 0.0
 	skater.is_diving = diving
+	skater.is_stumbling = stumbling and skater.is_knocked_down
 	skater.dive_laid_out = diving and knockdown_timer >= knockdown_getup_seconds
 
 
@@ -2176,8 +2201,7 @@ func _apply_knockdown_brace() -> void:
 # world, because the kneel has taken the frame down with the body.
 func _apply_getup_hold() -> void:
 	var kd_t: float = knockdown_getup_left()
-	var hold: float = (1.0 - KnockdownFallRules.lie_share(kd_t)) \
-			* KnockdownFallRules.stand_hold(kd_t)
+	var hold: float = (1.0 - KnockdownFallRules.lie_share(kd_t)) * knockdown_pose_weight()
 	if hold <= 0.001:
 		return
 	var side: float = -1.0 if skater.is_left_handed else 1.0
@@ -2262,6 +2286,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.pin_role = skater.pin_role
 	state.pin_strength = skater.pin_strength
 	state.diving = skater.is_diving
+	state.stumbling = skater.is_stumbling
 	state.slapshot_pinned = skater.is_slapshot_pinning()
 	# Host-only shaft segment for stick-lift claim resolution (paired with
 	# blade_contact_world). World-space grip point — the wire top_hand_position
@@ -2384,7 +2409,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.set_balance_tilt(state.balance_tilt, state.balance_tilt_vel)
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = state.knockdown_timer
-	_set_down_flags(state.diving)
+	_set_down_flags(state.diving, state.stumbling)
 	# Fall metadata off the recorded velocity (stamped above), so a replayed
 	# knockdown falls the way the live one did.
 	_sync_knockdown_meta(prev_kd)
@@ -2650,7 +2675,7 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	skater.set_balance_tilt(Vector2.ZERO)
 	var was_down: bool = knockdown_timer > 0.0
 	knockdown_timer = 0.0
-	_set_down_flags(false)
+	_set_down_flags(false, false)
 	_knockdown_total = 0.0
 	_knockdown_entry_speed = 0.0
 	# The render pass only clears the tilt while it runs, and it's
@@ -3641,7 +3666,7 @@ func _apply_movement(input: InputState, delta: float) -> void:
 		down_floor = knockdown_getup_seconds
 	var was_down: bool = knockdown_timer > 0.0
 	knockdown_timer = maxf(knockdown_timer - delta, down_floor)
-	_set_down_flags(skater.is_diving and knockdown_timer > 0.0)
+	_set_down_flags(skater.is_diving and knockdown_timer > 0.0, skater.is_stumbling)
 	if was_down and not skater.is_knocked_down:
 		stagger_timer = maxf(stagger_timer, knockdown_getup_stagger_seconds)
 		stagger_recoil_dir = Vector2(0.0, -1.0)
@@ -3955,6 +3980,9 @@ func _body_check_config() -> BodyCheckRules.Config:
 		_cached_body_check_cfg.rocked_min_seconds = rocked_min_seconds
 		_cached_body_check_cfg.rocked_max_seconds = rocked_max_seconds
 		_cached_body_check_cfg.rocked_grip_penalty = rocked_grip_penalty
+		_cached_body_check_cfg.flat_overshoot = knockdown_flat_overshoot
+		_cached_body_check_cfg.stumble_min_seconds = stumble_min_seconds
+		_cached_body_check_cfg.stumble_max_seconds = stumble_max_seconds
 		_cached_body_check_cfg.knockdown_ref_overshoot = knockdown_ref_overshoot
 		_cached_body_check_cfg.min_lie_seconds = knockdown_lie_min_seconds
 		_cached_body_check_cfg.max_lie_seconds = knockdown_lie_max_seconds
@@ -4001,6 +4029,7 @@ func _fall_config() -> KnockdownFallRules.Config:
 		_cached_fall_cfg.rest_omega = knockdown_fall_rest_omega
 		_cached_fall_cfg.com_height = knockdown_fall_com_height_m
 		_cached_fall_cfg.max_entry_omega = knockdown_fall_max_entry_omega
+		_cached_fall_cfg.pivot_height = knockdown_fall_pivot_height_m
 		_cached_fall_cfg.sprawl_in_seconds = knockdown_sprawl_in_seconds
 		_cached_fall_cfg.sprawl_splay = deg_to_rad(knockdown_sprawl_splay_deg)
 		_cached_dive_fall_cfg = DiveRules.fall_config(_cached_fall_cfg)
@@ -4018,6 +4047,11 @@ func _fall_entry_speed() -> float:
 # The down pose is read by the gait before a skater is attached.
 func _diving() -> bool:
 	return skater != null and skater.is_diving
+
+
+func _stumbling() -> bool:
+	return skater != null and skater.is_stumbling
+
 
 
 # Scratch for the sprawl solve — refilled every rendered frame while a skater

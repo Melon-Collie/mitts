@@ -88,12 +88,17 @@ func absorb(stagger: float, knockdown: float, impulse: Vector3, strength: float,
 	var knockdown_add: float = 0.0
 	var over: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z), facing,
 			BodyBalanceRules.posture_of(stance, off_balance), height_mult, balance_cfg)
-	if over > 1.0:
+	var flat: bool = BodyCheckRules.is_flat(over, check_cfg)
+	if flat:
 		knockdown_add = KnockdownFallRules.first_impact_time(
 				Vector2(impulse.x, impulse.z).length(), fall_cfg) \
 				+ BodyCheckRules.lie_seconds_from_overshoot(over, check_cfg) + getup_s
+	elif over > 1.0:
+		knockdown_add = BodyCheckRules.stumble_seconds_from_overshoot(over, check_cfg)
 	var stagger_add: float = BodyCheckRules.stagger_seconds_from_impulse(stagger_from,
 			check_cfg, knockdown_add > 0.0)
+	if knockdown_add > 0.0 and not flat:
+		stagger_add = minf(stagger_add, knockdown_add - KnockdownFallRules.STUMBLE_RISE_S)
 	return Vector2(maxf(stagger, stagger_add), maxf(knockdown, knockdown_add))
 
 

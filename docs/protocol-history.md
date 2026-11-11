@@ -483,3 +483,9 @@ here whenever you bump, in the same format.
 #      it) and the local reconcile adopts. The hit button's meaning changed
 #      with it: a contact outside the drive lands at CheckDriveRules.HELD_SHARE
 #      of the transfer. Replay FORMAT_VERSION 21: the frames hold the block.
+# v100: the body-lock byte's bit 4 is `stumbling`: a down window that is a
+#      stumble, on a knee (BodyCheckRules.flat_overshoot), where it was always a
+#      knockdown flat on the ice, and the knockdown's own line moved up to
+#      flat_overshoot. A v99 peer would predict a different outcome for the same
+#      hit and draw a stumble lying down, so mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged: the block's layout did not move.

@@ -288,7 +288,9 @@ and the ankles, and unplants its kneeling leg; the knockdown, last, owns the
 legs, the drop, the plants (the blade contact seat, `Scripts/actors/CLAUDE.md`),
 the mohawk yaw, the edges, the trunk and the wobble — and through the get-up
 it owns the kneel too, solving each thigh so a foot pivot never goes under
-the ice. **A layer never suppresses another with a
+the ice. A stumble is that kneel's last stage entered from standing
+(`SkaterController.knockdown_getup_left` reads a stumble's timer onto it), so
+it is drawn by the same layer with no branch of its own. **A layer never suppresses another with a
 `(1 − other.weight)` factor** — if one must win, it is an override above the
 other. `test_gait_layers.gd` holds the order and the knockdown's mask.
 

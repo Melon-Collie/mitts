@@ -556,6 +556,34 @@ func test_skater_slapshot_pin_rides_the_body_lock_byte() -> void:
 		assert_true(dec.diving, "the pin bit leaves the dive alone")
 
 
+func test_skater_stumble_rides_the_body_lock_byte() -> void:
+	for stumbling: bool in [false, true]:
+		var s := SkaterNetworkState.new()
+		s.pin_role = BoardPinRules.Role.PINNER
+		s.slapshot_pinned = true
+		s.stumbling = stumbling
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_eq(dec.stumbling, stumbling)
+		assert_eq(dec.pin_role, BoardPinRules.Role.PINNER, "the stumble bit leaves the role alone")
+		assert_true(dec.slapshot_pinned, "and the slapshot pin")
+		assert_false(dec.diving, "and the dive")
+
+
+func test_skater_check_drive_round_trips() -> void:
+	for phase: int in [CheckDriveRules.Phase.IDLE, CheckDriveRules.Phase.DRIVE,
+			CheckDriveRules.Phase.SPENT]:
+		var s := SkaterNetworkState.new()
+		s.check_drive_phase = phase
+		s.check_drive_elapsed = 0.2
+		s.pin_strength = 0.5
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_eq(dec.check_drive_phase, phase)
+		assert_almost_eq(dec.check_drive_elapsed, 0.2, 0.5 * Constants.TICK_DURATION + 1e-6)
+		assert_almost_eq(dec.pin_strength, 0.5, 1.0 / 255.0, "the byte before it is untouched")
+
+
 func test_skater_stagger_round_trips() -> void:
 	# stagger_timer was never on the wire, so a client victim's predicted stagger
 	# was wiped to 0 on the next reconcile. u8 @0.01s must now round-trip it.

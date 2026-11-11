@@ -370,10 +370,10 @@ func _add_play(out: Array[Dictionary]) -> void:
 	_add(out, "knocked down from the side and up again", 420, func(inp: InputState, i: int) -> Vector3:
 		inp.move_vector = Vector2(0.0, -1.0)
 		if i == 60:
-			_controller._on_body_check_received(Vector3(3.8, 0.0, 0.0))
+			_controller._on_body_check_received(Vector3(5.3, 0.0, 0.0))
 		return _up(2.0), 26.0)
-	# Just past his balance from the side: the softest fall and the shortest lie.
-	_add(out, "knocked down just past his balance and up again", 420,
+	# Past his balance and short of flat, from the side: down onto a knee and up.
+	_add(out, "stumbled onto a knee and up again", 420,
 			func(inp: InputState, i: int) -> Vector3:
 		inp.move_vector = Vector2(0.0, -1.0)
 		if i == 60:

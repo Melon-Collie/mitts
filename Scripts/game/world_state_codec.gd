@@ -37,8 +37,9 @@ extends RefCounted
 #                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63),
 #                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v70),
 #                      body lock u8 (pin_role[1:0] BoardPinRules.Role (v74) + diving[2] (v75)
-#                                    + slapshot_pinned[3] (v91)),
-#                      pin_strength u8@1/255 (v74)
+#                                    + slapshot_pinned[3] (v91) + stumbling[4] (v100)),
+#                      pin_strength u8@1/255 (v74),
+#                      check_drive u8 (phase[1:0] + ticks elapsed[7:2]) (v99)
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie (142 B): root (12 B) + the keeper's pose (KeeperPoseCodec, 130 B).
 #                      Root: pos_x/z s16@1cm, rot_y s16@π/32767, state u8,
@@ -558,7 +559,7 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	b.encode_u8(o, posmod(roundi(atan2(s.recoil_dir.x, s.recoil_dir.y) / TAU * 256.0), 256)); o += 1
 	b.encode_u8(o, StickCheckRules.pack(s.stick_check_phase, s.stick_check_elapsed)); o += 1
 	b.encode_u8(o, (s.pin_role & 0x03) | (0x04 if s.diving else 0)
-			| (0x08 if s.slapshot_pinned else 0)); o += 1
+			| (0x08 if s.slapshot_pinned else 0) | (0x10 if s.stumbling else 0)); o += 1
 	b.encode_u8(o, clampi(roundi(s.pin_strength * 255.0), 0, 255)); o += 1
 	b.encode_u8(o, CheckDriveRules.pack(s.check_drive_phase, s.check_drive_elapsed)); o += 1
 	return o
@@ -650,6 +651,7 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	s.pin_role = lock & 0x03 if (lock & 0x03) <= BoardPinRules.Role.PINNED else 0
 	s.diving = (lock & 0x04) != 0
 	s.slapshot_pinned = (lock & 0x08) != 0
+	s.stumbling = (lock & 0x10) != 0
 	s.pin_strength = b.decode_u8(o) / 255.0; o += 1
 	var check_drive: int = b.decode_u8(o)
 	s.check_drive_phase = CheckDriveRules.unpack_phase(check_drive)

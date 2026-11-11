@@ -377,3 +377,53 @@ func _first_settle_time(entry_speed: float) -> float:
 		if KnockdownFallRules.tilt_at(t, entry_speed, _cfg) >= _cfg.settle_angle - 0.02:
 			return t
 	return 5.0
+
+
+# The skates going out from under him.
+
+func test_upright_his_skates_are_under_him() -> void:
+	assert_eq(KnockdownFallRules.feet_out(0.0, _cfg), 0.0)
+
+
+func test_the_skates_go_further_out_the_further_he_goes_over() -> void:
+	var prev: float = 0.0
+	for i: int in 21:
+		var out: float = KnockdownFallRules.feet_out(_cfg.settle_angle * i / 20.0, _cfg)
+		assert_gte(out, prev)
+		prev = out
+	assert_lt(prev, _cfg.com_height, "he turns about a point under his belt")
+	assert_gt(prev, 0.0)
+
+
+func test_a_body_tipped_about_planted_skates_keeps_them() -> void:
+	_cfg.pivot_height = 0.0
+	assert_eq(KnockdownFallRules.feet_out(_cfg.settle_angle, _cfg), 0.0)
+
+
+# A stumble sits on the get-up's one-knee stage: off the ice, the free skate
+# planted, the down pose held whole; and comes up off the knee over its rise.
+func test_a_stumble_holds_the_one_knee_stage_then_rises() -> void:
+	var kneel: float = KnockdownFallRules.stumble_getup_left(1.0)
+	assert_eq(KnockdownFallRules.lie_share(kneel), 0.0, "never lying")
+	assert_almost_eq(KnockdownFallRules.step_share(kneel), 1.0, 1e-5, "the free skate planted")
+	assert_almost_eq(KnockdownFallRules.stand_hold(kneel), 1.0, 1e-5)
+	assert_eq(KnockdownFallRules.stumble_getup_left(KnockdownFallRules.STUMBLE_RISE_S), kneel,
+			"held until the rise")
+	var prev: float = 1.0
+	for i: int in 11:
+		var left: float = KnockdownFallRules.STUMBLE_RISE_S * (1.0 - i / 10.0)
+		var hold: float = KnockdownFallRules.stand_hold(
+				KnockdownFallRules.stumble_getup_left(left))
+		assert_lte(hold, prev + 1e-6, "up off the knee, never back down")
+		prev = hold
+	assert_almost_eq(prev, 0.0, 1e-5, "on his skates as the window ends")
+
+
+func test_a_stumble_goes_down_onto_the_knee_from_standing() -> void:
+	assert_eq(KnockdownFallRules.stumble_entry(0.0), 0.0)
+	assert_almost_eq(KnockdownFallRules.stumble_entry(KnockdownFallRules.STUMBLE_ENTRY_S), 1.0, 1e-5)
+	var prev: float = 0.0
+	for i: int in 11:
+		var e: float = KnockdownFallRules.stumble_entry(KnockdownFallRules.STUMBLE_ENTRY_S * i / 10.0)
+		assert_gte(e, prev)
+		prev = e

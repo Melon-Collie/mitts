@@ -42,6 +42,8 @@ var pin_strength: float = 0.0
 # Skater.is_diving: a dive's down window rides knockdown_timer and recoil_dir;
 # this says it is a dive (its stick still plays, its body blocks low).
 var diving: bool = false
+# Skater.is_stumbling: the down window is a stumble's, on a knee.
+var stumbling: bool = false
 # Skater.is_slapshot_pinning: the carried puck holds its spot on the ice instead
 # of riding the blade — through a slapshot's wind-up, and through the recovery
 # after one is called off, while the blade comes back down to it. Remotes and
@@ -160,6 +162,7 @@ func to_array() -> Array:
 		slapshot_pinned,
 		check_drive_phase,
 		check_drive_elapsed,
+		stumbling,
 	]
 
 # The stick-play, pin, dive and check-drive fields, which are discrete: a reader
@@ -175,6 +178,7 @@ func copy_stick_play_from(s: SkaterNetworkState) -> void:
 	pin_role = s.pin_role
 	pin_strength = s.pin_strength
 	diving = s.diving
+	stumbling = s.stumbling
 	slapshot_pinned = s.slapshot_pinned
 
 
@@ -214,6 +218,7 @@ func copy_from(s: SkaterNetworkState) -> void:
 	slapshot_pinned = s.slapshot_pinned
 	check_drive_phase = s.check_drive_phase
 	check_drive_elapsed = s.check_drive_elapsed
+	stumbling = s.stumbling
 	slapshot_pin_offset = s.slapshot_pin_offset
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
@@ -274,4 +279,6 @@ static func from_array(data: Array) -> SkaterNetworkState:
 	if data.size() > 34:
 		state.check_drive_phase = data[33]
 		state.check_drive_elapsed = data[34]
+	if data.size() > 35:
+		state.stumbling = data[35]
 	return state

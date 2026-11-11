@@ -49,13 +49,20 @@ class Config:
 	# Peak edge-grip reduction at the top of the rocked band: off his edges, he
 	# glides along the hit rather than cutting out of it.
 	var rocked_grip_penalty: float = 0.75
-	# Knockdown: a hit that beats his balance (BodyBalanceRules.overshoot over 1)
-	# knocks him off his skates — movement locked, slides and bleeds speed, can't
-	# touch the puck. He falls to the ice (KnockdownFallRules.first_impact_time),
-	# lies there from min_lie_seconds just past his balance to max_lie_seconds at
-	# knockdown_ref_overshoot and beyond, then gets up; the caller adds the fall
-	# and the get-up, so the get-up never starts before he is down.
-	var knockdown_ref_overshoot: float = 1.7
+	# A hit that beats his balance (BodyBalanceRules.overshoot over 1) takes him
+	# off his skates — movement locked, slides and bleeds speed, can't touch the
+	# puck. Up to flat_overshoot it is a stumble: down onto a knee and up off it,
+	# stumble_min_seconds just past his balance to stumble_max_seconds at the
+	# band's top (KnockdownFallRules.stumble_getup_left).
+	var flat_overshoot: float = 1.5
+	var stumble_min_seconds: float = 0.55
+	var stumble_max_seconds: float = 0.85
+	# Past flat_overshoot he is knocked flat: he falls to the ice
+	# (KnockdownFallRules.first_impact_time), lies there from min_lie_seconds to
+	# max_lie_seconds at knockdown_ref_overshoot and beyond, then gets up; the
+	# caller adds the fall and the get-up, so the get-up never starts before he
+	# is down.
+	var knockdown_ref_overshoot: float = 2.2
 	var min_lie_seconds: float = 0.15
 	var max_lie_seconds: float = 0.7
 
@@ -94,12 +101,26 @@ static func rocked_share(stagger_timer: float, cfg: Config) -> float:
 	return clampf((stagger_timer - cfg.max_stagger_seconds) / cfg.rocked_max_seconds, 0.0, 1.0)
 
 
-# Seconds he lies on the ice from how far past his balance the hit landed
-# (BodyBalanceRules.overshoot, over 1 for a knockdown at all): min_lie_seconds
-# just past it, up to max_lie_seconds at knockdown_ref_overshoot (clamped).
-static func lie_seconds_from_overshoot(overshoot: float, cfg: Config) -> float:
-	var span: float = maxf(cfg.knockdown_ref_overshoot - 1.0, 0.001)
+# Whether a hit this far past his balance (BodyBalanceRules.overshoot) knocks
+# him flat rather than onto a knee.
+static func is_flat(overshoot: float, cfg: Config) -> bool:
+	return overshoot > cfg.flat_overshoot
+
+
+# Seconds a stumble has him down, from just past his balance to the top of the
+# stumble band.
+static func stumble_seconds_from_overshoot(overshoot: float, cfg: Config) -> float:
+	var span: float = maxf(cfg.flat_overshoot - 1.0, 0.001)
 	var t: float = clampf((overshoot - 1.0) / span, 0.0, 1.0)
+	return lerpf(cfg.stumble_min_seconds, cfg.stumble_max_seconds, t)
+
+
+# Seconds he lies on the ice, knocked flat, from how far past his balance the hit
+# landed: min_lie_seconds at flat_overshoot, up to max_lie_seconds at
+# knockdown_ref_overshoot (clamped).
+static func lie_seconds_from_overshoot(overshoot: float, cfg: Config) -> float:
+	var span: float = maxf(cfg.knockdown_ref_overshoot - cfg.flat_overshoot, 0.001)
+	var t: float = clampf((overshoot - cfg.flat_overshoot) / span, 0.0, 1.0)
 	return lerpf(cfg.min_lie_seconds, cfg.max_lie_seconds, t)
 
 

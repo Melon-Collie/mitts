@@ -1,6 +1,6 @@
 # Hit outcomes — balance, the rocked hit, and both bodies
 
-Status: **Phases 0–3 and 5 built**, playtest pending. Amends the physicality paragraphs of
+Status: **Phases 0–3, 5 and 6 built**, playtest pending. Amends the physicality paragraphs of
 `docs/gameplay-design.md` and the body-check verbs of
 `docs/physicality-plan.md`. Four phases plus a small controls pass, each its
 own PR and playtest. The cross-check this plan names was retired at v88
@@ -540,6 +540,83 @@ is not in.
 - `test_contact_aggressor_side.gd`: on real skaters, the timed check against
   the held shoulder, and the stand-up still only staggering its man.
 
+## Phase 6 — the stumble, and the fall (built)
+
+Why: past his balance there was one outcome, flat on the ice for 1.5–1.9 s and
+a 0.5 s stagger after, and it looked like a plank tipping about planted skates
+and bouncing. Coaching treats a check's job as separating the man from the
+puck; a man put on the ice is the exception.
+
+### Rules
+
+- **Past his balance and short of flat he stumbles** (`BodyCheckRules
+  .flat_overshoot`, 1.5): down onto a knee and up off it,
+  `stumble_min_seconds` just past his balance to `stumble_max_seconds` at the
+  band's top, then the stagger of a man finding his legs
+  (`knockdown_getup_stagger_seconds`, the knockdown's own). Down, he is down like anyone: no stride,
+  no stick, sliding on his gear, stripped.
+- **Past the flat line he is knocked flat**, as before: the fall, the lie
+  (now measured from the flat line, to `knockdown_ref_overshoot` 2.2) and the
+  staged get-up.
+- **It rides the knockdown's rail.** `knockdown_timer` runs the window and one
+  replicated bit (`Skater.is_stumbling`) says which it is, as `is_diving` does
+  for a dive. A stumbling man hit past the flat line is floored from the knee
+  on a clock of its own; a man lying flat is never stood up onto one.
+
+### What it does, at the starting values
+
+Closing speed (m/s) of a timed check, equal builds, from the snapshot grid
+(`tests/unit/rules/snapshots/body_balance.txt`) and the flat line:
+
+| victim | stumbles from | flat from |
+|---|---|---|
+| upright, hit from the side | 5.8 | 10.0 |
+| upright, heavy into light | 3.4 | 6.8 |
+| upright, 45° or square on | 12.5 / 18.3 | never one-sided |
+| caught shooting, from the side | 3.5 | 6.6 |
+| in the stance, from the side | 13.8 | never one-sided |
+
+So at equal builds a hard side hit puts a man on a knee, and he is laid out
+only caught shooting, badly outweighed, or by a full-speed hit he never saw.
+
+### The pose
+
+- **A stumble is the get-up's last stage entered from standing**
+  (`KnockdownFallRules.stumble_getup_left`, `stumble_entry`): down onto the
+  one-knee kneel over `STUMBLE_ENTRY_S`, the knee on the side he was driven
+  over, the other skate planted and the stick out on the ice; held; up off
+  the knee over `STUMBLE_RISE_S`. Every reader of the get-up's clock
+  (`SkaterController.knockdown_getup_left`) draws it with no branch of its
+  own.
+- **The fall turns about a point under his belt, not his skates**
+  (`KnockdownFallRules.feet_out`, `pivot_height` 0.75 m): blades do not hold
+  against a shove at the shoulders, so the skates go out the far side as he
+  goes over, and he lands on his hip sliding the way he was hit.
+- **It barely rebounds** (`restitution` 0.3 → 0.1).
+
+### Networking
+
+The body-lock byte's bit 4 is `stumbling`; nothing else moved. The local
+victim predicts the same verdict the host reaches, since the line between
+the two is a function of the overshoot both already compute. Protocol v100.
+
+### Bots
+
+No new decision. Every read of a downed man (`is_knocked_down`, the wire's
+`knockdown_timer`) takes a stumble as down, and the pin reach's "will this
+hit put him down" still asks whether it beats his balance.
+
+### Tests
+
+- `test_body_check_rules.gd`: the band, its timing against the softest
+  knockdown, room for the entry and the rise.
+- `test_knockdown_fall_rules.gd`: the stumble's envelopes on the get-up's
+  stages; the skates going out.
+- `test_stumble.gd`: through the controller, a stumble never lies down and is
+  up inside its window; past the flat line he is laid out; a stumbling man
+  hit flat is floored, a flat one stays flat.
+- `render-poses.sh --only=stumble`, `--only=knockdown`.
+
 ## Docs that change when each phase lands
 
 - `docs/gameplay-design.md`: the physicality and stagger paragraphs (1, 2, 3)
@@ -558,6 +635,7 @@ is not in.
 |---|---|
 | Stagger, rocked and knockdown timers | `Scripts/domain/rules/body_check_rules.gd` |
 | Balance budget and tip share | new `Scripts/domain/rules/body_balance_rules.gd` |
+| The stumble band and its timing | `body_check_rules.gd`; its pose envelopes and the fall's pivot in `knockdown_fall_rules.gd` |
 | Delivery (transfer from commit, possession, brace) | one function beside `SkaterCollisionRules.victim_kick` |
 | The timed check's phase, window, kick and held share | `Scripts/domain/rules/check_drive_rules.gd`, stepped by `SkaterCheckDrive` |
 | Both-body outcomes | `Skater._resolve_player_collisions`, `LocalController`'s replay contact |

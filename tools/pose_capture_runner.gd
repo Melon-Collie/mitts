@@ -376,15 +376,27 @@ const POSES: Array = [
 	# the side and backward. These are the tiles that show where the fall
 	# pivots: a body lying a hip-height above the ice, or one sunk through it,
 	# is a proportion no display-less test catches.
-	{"name": "knockdown_mid_fall", "puck": false, "knockdown": Vector3(4.25, 0.0, 0.0),
-		"cam": Vector3(0.6, -0.2, 3.4), "cam_aim": Vector3(0.6, -0.5, 0.0),
+	{"name": "knockdown_mid_fall", "puck": false, "knockdown": Vector3(5.3, 0.0, 0.0),
+		"cam": Vector3(0.1, -0.2, 3.4), "cam_aim": Vector3(0.1, -0.5, 0.0),
 		"steps": [[30, {}]]},
-	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(4.25, 0.0, 0.0),
-		"cam": Vector3(0.9, -0.45, 2.6), "cam_aim": Vector3(0.9, -0.95, 0.0),
-		"steps": [[85, {}]]},
-	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 8.5),
-		"cam": Vector3(2.6, -0.45, 0.9), "cam_aim": Vector3(0.0, -0.95, 0.9),
-		"steps": [[85, {}]]},
+	{"name": "knockdown_early_fall", "puck": false, "knockdown": Vector3(5.3, 0.0, 0.0),
+		"cam": Vector3(0.1, -0.2, 3.4), "cam_aim": Vector3(0.1, -0.5, 0.0),
+		"steps": [[18, {}]]},
+	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(5.3, 0.0, 0.0),
+		"cam": Vector3(0.15, -0.45, 2.6), "cam_aim": Vector3(0.15, -0.95, 0.0),
+		"steps": [[50, {}]]},
+	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 6.5),
+		"cam": Vector3(2.6, -0.45, 0.15), "cam_aim": Vector3(0.0, -0.95, 0.15),
+		"steps": [[50, {}]]},
+	# Past his balance and short of flat he stumbles: down onto the knee he was
+	# driven over, the other skate planted, the stick out on the ice. Hit from
+	# the side, seen from in front and from the side it came from.
+	{"name": "stumble_down", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+		"cam": Vector3(0.6, 0.0, -3.4), "cam_aim": Vector3(0.3, -0.5, 0.0),
+		"steps": [[30, {}]]},
+	{"name": "stumble_down_side", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+		"cam": Vector3(-3.4, 0.0, 0.4), "cam_aim": Vector3(0.0, -0.5, 0.0),
+		"steps": [[30, {}]]},
 	# A full check short of the knockdown line rocks him: the reel, the splayed
 	# catch, the stick jarred up. Hit from the side, seen from behind and from
 	# the side the hit came from.

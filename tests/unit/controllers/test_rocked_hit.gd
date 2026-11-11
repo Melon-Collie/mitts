@@ -166,7 +166,7 @@ func test_uncommitted_the_same_hit_rocks_him() -> void:
 # He is on the ice before the get-up starts: the window is the fall, a lie and
 # the get-up, however softly he goes down.
 func test_the_get_up_waits_for_the_ice() -> void:
-	for dv: float in [2.73, 4.25, 8.5]:
+	for dv: float in [4.1, 4.7, 5.4]:
 		before_each()
 		_controller._on_body_check_received(Vector3(dv, 0.0, 0.0))
 		var landing: float = KnockdownFallRules.first_impact_time(dv, _controller._fall_config())
