@@ -2,7 +2,8 @@ extends GutTest
 
 # Parity fuzz: NativeShotOdds (C++ GDExtension, native/src/) against the GDScript
 # reference AIShotOdds — every query kind, from random releases over both ends,
-# against random keepers in every stance, the field the same for both. The
+# against random keepers in every stance after every play history, the field the
+# same for both. The
 # weights are rounded the same way on both sides, so the two agree to the bit.
 # Goes pending when the extension isn't built.
 
@@ -86,8 +87,9 @@ func test_every_query_weighs_as_the_gdscript_does() -> void:
 		var vel_x: float = _rng.randf_range(-3.0, 3.0)
 		var stance: int = stances[_rng.randi_range(0, 2)]
 		var yaw: float = NAN if _rng.randf() < 0.3 else _rng.randf_range(-PI, PI)
+		var history: int = _rng.randi_range(0, AIShotOdds.History.size() - 1)
 		var now: Array = _both(func(q: AIShotOdds.Query) -> float:
-			return AIShotOdds.shot_now(release, goal, keeper, vel_x, stance, yaw, q))
+			return AIShotOdds.shot_now(release, goal, keeper, vel_x, stance, yaw, q, history))
 		_check(now, "shot_now %d" % i)
 		if not (now[2] as PackedInt32Array).is_empty():
 			matched += 1
@@ -111,7 +113,8 @@ func test_every_query_weighs_as_the_gdscript_does() -> void:
 				"shot_now_at_spread %d" % i)
 		var pick := AIShotOdds.Pick.new()
 		var picks: Array = _both(func(q: AIShotOdds.Query) -> Array:
-			AIShotOdds.pick_shot_now(release, goal, keeper, vel_x, stance, pick, yaw, q)
+			AIShotOdds.pick_shot_now(release, goal, keeper, vel_x, stance, pick, yaw, q,
+					history)
 			return [pick.odds, pick.aim, pick.loft])
 		_check(picks, "pick_shot_now %d" % i)
 	assert_gt(matched, FUZZ_ITERATIONS / 4, "a good share of the queries land on measured cells")

@@ -16,7 +16,7 @@ extends GutTest
 
 # ── Wrister swing — same input sequence yields same state ────────────────────
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SMOOTHING: float = 14.0
 
 func test_wrister_charge_deterministic_from_neutral_start() -> void:

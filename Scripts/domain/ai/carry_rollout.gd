@@ -40,11 +40,11 @@ const DT: float = 1.0 / _PhysicsConstants.PHYSICS_TICK
 const SAMPLES: int = 3
 const _TICKS_PER_SAMPLE: int = TICKS / SAMPLES
 
-# Physics ticks per rollout step. 1 is the live integration exactly; 4 (30 Hz)
+# Physics ticks per rollout step. 1 is the live integration exactly; 30 Hz
 # drifts from it by up to ~20 cm and 0.3 m/s over the horizon, inside a stick's
 # reach, for a quarter of the cost (test_carry_rollout.gd bounds the drift). Must
 # divide _TICKS_PER_SAMPLE.
-const STEP_TICKS: int = 4
+const STEP_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 30
 var step_ticks: int = STEP_TICKS
 
 # Stick angles off `toward`. In world XZ a positive Vector2.rotated turns toward
@@ -136,6 +136,53 @@ func _native_loaded(caps: AISkaterCaps) -> bool:
 
 func sample(move: int, k: int) -> Vector3:
 	return samples[move * SAMPLES + k]
+
+
+# How many of `move`'s samples come before its path reaches a crease or passes
+# |z| = `max_abs_z`: SAMPLES for the whole move, 0 for none of it.
+func reach_short_of_net(move: int, max_abs_z: float) -> int:
+	for k: int in SAMPLES:
+		var s: Vector3 = sample(move, k)
+		if absf(s.z) > max_abs_z or CreaseRules.is_in_crease(Vector2(s.x, s.z)):
+			return k
+	return SAMPLES
+
+
+# The most a strip of the puck carried along `move` from `from`, over its first
+# `reach` samples, can pay the side attacking `goal` that loses it
+# (AIPossessionFloor.most_lost): every leg's, the puck riding within the blade's
+# lead (AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M) of the body.
+func lost_ceiling(move: int, from: Vector3, reach: int, goal: Vector3) -> float:
+	var lead: float = AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
+	var up: float = signf(goal.z)
+	var most_up: float = from.z * up
+	var near: float = INF
+	var prev: Vector3 = from
+	for k: int in reach:
+		var p: Vector3 = sample(move, k)
+		most_up = maxf(most_up, p.z * up)
+		near = minf(near, minf(_net_dist(prev, goal), _net_dist(p, goal))
+				- 0.5 * Vector2(p.x - prev.x, p.z - prev.z).length())
+		prev = p
+	return AIPossessionFloor.most_lost(most_up + lead, minf(near, _net_dist(from, goal)) - lead)
+
+
+static func _net_dist(p: Vector3, goal: Vector3) -> float:
+	return Vector2(p.x - goal.x, p.z - goal.z).length()
+
+
+# Where `move` is `reach` samples in (its end, at SAMPLES).
+func reach_pos(move: int, reach: int) -> Vector3:
+	return end_pos[move] if reach == SAMPLES else sample(move, reach - 1)
+
+
+# Its velocity there: the end's, or the mean over that sample's leg from `from`,
+# the roll's start (no velocity is kept between the ends).
+func reach_vel(move: int, reach: int, from: Vector3) -> Vector3:
+	if reach == SAMPLES:
+		return end_vel[move]
+	var prev: Vector3 = from if reach == 1 else sample(move, reach - 2)
+	return (sample(move, reach - 1) - prev) * (SAMPLES / HORIZON_S)
 
 
 func _set_move(m: int, t: Vector2) -> void:

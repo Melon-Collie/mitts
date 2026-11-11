@@ -107,13 +107,15 @@ func test_stays_goal_side_of_carrier() -> void:
 	# SUPPORT is the conservative safety valve: even starting up-ice
 	# (ahead of the carrier toward the opp net) where the cleanest
 	# pass/shot would sit, it must pick a position goal-side of the
-	# carrier so the carrier is never the last man back. Team 0 attacks
+	# carrier, a forechecker on him and nobody else back to beat the counter
+	# home, so the carrier is never the last man back. Team 0 attacks
 	# -Z / defends +Z, so own_goal_dir * z grows toward our net.
 	var carrier_pos := Vector3(0, 0, 5)        # breaking out, our half
 	var self_pos := Vector3(3, 0, -12)         # up-ice, ahead of the carrier
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos, Vector3.ZERO],          # us (SUPPORT)
 		[100, TEAM_ID, carrier_pos, Vector3.ZERO],     # carrier
+		[200, 1, carrier_pos + Vector3(2, 0, -2), Vector3.ZERO],  # forechecker on him
 	]
 	var ctx: RoleContext = _make_ctx(self_pos, 100, skaters)
 	var d: RoleDecision = AIRoleSupport.decide(ctx)
@@ -125,6 +127,43 @@ func test_stays_goal_side_of_carrier() -> void:
 	assert_gt(d.target_position.z, self_pos.z,
 			"SUPPORT drops back from an up-ice start toward the safety position")
 
+
+
+# A pass in flight on a 2-on-1: the passer is SUPPORT, the receiver driving at
+# the net, their only skater back. Team 0 attacks -Z.
+func _feed_in_flight_ctx(with_receiver: bool) -> RoleContext:
+	var skaters: Array = [
+		[1, TEAM_ID, Vector3(-3.7, 0, -10.2), Vector3(2.8, 0, -3.9)],   # the passer
+		[200, 1, Vector3(0.3, 0, -19.8), Vector3(2.6, 0, -2.2)],         # the lone D
+	]
+	if with_receiver:
+		skaters.append([2, TEAM_ID, Vector3(3.8, 0, -14.7), Vector3(-0.5, 0, -7.8)])
+	var ctx: RoleContext = _make_ctx(skaters[0][2], -1, skaters)
+	ctx.snapshot.puck_state.position = Vector3(-1.9, 0, -15.4)
+	ctx.snapshot.puck_state.velocity = Vector3(9.9, 0, -7.3)
+	ctx.self_velocity = skaters[0][3]
+	return ctx
+
+
+func test_a_support_a_teammate_covers_for_joins_the_attack() -> void:
+	# The receiver beats a counter home, so the passer is not the last man back:
+	# nothing holds him goal-side of the puck, and he goes forward with it.
+	var ctx: RoleContext = _feed_in_flight_ctx(true)
+	var puck_z: float = ctx.snapshot.puck_state.position.z
+	var d: RoleDecision = AIRoleSupport.decide(ctx)
+	assert_lt(ctx.own_goal_dir * d.target_position.z,
+			ctx.own_goal_dir * puck_z - AIRoleSupport.GOAL_SIDE_TOLERANCE_M,
+			"past the goal-side bound, into the attack; got %s" % d.target_position)
+
+
+func test_the_last_man_back_holds_goal_side() -> void:
+	# Nobody else would beat the counter home: he stays the safety valve.
+	var ctx: RoleContext = _feed_in_flight_ctx(false)
+	var puck_z: float = ctx.snapshot.puck_state.position.z
+	var d: RoleDecision = AIRoleSupport.decide(ctx)
+	assert_gte(ctx.own_goal_dir * d.target_position.z,
+			ctx.own_goal_dir * puck_z - AIRoleSupport.GOAL_SIDE_TOLERANCE_M - 0.01,
+			"goal-side of the puck; got %s" % d.target_position)
 
 # ── Anti-crowding ───────────────────────────────────────────────────────────
 

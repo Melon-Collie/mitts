@@ -430,3 +430,50 @@ here whenever you bump, in the same format.
 #      941 B), still one unreliable Steam message. Packet layout change, so
 #      mixed builds must be refused. Replay FORMAT_VERSION 20: the embedded
 #      world state's goalie block changed size.
+# v90: the physics tick is 90 Hz and the world-state broadcast 45 Hz (was
+#      120 / 60). Input stamps are a tick apart and the host consumes one a
+#      tick, the input lead's margin is 1.5 ticks (16.7 ms), and the stick
+#      check's elapsed byte counts ticks at the new rate. Nothing changed size,
+#      so a v89 peer would decode cleanly and desync; mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged: an older replay's stick-check
+#      timing reads a third long, which is cosmetic.
+# v91: the skater block's body-lock byte carries slapshot_pinned in bit 3
+#      (Skater.is_slapshot_pinning: the carried puck held on the ice through a
+#      wind-up and through the recovery after one is called off), so a client's
+#      remote carrier and a replay hold the puck where the host did instead of
+#      under the raised blade. The spot rides no bytes: the decoder takes it
+#      from the same packet's puck. Same size; a v90 peer ignores the bit, but
+#      mixed builds must be refused. Replay FORMAT_VERSION unchanged: an older replay reads
+#      the bit as clear, and its wind-ups are still recognized by shot state.
+# v92: receive_pickup_claim drops its trailing top_hand Vector3 (the client's
+#      top-hand grip). The host's catch read is the blade's distance off the
+#      puck's path (PuckReceptionRules.path_offset), which never read the shaft.
+#      The RPC's argument count changed, so mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged: claims are not recorded.
+# v93: the world-state snapshot and the input batch are compressed at the RPC
+#      boundary (WirePacking: a u16 raw size and a zstd / deflate body). A v92
+#      peer would decode the packed bytes as a raw layout, so mixed builds must
+#      be refused. Replay FORMAT_VERSION unchanged: recorders keep raw frames.
+# v94: snapshots go as deltas against the newest one each client acked
+#      (SnapshotDelta: a u8 kind, a u16 connection-scoped seq and, for a delta,
+#      the u16 baseline seq, before the body), and the input batch header grows
+#      to 6 B to carry that ack (u8 has-ack, u16 seq). Mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged: recorders keep raw frames.
+# v95: receive_snapshot_ack RPC added — a spectator's delta ack, since it sends
+#      no input batches. The RPC set changed, so mixed builds must be refused.
+# v96: the goalies' whole sim states ride every snapshot (KeeperWireTail, a
+#      KeeperWire blob per goalie: KeeperController.wire at the Q16 scales,
+#      the host snapping his own state to it), appended after the world-state
+#      body inside the delta and ahead of the carrier-event block, so a client
+#      can re-seed a keeper of its own from it (#903). A v95 peer would read the
+#      blobs as world state, so mixed builds must be refused. Replay
+#      FORMAT_VERSION unchanged: the recorders' frames never hold the blobs.
+# v97: the keeper's blob carries his tier (GoalieSkillProfile.tier), which a
+#      client never learned, so a client's predicted keeper (KeeperPredictor)
+#      plays the host's. One byte more in the blob, so mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged.
+# v98: the keeper's blob ends in a u32 digest of his discrete state
+#      (KeeperWire.discrete_digest), which a client's predictor compares
+#      before confirming a snapshot within the box tolerance. A v97 peer would
+#      read the digest as bits past the blob's end, so mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged.

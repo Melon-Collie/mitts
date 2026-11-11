@@ -1,12 +1,15 @@
 class_name AIRoleRushD
 
-# RUSH_D1 / RUSH_D2 — the rush defense's front layer (TRANS_DEFENSE; 3v3 runs
-# RUSH_D1 alone). Design: docs/transition-defense-plan.md §5–§6.
+# BACK_STRONG / BACK_MID — the back line of the set neutral-zone shape
+# (TRANS_DEFENSE: the "3" of 5v5's 1-1-3, the "2" of 3v3's 1-2; the rest is
+# AIRoleNeutralZone). Design: docs/transition-defense-plan.md §5–§6.
 #
-#   RUSH_D1 — OWNS THE CARRIER: holds the ladder's gap, angles him off the
-#     middle, and attacks once his speed advantage is gone. He keeps the carrier
-#     across the blue line, so there is no handoff mid-rush.
-#   RUSH_D2 (5v5) — holds MID-ICE and takes the mid-lane drive.
+#   BACK_STRONG — OWNS THE CARRIER: waits for him on our line, then holds the
+#     ladder's gap, angles him off the middle, and attacks once his speed
+#     advantage is gone. He keeps the carrier across the blue line, so there is
+#     no handoff mid-rush.
+#   BACK_MID — holds the MIDDLE of our line behind him and takes whoever drives
+#     the middle into it — the pass across is his, not BACK_STRONG's.
 #
 # The gap ladder, its ramp cushion and its domain: Scripts/domain/ai/CLAUDE.md →
 # "The gap ladder is one ladder". Measure the gap off his REAL position, never a
@@ -36,30 +39,41 @@ const RUSH_LANE_FAN_FRACTIONS: Array[float] = [0.25, 0.5, 0.75, 1.0]
 const LINE_HOLD_MARGIN: float = 0.04
 const LANE_PLAY_DANGER_BAR: float = 0.5
 
-# RUSH_D2's mid-ice post: how far off the net he holds when there is no mid-lane
-# man to pick up, measured along the threat axis. Just above the house gate —
-# he is the layer behind RUSH_D1, not a second body on the puck.
-const D2_MID_DEPTH_M: float = 12.0
 # How far off centre an attacker may be and still count as the MID-LANE drive
-# D2 takes: the end-zone dot lane. A wide man is the mid trackers' pickup as he
-# cuts in, not D2's to chase off mid-ice.
+# BACK_MID takes: the end-zone dot lane. A wide man is the lanes' pickup as he
+# cuts in, not the middle's to chase off mid-ice.
 const D2_MID_LANE_HALF_WIDTH_M: float = GameRules.END_ZONE_FACEOFF_DOT_X
-# How far weak-side of centre D2 shades while holding mid-ice.
-const D2_WEAK_SHADE_M: float = 2.0
 
 # A threat with no caps of his own is a league skater.
 static var _league_caps := AISkaterCaps.new()
 
 
 static func decide(ctx: RoleContext, slot: int) -> RoleDecision:
-	if slot == AIRoleSlots.Slot.RUSH_D2:
+	var bracket: float = AIBackLineStands.bracket_side(ctx, slot)
+	var owner: bool = AIRoleSlots.owns_back_line_carrier(ctx.team_brain, slot)
+	if bracket != 0.0 or owner:
+		return _decide_d1(ctx, bracket, owner, slot)
+	return _decide_off_carrier(ctx, slot)
+
+
+# The back-line D the carrier is not: BACK_MID holds the middle; BACK_STRONG with
+# the carrier BACK_MID's keeps the strong lane, as BACK_WEAK keeps the weak one.
+static func _decide_off_carrier(ctx: RoleContext, slot: int) -> RoleDecision:
+	if slot == AIRoleSlots.Slot.BACK_MID:
 		return _decide_d2(ctx)
-	return _decide_d1(ctx)
+	return AIRoleNeutralZone.decide_back_lane(ctx, ctx.strong_x)
 
 
-# ── RUSH_D1: own the carrier ─────────────────────────────────────────────────
+# ── The carrier's D (BACK_STRONG, or BACK_MID by election) ─────────────────────
 
-static func _decide_d1(ctx: RoleContext) -> RoleDecision:
+# `bracket`: ±1 while the carrier has not picked a side of the pair
+# (AIBackLineStands.bracket_side), and the pair plays him straight to its stands, with no cross
+# at his depth: the carrier's D (`owner`) on his line at the ladder's gap, his
+# partner a stick off it to that side — until the ladder steps up on him: one D
+# steps up, and the partner goes back to his own job and keeps his depth on the
+# men still at speed. 0 for the carrier's D alone.
+static func _decide_d1(ctx: RoleContext, bracket: float = 0.0,
+		owner: bool = true, slot: int = AIRoleSlots.Slot.BACK_STRONG) -> RoleDecision:
 	var d := RoleDecision.new()
 	var read: AIRushRead = ctx.rush_read
 
@@ -84,6 +98,8 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	# stand (see _settable_gap); a riding route is bounded instead by
 	# set_advance_cap.
 	var gapping_up: bool = should_gap_up(ctx, read, ap, cushion)
+	if gapping_up and bracket != 0.0 and not owner:
+		return _decide_off_carrier(ctx, slot)
 	var ride: Vector3 = AIRoleReads.stand_ride_velocity(ctx)
 	if gapping_up:
 		gap = minf(stick_m(ctx) * GAP_MIN_STICKS, dist)
@@ -94,9 +110,37 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	var stepping_up: bool = _depth_along(ctx, carrier_pos, dir_net) > gap
 
 	var stand: Vector3 = AIDefensiveVerbs.carrier_stand(ap, gap)
+	var bracket_off := Vector3(-dir_net.z, 0.0, dir_net.x) * stick_m(ctx)
+	if bracket_off.x * bracket < 0.0:
+		bracket_off = -bracket_off
 
-	# Odd-man: play the pass. The numbers read decides WHEN; the fan finds where.
-	if read.numbers != AIRushRead.Numbers.EVEN_OR_UP and ctx.plays_rush_pass_lanes:
+	# Stand him up at our line: while even a man standing on it would make his
+	# retreat in time (the stand priced with a standing start's cushion is still
+	# up-ice of it), a back man on the line waits there, inside the dots — the
+	# carrier comes to the line, the line does not go out to him. One already
+	# riding the retreat, or caught out in front of the carrier, rides the ladder
+	# back; a stalled carrier, with no pace to beat anyone with, is still stepped
+	# up on.
+	var standing_stand: Vector3 = AIDefensiveVerbs.carrier_stand(ap, minf(_gap_for(ctx, read,
+			carrier_pos, standing_cushion_m(ctx, ap, read.carrier_peer)), dist))
+	var line_stand: Vector3 = AIBackLineStands.line_stand(ctx, ap, standing_stand)
+	var off_line: float = AIRoleNeutralZone.depth_of(ctx, ctx.self_pos) \
+			- AIRoleNeutralZone.line_depth_m()
+	var holding_line: bool = line_stand.is_finite() and off_line <= stick_m(ctx) \
+			and not is_stalled(ctx, ap, cushion) \
+			and (off_line >= -stick_m(ctx)
+					or AIBackLineStands.set_on_line_in_time(ctx, ap, line_stand, standing_stand))
+	if holding_line:
+		stand = line_stand
+		gap = carrier_pos.distance_to(stand)
+		gapping_up = false
+		stepping_up = _depth_along(ctx, carrier_pos, dir_net) > gap
+		ride = AIBackLineStands.line_ride(ctx, ap, stand)
+	# Odd-man: play the pass — unless a teammate holds the middle behind me, whose
+	# pass it is. The numbers read decides WHEN; the fan finds where.
+	elif bracket == 0.0 and read.numbers != AIRushRead.Numbers.EVEN_OR_UP \
+			and ctx.plays_rush_pass_lanes \
+			and not _middle_held(ctx):
 		var fan: Vector3 = _lane_fan_target(ctx, read, ap, our_net,
 				carrier_pos.distance_to(stand))
 		if fan.is_finite():
@@ -104,17 +148,35 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 
 	d.target_velocity = ride
 	set_retreat_facing(ctx, ap, d, gapping_up, stand)
-	if not gapping_up:
+	if bracket != 0.0:
+		if not owner:
+			stand += bracket_off
+	elif not gapping_up:
 		stand = depth_first(ctx, ap, stand, d)
 	d.target_position = _clamp_to_house(ctx, stand)
 	set_retreat_floor(ctx, ap, d)
-	set_advance_cap(ctx, ap, d, gap)
+	set_advance_cap(ctx, ap, d, gap, not gapping_up and not holding_line)
 	# The arrival brake only matters with no man to ride (a moving stand stands it
 	# down). A retreat is paced rather than braked; a step-up wants the brake,
 	# since the approach bound placed that stand as its trigger; the gap-up drives
-	# through.
-	d.arrive_at_speed = gapping_up or not stepping_up
+	# through. The line is a post: he stops on it.
+	d.arrive_at_speed = (gapping_up or not stepping_up) and not holding_line
 	return d
+
+
+# True when a teammate holds the middle of our line behind me (BACK_MID, back
+# in the shape): the feed across belongs to him.
+static func _middle_held(ctx: RoleContext) -> bool:
+	if ctx.team_brain == null or ctx.snapshot == null:
+		return false
+	for pid: int in ctx.snapshot.skater_states:
+		if pid == ctx.peer_id or ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
+			continue
+		if ctx.team_brain.get_slot(pid) == AIRoleSlots.Slot.BACK_MID \
+				and ctx.rush_read.recovery_by_peer.get(pid, AIRushRead.Recovery.INSIDE) \
+						== AIRushRead.Recovery.INSIDE:
+			return true
+	return false
 
 
 # Depth before width. A defender short of his stand's depth must keep pace with
@@ -124,7 +186,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 # every push goes down the line first. So the stand's offset across the line,
 # and the ride's sideways part, are capped at the spare speed, scaled by the
 # share of the pace he has, over the time his depth buys: the carrier's soonest
-# trip down to it (_carrier_time_to), so speed he carries across the line buys
+# trip down to it (carrier_time_to), so speed he carries across the line buys
 # him only what turning it costs. Mirroring a carrier who skates wide spends the
 # retreat, and a turn then finds the defender level with him. Speed he already
 # carries across, the way the cap would send him, he keeps: gliding costs no
@@ -136,7 +198,9 @@ static func depth_first(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3,
 	var short: float = to_stand.x * dir_net.x + to_stand.z * dir_net.z
 	if short <= 0.0:
 		return stand
-	var time_s: float = maxf(_carrier_time_to(ctx, ap,
+	if AIDefensiveVerbs.middle_open(ctx, ap):
+		return AIDefensiveVerbs.cut_off(ctx, ap, d)
+	var time_s: float = maxf(carrier_time_to(ctx, ap,
 			maxf(_depth_along(ctx, ap.carrier_pos, dir_net), stick_m(ctx))), 0.05)
 	var pace: float = maxf(ap.closing, 0.0) + short / time_s
 	var have: float = ctx.self_velocity.x * dir_net.x + ctx.self_velocity.z * dir_net.z
@@ -185,7 +249,7 @@ static func _ladder_sticks(threat_pos: Vector3, own_goal_dir: float) -> float:
 
 # The ladder gap in metres plus the ramp cushion, WITHOUT the read's numbers /
 # backpressure rungs (a NEUTRAL chaser has no rush posture to read yet). Public
-# so the lost-race pre-contain stands where RUSH_D1 will want it.
+# so the lost-race pre-contain stands where BACK_STRONG will want it.
 static func ladder_gap_m(threat_pos: Vector3, own_goal_dir: float,
 		stick: float, cushion_m: float) -> float:
 	return _with_cushion(_ladder_sticks(threat_pos, own_goal_dir) \
@@ -212,12 +276,34 @@ static func ramp_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 			threat_peer, RETREAT_FINISH_M)
 
 
+# The ground the threat gains on this body standing still where he is, on the
+# better of the two retreats he can actually skate from there (retreat_gains):
+# backpedalling, or turned to skate after turning.
+static func standing_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
+		threat_peer: int) -> float:
+	var facing: Vector2 = _self_facing(ctx, -ap.dir_net)
+	return minf(
+			_threat_gain(ctx, ap.dir_net, ap.carrier_vel, ap.net_dist, threat_peer,
+					RETREAT_FINISH_M, retreat_max_speed(ctx, false),
+					retreat_max_accel(ctx, false), _turn_s(ctx, facing, -ap.dir_net), 0.0),
+			_threat_gain(ctx, ap.dir_net, ap.carrier_vel, ap.net_dist, threat_peer,
+					RETREAT_FINISH_M, retreat_max_speed(ctx, true),
+					retreat_max_accel(ctx, true), _turn_s(ctx, facing, ap.dir_net), 0.0))
+
+
 # Ends a ridden retreat for a defender still in front of the carrier he owns.
 # With a gap he may back off as far as the house gate and no further — inside it,
 # backing off only walks him into his own net. Draped on the carrier — within a
 # stick, or close enough that building to the carrier's pace from here
 # (ramp_cushion_m) ends with him there — he rides him in down to
 # RETREAT_FINISH_M. Once level the floor lifts: a beaten defender has to chase.
+#
+# The gate holds him by stopping him, so once its brake has him (inside the
+# stopping distance of his retreat, at the steering's arrival brake) the drape
+# is read from a standstill there (standing_cushion_m): a man who would be
+# draped once stopped is draped now, and rides on. Read off his speed instead,
+# the gate braked a defender with a gap to a stop, the stop draped him, and he
+# rebuilt his retreat from rest while a carrier at pace came level.
 static func set_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision) -> void:
 	if d.target_velocity == Vector3.ZERO or ap.dir_net == Vector3.ZERO:
@@ -227,24 +313,57 @@ static func set_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 	if depth <= 0.0:
 		return
 	var threat: int = ctx.rush_read.carrier_peer if ctx.rush_read != null else -1
-	var draped: bool = depth - stick_m(ctx) <= ramp_cushion_m(ctx, ap, threat)
+	var from_net: float = AIRoleReads.xz_distance(ctx.self_pos, ctx.defending_goal_pos)
+	var cushion: float = ramp_cushion_m(ctx, ap, threat)
+	if from_net - AIZoneCoverage.HOUSE_TOP_DEPTH_M <= _gate_brake_m(ctx, from_net):
+		cushion = maxf(cushion, standing_cushion_m(ctx, ap, threat))
+	var draped: bool = depth - stick_m(ctx) <= cushion
 	d.retreat_floor_center = ctx.defending_goal_pos
 	d.retreat_floor_radius_m = RETREAT_FINISH_M if draped \
-			else minf(AIZoneCoverage.HOUSE_TOP_DEPTH_M,
-					AIRoleReads.xz_distance(ctx.self_pos, ctx.defending_goal_pos))
+			else minf(AIZoneCoverage.HOUSE_TOP_DEPTH_M, from_net)
+
+
+# How far short of the house gate its brake takes hold of a defender `from_net`
+# metres off our net: the stopping distance of his speed toward it at the
+# steering's arrival brake (the retreat floor's own law).
+static func _gate_brake_m(ctx: RoleContext, from_net: float) -> float:
+	if from_net < 0.001:
+		return 0.0
+	var to_net := Vector2(ctx.defending_goal_pos.x - ctx.self_pos.x,
+			ctx.defending_goal_pos.z - ctx.self_pos.z) / from_net
+	var v: float = maxf(0.0, ctx.self_velocity.x * to_net.x + ctx.self_velocity.z * to_net.y)
+	return v * v / (2.0 * AISteering.ARRIVAL_BRAKE_DECEL_M_S2)
 
 
 # Bounds a ridden stand's step toward the carrier, set with the retreat floor:
 # the route may command no more speed up-ice than the defender can still turn
 # into the carrier's pace before the carrier has eaten the depth he holds past
 # `gap` (AILastManDiscipline.approach_speed_cap, the step-up bound with its
-# pivot), the carrier's pace being his whole speed turned at our net. The stand
+# pivot), the carrier's pace being his whole speed turned at our net and his
+# burst from it while the defender brakes. A stalled carrier is no invitation to
+# charge: he starts the moment the defender commits. The stand
 # keeps its place and the ride its lateral; only the charge is bounded. Without
 # it the moving-frame closing term walks a stepping-up defender up-ice at a
 # carrier who is crossing rather than coming, and the turn down beats him.
+#
+# While a carrier coming at pace gains on him down his line and he still holds
+# a gap outside the house gate (set_retreat_floor), the cap turns into a floor on the
+# retreat (`may_give_ice`: the route is a retreat at all, not a gap-up or a held
+# line): no slower than the carrier's pace there, or his retreat's top speed.
+# The closing term spends depth by slowing the retreat, and the stride,
+# power-limited at speed, rebuilds that pace far slower than the carrier eats the
+# depth it gave away.
 static func set_advance_cap(ctx: RoleContext, ap: AICarrierApproach,
-		d: RoleDecision, gap: float) -> void:
+		d: RoleDecision, gap: float, may_give_ice: bool = true) -> void:
 	if d.retreat_floor_radius_m <= 0.0:
+		return
+	# Inside the gate, undraped, the floor holds him where he stands, and re-read
+	# each decision a least retreat would ratchet him in.
+	var at_gate: bool = d.retreat_floor_radius_m >= AIZoneCoverage.HOUSE_TOP_DEPTH_M
+	if may_give_ice and at_gate and ap.closing >= GAP_UP_CLOSING_M_S \
+			and ctx.self_velocity.x * ap.dir_net.x \
+					+ ctx.self_velocity.z * ap.dir_net.z < ap.closing:
+		d.advance_cap_m_s = -minf(ap.closing, retreat_max_speed(ctx, d.face_travel))
 		return
 	var depth: float = _depth_along(ctx, ap.carrier_pos, ap.dir_net)
 	var pace: float = maxf(ap.closing, Vector2(ap.carrier_vel.x, ap.carrier_vel.z).length())
@@ -253,8 +372,12 @@ static func set_advance_cap(ctx: RoleContext, ap: AICarrierApproach,
 	if pace >= retreat_max_speed(ctx, d.face_travel):
 		d.advance_cap_m_s = 0.0
 		return
+	var threat: AISkaterCaps = ctx.caps_by_peer.get(ctx.rush_read.carrier_peer) \
+			if ctx.rush_read != null else null
 	d.advance_cap_m_s = AILastManDiscipline.approach_speed_cap(depth - gap, pace,
-			ctx.self_max_speed, retreat_max_accel(ctx, d.face_travel))
+			ctx.self_max_speed, retreat_max_accel(ctx, d.face_travel),
+			threat.max_speed if threat != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
+			threat.max_accel if threat != null else GameRules.DEFAULT_SKATER_THRUST_M_S2)
 
 
 # Which way a defender in front of the carrier he owns skates his retreat
@@ -354,9 +477,10 @@ static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
 			ctx.self_max_speed, ctx.self_max_accel, 0.0)
 
 
+# `self_v_along` overrides this body's pace down the line (NAN: his own).
 static func _threat_gain(ctx: RoleContext, dir_net: Vector3, threat_vel: Vector3,
 		net_dist: float, threat_peer: int, finish_m: float, self_vmax: float,
-		self_accel: float, self_turn_s: float) -> float:
+		self_accel: float, self_turn_s: float, self_v_along: float = NAN) -> float:
 	var ice_to_finish: float = net_dist - finish_m
 	if ice_to_finish <= 0.0:
 		return 0.0
@@ -364,8 +488,8 @@ static func _threat_gain(ctx: RoleContext, dir_net: Vector3, threat_vel: Vector3
 			if threat_peer != -1 else null
 	if caps == null:
 		caps = _league_caps
-	var self_v: float = ctx.self_velocity.x * dir_net.x \
-			+ ctx.self_velocity.z * dir_net.z
+	var self_v: float = self_v_along if not is_nan(self_v_along) \
+			else ctx.self_velocity.x * dir_net.x + ctx.self_velocity.z * dir_net.z
 	var along: float = threat_vel.x * dir_net.x + threat_vel.z * dir_net.z
 	var gained: float = _head_start_from(along, caps, self_v, self_vmax, self_accel,
 			self_turn_s, ice_to_finish)
@@ -392,7 +516,7 @@ static func _turn_onto_line_s(caps: AISkaterCaps, along: float, speed: float) ->
 
 # The soonest the carrier covers `dist` toward our net: from his pace down the
 # line, or with his whole speed turned onto it (head_start_on_me's two starts).
-static func _carrier_time_to(ctx: RoleContext, ap: AICarrierApproach, dist: float) -> float:
+static func carrier_time_to(ctx: RoleContext, ap: AICarrierApproach, dist: float) -> float:
 	var peer: int = ctx.rush_read.carrier_peer if ctx.rush_read != null else -1
 	var caps: AISkaterCaps = ctx.caps_by_peer.get(peer) if peer != -1 else null
 	if caps == null:
@@ -460,12 +584,13 @@ static func _gap_for(ctx: RoleContext, read: AIRushRead, carrier_pos: Vector3,
 # Is his speed advantage gone — close to stick range and attack? True when:
 #   · he is not advancing on our net and cannot build a head start on us (the
 #     ladder has no domain) — a man crossing the ice at speed is not regrouping:
-#     a turn puts that speed at our net (head_start_on_me) — or is steered to
-#     the wall;
+#     a turn puts that speed at our net (head_start_on_me);
 #   · he is not coming at pace AND cannot build it past us (cushion under a
 #     stick);
-#   · the retreat cannot hold a gap (the cushion eats all but a stick of my
-#     depth) and I stand in his lane — off it, I keep retreating.
+#   · I stand in his lane and either he is steered to the wall (no room left
+#     outside me) or the retreat cannot hold a gap (the cushion eats all but a
+#     stick of my depth). Off his lane I keep retreating: a man on the wall
+#     with me inside him still has the whole wall to skate down past me.
 # Shared with AIRolePressure so both carrier-owners agree at the handoff. See
 # Scripts/domain/ai/CLAUDE.md → "Pace enters through the stride ramp".
 static func should_gap_up(ctx: RoleContext, read: AIRushRead,
@@ -474,17 +599,20 @@ static func should_gap_up(ctx: RoleContext, read: AIRushRead,
 	if read.numbers == AIRushRead.Numbers.DOWN_TWO_PLUS:
 		return false
 	var stick: float = stick_m(ctx)
-	if ap.closing < AIRushRead.REGROUP_CLOSING_M_S and cushion_m < stick:
-		return true
-	if GameRules.INNER_HALF_WIDTH - absf(ap.carrier_pos.x) < GAP_UP_WALL_M:
-		return true
-	if ap.closing < GAP_UP_CLOSING_M_S and cushion_m < stick:
+	if is_stalled(ctx, ap, cushion_m):
 		return true
 	var dx: float = ctx.self_pos.x - ap.carrier_pos.x
 	var dz: float = ctx.self_pos.z - ap.carrier_pos.z
-	var depth: float = dx * ap.dir_net.x + dz * ap.dir_net.z
-	var off_lane: float = absf(dx * ap.dir_net.z - dz * ap.dir_net.x)
-	return depth < cushion_m + stick and off_lane <= stick
+	if absf(dx * ap.dir_net.z - dz * ap.dir_net.x) > stick:
+		return false
+	if GameRules.INNER_HALF_WIDTH - absf(ap.carrier_pos.x) < GAP_UP_WALL_M:
+		return true
+	return dx * ap.dir_net.x + dz * ap.dir_net.z < cushion_m + stick
+
+
+# He is not coming at pace and cannot build it past us (cushion under a stick).
+static func is_stalled(ctx: RoleContext, ap: AICarrierApproach, cushion_m: float) -> bool:
+	return ap.closing < GAP_UP_CLOSING_M_S and cushion_m < stick_m(ctx)
 
 
 # ── Step-up discipline ───────────────────────────────────────────────────────
@@ -506,46 +634,56 @@ static func _settable_gap(ctx: RoleContext, carrier_pos: Vector3,
 			ctx, carrier_pos, dir_net, gap, closing)
 
 
-# ── RUSH_D2: hold mid-ice, take the mid-lane drive ───────────────────────────
+# ── BACK_MID: hold the middle of our line ────────────────────────────────────
 
 static func _decide_d2(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
-	var read: AIRushRead = ctx.rush_read
-	var our_net: Vector3 = ctx.defending_goal_pos
-
-	if AIDefensiveVerbs.cover_threat(ctx, d, _mid_lane_man_peer(read),
+	var ap: AICarrierApproach = ctx.scratch_carrier_approach
+	if not AIDefensiveVerbs.read_carrier_approach(ctx, ap):
+		d.target_position = ctx.self_pos
+		return d
+	# 5v5's middle shades weak: the strong side is BACK_STRONG's. 3v3's is the
+	# middle itself.
+	var shade: float = AIRoleNeutralZone.BACK_MID_SHADE_M if ctx.team_size >= 5 else 0.0
+	var post: Vector3 = AIRoleNeutralZone.back_post(ctx, ap, -ctx.strong_x * shade)
+	# Recovering: at pace to the post, no man (AIRoleTrack's doctrine).
+	if not AIRoleTrack.is_inside(ctx, ctx.rush_read):
+		d.target_position = post
+		d.arrive_at_speed = true
+		return d
+	# Whoever drives the middle into my ice is mine; one still up the ice is not
+	# yet, or I leave the line to escort him.
+	var pickup: float = AIRoleReads.xz_distance(post, ctx.defending_goal_pos) \
+			+ AIRushRead.cover_envelope_m()
+	if AIDefensiveVerbs.cover_threat(ctx, d, _mid_lane_man_peer(ctx, ctx.rush_read, pickup),
 			AIRoleReads.resolve_defensive_play_ref(ctx)):
 		d.target_position = _clamp_to_house(ctx, d.target_position)
 		d.arrive_at_speed = true
 		return d
-
-	# Nobody driving the middle: hold the mid-ice post behind RUSH_D1, shaded
-	# weak side. Depth is paced off the rush so he stays a layer, not a chaser.
-	var axis: Vector3 = read.threat_axis
-	if axis == Vector3.ZERO:
-		axis = Vector3(0.0, 0.0, -ctx.own_goal_dir)
-	var post: Vector3 = our_net - axis * D2_MID_DEPTH_M
-	post.x -= ctx.strong_x * D2_WEAK_SHADE_M
-	d.target_position = _clamp_to_house(ctx, post)
+	d.target_position = post
 	return d
 
 
 # The attacker (excluding the carrier) driving the MIDDLE — the most central one
-# inside the mid-lane band, as a peer id. -1 when nobody is in the middle, which
-# is D2's cue to hold his post rather than chase a wide man (see
-# D2_MID_LANE_HALF_WIDTH_M).
-static func _mid_lane_man_peer(read: AIRushRead) -> int:
-	var i: int = _mid_lane_man_index(read)
+# inside the mid-lane band and within `pickup_m` of our net, as a peer id. -1
+# when nobody is, which is BACK_MID's cue to hold his post rather than chase a
+# wide man (see D2_MID_LANE_HALF_WIDTH_M) or one still up the ice.
+static func _mid_lane_man_peer(ctx: RoleContext, read: AIRushRead,
+		pickup_m: float) -> int:
+	var i: int = _mid_lane_man_index(ctx, read, pickup_m)
 	return read.attackers[i] if i != -1 else -1
 
 
-static func _mid_lane_man_index(read: AIRushRead) -> int:
+static func _mid_lane_man_index(ctx: RoleContext, read: AIRushRead,
+		pickup_m: float) -> int:
 	var best: int = -1
 	var best_x: float = D2_MID_LANE_HALF_WIDTH_M
 	for i: int in read.attackers.size():
 		if read.attackers[i] == read.carrier_peer:
 			continue
 		var lead: Vector3 = read.attacker_leads[i]
+		if AIRoleReads.xz_distance(lead, ctx.defending_goal_pos) > pickup_m:
+			continue
 		if absf(lead.x) < best_x:
 			best_x = absf(lead.x)
 			best = i

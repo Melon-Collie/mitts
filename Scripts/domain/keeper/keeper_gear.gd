@@ -47,10 +47,22 @@ const _PAD_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.5, KeeperAnatomy.PAD_LE
 const _RISE_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.5, KeeperAnatomy.PAD_THIGH_RISE_M * 0.5, 0.04)
 const _RISE_FACE_Z: float = -KeeperAnatomy.PAD_FORWARD_OF_SHIN_M \
 		- KeeperAnatomy.PAD_DEPTH_M * 0.5 + _RISE_HALF.z
+# A pad settles on the ice (`_pad_settle`) past this much of its foam's give,
+# up to this far up its leg, and only on a shin standing up at least this much
+# (its up axis's height): a pad laid flat rests on the ice already.
+const PAD_SETTLE_GIVE_M: float = 0.025
+const PAD_SETTLE_MAX_M: float = 0.12
+const PAD_SETTLE_MIN_RISE: float = 0.1
+# Settled this much clear of the give, so it rests inside it to the float.
+const PAD_SETTLE_SLACK_M: float = 1.0e-5
+# The boot's toe flexes up off the ice by at most this past its built angle,
+# found to within BOOT_FLEX_MAX_RAD / 2^BOOT_FLEX_STEPS (about half a degree).
+const BOOT_FLEX_MAX_RAD: float = deg_to_rad(30.0)
+const BOOT_FLEX_STEPS: int = 6
 
 # The pad's boot: the pad's toe, a stiff section of it jutting forward over
-# the skate's toe from the pad's lower face, as wide as the pad and rigid on
-# the shin with it (`_boot_box`), turned up by KeeperAnatomy.PAD_TOE_ANGLE_RAD
+# the skate's toe from the pad's lower face, as wide as the pad and on the
+# shin with it (`_boot_box`), turned up by KeeperAnatomy.PAD_TOE_ANGLE_RAD
 # so in the stance it lies along the skate just off the ice. Where the foot
 # pitches down under the shin instead (a kick), the skate shows beneath it, as
 # a real one does. Measured in that turned frame from the ankle.
@@ -159,22 +171,71 @@ static func center_on_bone(part: int) -> Vector3:
 
 # The part's box in keeper space: basis columns are its axes, origin its centre.
 static func box(skel: KeeperSkeleton, part: int) -> Transform3D:
+	if part == Part.PAD_G or part == Part.PAD_B:
+		return _pad_box(skel, part - Part.PAD_G).translated(_pad_settle(skel, part - Part.PAD_G))
+	if part == Part.RISE_G or part == Part.RISE_B:
+		return _rise_box(skel, part - Part.RISE_G).translated(_pad_settle(skel, part - Part.RISE_G))
+	if part == Part.BOOT_G or part == Part.BOOT_B:
+		return _boot_box(skel, part - Part.BOOT_G).translated(_pad_settle(skel, part - Part.BOOT_G))
 	var bone: int = _BONE[part]
 	if bone >= 0:
 		var b: Transform3D = skel.xf[bone]
 		return Transform3D(b.basis, b * _CENTER[part])
-	if part == Part.RISE_G or part == Part.RISE_B:
-		return _rise_box(skel, part - Part.RISE_G)
-	if part == Part.BOOT_G or part == Part.BOOT_B:
-		return _boot_box(skel, part - Part.BOOT_G)
 	return _stick_box(skel, part)
 
 
-# The boot on the shin, turned toe-up at the ankle by its built-in angle.
+# The pad strapped on its shin, where the leg holds it.
+static func _pad_box(skel: KeeperSkeleton, side: int) -> Transform3D:
+	var shin: Transform3D = skel.xf[KeeperSkeleton.SHIN[side]]
+	return Transform3D(shin.basis, shin * _PAD_CENTER)
+
+
+# How far the pad on `side`, its boot and its rise ride up the shin to rest on
+# the ice: a shin tilted in (knees driven in, skates wide) would put the rigid
+# pad's bottom corner, or its boot's toe, into the ice, where a real pad,
+# strapped loose round the leg, settles onto it instead. Past its foam's give,
+# and no further than its straps let it. Keeper space.
+static func _pad_settle(skel: KeeperSkeleton, side: int) -> Vector3:
+	var low: float = minf(lowest(_pad_box(skel, side), _PAD_HALF), lowest(_boot_box(skel, side), _BOOT_HALF))
+	var sink: float = -low - PAD_SETTLE_GIVE_M
+	if sink <= 0.0:
+		return Vector3.ZERO
+	var up: Vector3 = skel.xf[KeeperSkeleton.SHIN[side]].basis.y.normalized()
+	if up.y < PAD_SETTLE_MIN_RISE:
+		return Vector3.ZERO
+	return up * minf((sink + PAD_SETTLE_SLACK_M) / up.y, PAD_SETTLE_MAX_M)
+
+
+# A box's lowest point.
+static func lowest(t: Transform3D, h: Vector3) -> float:
+	return t.origin.y - absf(t.basis.x.y) * h.x - absf(t.basis.y.y) * h.y - absf(t.basis.z.y) * h.z
+
+
+# The boot on the shin, turned toe-up at the ankle by its built-in angle; where
+# that would drive its toe into the ice past the foam's give (a shin leant on
+# over it), the toe bridge flexes it up off the ice instead, no further than
+# BOOT_FLEX_MAX_RAD.
 static func _boot_box(skel: KeeperSkeleton, side: int) -> Transform3D:
 	var shin: Transform3D = skel.xf[KeeperSkeleton.SHIN[side]]
-	var basis: Basis = shin.basis * Basis(Vector3.RIGHT, KeeperAnatomy.PAD_TOE_ANGLE_RAD)
 	var ankle: Vector3 = shin * Vector3(0.0, -KeeperAnatomy.SHIN_M, 0.0)
+	var built: Transform3D = _boot_turned(shin.basis, ankle, KeeperAnatomy.PAD_TOE_ANGLE_RAD)
+	if lowest(built, _BOOT_HALF) >= -PAD_SETTLE_GIVE_M:
+		return built
+	var flexed: float = KeeperAnatomy.PAD_TOE_ANGLE_RAD
+	var most: float = KeeperAnatomy.PAD_TOE_ANGLE_RAD + BOOT_FLEX_MAX_RAD
+	if lowest(_boot_turned(shin.basis, ankle, most), _BOOT_HALF) < -PAD_SETTLE_GIVE_M:
+		return _boot_turned(shin.basis, ankle, most)
+	for _i: int in BOOT_FLEX_STEPS:
+		var mid: float = (flexed + most) * 0.5
+		if lowest(_boot_turned(shin.basis, ankle, mid), _BOOT_HALF) < -PAD_SETTLE_GIVE_M:
+			flexed = mid
+		else:
+			most = mid
+	return _boot_turned(shin.basis, ankle, most)
+
+
+static func _boot_turned(shin: Basis, ankle: Vector3, toe_up: float) -> Transform3D:
+	var basis: Basis = shin * Basis(Vector3.RIGHT, toe_up)
 	return Transform3D(basis, ankle + basis * _BOOT_CENTER)
 
 

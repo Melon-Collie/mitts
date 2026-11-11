@@ -151,7 +151,9 @@ func test_cognition_gates_close_down_the_tiers() -> void:
 	assert_eq(normal.lifts_sticks, hard.lifts_sticks)
 	assert_eq(normal.ties_sticks, hard.ties_sticks)
 	assert_eq(normal.blocks_shots, hard.blocks_shots)
+	assert_eq(normal.reads_puck_path, hard.reads_puck_path)
 	assert_true(hard.blocks_shots, "the shared ceiling blocks shots and dives")
+	assert_true(hard.reads_puck_path, "the shared ceiling plays the puck's path")
 	assert_true(hard.reads_goalie_motion, "the shared ceiling is the full hockey IQ")
 	assert_true(hard.reads_receiver_commitment,
 			"the shared ceiling reads receiver commitment")
@@ -161,7 +163,8 @@ func test_cognition_gates_close_down_the_tiers() -> void:
 	assert_false(easy.angles_the_chase, "Easy chases in a straight line")
 	assert_false(easy.reads_receiver_commitment,
 			"Easy is commitment-blind — it chucks feeds at turning players")
-	assert_false(easy.lifts_sticks, "Easy jabs only")
+	assert_false(easy.lifts_sticks, "Easy never lifts a stick")
+	assert_false(easy.reads_puck_path, "Easy's stick reads only where the puck is")
 	assert_false(easy.ties_sticks, "Easy has no stick battle")
 	assert_false(easy.blocks_shots, "Easy never takes a shot or a feed away")
 

@@ -16,12 +16,13 @@ class_name TopHandIK
 #      ceiling at close range) **along the aim line**, preserving aim
 #      direction but clipping distance.
 #
-# Two regimes (continuous at the boundary r = stick_horiz_at_rest):
-#   FAR  (r ≥ stick_horiz_at_rest): hand.y = hand_rest_y; hand displaces in
-#         XZ toward target up to ROM; blade sits stick_horiz from clamped
-#         hand along the aim line.
-#   CLOSE (r < stick_horiz_at_rest): hand.xz stays at shoulder; hand.y rises
-#         so stick_horiz shrinks to exactly r and the blade lands on target.
+# Two regimes (continuous at the boundary r = stick_horiz_at_rest + floor):
+#   FAR  (r ≥ stick_horiz_at_rest + floor): hand.y = hand_rest_y; hand
+#         displaces in XZ toward target up to ROM; blade sits stick_horiz from
+#         clamped hand along the aim line.
+#   CLOSE (below it): hand.xz stays its floor (Config.hand_forward) out from
+#         the shoulder along the aim; hand.y rises so stick_horiz shrinks to
+#         exactly r − floor and the blade lands on target.
 #         Clamped by hand_y_max — if the hand can't rise far enough, the
 #         stick's min horizontal projection overshoots the target along the
 #         aim line.
@@ -59,6 +60,21 @@ class Config:
 	# real player does when jammed on the boards, rather than a full-reach pose
 	# that a post-hoc clamp then has to drag back. INF = unconstrained.
 	var max_blade_reach: float = INF
+	# The least the hand reaches off its shoulder along the bearing to the blade
+	# (meters) once the blade is round the forehand (forward_floor). Without it
+	# the CLOSE regime holds the hand at the shoulder, on the backhand side: a
+	# stick held round the forehand then runs from the far hip, and the other
+	# hand reaches it only across the chest. All of it from
+	# `hand_forward_full_angle` round the forehand (forehand-signed, radians),
+	# none from `hand_forward_none_angle` back, where a top hand holds its stick
+	# at its own side; all of it with the blade `hand_forward_full` off the
+	# shoulder, none from `hand_forward_none` in, where pulled tight the hand
+	# comes back to the hip.
+	var hand_forward: float = 0.0
+	var hand_forward_none: float = 0.3
+	var hand_forward_full: float = 0.9
+	var hand_forward_none_angle: float = deg_to_rad(10.0)
+	var hand_forward_full_angle: float = deg_to_rad(55.0)
 
 class Result:
 	var hand: Vector3 = Vector3.ZERO
@@ -71,6 +87,9 @@ const _TWO_HAND_BISECTIONS: int = 9
 # it the hand's path turns a corner there: a blade swept across the body at
 # speed kinked the hand from vertical travel to horizontal in one tick.
 const REGIME_BAND_M: float = 0.08
+# _blade_for_span's fixed point: it contracts by the floor's slope, at most
+# ~0.63 at the defaults, so twelve steps take the error under a millimetre.
+const _FLOOR_ITERATIONS: int = 12
 
 # Projects a desired blade target onto the reachable blade region (the ROM
 # envelope), in upper-body-local space. This is the closed-form clamp — no
@@ -106,13 +125,17 @@ static func project_blade(
 	# AIM is clamped to the same angular ROM the FAR regime enforces — the
 	# wrists don't gain articulation because the puck is close; without this
 	# clamp a slowly-swept cursor could walk the blade fully behind the body.
-	if r < stick_horiz_at_rest:
+	# The hand sits its floor out along the aim (forward_floor), so the stick
+	# spans what is left.
+	var floor_m: float = forward_floor(r, _to_forehand(aim_dir, blade_side_sign), cfg)
+	if r - floor_m < stick_horiz_at_rest:
 		aim_dir = _clamp_aim_to_rom(aim_dir, blade_side_sign, cfg)
-		var ideal_drop_sq: float = stick_length * stick_length - r * r
-		var ideal_hand_y: float = blade_y + sqrt(maxf(ideal_drop_sq, 0.0))
-		var hand_y: float = minf(ideal_hand_y, cfg.hand_y_max)
-		var stick_horiz: float = _stick_horiz_for(stick_length, hand_y, blade_y)
-		var close_blade_xz: Vector2 = shoulder_xz + aim_dir * stick_horiz
+		var to_forehand: float = _to_forehand(aim_dir, blade_side_sign)
+		floor_m = forward_floor(r, to_forehand, cfg)
+		var span_min: float = _stick_horiz_for(stick_length, cfg.hand_y_max, blade_y)
+		var d: float = r if r - floor_m >= span_min \
+				else _blade_for_span(span_min, to_forehand, cfg)
+		var close_blade_xz: Vector2 = shoulder_xz + aim_dir * d
 		return Vector3(close_blade_xz.x, blade_y, close_blade_xz.y)
 
 	# FAR regime: target is beyond the default stick reach. The hand displaces
@@ -171,17 +194,53 @@ static func solve(
 	var from_shoulder: Vector2 = Vector2(blade.x, blade.z) - shoulder_xz
 	var d: float = from_shoulder.length()
 	var stick_horiz_at_rest: float = _stick_horiz_for(cfg.stick_length, cfg.hand_rest_y, cfg.blade_y)
-	var reach: float = hand_reach(d, stick_horiz_at_rest)
 	var dir: Vector2 = from_shoulder / d if d > 0.0001 else Vector2(0.0, -1.0)
+	var reach: float = floored_reach(d, stick_horiz_at_rest,
+			_to_forehand(dir, blade_side_sign), cfg)
 	var hand_xz: Vector2 = shoulder_xz + dir * reach
 	out.hand = Vector3(hand_xz.x, _hand_y_on_stick(d - reach, cfg.stick_length,
 			cfg.hand_rest_y, cfg.blade_y, stick_horiz_at_rest), hand_xz.y)
 	return out
 
 
-# How far out from the shoulder the hand sits for a blade `d` off it: none in
-# close, the reach past the resting stick (`d − rest_horiz`) beyond, and a
-# quadratic across REGIME_BAND_M between them, so the hand's path has no corner.
+# How far out from the shoulder the hand sits for a blade `d` off it: the
+# floor in close, the reach past the resting stick (`d − rest_horiz`) beyond,
+# and a quadratic across REGIME_BAND_M between them, so the hand's path has no
+# corner. Past the floor's band it is exactly the floorless reach.
+static func floored_reach(d: float, rest_horiz: float, to_forehand: float,
+		cfg: Config) -> float:
+	var floor_m: float = forward_floor(d, to_forehand, cfg)
+	return floor_m + hand_reach(d - floor_m, rest_horiz)
+
+
+# The hand's least reach for a blade `d` off the shoulder `to_forehand` round
+# the forehand (Config.hand_forward). Its slope in `d` stays under 1
+# (hand_forward × 1.5 over the band, smoothstep's steepest), so the stick's span
+# `d − floor` grows with `d` and a blade distance is found from a span
+# (_blade_for_span).
+static func forward_floor(d: float, to_forehand: float, cfg: Config) -> float:
+	if cfg.hand_forward <= 0.0:
+		return 0.0
+	return cfg.hand_forward * smoothstep(cfg.hand_forward_none, cfg.hand_forward_full, d) \
+			* smoothstep(cfg.hand_forward_none_angle, cfg.hand_forward_full_angle, to_forehand)
+
+
+# The blade distance off the shoulder whose stick spans `span` across the ice
+# past the floored hand: the fixed point of d = span + floor(d).
+static func _blade_for_span(span: float, to_forehand: float, cfg: Config) -> float:
+	var d: float = span + cfg.hand_forward
+	for _i: int in _FLOOR_ITERATIONS:
+		d = span + forward_floor(d, to_forehand, cfg)
+	return d
+
+
+# A bearing's angle round the forehand from straight ahead (radians, negative
+# toward the backhand), for a skater whose blade lives on `blade_side_sign`.
+static func _to_forehand(dir: Vector2, blade_side_sign: float) -> float:
+	return atan2(dir.x, -dir.y) * blade_side_sign
+
+
+# The floorless reach: none in close, the reach past the resting stick beyond.
 static func hand_reach(d: float, rest_horiz: float) -> float:
 	var x: float = d - rest_horiz
 	if x >= REGIME_BAND_M:
@@ -232,14 +291,18 @@ static func hand_for_clamped_blade(
 	var from_shoulder: Vector2 = blade_xz - shoulder_xz
 	var d: float = from_shoulder.length()
 	var stick_horiz_at_rest: float = _stick_horiz_for(cfg.stick_length, cfg.hand_rest_y, blade_y)
-	var reach: float = hand_reach(d, stick_horiz_at_rest)
-	if reach <= 0.0:
-		# CLOSE: hands come in over the shoulder and rise, tilting the stick
-		# toward vertical. hand_y_max bounds the choke-up; past it the stick
-		# simply reads shorter than it is.
-		var drop_sq: float = cfg.stick_length * cfg.stick_length - d * d
+	var bearing: Vector2 = from_shoulder / d if d > 0.0001 else Vector2(0.0, -1.0)
+	var floor_m: float = forward_floor(d, _to_forehand(bearing, blade_side_sign), cfg)
+	var reach: float = floor_m + hand_reach(d - floor_m, stick_horiz_at_rest)
+	if reach <= floor_m:
+		# CLOSE: the hand comes in to its floor along the bearing and rises,
+		# tilting the stick toward vertical. hand_y_max bounds the choke-up; past
+		# it the stick simply reads shorter than it is.
+		var span: float = d - floor_m
+		var drop_sq: float = cfg.stick_length * cfg.stick_length - span * span
 		var hand_y: float = minf(blade_y + sqrt(maxf(drop_sq, 0.0)), cfg.hand_y_max)
-		return Vector3(shoulder_xz.x, hand_y, shoulder_xz.y)
+		var close_xz: Vector2 = shoulder_xz + bearing * floor_m
+		return Vector3(close_xz.x, hand_y, close_xz.y)
 	var dir: Vector2 = from_shoulder / d
 	var angle_to_forehand: float = clampf(
 			atan2(dir.x, -dir.y) * blade_side_sign,

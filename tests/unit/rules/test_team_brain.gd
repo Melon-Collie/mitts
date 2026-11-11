@@ -363,11 +363,14 @@ func test_zone_defenders_never_cover_the_same_man() -> void:
 func test_a_zone_defender_is_only_given_a_man_in_his_own_area() -> void:
 	# Areas enter the matcher as ELIGIBILITY. Whatever the reward says, a
 	# defender may not be handed a body standing outside the ice he owns —
-	# chasing out of the structure is the thing the zone exists to prevent.
+	# chasing out of the structure is the thing the zone exists to prevent. The
+	# puck owner's area is everyone's while he is on the puck.
 	var brain: TeamBrain = _zone_brain()
 	brain.force_retick()
 	var snap: WorldSnapshot = _make_5v5_zone_snapshot()
 	brain.tick(0.001, snap)
+	var owner_slot: int = AIZoneCoverage.pressure_owner(
+			brain.strong_x(), GameRules.GOAL_LINE_Z, snap.puck_state.position)
 
 	for def_pid: int in brain.threat_assignments:
 		var slot: int = brain.get_slot(def_pid)
@@ -375,8 +378,11 @@ func test_a_zone_defender_is_only_given_a_man_in_his_own_area() -> void:
 			continue
 		var man_pos: Vector3 = snap.skater_states[
 				brain.threat_assignments[def_pid]].position
-		assert_true(AIZoneCoverage.in_area(slot, brain.strong_x(),
-				GameRules.GOAL_LINE_Z, man_pos, AIZoneCoverage.AREA_RELEASE_MARGIN_M),
+		var in_own: bool = AIZoneCoverage.in_area(slot, brain.strong_x(),
+				GameRules.GOAL_LINE_Z, man_pos, AIZoneCoverage.AREA_RELEASE_MARGIN_M)
+		var in_owners: bool = AIZoneCoverage.in_area(owner_slot, brain.strong_x(),
+				GameRules.GOAL_LINE_Z, man_pos)
+		assert_true(in_own or in_owners,
 				"peer %d (slot %d) was given a man outside its area at %s"
 				% [def_pid, slot, str(man_pos)])
 
@@ -393,3 +399,227 @@ func test_the_area_owning_the_puck_covers_nobody() -> void:
 	for def_pid: int in brain.threat_assignments:
 		assert_ne(brain.get_slot(def_pid), owner_slot,
 				"the pressure owner (slot %d) was also assigned a man" % owner_slot)
+
+
+func test_a_loose_puck_is_the_elected_chasers_and_the_area_owner_covers_a_man() -> void:
+	# The corner puck squirts loose and one of ours (120) is elected to race it:
+	# he is on the puck, so he takes no man, and the strong D whose ice holds it
+	# is handed one instead of standing off the puck and every man.
+	var brain: TeamBrain = _zone_brain()
+	brain.force_retick()
+	brain.tick(0.001, _make_5v5_zone_snapshot())
+	var snap: WorldSnapshot = _make_5v5_zone_snapshot()
+	snap.puck_state.carrier_peer_id = -1
+	snap.puck_state.position = Vector3(8.0, 0.0, 24.5)
+	snap.puck_state.velocity = Vector3(-1.0, 0.0, 0.5)
+	snap.closest_to_puck_by_team[TEAM_ID] = 120
+	brain.force_retick()
+	brain.tick(0.001, snap)
+	assert_eq(brain.state, AIPossessionState.State.DZONE, "fixture sanity: DZONE")
+	assert_false(brain.threat_assignments.has(120), "the chaser takes no man")
+	var owner_slot: int = AIZoneCoverage.pressure_owner(
+			brain.strong_x(), GameRules.GOAL_LINE_Z, snap.puck_state.position)
+	var area_owner: int = -1
+	for pid: int in brain.slot_assignments:
+		if brain.slot_assignments[pid] == owner_slot:
+			area_owner = pid
+	assert_ne(area_owner, 120, "fixture sanity: the chaser is not the area's owner")
+	assert_true(brain.threat_assignments.has(area_owner),
+			"the area's owner covers a man; partition %s" % str(brain.threat_assignments))
+
+
+# ── A carrier at pace across our line ────────────────────────────────────────
+
+# 5v5: their carrier just across our line on the left wall at `carrier_vel`, his
+# two trailers still in the neutral zone; our D who rode him back (130) goal-side
+# of him, our backchecker (110) a stride behind him.
+func _entry_snapshot(carrier_vel: Vector3) -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	for entry: Array in [
+			[100, 0, Vector3(1.0, 0.0, 16.0), Vector3(0.0, 0.0, 4.0)],
+			[110, 0, Vector3(-7.5, 0.0, 6.5), Vector3(0.0, 0.0, 6.0)],
+			[120, 0, Vector3(5.0, 0.0, 15.0), Vector3(0.0, 0.0, 4.0)],
+			[130, 0, Vector3(-4.0, 0.0, 15.5), Vector3(0.0, 0.0, 6.5)],
+			[140, 0, Vector3(1.5, 0.0, 12.0), Vector3(0.0, 0.0, 5.0)],
+			[200, 1, Vector3(-8.0, 0.0, 9.0), carrier_vel],
+			[210, 1, Vector3(-1.0, 0.0, -4.0), Vector3(0.0, 0.0, 9.0)],
+			[220, 1, Vector3(1.0, 0.0, -7.0), Vector3(0.0, 0.0, 9.0)]]:
+		var s := SkaterNetworkState.new()
+		s.position = entry[2]
+		s.velocity = entry[3]
+		snap.skater_states[entry[0]] = s
+	var puck := PuckNetworkState.new()
+	puck.carrier_peer_id = 200
+	puck.position = Vector3(-8.0, 0.0, 9.0)
+	snap.puck_state = puck
+	return snap
+
+
+func _entry_brain() -> TeamBrain:
+	var team_map: Dictionary = {100: 0, 110: 0, 120: 0, 130: 0, 140: 0,
+			200: 1, 210: 1, 220: 1}
+	return TeamBrain.new(TEAM_ID, team_map, {}, 5,
+			{100: 0, 110: 1, 120: 2, 130: 3, 140: 4})
+
+
+func test_a_carrier_at_pace_is_kept_by_the_zone_role_goal_side_of_him() -> void:
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _entry_snapshot(Vector3(0.0, 0.0, 9.0)))
+	assert_eq(brain.state, AIPossessionState.State.DZONE, "fixture sanity: DZONE")
+	var owner_slot: int = brain.pressure_slot_override()
+	assert_ne(owner_slot, AIRoleSlots.Slot.NONE, "a carrier at pace has an owner")
+	var holder: int = -1
+	for pid: int in brain.slot_assignments:
+		if brain.slot_assignments[pid] == owner_slot:
+			holder = pid
+	assert_ne(holder, 110, "not the backchecker he has already passed")
+	brain.build_view()
+	assert_eq(brain.get_view().pressure_slot_override(), owner_slot, "the view carries it")
+
+
+func test_a_stalled_carrier_leaves_the_puck_to_its_area() -> void:
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _entry_snapshot(Vector3.ZERO))
+	assert_eq(brain.pressure_slot_override(), AIRoleSlots.Slot.NONE)
+
+
+# 5v5 neutral zone: their carrier up the middle at the red line at pace, two
+# wingers wide of him; our D pair back, one (140) in front of him, one (130)
+# wide on the strong side; our forwards caught up the ice behind the play.
+func _middle_rush_snapshot() -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	for entry: Array in [
+			[100, 0, Vector3(0.0, 0.0, -10.0), Vector3(0.0, 0.0, 7.0)],
+			[110, 0, Vector3(-4.0, 0.0, -11.0), Vector3(0.0, 0.0, 7.0)],
+			[120, 0, Vector3(4.0, 0.0, -11.0), Vector3(0.0, 0.0, 7.0)],
+			[130, 0, Vector3(6.5, 0.0, 9.0), Vector3(0.0, 0.0, 6.0)],
+			[140, 0, Vector3(-1.0, 0.0, 7.0), Vector3(0.0, 0.0, 6.0)],
+			[200, 1, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 8.5)],
+			[210, 1, Vector3(-8.0, 0.0, -1.5), Vector3(0.0, 0.0, 8.5)],
+			[220, 1, Vector3(8.0, 0.0, -1.5), Vector3(0.0, 0.0, 8.5)]]:
+		var s := SkaterNetworkState.new()
+		s.position = entry[2]
+		s.velocity = entry[3]
+		snap.skater_states[entry[0]] = s
+	var puck := PuckNetworkState.new()
+	puck.carrier_peer_id = 200
+	puck.position = Vector3(1.0, 0.0, 0.0)
+	snap.puck_state = puck
+	return snap
+
+
+func test_a_carrier_up_the_middle_is_the_back_line_d_in_front_of_him() -> void:
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _middle_rush_snapshot())
+	assert_eq(brain.state, AIPossessionState.State.TRANS_DEFENSE,
+			"fixture sanity: TRANS_DEFENSE")
+	assert_true(AIRoleSlots.is_back_line_d(brain.slot_assignments.get(130, -1))
+			and AIRoleSlots.is_back_line_d(brain.slot_assignments.get(140, -1)),
+			"fixture sanity: the D pair is the back line; got %s" % str(brain.slot_assignments))
+	var owner_slot: int = brain.pressure_slot_override()
+	assert_eq(owner_slot, brain.slot_assignments[140],
+			"the D on his line owns him, whichever post he holds")
+	assert_true(AIRoleSlots.owns_back_line_carrier(brain, brain.slot_assignments[140]))
+	assert_false(AIRoleSlots.owns_back_line_carrier(brain, brain.slot_assignments[130]),
+			"and the D across from him does not")
+
+
+func test_a_slowed_carrier_stays_with_the_d_whose_lane_he_is_in() -> void:
+	# Elected while the carrier comes at pace, the D in front of him keeps him
+	# once he slows and no election runs — not handed to BACK_STRONG's label.
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _middle_rush_snapshot())
+	assert_eq(brain.pressure_slot_override(), brain.slot_assignments[140],
+			"fixture sanity: 140 elected")
+	var slowed: WorldSnapshot = _middle_rush_snapshot()
+	slowed.skater_states[200].velocity = Vector3(-1.0, 0.0, 1.0)
+	brain.force_retick()
+	brain.tick(0.001, slowed)
+	assert_eq(brain.state, AIPossessionState.State.TRANS_DEFENSE, "fixture sanity")
+	assert_true(AIRoleSlots.owns_back_line_carrier(brain, brain.slot_assignments[140]),
+			"the D on him keeps him; slots %s, owner %s" % [str(brain.slot_assignments),
+					AIRoleSlots.label(brain.pressure_slot_override())])
+
+
+func test_a_carrier_cutting_across_is_switched_to_the_d_on_that_side() -> void:
+	# The D-to-D switch: no longer coming at our net, he skates across the ice
+	# toward 130's lane, and he is 130's.
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _middle_rush_snapshot())
+	assert_eq(brain.pressure_slot_override(), brain.slot_assignments[140],
+			"fixture sanity: 140 elected")
+	var across: WorldSnapshot = _middle_rush_snapshot()
+	across.skater_states[200].position = Vector3(3.0, 0.0, 0.0)
+	across.puck_state.position = Vector3(3.0, 0.0, 0.0)
+	across.skater_states[200].velocity = Vector3(8.0, 0.0, 1.0)
+	brain.force_retick()
+	brain.tick(0.001, across)
+	assert_true(AIRoleSlots.owns_back_line_carrier(brain, brain.slot_assignments[130]),
+			"the D on the side he picked takes him; slots %s, owner %s" % [
+					str(brain.slot_assignments),
+					AIRoleSlots.label(brain.pressure_slot_override())])
+
+
+func test_zone_coverage_takes_no_man_still_up_the_ice() -> void:
+	# His trailers are in the neutral zone: escorting them walks the coverage
+	# away from the puck.
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _entry_snapshot(Vector3(0.0, 0.0, 9.0)))
+	for def_pid: int in brain.threat_assignments:
+		assert_false(brain.threat_assignments[def_pid] in [210, 220],
+				"peer %d covers a man up the ice" % def_pid)
+
+
+# ── Whether we have the numbers (their rush read of our attack) ─────────────
+# Our three a stride short of their line at speed; their lone D backing in
+# ahead, and `backcheckers` of theirs on our hip. Team 0 attacks -Z.
+func _three_on_one(backcheckers: int, carrier: int = 100) -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	var v := Vector3(0.0, 0.0, -7.0)
+	var rows: Array = [[100, 0, Vector3(-6.0, 0.0, -1.5), v],
+			[110, 0, Vector3(-1.0, 0.0, -1.0), v],
+			[120, 0, Vector3(4.0, 0.0, -1.0), v],
+			[200, 1, Vector3(0.0, 0.0, -7.5), Vector3(0.0, 0.0, -3.0)]]
+	for i: int in backcheckers:
+		rows.append([210 + i, 1, Vector3(-4.0 + 5.0 * i, 0.0, 1.5), Vector3(0.0, 0.0, -7.5)])
+	for r: Array in rows:
+		var s := SkaterNetworkState.new()
+		s.position = r[2]
+		s.velocity = r[3]
+		snap.skater_states[r[0]] = s
+	var puck := PuckNetworkState.new()
+	puck.carrier_peer_id = carrier
+	puck.position = snap.skater_states[carrier].position
+	snap.puck_state = puck
+	return snap
+
+
+func _numbers_up(snap: WorldSnapshot) -> bool:
+	var team_map: Dictionary = {}
+	for pid: int in snap.skater_states:
+		team_map[pid] = 0 if pid < 200 else 1
+	var brain := TeamBrain.new(TEAM_ID, team_map)
+	brain._compute_tick(snap)
+	return brain.numbers_up()
+
+
+func test_a_three_on_one_is_numbers_up() -> void:
+	assert_true(_numbers_up(_three_on_one(0)))
+
+
+func test_a_backchecker_on_the_hip_is_a_man_back() -> void:
+	# Their own read counts him (AIRushRead.BACKCHECK_WINDOW_S): one makes it a
+	# 3-on-2, still ours; two make it even.
+	assert_true(_numbers_up(_three_on_one(1)), "3-on-2")
+	assert_false(_numbers_up(_three_on_one(2)), "3-on-3")
+
+
+func test_never_numbers_up_on_their_puck() -> void:
+	assert_false(_numbers_up(_three_on_one(0, 200)))
+

@@ -55,8 +55,12 @@ are addressable incrementally.
   client's world view), the velocity/position phase mix is gone, and the
   label skew the input-lead servo was padding over is removed (expect
   `input_lead_ms` to relax by ~a tick).
-- **Open:** A1–A4 (clock foundation), B1–B3 (channels / replay-event
-  packing / 5v5 bandwidth), E1–E3, F6, F9–F11.
+- **Addressed — B3, by (b):** `STATE_RATE` is 60. The 5v5 snapshot has since
+  grown to 941 B (the keeper's pose), so an all-human 5v5 is ~4.1 Mbps of host
+  upload at 60 Hz (`docs/performance-findings.md` → *Network bytes by broadcast
+  rate*). (a) and (c) are unexplored.
+- **Open:** A1–A4 (clock foundation), B1–B2 (channels / replay-event
+  packing), E1–E3, F6, F9–F11.
 
 ## What clears the AAA bar (calibration — don't touch these)
 

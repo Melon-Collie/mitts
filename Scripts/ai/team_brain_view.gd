@@ -10,8 +10,13 @@ extends TeamStrategyView
 # through the TeamStrategyView interface methods below.
 
 var strong_x_val: float = 1.0
+var carrier_lane_val: int = 0
 var team_size_val: int = GameRules.DEFAULT_TEAM_SIZE
+var icing_enforced_val: bool = false
+var covers_whistled_val: bool = false
+var numbers_up_val: bool = false
 var ping_chase_peer_val: int = -1
+var pressure_slot_override_val: int = AIRoleSlots.Slot.NONE
 var slot_by_peer: Dictionary[int, int] = {}
 var assigned_threat_by_peer: Dictionary[int, int] = {}
 var position_by_peer: Dictionary[int, int] = {}
@@ -30,6 +35,10 @@ func get_slot(peer_id: int) -> int:
 
 func strong_x() -> float:
 	return strong_x_val
+
+
+func carrier_lane() -> int:
+	return carrier_lane_val
 
 
 func assigned_threat(peer_id: int) -> int:
@@ -60,8 +69,24 @@ func ping_chase_peer() -> int:
 	return ping_chase_peer_val
 
 
+func pressure_slot_override() -> int:
+	return pressure_slot_override_val
+
+
 func get_team_size() -> int:
 	return team_size_val
+
+
+func icing_enforced() -> bool:
+	return icing_enforced_val
+
+
+func covers_whistled() -> bool:
+	return covers_whistled_val
+
+
+func numbers_up() -> bool:
+	return numbers_up_val
 
 
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:

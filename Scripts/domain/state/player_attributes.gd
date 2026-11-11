@@ -424,7 +424,7 @@ func curve_backhand_mult() -> float:
 	return _CURVE_BACKHAND_LEAN[curve]
 
 
-# Scales the deflect ceiling + squared-up bonus a receiver's blade can soak —
+# Scales the deflect ceiling + on-the-line bonus a receiver's blade can soak —
 # the blade shape's force limit, read at the reception decision sites.
 func reception_ceiling_mult() -> float:
 	return _CURVE_RECEPTION_LEAN[curve]
@@ -442,6 +442,12 @@ func curve_loft_tan_mid() -> float:
 
 func curve_loft_tan_high() -> float:
 	return tan(deg_to_rad(_CURVE_LOFT_HIGH_DEG[curve]))
+
+
+# The steepest any pattern launches a shot: how high a puck can be lifted over
+# a given distance from the blade, whoever shoots it.
+static func steepest_loft_tan() -> float:
+	return tan(deg_to_rad(_CURVE_LOFT_HIGH_DEG.max()))
 
 
 # Cosmetic shaft bow, so the pick reads on the ice.

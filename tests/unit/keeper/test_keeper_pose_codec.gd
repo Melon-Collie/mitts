@@ -5,7 +5,7 @@ extends GutTest
 # piece of gear where the host's was; the flags come back as they went; and a
 # pose blended between two snapshots is each at its ends.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # How far a piece of gear may lie from the host's once its pose has been on the
 # wire: the quantization's millimetres and fraction of a degree carried out
 # along a limb.

@@ -14,6 +14,9 @@ jobs:
     name: Export and Release
     needs: test
     runs-on: ubuntu-latest
+    # A healthy run takes ~5 min. Without a cap, a hung apt mirror sits out
+    # GitHub's 6-hour default.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -40,16 +43,79 @@ jobs:
           sed -i "s|^application/file_version=.*|application/file_version=\"${VERSION}.0\"|" export_presets.cfg
           sed -i "s|^application/product_version=.*|application/product_version=\"${VERSION}.0\"|" export_presets.cfg
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install SCons
+        run: python -m pip install --upgrade scons
+
+      - name: Resolve godot-cpp revision
+        id: gdcpp
+        run: echo "sha=$(git rev-parse HEAD:native/godot-cpp)" >> "$GITHUB_OUTPUT"
+
+      # Same scheme as test.yml's cache, under its own prefix: this one holds
+      # the template_release objects for both platforms, which the test job's
+      # Linux template_debug build never produces.
+      - name: Cache SCons build
+        uses: actions/cache@v4
+        with:
+          path: .scons-cache
+          key: scons-release-${{ runner.os }}-${{ steps.gdcpp.outputs.sha }}-${{ hashFiles('native/src/**', 'native/SConstruct', 'native/build_profile.json') }}
+          restore-keys: |
+            scons-release-${{ runner.os }}-${{ steps.gdcpp.outputs.sha }}-
+
+      # mingw and wine come out of this cache offline, so a slow Ubuntu mirror
+      # only costs the run that has to refill it. A save is keyed by run, so
+      # restoring by prefix picks the newest snapshot; it is saved again only
+      # when the install had to reach the mirror (apt-install-cached.sh).
+      - name: Resolve apt cache key
+        id: aptkey
+        run: echo "prefix=apt-${ImageOS:-${{ runner.os }}}-${{ hashFiles('.github/scripts/apt-install-cached.sh') }}-" >> "$GITHUB_OUTPUT"
+
+      - name: Restore apt cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-cache
+          key: ${{ steps.aptkey.outputs.prefix }}
+          restore-keys: ${{ steps.aptkey.outputs.prefix }}
+
+      - name: Install mingw-w64
+        id: apt-mingw
+        timeout-minutes: 15
+        run: bash .github/scripts/apt-install-cached.sh ~/apt-cache --no-install-recommends g++-mingw-w64-x86-64
+
+      # Build the native GDExtension for every shipped platform BEFORE export.
+      # The binaries are gitignored (dev machines build their own), and Godot's
+      # export fails outright when a library mapped in
+      # native/mitts_native.gdextension is missing — so each exported preset
+      # needs its build here: the Windows DLL cross-compiled with mingw-w64
+      # (godot-cpp statically links the runtime, so no extra dependencies)
+      # and the Linux .so with the runner's host g++.
+      - name: Build native GDExtension (Windows + Linux release)
+        timeout-minutes: 10
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: |
+          cd native
+          scons platform=windows arch=x86_64 target=template_release use_mingw=yes \
+                build_profile=build_profile.json -j"$(nproc)"
+          scons platform=linux arch=x86_64 target=template_release \
+                build_profile=build_profile.json -j"$(nproc)"
+          ls -la bin/
+
       # The Windows exe icon + version strings are embedded by rcedit (run
       # through wine). icon.ico is committed (generated from icon.svg), so the
       # only build-time dependency here is rcedit/wine. Best-effort: if the
       # setup fails, Godot skips embedding (warning, not error) and the export
       # proceeds with the default icon.
       - name: Set up rcedit for Windows exe branding
+        id: rcedit
         continue-on-error: true
+        timeout-minutes: 10
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq wine64
+          bash .github/scripts/apt-install-cached.sh ~/apt-cache wine64
           WINE_BIN=$(command -v wine64 || command -v wine)
           curl -fsSL -o /usr/local/bin/rcedit.exe \
             https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
@@ -63,23 +129,12 @@ jobs:
           EOF
           echo "rcedit configured (wine: ${WINE_BIN})"
 
-      # Build the native GDExtension for every shipped platform BEFORE export.
-      # The binaries are gitignored (dev machines build their own), and Godot's
-      # export fails outright when a library mapped in
-      # native/mitts_native.gdextension is missing — so each exported preset
-      # needs its build here: the Windows DLL cross-compiled with mingw-w64
-      # (godot-cpp statically links the runtime, so no extra dependencies)
-      # and the Linux .so with the runner's host g++.
-      - name: Build native GDExtension (Windows + Linux release)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends g++-mingw-w64-x86-64 scons
-          cd native
-          scons platform=windows arch=x86_64 target=template_release use_mingw=yes \
-                build_profile=build_profile.json -j"$(nproc)"
-          scons platform=linux arch=x86_64 target=template_release \
-                build_profile=build_profile.json -j"$(nproc)"
-          ls -la bin/
+      - name: Save apt cache
+        if: steps.apt-mingw.outputs.refreshed == 'true' || steps.rcedit.outputs.refreshed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-cache
+          key: ${{ steps.aptkey.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Export with Godot
         uses: firebelley/godot-export@v5.2.1

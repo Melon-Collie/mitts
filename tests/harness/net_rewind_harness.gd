@@ -33,6 +33,7 @@ extends RefCounted
 # the same fields, so the thing that actually decides these tests — the lookup —
 # is entirely the shipping implementation.
 
+const _ClockSyncScript: GDScript = preload("res://Scripts/networking/clock_sync.gd")
 const _PEER: int = 7
 
 
@@ -45,7 +46,7 @@ enum ResolveMode {
 class Config:
 	var rtt_ms: float = 30.0
 	var interp_delay_ms: float = 45.0
-	var input_lead_ms: float = 25.0
+	var input_lead_ms: float = _ClockSyncScript.INPUT_LEAD_SEC * 1000.0
 	var duration_s: float = 3.0
 	var claim_every_ticks: int = 7
 	var resolve_mode: ResolveMode = ResolveMode.DEFER_TO_INSTANT

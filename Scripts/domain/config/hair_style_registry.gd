@@ -7,9 +7,10 @@ extends RefCounted
 # an untouched player wears — short dark-brown hair, no facial hair. Cosmetic
 # only: nothing gameplay reads them.
 #
-# The helmet covers the crown, so a style is really a statement about what
-# shows under its rim: a short cut is a nape and sideburns, medium covers the
-# ears and the top of the neck, a shag or a mullet spills out over the collar.
+# Every style is a whole head of hair, but the helmet covers the crown, so on
+# the ice a style mostly reads by what shows under its rim: a short cut is a
+# nape and sideburns, medium covers the ears and the top of the neck, a shag or
+# a mullet spills out over the collar, and a flow wings out past it.
 #
 # A style is retired rather than removed: its index stays (a saved or sent code
 # still names it), it leaves the picker and the bots' rolls, and whoever wore it
@@ -22,6 +23,7 @@ const HAIR_BALD: int = 3
 const HAIR_MULLET: int = 4
 const HAIR_BUZZ: int = 5
 const HAIR_SHAGGY: int = 6
+const HAIR_FLOW: int = 7
 
 const HAIR_NAME_KEYS: Array[StringName] = [
 	&"HAIR_STYLE_SHORT",
@@ -31,6 +33,7 @@ const HAIR_NAME_KEYS: Array[StringName] = [
 	&"HAIR_STYLE_MULLET",
 	&"HAIR_STYLE_BUZZ",
 	&"HAIR_STYLE_SHAGGY",
+	&"HAIR_STYLE_FLOW",
 ]
 
 const FACIAL_NONE: int = 0

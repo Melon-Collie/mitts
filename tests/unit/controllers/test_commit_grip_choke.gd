@@ -18,7 +18,7 @@ extends GutTest
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # Long enough for the commit-lift ease (9/s) and the lead ease (5/s) to converge.
 const TICKS: int = 90
 

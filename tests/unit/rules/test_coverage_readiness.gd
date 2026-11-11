@@ -93,7 +93,7 @@ func test_backcheck_is_not_dissolved_at_the_blue_line() -> void:
 	assert_eq(brain.state, AIPossessionState.State.TRANS_DEFENSE,
 			"an outnumbered entry stays in the rush shape, not zone coverage")
 	# And the shape is the layered rush, not zone posts.
-	assert_ne(_slot_of(brain, AIRoleSlots.Slot.RUSH_D1), -1,
+	assert_ne(_slot_of(brain, AIRoleSlots.Slot.BACK_STRONG), -1,
 			"the rush layers are live")
 	for pid: int in [100, 110, 120, 130, 140]:
 		assert_false(brain.get_slot(pid) in [
@@ -188,13 +188,13 @@ func test_the_gate_applies_to_3v3_too() -> void:
 	], 200))
 	assert_eq(brain.state, AIPossessionState.State.TRANS_DEFENSE,
 			"3v3 holds the rush shape through an unaccounted-for entry")
-	assert_ne(_slot_of(brain, AIRoleSlots.Slot.RUSH_D1), -1,
+	assert_ne(_slot_of(brain, AIRoleSlots.Slot.BACK_STRONG), -1,
 			"and runs the 3v3 rush layers")
 
 
 func test_3v3_converges_into_man_coverage_once_set() -> void:
 	# The other half of the argument for gating 3v3: the rush roles themselves
-	# bring everyone into the house — RUSH_D1 is home already, TRACK_PUCK chases
+	# bring everyone into the house — BACK_STRONG is home already, NZ_F1 chases
 	# to the net, TRACK_MID stops at the circle tops — so the shapes converge and
 	# the gate hands off to man coverage rather than latching.
 	var brain: TeamBrain = _brain_3v3()

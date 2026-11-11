@@ -27,10 +27,10 @@ extends RefCounted
 # Shoulders against hips: the trunk's comfortable axial rotation, thoracic and
 # lumbar together.
 const TWIST_LIMIT: float = deg_to_rad(55.0)
-# Share of that twist the pelvis takes over the hip joints. The shorts are one
-# rigid shell and so is the jersey, so the twist shows as a seam wherever it
-# happens; splitting it puts half at the hem and half at the hip balls instead of
-# all of it at the hem.
+# Share of that twist the pelvis takes over the hip joints. The pants ride the
+# waist and the chest rides the spine, so the twist shows wherever it happens;
+# splitting it puts half at the hem and half over the hips instead of all of it
+# at the hem.
 const WAIST_TWIST_SHARE: float = 0.5
 
 var _skater: Skater

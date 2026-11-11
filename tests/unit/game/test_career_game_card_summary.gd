@@ -109,6 +109,21 @@ func test_card_colours_are_each_teams_own_primary() -> void:
 	assert_eq(colors[1], pair.away as Color)
 
 
+# Where the colour is the lettering (rosters, period letters, the analytics
+# screen), it is the team's ink, which reads on the dark card.
+func test_card_inks_are_each_teams_ink_on_the_card() -> void:
+	var inks: Array[Color] = _screen._inks_from_meta(_meta(2, 1))
+	var pair: Dictionary = TeamColorRegistry.get_score_ink_pair(0, 1, MenuStyle.BROADCAST_BG)
+	assert_eq(inks.size(), 2)
+	assert_eq(inks[0], pair.home as Color)
+	assert_eq(inks[1], pair.away as Color)
+
+
+func test_card_inks_fall_back_to_the_neutral_pair() -> void:
+	var inks: Array[Color] = _screen._inks_from_meta({})
+	assert_eq(inks, _screen._colors_from_meta({}))
+
+
 func test_card_colours_fall_back_when_no_replay_file_recorded_them() -> void:
 	# career_stats has no colour columns, so a backend row with no local file has
 	# to render neutral rather than borrow the CURRENT session's palette.

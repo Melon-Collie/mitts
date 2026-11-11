@@ -1,7 +1,7 @@
 extends GutTest
 
-# BodyZoneMesh merges surfaces into one without moving a vertex: a body drawn as
-# zones must be the body that was drawn as surfaces.
+# BodyZoneMesh joins surfaces into one without moving a vertex: a body drawn as
+# zones must be the body its parts would draw as surfaces.
 
 
 func _two_surface_mesh() -> ArrayMesh:
@@ -15,9 +15,12 @@ func _two_surface_mesh() -> ArrayMesh:
 	return m
 
 
-func test_merge_keeps_every_triangle_and_numbers_each_surface() -> void:
+func test_adding_keeps_every_triangle_and_numbers_each_surface() -> void:
 	var src: ArrayMesh = _two_surface_mesh()
-	var merged: ArrayMesh = BodyZoneMesh.merge(src, 5)
+	var b := BodyZoneMesh.new()
+	for s: int in src.get_surface_count():
+		b.add(src.surface_get_arrays(s), 5 + s)
+	var merged: ArrayMesh = b.commit()
 	assert_eq(merged.get_surface_count(), 1)
 	var out: Array = merged.surface_get_arrays(0)
 	var out_v: PackedVector3Array = out[Mesh.ARRAY_VERTEX]
@@ -58,16 +61,22 @@ func test_rigid_bone_bakes_the_transform_and_corrects_normals() -> void:
 		assert_eq(weights[i * 4], 1.0)
 
 
-func test_merge_keeps_the_source_bones_and_weights() -> void:
-	var src: ArrayMesh = SkaterMeshBuilder.shared_leg_skin_mesh()
-	var merged: Array = BodyZoneMesh.merge(src, 0).surface_get_arrays(0)
-	var bones: PackedInt32Array = merged[Mesh.ARRAY_BONES]
-	var weights: PackedFloat32Array = merged[Mesh.ARRAY_WEIGHTS]
-	var at: int = 0
-	for s: int in src.get_surface_count():
-		var arrays: Array = src.surface_get_arrays(s)
-		var sb: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-		var sw: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
-		assert_eq(bones.slice(at, at + sb.size()), sb, "bones of surface %d" % s)
-		assert_eq(weights.slice(at, at + sw.size()), sw, "weights of surface %d" % s)
-		at += sb.size()
+func test_a_skinned_surface_keeps_its_own_bones_and_weights() -> void:
+	var arrays: Array = BoxMesh.new().get_mesh_arrays()
+	var n: int = (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	for i: int in n:
+		bones.append_array([i % 3, 4, 0, 0])
+		weights.append_array([0.75, 0.25, 0.0, 0.0])
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	var b := BodyZoneMesh.new()
+	b.add(arrays, 0)
+	var out: Array = b.commit().surface_get_arrays(0)
+	assert_eq(out[Mesh.ARRAY_BONES], bones)
+	# The engine stores weights in 16 bits.
+	var kept: PackedFloat32Array = out[Mesh.ARRAY_WEIGHTS]
+	assert_eq(kept.size(), weights.size())
+	for i: int in weights.size():
+		assert_almost_eq(kept[i], weights[i], 1e-4)

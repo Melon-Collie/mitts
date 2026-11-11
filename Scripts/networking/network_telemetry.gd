@@ -24,7 +24,7 @@ var current_actor_count: int = 0
 var _last_host_event: String = ""
 var _last_host_event_sec: float = -1.0
 # Host physics ticks whose inter-tick wall gap exceeded _HOST_STALL_MS this
-# window. The threshold is a feel/diagnostic cutoff (~2 dropped 60 Hz frames),
+# window. The threshold is a feel/diagnostic cutoff (~2 dropped 60 fps frames),
 # not an evaluator constant. Host only; folded as a TOTAL_KEY.
 const _HOST_STALL_MS: float = 33.0
 var _host_stall_count: int = 0
@@ -97,6 +97,19 @@ var _puck_predict_residual_sum: float = 0.0
 var _puck_predict_residual_n: int = 0
 var _puck_predict_residual_max: float = 0.0
 var _puck_predict_fallback_count: int = 0
+# The predicted goalie (client, KeeperPredictor): snapshots that confirmed his
+# predicted state and ones that re-stepped him, the box gap at a re-step's
+# snapshot where a state was held for it, frames drawn interpolated for want of
+# a prediction, and each physics frame's predictor time for both goalies (us).
+var _keeper_confirm_count: int = 0
+var _keeper_restep_count: int = 0
+var _keeper_gap_sum: float = 0.0
+var _keeper_gap_n: int = 0
+var _keeper_gap_max: float = 0.0
+var _keeper_fallback_count: int = 0
+var _keeper_frame_us := PackedInt32Array()
+var _keeper_frame_at: int = -1
+var _keeper_frame_accum: int = 0
 # Remote-skater forward-prediction quality (client): the same pre-damp residual
 # on remote bodies, once per tick.
 var _remote_correction_sum: float = 0.0
@@ -113,13 +126,15 @@ var _delay_clamp_excess_max_ms: float = 0.0
 var _pickup_claim_count: int = 0
 var _pickup_claim_miss_count: int = 0
 var _pickup_claim_deflect_count: int = 0
-# Poke / stick-lift lag-comp claim outcomes: the same denominator-and-miss shape
-# as the pickup counters, for the other two client-authoritative blade actions.
-# Folded as session totals.
+# Poke / stick-lift / stick-tie lag-comp claim outcomes: the same
+# denominator-and-miss shape as the pickup counters, for the other
+# client-authoritative stick actions. Folded as session totals.
 var _poke_claim_count: int = 0
 var _poke_claim_miss_count: int = 0
 var _stick_lift_claim_count: int = 0
 var _stick_lift_claim_miss_count: int = 0
+var _stick_tie_claim_count: int = 0
+var _stick_tie_claim_miss_count: int = 0
 # ── Why a claim missed ───────────────────────────────────────────────────────
 # A miss fraction on its own conflates three unrelated things: the rewind
 # failing to reproduce the client's view, the two sides running different tests
@@ -185,7 +200,7 @@ var world_state_hz: float = 0.0          # world-state packets RECEIVED per seco
 # the host never receives its own state, and a client never sends one, so each
 # side folds a structural 0 on the other's field.
 var world_state_sent_hz: float = 0.0
-var input_hz: float = 0.0                # ~120/s — input batch send rate (Constants.INPUT_RATE)
+var input_hz: float = 0.0                # ~90/s — input batch send rate (Constants.INPUT_RATE)
 var reconcile_per_sec: float = 0.0
 # Subset of reconcile_per_sec whose matched prediction was replay-re-recorded.
 var recon_replayed_entry_per_sec: float = 0.0
@@ -211,6 +226,9 @@ var extrapolation_pct: float = 0.0       # 0..100
 # Effective client render rate (frames observed / window) — the framerate that
 # otherwise silently confounds every per-frame-sampled rate here.
 var client_fps: float = 0.0
+# The SHALLOWEST buffer of each kind this frame (shallowest_depth): running dry
+# is the bad direction, which is why the session folds the skater and puck
+# depths as minima.
 var buffer_depth_skater: int = 0
 var buffer_depth_puck: int = 0
 var buffer_depth_goalie: int = 0
@@ -229,6 +247,10 @@ var input_queue_depth_median: int = 0
 # of its pending client inputs — input_queue_depth above is the client's echo and
 # folds 0 on host rows).
 var host_input_queue_depth_max: int = 0
+# How many samples that maximum is over: 0 when no remote skater was broadcast
+# this window (a spectator-only lobby, a goal replay), where the 0 above is no
+# reading at all rather than a starving queue.
+var host_input_queue_depth_samples: int = 0
 var input_lead_avg_ms: float = 0.0
 var input_starvations_per_sec: float = 0.0
 var input_drains_per_sec: float = 0.0
@@ -236,8 +258,15 @@ var puck_predict_residual_avg_m: float = 0.0
 var puck_predict_residual_max_m: float = 0.0
 var remote_correction_avg_m: float = 0.0
 var remote_correction_max_m: float = 0.0
+var keeper_resteps_per_sec: float = 0.0
+var keeper_confirm_pct: float = 100.0
+var keeper_restep_gap_avg_m: float = 0.0
+var keeper_restep_gap_max_m: float = 0.0
+var keeper_predict_us_avg: float = 0.0
+var keeper_predict_us_p95: float = 0.0
 var _queue_depth_window: Array[int] = []
 var _host_queue_depth_window_max: int = 0
+var _host_queue_depth_window_samples: int = 0
 var packet_loss_pct: float = 0.0
 var jitter_p95_ms: float = 0.0
 var puck_mode: String = "—"
@@ -246,9 +275,13 @@ var puck_mode: String = "—"
 # 1 s window. The SHAPE is the signal: a bimodal spread (mass in the shortest
 # AND the longest buckets, little at the broadcast interval) is relay clumping,
 # which no_nagle flattens; a spread centred on the broadcast interval is path
-# jitter that only a deeper interpolation buffer absorbs.
-const WS_GAP_EDGES_MS: Array[float] = [4.0, 8.0, 12.0, 16.0, 24.0]
-const WS_GAP_LABELS: Array[String] = ["<4", "4-8", "8-12", "12-16", "16-24", "24+"]
+# jitter that only a deeper interpolation buffer absorbs. The edges are laid
+# round the 45 Hz broadcast's ~22 ms: clumped, early, on time, late, one
+# broadcast missed, a longer gap (test_ws_gap_buckets.gd holds the interval in
+# the on-time bucket).
+const WS_GAP_EDGES_MS: Array[float] = [6.0, 16.0, 28.0, 40.0, 64.0]
+const WS_GAP_LABELS: Array[String] = ["<6", "6-16", "16-28", "28-40", "40-64", "64+"]
+const WS_GAP_ON_TIME_BUCKET: int = 2
 var _ws_gap_counts: Array[int] = [0, 0, 0, 0, 0, 0]
 var ws_gap_histogram: String = "—"
 
@@ -264,7 +297,7 @@ var broadcast_interval_p95_ms: float = 0.0
 var _phys_tick_samples_us: Array[int] = []
 var _bcast_interval_samples_us: Array[int] = []
 const PHYS_TICK_WINDOW: int = _PhysicsConstants.PHYSICS_TICK   # 1 s of samples
-const BCAST_INTERVAL_WINDOW: int = 120  # 2 s at the 60 Hz broadcast rate
+const BCAST_INTERVAL_WINDOW: int = 120  # ~2.7 s at the 45 Hz broadcast rate
 
 # ── Static call sites (no-op when not in a game session) ─────────────────────
 static func record_world_state() -> void:
@@ -287,7 +320,7 @@ static func record_bytes_sent(n: int) -> void:
 static func record_bytes_received(n: int) -> void:
 	if instance: instance._bytes_received_window += n
 
-const QUEUE_DEPTH_WINDOW: int = 240  # samples, ~4 s at the 60 Hz broadcast rate
+const QUEUE_DEPTH_WINDOW: int = 240  # samples, ~5.3 s at the 45 Hz broadcast rate
 
 static func record_queue_depth(depth: int) -> void:
 	if instance == null:
@@ -302,6 +335,7 @@ static func record_queue_depth(depth: int) -> void:
 static func record_host_queue_depth(depth: int) -> void:
 	if instance == null:
 		return
+	instance._host_queue_depth_window_samples += 1
 	if depth > instance._host_queue_depth_window_max:
 		instance._host_queue_depth_window_max = depth
 
@@ -316,12 +350,14 @@ static func record_jitter_p95(ms: float) -> void:
 static func record_ws_arrival_gap(gap_ms: float) -> void:
 	if instance == null:
 		return
-	var idx: int = WS_GAP_EDGES_MS.size()  # overflow (last) bucket
+	instance._ws_gap_counts[ws_gap_bucket(gap_ms)] += 1
+
+
+static func ws_gap_bucket(gap_ms: float) -> int:
 	for i: int in WS_GAP_EDGES_MS.size():
 		if gap_ms < WS_GAP_EDGES_MS[i]:
-			idx = i
-			break
-	instance._ws_gap_counts[idx] += 1
+			return i
+	return WS_GAP_EDGES_MS.size()  # overflow (last) bucket
 
 # A reconcile whose MATCHED prediction was a replay-re-recorded entry (see
 # PredictedState.was_replay_rerecorded).
@@ -344,7 +380,7 @@ static func record_reconcile(delta_m: float) -> void:
 # blade_jump: a reconcile teleported the blade > 5 cm (a real visible pop).
 # Recorded only from the reconcile path — a per-tick live check does NOT belong
 # here, because ordinary fast stickhandling legitimately moves the blade > 5 cm
-# in one 8.3 ms tick (= 6 m/s).
+# in one 11 ms tick (= 4.5 m/s).
 static func record_blade_jump(magnitude: float) -> void:
 	if instance == null:
 		return
@@ -444,8 +480,8 @@ static func record_input_lead(lead_sec: float) -> void:
 	instance._input_lead_sum += lead_sec
 	instance._input_lead_n += 1
 
-# input_starvation: the input queue was empty so the host fell back to the
-# last known input for this physics tick.
+# input_starvation: no input was due this live physics tick (the queue empty,
+# or its front stamped later), so the host fell back to the last known input.
 static func record_input_starvation() -> void:
 	if instance: instance._starvation_count += 1
 
@@ -467,6 +503,40 @@ static func record_puck_predict_residual(meters: float) -> void:
 # (snapshot older than PUCK_PREDICT_MAX_S) — the interp fallback engaged.
 static func record_puck_predict_fallback() -> void:
 	if instance: instance._puck_predict_fallback_count += 1
+
+# keeper_snapshot: a snapshot's blob met a predicted goalie — `confirmed` his own
+# state at its tick, else re-stepped, `gap_m` the box gap there (< 0: he held
+# no state for that tick).
+static func record_keeper_snapshot(confirmed: bool, gap_m: float) -> void:
+	if not instance: return
+	if confirmed:
+		instance._keeper_confirm_count += 1
+		return
+	instance._keeper_restep_count += 1
+	if gap_m >= 0.0:
+		instance._keeper_gap_sum += gap_m
+		instance._keeper_gap_n += 1
+		instance._keeper_gap_max = maxf(instance._keeper_gap_max, gap_m)
+
+
+# keeper_predict_us: one goalie's predictor time this physics frame; a frame's
+# goalies are summed into one sample.
+static func record_keeper_predict_us(us: int) -> void:
+	if not instance: return
+	var frame: int = Engine.get_physics_frames()
+	if frame != instance._keeper_frame_at:
+		if instance._keeper_frame_at >= 0:
+			instance._keeper_frame_us.append(instance._keeper_frame_accum)
+		instance._keeper_frame_at = frame
+		instance._keeper_frame_accum = 0
+	instance._keeper_frame_accum += us
+
+
+# keeper_predict_fallback: a goalie with a predictor drawn interpolated this
+# frame (no snapshot yet, the newest too stale, the clock not ready).
+static func record_keeper_predict_fallback() -> void:
+	if instance: instance._keeper_fallback_count += 1
+
 
 # remote_correction: per-tick pre-damp error on a remote skater body.
 static func record_remote_correction(meters: float) -> void:
@@ -527,7 +597,13 @@ static func record_stick_lift_claim() -> void:
 static func record_stick_lift_claim_miss() -> void:
 	if instance: instance._stick_lift_claim_miss_count += 1
 
-# One counter across all four claim types.
+static func record_stick_tie_claim() -> void:
+	if instance: instance._stick_tie_claim_count += 1
+
+static func record_stick_tie_claim_miss() -> void:
+	if instance: instance._stick_tie_claim_miss_count += 1
+
+# One counter across every claim type.
 static func record_claim_stamp_reject() -> void:
 	if instance: instance._claim_stamp_reject_count += 1
 
@@ -544,7 +620,7 @@ static func record_provisional_stolen() -> void:
 	if instance: instance._provisional_stolen_count += 1
 
 # Wall-clock microseconds between consecutive host physics ticks (steady state
-# ≈ 8333 µs at the 120 Hz tick). A stall produces one large sample followed by
+# ≈ 11111 µs at the 90 Hz tick). A stall produces one large sample followed by
 # near-zero catch-up samples. Host-only.
 static func record_host_physics_tick_us(us: int) -> void:
 	if instance == null:
@@ -566,7 +642,7 @@ static func note_host_event(name: String) -> void:
 	instance._last_host_event_sec = float(instance.session.seconds)
 
 # Wall-clock microseconds between consecutive `_broadcast_state()` calls on the
-# host. Tracks the physics-driven broadcast cadence (~16.7 ms at STATE_RATE 60).
+# host. Tracks the physics-driven broadcast cadence (~22.2 ms at STATE_RATE 45).
 static func record_broadcast_interval_us(us: int) -> void:
 	if instance == null:
 		return
@@ -581,10 +657,16 @@ static func percentile_index(n: int, p: float) -> int:
 	return clampi(int(ceil(n * p)) - 1, 0, n - 1)
 
 
+# Folds one actor's buffer depth into the shallowest seen so far; start from -1
+# (none seen), which reads back as 0.
+static func shallowest_depth(shallowest: int, depth: int) -> int:
+	return depth if shallowest < 0 else mini(shallowest, depth)
+
+
 func observe_actors(skater_buf: int, puck_buf: int, goalie_buf: int, extrapolating: bool) -> void:
-	buffer_depth_skater = skater_buf
+	buffer_depth_skater = maxi(skater_buf, 0)
 	buffer_depth_puck = puck_buf
-	buffer_depth_goalie = goalie_buf
+	buffer_depth_goalie = maxi(goalie_buf, 0)
 	_frame_count += 1
 	if extrapolating:
 		_extrapolation_count += 1
@@ -626,7 +708,9 @@ func tick(delta: float) -> void:
 	remote_correction_avg_m = (_remote_correction_sum / _remote_correction_n) \
 			if _remote_correction_n > 0 else 0.0
 	remote_correction_max_m = _remote_correction_max
+	_publish_keeper_prediction()
 	host_input_queue_depth_max = _host_queue_depth_window_max
+	host_input_queue_depth_samples = _host_queue_depth_window_samples
 	if not _queue_depth_window.is_empty():
 		var sorted := _queue_depth_window.duplicate()
 		sorted.sort()
@@ -706,6 +790,7 @@ func tick(delta: float) -> void:
 	_starvation_count = 0
 	_input_drain_count = 0
 	_host_queue_depth_window_max = 0
+	_host_queue_depth_window_samples = 0
 	_puck_predict_residual_sum = 0.0
 	_puck_predict_residual_n = 0
 	_puck_predict_residual_max = 0.0
@@ -713,6 +798,13 @@ func tick(delta: float) -> void:
 	_remote_correction_sum = 0.0
 	_remote_correction_n = 0
 	_remote_correction_max = 0.0
+	_keeper_confirm_count = 0
+	_keeper_restep_count = 0
+	_keeper_gap_sum = 0.0
+	_keeper_gap_n = 0
+	_keeper_gap_max = 0.0
+	_keeper_fallback_count = 0
+	_keeper_frame_us.clear()
 	_delay_clamp_count = 0
 	_delay_clamp_excess_max_ms = 0.0
 	_host_stall_count = 0
@@ -731,12 +823,36 @@ func tick(delta: float) -> void:
 	_poke_claim_miss_count = 0
 	_stick_lift_claim_count = 0
 	_stick_lift_claim_miss_count = 0
+	_stick_tie_claim_count = 0
+	_stick_tie_claim_miss_count = 0
 	_claim_stamp_reject_count = 0
 	_provisional_pin_count = 0
 	_provisional_confirmed_count = 0
 	_provisional_timeout_count = 0
 	_provisional_stolen_count = 0
 	_window_timer = 0.0
+
+# The predicted goalie's window: re-steps a second, the share of snapshots
+# confirmed (100 with none), the gap at a re-step, and the per-frame cost of
+# both goalies' predictors, mean and p95 (us).
+func _publish_keeper_prediction() -> void:
+	var snapshots: int = _keeper_confirm_count + _keeper_restep_count
+	keeper_resteps_per_sec = _keeper_restep_count / _window_timer
+	keeper_confirm_pct = (100.0 * _keeper_confirm_count / snapshots) if snapshots > 0 else 100.0
+	keeper_restep_gap_avg_m = (_keeper_gap_sum / _keeper_gap_n) if _keeper_gap_n > 0 else 0.0
+	keeper_restep_gap_max_m = _keeper_gap_max
+	keeper_predict_us_avg = 0.0
+	keeper_predict_us_p95 = 0.0
+	var n: int = _keeper_frame_us.size()
+	if n == 0:
+		return
+	var total: int = 0
+	for us: int in _keeper_frame_us:
+		total += us
+	_keeper_frame_us.sort()
+	keeper_predict_us_avg = float(total) / n
+	keeper_predict_us_p95 = float(_keeper_frame_us[mini(n - 1, int(n * 0.95))])
+
 
 # Fold this window's published metrics into the session summary. Keys here are
 # the column prefixes the network_sessions table expects (see
@@ -780,6 +896,14 @@ func _fold_session_sample() -> void:
 		"puck_predict_residual_peak_m": puck_predict_residual_max_m,
 		"remote_correction_m": remote_correction_avg_m,
 		"remote_correction_peak_m": remote_correction_max_m,
+		# The predicted goalie; client only, hosts fold 0s (and 100% confirmed).
+		"keeper_resteps_per_sec": keeper_resteps_per_sec,
+		"keeper_confirm_pct": keeper_confirm_pct,
+		"keeper_restep_gap_m": keeper_restep_gap_avg_m,
+		"keeper_restep_gap_peak_m": keeper_restep_gap_max_m,
+		"keeper_predict_us": keeper_predict_us_avg,
+		"keeper_predict_p95_us": keeper_predict_us_p95,
+		"keeper_predict_fallbacks": float(_keeper_fallback_count),
 		# TOTAL_KEYS event counters.
 		"puck_predict_fallbacks": float(_puck_predict_fallback_count),
 		"delay_clamps": float(_delay_clamp_count),
@@ -829,6 +953,8 @@ func _fold_session_sample() -> void:
 		"poke_claim_misses": float(_poke_claim_miss_count),
 		"stick_lift_claims": float(_stick_lift_claim_count),
 		"stick_lift_claim_misses": float(_stick_lift_claim_miss_count),
+		"stick_tie_claims": float(_stick_tie_claim_count),
+		"stick_tie_claim_misses": float(_stick_tie_claim_miss_count),
 		# TOTAL_KEY; clients fold 0s.
 		"claim_stamp_rejects": float(_claim_stamp_reject_count),
 		# TOTAL_KEYS; host rows fold 0s.

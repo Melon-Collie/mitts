@@ -1,5 +1,9 @@
 class_name NameFilter
 
+# The longest player name: what the settings field takes, what a saved name
+# loads as, and what the host keeps of a joining peer's.
+const MAX_LENGTH: int = 16
+
 const _WORD_LIST_PATH := "res://Data/censored_words.txt"
 
 static var _words: Array[String] = []

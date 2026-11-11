@@ -13,7 +13,7 @@ extends GutTest
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const SlapState = SkaterStateMachine.State
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const GOAL := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 const FINISHER_ID := 1
 const CARRIER_ID := 2
@@ -278,6 +278,6 @@ func test_a_body_turned_away_pivots_into_the_one_timer() -> void:
 # blade instead of swung at.
 func test_a_feed_out_of_reach_of_the_circle_is_caught() -> void:
 	var spot: Vector3 = _argmax_spot()
-	var o: Outcome = _feed(spot, _to_net(spot), _beside(spot, 1.0))
+	var o: Outcome = _feed(spot, _to_net(spot), _beside(spot, 1.2))
 	assert_false(o.pressed, _describe(o))
 	assert_true(_controller.has_puck or o.fired, "caught: " + _describe(o))

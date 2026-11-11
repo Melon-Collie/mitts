@@ -425,6 +425,22 @@ const POSES: Array = [
 			"from": Vector3(-1.5, 0.0, 7.0), "duration": 1.4, "ticks": 168, "hold": 90,
 			"center": true,
 		}},
+	# The address tucked: the fold over the dot is the deepest the jersey is
+	# pushed against the pants' rim in play (test_tuck_holds_through_the_address.gd).
+	{"name": "faceoff_center_tuck_full", "puck": false, "tuck": GearModelRegistry.TUCK_FULL,
+		"faceoff": {
+			"from": Vector3(-1.5, 0.0, 7.0), "duration": 1.4, "ticks": 168, "hold": 90,
+			"center": true,
+		}},
+	{"name": "faceoff_center_tuck_right", "puck": false, "tuck": GearModelRegistry.TUCK_RIGHT,
+		"faceoff": {
+			"from": Vector3(-1.5, 0.0, 7.0), "duration": 1.4, "ticks": 168, "hold": 90,
+			"center": true,
+		}},
+	{"name": "faceoff_winger_tuck_right", "puck": false, "tuck": GearModelRegistry.TUCK_RIGHT,
+		"faceoff": {
+			"from": Vector3(-1.5, 0.0, 7.0), "duration": 1.4, "ticks": 168, "hold": 90,
+		}},
 	# The same address, and a plain stride, from the seat the game is played
 	# from. Two tiles rather than one because the question they answer is
 	# comparative: the centre is supposed to look like a different pose from up
@@ -587,12 +603,10 @@ func _build_actor() -> void:
 	gear.jersey_tuck = int((_poses[_pose_index] as Dictionary).get("tuck",
 			GearModelRegistry.TUCK_NONE))
 	_skater.set_gear_style(gear)
-	# Blueberry's home kit, deliberately: these tiles are read for where one
-	# piece of the body ends and the next begins, and that needs a jersey, a
-	# pair of pants and a stripe on them that are all told apart at 384 px.
-	# Slot 1's kit is one green — under it a seat, a hip and a thigh are one
-	# silhouette, and a pose that lost its pelvis would look exactly like a
-	# pose that kept it.
+	# Lime's home kit, deliberately: these tiles are read for where one piece of
+	# the body ends and the next begins, and that needs a jersey, a pair of pants
+	# and a stripe on them that are all told apart at 384 px — a light jersey
+	# over dark pants, white stripes on both.
 	_skater.set_uniform(TeamColorRegistry.get_colors(5, 0))
 	_skater.set_jersey_info("POSE", 8)
 	_skater.apply_appearance(attrs)

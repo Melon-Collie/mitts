@@ -4,7 +4,7 @@ extends GutTest
 # (SkaterArmRig.arm_root), even on a frame where only the body moved: a crouch
 # easing in from a standstill moves the spine and nothing gameplay reads.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const UpperBone = SkaterMeshBuilder.UpperBone
 # The arm root sits on the shoulder to float precision; a frame the arm missed
 # leaves it a crouch step behind (millimetres).

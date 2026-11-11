@@ -41,6 +41,80 @@ func _resolver(skaters: Array) -> Dictionary:
 	return team_map
 
 
+# A carrier on the wing coming at our net at `carrier_vel`; our D riding back
+# goal-side of him (100), our backchecker a stride behind him and nearer the
+# puck (110), the third man at the net (120).
+func _entry_pressure(carrier_vel: Vector3) -> int:
+	var skaters: Array = [
+			[100, 0, Vector3(-4.0, 0.0, 17.0), Vector3(0.0, 0.0, 6.0)],
+			[110, 0, Vector3(-7.0, 0.0, 8.5), Vector3(0.0, 0.0, 6.0)],
+			[120, 0, Vector3(3.0, 0.0, 22.0)],
+			[200, 1, Vector3(-8.0, 0.0, 10.0), carrier_vel],
+	]
+	var a: Dictionary[int, int] = AIRoleSlots.assign(_make_snapshot(skaters, 200),
+			TEAM_ID, OUR_NET_Z, AIPossessionState.State.DZONE, _resolver(skaters), {})
+	for pid: int in a:
+		if a[pid] == AIRoleSlots.Slot.PRESSURE:
+			return pid
+	return -1
+
+
+func test_a_carrier_at_pace_is_kept_by_the_body_goal_side_of_him() -> void:
+	# Raced to where the puck is, the backchecker wins it, but he is a stride
+	# behind a man coming at our net faster than he is and never catches him.
+	assert_eq(_entry_pressure(Vector3(0.0, 0.0, 9.0)), 100)
+
+
+func test_a_stalled_carrier_goes_to_the_soonest_body() -> void:
+	assert_eq(_entry_pressure(Vector3.ZERO), 110)
+
+
+func _cut_off(self_pos: Vector3, exact: bool) -> float:
+	return AIDefensiveVerbs.cut_off_m(self_pos, Vector3.ZERO,
+			AIArrival.SKATER_REF_SPEED_M_S, AIArrival.SHED_ACCEL_DEFAULT_M_S2,
+			AIBotMechanics.BLADE_REACH_M, Vector3(-8.0, 0.0, 6.0), Vector3(0.0, 0.0, 9.0),
+			Vector3(0.0, 0.0, 1.0), 16.0, null, exact)
+
+
+func test_the_exact_cut_off_is_inside_the_walked_step() -> void:
+	# The walk takes the first whole step he beats the carrier to; the exact
+	# read is the crossing inside it, so men a fraction of a step apart differ.
+	var exact_seen: Dictionary = {}
+	for x: float in [-5.0, -4.5, -4.0, -3.0]:
+		var walked: float = _cut_off(Vector3(x, 0.0, 14.0), false)
+		var exact: float = _cut_off(Vector3(x, 0.0, 14.0), true)
+		assert_true(exact <= walked and exact > walked - AIDefensiveVerbs.CUT_OFF_STEP_M,
+				"x %.1f: exact %.3f inside (%.0f - step, %.0f]" % [x, exact, walked, walked])
+		exact_seen[exact] = true
+	assert_eq(exact_seen.size(), 4, "every start reads its own crossing")
+
+
+# Two of ours goal-side of a carrier coming up the middle at pace, both a few
+# metres in front of him and skating off to the left wall at his speed, so
+# neither gets back onto his line short of the crease: one a stick off it, one
+# out by the dots.
+func _two_back_owner(lane_pid: int, wide_pid: int, prev: int) -> int:
+	var skaters: Array = [
+			[lane_pid, 0, Vector3(-1.5, 0.0, 9.0), Vector3(-9.0, 0.0, 0.0)],
+			[wide_pid, 0, Vector3(-6.0, 0.0, 9.0), Vector3(-9.0, 0.0, 0.0)],
+			[200, 1, Vector3(0.0, 0.0, 6.0), Vector3(0.0, 0.0, 9.0)],
+	]
+	var snap := _make_snapshot(skaters, 200)
+	return AIRoleSlots.carrier_owner(snap, TEAM_ID, OUR_NET_Z, _resolver(skaters),
+			[wide_pid, lane_pid], {}, prev)
+
+
+func test_a_carrier_owner_tie_goes_to_the_man_in_his_lane() -> void:
+	# Neither cuts him off short of the crease, so the race ties; whoever
+	# registered first must not decide it.
+	assert_eq(_two_back_owner(100, 110, -1), 100)
+	assert_eq(_two_back_owner(110, 100, -1), 110)
+
+
+func test_the_incumbent_owner_keeps_a_tie_he_holds() -> void:
+	assert_eq(_two_back_owner(100, 110, 110), 110)
+
+
 func test_assign_dzone_distributes_slots() -> void:
 	# PRESSURE = closest to the puck; the other two MARK a man each. Which
 	# marker ends up net-front vs. weak-side is decided downstream by the threat
@@ -173,71 +247,79 @@ func test_assign_forecheck_f1_pressures_puck_f3_is_high() -> void:
 			_resolver(skaters), {})
 	assert_eq(assignments[100], AIRoleSlots.Slot.F3_HIGH, "highest bot is the safety")
 	assert_eq(assignments[110], AIRoleSlots.Slot.F1_PRESSURE, "bot nearest the puck pressures")
-	assert_eq(assignments[120], AIRoleSlots.Slot.F2_MID, "leftover bot reads the mid lane")
+	assert_eq(assignments[120], AIRoleSlots.Slot.F2_NET, "leftover bot reads in front of the net")
 
 
-func test_assign_trans_od_contain_is_last_man_back() -> void:
-	# TRANS_DEFENSE: CONTAIN goes to the LAST MAN BACK — the peer soonest to our
-	# OWN +Z net (momentum-aware), i.e. the deepest line of defense that's
-	# genuinely in front of the rush. Carrier at z=0; peer 120 (z=20) is deepest
-	# and nearest our net, so it contains, while the up-ice peers (100, 110) mark
-	# a man each. This is the fix for the "last man leaves to mark a receiver,
-	# nobody picks up the carrier" failure: the man in front of the rush stays on
-	# the rush, and the peers further up the ice pick up the receivers.
+func test_assign_trans_def_fills_our_line_first() -> void:
+	# TRANS_DEFENSE is the 1-2, filled from the back: the two bodies soonest to
+	# our line's posts hold it, and the one left up the ice is the high "1".
+	# Carrier at centre; 110 and 120 are back, 100 is caught up the ice.
 	var skaters: Array = [
-			[100, 0, Vector3(0.0, 0.0, -8.0)],  # up-ice → MARK
-			[110, 0, Vector3(0.0, 0.0, 5.0)],   # mid, closest to carrier → MARK
-			[120, 0, Vector3(0.0, 0.0, 20.0)],  # deepest / last man back → CONTAIN
+			[100, 0, Vector3(0.0, 0.0, -8.0)],  # up-ice → NZ_F1
+			[110, 0, Vector3(0.0, 0.0, 5.0)],   # at our line
+			[120, 0, Vector3(0.0, 0.0, 20.0)],  # deep in our zone
 			[200, 1, Vector3(0.0, 0.0, 0.0)],   # opp carrier
 	]
 	var snap := _make_snapshot(skaters, 200)
 	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
 			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.TRANS_DEFENSE,
 			_resolver(skaters), {})
-	assert_eq(assignments[120], AIRoleSlots.Slot.RUSH_D1,
-			"the last man back (soonest to our net) owns the carrier")
-	# The other two take the recovery jobs — whichever reaches the puck soonest
-	# runs it down, the leftover takes the middle.
-	for pid: int in [100, 110]:
+	assert_eq(assignments[100], AIRoleSlots.Slot.NZ_F1,
+			"the body caught up the ice is the high one")
+	for pid: int in [110, 120]:
 		assert_true(assignments[pid] in [
-				AIRoleSlots.Slot.TRACK_PUCK, AIRoleSlots.Slot.TRACK_MID],
-				"peer %d recovers, it is not the last man back" % pid)
-	# Exactly one body in FRONT of the carrier — the gap is never double-manned.
-	var front_count: int = 0
-	for pid: int in [100, 110, 120]:
-		if assignments[pid] == AIRoleSlots.Slot.RUSH_D1:
-			front_count += 1
-	assert_eq(front_count, 1, "exactly one RUSH_D1")
+				AIRoleSlots.Slot.BACK_STRONG, AIRoleSlots.Slot.BACK_MID],
+				"peer %d is back, so he holds our line" % pid)
+	assert_ne(assignments[110], assignments[120], "one carrier owner, one middle")
 
 
-func test_assign_trans_od_contain_is_momentum_aware() -> void:
-	# "Soonest to our net" folds in momentum, not just raw depth: a peer a touch
-	# further from the net but already skating hard toward it beats a marginally
-	# deeper peer drifting up-ice. Peer 110 is 2 m further from our net than 120
-	# but barrelling home; 120 is nearer but coasting the wrong way.
+func test_assign_trans_def_back_line_is_momentum_aware() -> void:
+	# "Soonest to the post" folds in momentum, not just raw distance: a peer
+	# further from the strong post but skating at it beats a nearer one skating
+	# away from it.
 	var skaters: Array = [
-			[100, 0, Vector3(0.0, 0.0, -6.0)],                       # up-ice → MARK
-			[110, 0, Vector3(0.0, 0.0, 16.0), Vector3(0.0, 0.0, 12.0)], # closing home fast → CONTAIN
-			[120, 0, Vector3(0.0, 0.0, 18.0), Vector3(0.0, 0.0, -12.0)],# nearer but fleeing up-ice
-			[200, 1, Vector3(0.0, 0.0, 0.0)],                        # opp carrier
+			[100, 0, Vector3(0.0, 0.0, -6.0)],
+			[110, 0, Vector3(5.0, 0.0, 0.0), Vector3(0.0, 0.0, 12.0)],   # coming to it
+			[120, 0, Vector3(5.0, 0.0, 11.0), Vector3(0.0, 0.0, 12.0)],  # nearer, leaving it
+			[200, 1, Vector3(0.0, 0.0, -10.0)],
 	]
 	var snap := _make_snapshot(skaters, 200)
 	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
 			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.TRANS_DEFENSE,
 			_resolver(skaters), {})
-	assert_eq(assignments[110], AIRoleSlots.Slot.RUSH_D1,
-			"the peer genuinely arriving home soonest (momentum) contains, not the nearer coaster")
+	assert_eq(assignments[110], AIRoleSlots.Slot.BACK_STRONG,
+			"the peer genuinely arriving soonest (momentum) takes the strong post")
 
 
-func test_assign_trans_od_contain_when_whole_team_caught_up_ice() -> void:
-	# The whole team is beaten up the ice on the turnover — every peer is on the
-	# -Z (up-ice) side of the carrier. The race-home election still resolves
-	# cleanly: the peer nearest our +Z net recovers into the gap fastest and
-	# contains, the rest MARK. (No special goal-side fallback needed — "soonest
-	# home" subsumes it.)
+# Once nobody can be on our line before the carrier is (a carrier at speed a
+# couple of metres off it, both D already back past it), the line is lost and
+# BACK_STRONG rides him back: the man in the strong lane keeps him, though he is
+# riding back hardest and so has the most to brake out to get back up to the
+# post. Raced up to it, the carrier went to the slower man in the middle, and
+# the strong-lane D drifted off him to the middle while he drove in.
+func test_assign_trans_def_a_lost_line_keeps_the_man_riding_the_strong_lane() -> void:
 	var skaters: Array = [
-			[100, 0, Vector3(0.0, 0.0, -5.0)],  # nearest our net of the caught peers → CONTAIN
-			[110, 0, Vector3(0.0, 0.0, -10.0)],
+			[100, 0, Vector3(0.0, 0.0, -6.0)],
+			[110, 0, Vector3(2.0, 0.0, 8.9), Vector3(-0.9, 0.0, 6.6)],   # strong lane, riding back
+			[120, 0, Vector3(-0.4, 0.0, 7.6), Vector3(0.2, 0.0, 4.9)],   # the middle, slower
+			[200, 1, Vector3(4.9, 0.0, 4.9), Vector3(-2.2, 0.0, 8.9)],
+	]
+	var snap := _make_snapshot(skaters, 200)
+	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
+			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.TRANS_DEFENSE,
+			_resolver(skaters), {})
+	assert_eq(assignments[110], AIRoleSlots.Slot.BACK_STRONG,
+			"the strong-lane D riding him back keeps the carrier")
+	assert_eq(assignments[120], AIRoleSlots.Slot.BACK_MID, "the middle man the middle")
+
+
+func test_assign_trans_def_when_whole_team_caught_up_ice() -> void:
+	# The whole team is beaten up the ice on the turnover — every peer is
+	# up-ice of the carrier. The line still fills from the back: the two nearest
+	# it race to it, the furthest is the high one.
+	var skaters: Array = [
+			[100, 0, Vector3(0.0, 0.0, -5.0)],
+			[110, 0, Vector3(0.0, 0.0, -10.0)],  # furthest → NZ_F1
 			[120, 0, Vector3(0.0, 0.0, -8.0)],
 			[200, 1, Vector3(0.0, 0.0, 0.0)],   # opp carrier; all peers are up-ice of it
 	]
@@ -245,12 +327,9 @@ func test_assign_trans_od_contain_when_whole_team_caught_up_ice() -> void:
 	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
 			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.TRANS_DEFENSE,
 			_resolver(skaters), {})
-	assert_eq(assignments[100], AIRoleSlots.Slot.RUSH_D1,
-			"peer nearest our net recovers as the last man back")
-	for pid: int in [110, 120]:
-		assert_true(assignments[pid] in [
-				AIRoleSlots.Slot.TRACK_PUCK, AIRoleSlots.Slot.TRACK_MID],
-				"peer %d takes a recovery job" % pid)
+	assert_eq(assignments[100], AIRoleSlots.Slot.BACK_STRONG,
+			"peer nearest our line takes the strong post")
+	assert_eq(assignments[110], AIRoleSlots.Slot.NZ_F1, "the furthest is the high one")
 
 
 func test_assign_hysteresis_flips_exactly_past_the_penalty() -> void:

@@ -10,7 +10,7 @@ extends GutTest
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const LegBone = SkaterMeshBuilder.LegBone
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const WARMUP_TICKS: int = 240  # let intensity/effort envelopes settle
 const MEASURE_TICKS: int = 480 # 4 s — several full cycles at steady state
 

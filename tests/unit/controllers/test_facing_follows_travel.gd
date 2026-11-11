@@ -5,7 +5,7 @@ extends GutTest
 # Facing starts toward −Z; the skater is held at a set velocity each tick so the
 # speed under test is the speed the rule reads.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const AHEAD := Vector3(0.0, 0.0, -1.0)
 const LEFT := Vector3(-1.0, 0.0, 0.0)
 const BEHIND := Vector3(0.0, 0.0, 1.0)

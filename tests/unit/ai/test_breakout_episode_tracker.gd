@@ -7,7 +7,7 @@ const TEAM: int = 0
 const OWN_GOAL_Z: float = GameRules.GOAL_LINE_Z
 const DEEP: float = GameRules.BLUE_LINE_Z + 6.0      # established in our zone
 const OUT: float = GameRules.BLUE_LINE_Z - 2.0       # out past our blue line
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 var _t: AIBreakoutEpisodeTracker
 

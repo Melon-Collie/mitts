@@ -17,7 +17,7 @@ extends GutTest
 # These pin that the sample now tracks the requested instant, and that the freeze
 # survives only as the deep-loss fallback.
 
-const TICK: float = 1.0 / 120.0
+const TICK: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 func _controller() -> RemoteController:
@@ -43,18 +43,19 @@ func _buffer(rc: RemoteController, at: float, pos: Vector3, vel: Vector3) -> voi
 
 
 func test_sample_past_the_buffer_advances_toward_the_requested_instant() -> void:
-	# A remote coasting at 6 m/s, sampled 50 ms past the newest snapshot — the
-	# steady-state replay case. Frozen, this returned the snapshot position; it
-	# must now have travelled toward the requested instant.
+	# A remote coasting at 6 m/s, sampled ~50 ms (whole ticks) past the newest
+	# snapshot — the steady-state replay case. Frozen, this returned the snapshot
+	# position; it must now have travelled toward the requested instant.
 	var rc := _controller()
 	_buffer(rc, 10.0, Vector3.ZERO, Vector3(0.0, 0.0, 6.0))
-	var s: SkaterNetworkState = rc.sample_state_at(10.05)
+	var ahead: float = roundf(0.05 / TICK) * TICK
+	var s: SkaterNetworkState = rc.sample_state_at(10.0 + ahead)
 	assert_not_null(s)
 	assert_gt(s.position.z, 0.0, "the sample projected forward instead of freezing")
 	# Coasting on ice, so it travels slightly under vel*dt (friction) but on the
 	# same order — not the frozen 0, and not an unbounded overshoot.
-	assert_between(s.position.z, 0.15, 0.30,
-			"travel is on the order of velocity x dt for a 50 ms coast at 6 m/s")
+	assert_between(s.position.z, 3.0 * ahead, 6.0 * ahead,
+			"travel is on the order of velocity x dt for a ~50 ms coast at 6 m/s")
 
 
 func test_further_requests_project_further() -> void:
@@ -156,3 +157,21 @@ func test_an_earlier_request_restarts_the_projection() -> void:
 	walked.sample_state_at(10.0 + TICK * 9.0)
 	var got: Vector3 = walked.sample_state_at(10.0 + TICK * 4.0).position
 	assert_eq(got, cold.sample_state_at(10.0 + TICK * 4.0).position)
+
+
+func test_interpolating_takes_the_newer_endpoints_discrete_fields() -> void:
+	# The host's rewind and this client's render both take discrete fields from
+	# the newer snapshot; the replay's sample must too, or the three resolve one
+	# contact with two different braces / ghosts / stances.
+	var rc := _controller()
+	_buffer(rc, 10.0, Vector3.ZERO, Vector3(0.0, 0.0, 6.0))
+	_buffer(rc, 10.0 + TICK * 2.0, Vector3(0.0, 0.0, 0.13), Vector3(0.0, 0.0, 6.0))
+	var newer: SkaterNetworkState = rc._state_buffer[1].state
+	newer.brake_intent = true
+	newer.hit_committed = true
+	newer.is_ghost = true
+	newer.stance_active = true
+	newer.move_intent = Vector2(1.0, 0.0)
+	var s: SkaterNetworkState = rc.sample_state_at(10.0 + TICK * 0.5)
+	assert_true(s.brake_intent and s.hit_committed and s.is_ghost and s.stance_active)
+	assert_eq(s.move_intent, Vector2(1.0, 0.0))

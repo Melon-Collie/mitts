@@ -127,6 +127,10 @@ func receive_claim(peer_id: int, host_timestamp: float,
 		return
 	if attacker_snap.is_ghost:
 		return
+	# Committed to a body check, the stick is off the ice: the body or nothing,
+	# as in the host's present-time loop.
+	if attacker_snap.hit_committed:
+		return
 	# A committed shot block withdraws the blade from puck play — no lift, the
 	# same way it takes no poke and corrals nothing. Judged from the REWOUND
 	# snapshot (like is_ghost) so the verdict matches the stance the claimant

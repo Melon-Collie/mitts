@@ -3,9 +3,9 @@ extends RefCounted
 
 # What he reads of a shot: nothing until he has watched the puck's own flight
 # for his read's delay, then the flight as it is, carried on — its line, and
-# under gravity its fall. His legs answer after the leg read, his hands after
-# the arm read, or both after the primed read for a release he watched wound
-# up (KeeperPlayRead.primed); a puck touched on the way (a tip, a deflection)
+# under gravity its fall. His legs and his hands answer after his read, or the
+# primed read for a release off a puck he held in his eyes long enough
+# (KeeperPlayRead.primed); a puck touched on the way (a tip, a deflection)
 # is a new shot he has to read again, cold. No aim before the release: what the
 # shooter's body shows is perception's (docs/goalie-rebuild-plan.md §3.1).
 #
@@ -22,7 +22,6 @@ const ON_ICE_Y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 const AIRBORNE_M: float = 0.002
 
 var leg_delay_s: float = GoalieSkillProfile.hard().reaction_delay_s
-var arm_delay_s: float = GoalieSkillProfile.hard().arm_reaction_delay_s
 var primed_delay_s: float = GoalieSkillProfile.hard().prearmed_reaction_delay_s
 
 # Seconds since the release or the last touch; below zero, no shot.
@@ -31,6 +30,7 @@ var age: float = -1.0
 var at := Vector3.ZERO
 var velocity := Vector3.ZERO
 var _primed: bool = false
+var _hidden_s: float = 0.0
 # Whether the next look is his first of this flight.
 var _first: bool = false
 # The flight as he first saw it, at the release or the touch.
@@ -40,10 +40,13 @@ var _from_velocity := Vector3.ZERO
 
 # A shot leaves a stick, or the puck is touched on its way: read from the start,
 # on the primed read if he had the save programmed; `seen_s` ago for a shot
-# whose shooter saw it leave that long before it reached the host (lag comp).
-func start(primed: bool = false, seen_s: float = 0.0) -> void:
+# whose shooter saw it leave that long before it reached the host (lag comp);
+# put off by `hidden_s`, the time a body hides it from him before it comes out
+# of the shadow (GoalieScreenRules).
+func start(primed: bool = false, seen_s: float = 0.0, hidden_s: float = 0.0) -> void:
 	age = maxf(seen_s, 0.0)
 	_primed = primed
+	_hidden_s = maxf(hidden_s, 0.0)
 	_first = true
 
 
@@ -56,11 +59,12 @@ func reading() -> bool:
 
 
 func legs_read() -> bool:
-	return age >= (minf(leg_delay_s, primed_delay_s) if _primed else leg_delay_s)
+	return age >= read_s()
 
 
-func arms_read() -> bool:
-	return age >= (minf(arm_delay_s, primed_delay_s) if _primed else arm_delay_s)
+# How long after the release or the touch he has read it.
+func read_s() -> float:
+	return _hidden_s + (minf(leg_delay_s, primed_delay_s) if _primed else leg_delay_s)
 
 
 func step(dt: float, puck_at: Vector3, puck_velocity: Vector3) -> void:
@@ -98,13 +102,27 @@ func time_to_line() -> float:
 	return -at.z / velocity.z
 
 
-# Whether it goes in if nothing stops it: across the goal line inside the iron
-# and under the bar.
+# Whether it can go in if nothing stops it: across the goal line inside the
+# iron's centreline and under the bar's. A puck clear of the iron goes in, and
+# so does one that catches the inner half of a post or the bar and is turned
+# in off it (GoalDetectionRules' cavity); never read the clear mouth alone, or
+# a shot placed tight inside the far post is let go as wide.
 func on_net() -> bool:
 	var t: float = time_to_line()
 	if t == INF:
 		return false
 	var p: Vector3 = position_in(t)
-	var r: float = GameRules.PUCK_COLLISION_RADIUS
-	return absf(p.x) < GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - r \
-			and p.y < GameRules.NET_HEIGHT - GameRules.NET_POST_RADIUS - r
+	return absf(p.x) < GameRules.NET_HALF_WIDTH and p.y < GameRules.NET_HEIGHT
+
+
+# The read under way on the wire (KeeperWire): where a shot is from may be
+# anywhere on the rink, in 32 bits. The delays are the tier's.
+func wire(w: KeeperWire) -> void:
+	age = w.s32(age, KeeperWire.MS)
+	at = w.v3_32(at, KeeperWire.MM)
+	velocity = w.v3_16(velocity, KeeperWire.SPEED)
+	_primed = w.bit(_primed)
+	_hidden_s = w.s32(_hidden_s, KeeperWire.MS)
+	_first = w.bit(_first)
+	_from = w.v3_32(_from, KeeperWire.MM)
+	_from_velocity = w.v3_16(_from_velocity, KeeperWire.SPEED)

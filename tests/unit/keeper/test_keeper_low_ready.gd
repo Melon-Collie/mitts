@@ -8,10 +8,10 @@ extends GutTest
 # stick. A drop or a low save from it is the shorter fall: the knees' fall to
 # the ice from where it holds them, at the root of the heights.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
-const MAX_BONE_STEP_M: float = 0.1
+const MAX_BONE_STEP_M: float = 12.0 * DT  # nothing on him moves 12 m/s
 const B := KeeperSkeleton.Bone
 const R := KeeperMotor.Rest
 const Low := KeeperSaveMove.Low
@@ -107,6 +107,24 @@ func test_a_move_takes_him_out_of_it_as_it_starts() -> void:
 	assert_eq(_motor.low_ready.share, 0.0, "up out of it as the push starts")
 	_run_checked("the push", 1.5)
 	assert_gt(_motor.low_ready.share, 0.0, "set again and still asked, sinking again")
+
+
+# Backing in with a rush at full depth glide, he stays sunk: the speed that
+# takes him out of it is across his line, not in depth.
+func test_backing_in_at_full_glide_he_stays_low() -> void:
+	_motor.z = -1.8
+	_was = _bones()
+	_sink()
+	var spot := Vector2(0.0, -1.8)
+	var v := Vector2(0.0, GameRules.DEFAULT_GOALIE_DEPTH_SPEED_M_S)
+	var fastest: float = 0.0
+	for i: int in int(0.5 / DT):
+		spot += v * DT
+		_motor.go_to(spot, 0.0, R.FEET, v)
+		_step_checked("backing in t %.3f" % (i * DT))
+		fastest = maxf(fastest, absf(_motor.glide.velocity.y))
+	assert_gt(fastest, _motor.glide.shuffle_speed, "backing in faster than he shuffles")
+	assert_eq(_motor.low_ready.share, 1.0, "still sunk")
 
 
 # Skating with the play no faster than he shuffles, he stays sunk; skated

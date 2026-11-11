@@ -1,48 +1,57 @@
 class_name SkaterHemFlaps
 extends HemFlaps
 
-# The skater's jersey tail below the belt as flaps (HemFlaps), one per torso
-# facet column: each segment a root bone (SkaterBodySkeleton.column_bone) that
-# its column's vertices ride rigidly (SkaterJerseyHem.append_torso).
+# The skater's jersey tail below the belt as flaps (HemFlaps), one per tail
+# column (SkaterConnectedMesh.TAIL_COLUMNS): each segment a root bone
+# (SkaterBodySkeleton.column_bone) that its column's vertices ride rigidly.
 #
-# A column hangs from its point on the belt ring, which is where the torso
-# surface's own weights put it — carried by the chest and the hips in the share
-# the azimuth and the tuck give it — so the jersey is one surface across the
-# belt. It drapes over the thighs and the pants (SkaterHemColliders), driven by
-# gravity less the skater's acceleration, read off his balance lean.
+# A column hangs from its point on the belt ring, which is where the torso's own
+# weights put it — carried by the chest and the hips in the share the azimuth
+# and the tuck give it — so the jersey is one surface across the belt. It drapes
+# over the thighs and the pants (SkaterHemColliders), driven by gravity less the
+# skater's acceleration, read off his balance lean; a figure with no skater (the
+# locker's, the bench's) hangs under gravity alone.
 #
-# The rest drape is the lathe's own rings, tucked as the skater's tuck drapes
-# them, torso-local: `rest[station][column]` for the four tail stations from the
-# belt down (SkaterMeshBuilder.TORSO_BELT_STATION and on).
+# The rest drape is the skin's own tail rings, tucked as the skater's tuck
+# drapes them, torso-local: `rest[station][column]` for the four tail stations
+# from the belt down (SkaterConnectedMesh.tail_ring). Beside a tucked corner the
+# tail is drawn in taut, so each column is held to its drape as far as the tuck
+# pulls it.
 
 const FIRST_STATION: int = SkaterMeshBuilder.TORSO_BELT_STATION
+# The skin's faces are drawn from its columns, so a hem that shingles round the
+# ring turns them over.
+const SHEAR_STIFFNESS: float = 0.5
+# Steps a still figure's drape is settled for: long past its swing's settling.
+const SETTLE_STEPS: int = 90
 
 var _skater: Skater = null
 
 
 func _init() -> void:
-	columns = SkaterMeshBuilder.TORSO_SIDES
+	columns = SkaterConnectedMesh.TAIL_COLUMNS
+	shear_stiffness = SHEAR_STIFFNESS
 
 
+# `skater` is null for a figure that is not one.
 func setup(skater: Skater, skeleton: Skeleton3D, tuck: int) -> void:
 	_skater = skater
 	bind(skeleton, SkaterMeshBuilder.UpperBone.TORSO, SkaterBodySkeleton.TAIL_BONE,
-			SkaterBodySkeleton.COLUMN_BONE_BASE, SkaterHemColliders.new())
+			SkaterBodySkeleton.column_bone(0, 0), SkaterHemColliders.new())
 	set_tuck(tuck)
 
 
 func set_tuck(tuck: int) -> void:
 	rest.clear()
 	for station: int in STATIONS:
-		rest.append(SkaterMeshBuilder.torso_ring(FIRST_STATION + station, tuck))
+		rest.append(SkaterConnectedMesh.tail_ring(FIRST_STATION + station, tuck))
 	hips_share.resize(columns)
 	tuck_share.resize(columns)
 	var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE
 	for k: int in columns:
 		var azimuth: float = TAU * float(k) / float(columns) + phase
-		tuck_share[k] = SkaterJerseyHem.tucked_in(tuck, azimuth)
-		hips_share[k] = lerpf(SkaterJerseyHem.carry(azimuth), 1.0,
-				SkaterJerseyHem.tuck_share(tuck, azimuth))
+		tuck_share[k] = SkaterJerseyHem.tuck_share(tuck, azimuth)
+		hips_share[k] = lerpf(SkaterJerseyHem.carry(azimuth), 1.0, tuck_share[k])
 	restart()
 
 
@@ -54,54 +63,19 @@ func update(delta: float, on_camera: bool) -> void:
 	step(delta, g, on_camera)
 
 
-# Steps a still figure's drape is settled for: long past its swing's settling.
-const SETTLE_STEPS: int = 90
-
-
-# The torso as a figure that is not a skinned rig wears it (FigureKit — the
-# player screen's mannequin, the lobby's bench): the tail settled hanging over the
-# figure's own pants and legs, and baked into the torso's own frame. `torso`,
-# `pelvis` and each leg's frame at its hip (as SkaterBodySkeleton's LEG bone
-# carries it, scaled by the leg's bulk) are the figure's parts in one upright
-# space.
-static func baked_torso(tuck: int, torso: Transform3D, pelvis: Transform3D,
-		legs: Array[Transform3D]) -> ArrayMesh:
-	var skeleton: Skeleton3D = SkaterBodySkeleton.new_body_skeleton()
-	var leg_bones: Array[int] = [SkaterMeshBuilder.LegBone.LEG_L, SkaterMeshBuilder.LegBone.LEG_R]
-	skeleton.set_bone_pose(SkaterMeshBuilder.UpperBone.TORSO, torso)
-	skeleton.set_bone_pose(SkaterBodySkeleton.TAIL_BONE, torso)
-	skeleton.set_bone_pose(SkaterMeshBuilder.UpperBone.PELVIS, pelvis)
-	for i: int in 2:
-		skeleton.set_bone_pose(SkaterBodySkeleton.LEG_BONE_OFFSET + leg_bones[i], legs[i])
-	var flaps := SkaterHemFlaps.new()
-	flaps.setup(null, skeleton, tuck)
+# Hangs the drape still, for an upright figure posed and then left: from its
+# rest, swung out under gravity and settled, its bones written.
+func settle() -> void:
+	restart()
 	for i: int in SETTLE_STEPS:
-		flaps.step(1.0 / 60.0, Vector3(0.0, -flaps.gravity_m_s2, 0.0), i == SETTLE_STEPS - 1)
-	var arrays: Array = SkaterMeshBuilder.shared_torso(tuck).surface_get_arrays(0)
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	var bones: PackedInt32Array = SkaterMeshBuilder.shared_upper_skin_mesh(tuck) \
-			.surface_get_arrays(SkaterMeshBuilder.UpperSurface.TORSO)[Mesh.ARRAY_BONES]
-	var to_torso: Transform3D = torso.affine_inverse()
-	for v: int in verts.size():
-		var column_bind: int = bones[v * 4] - SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE
-		if column_bind < 0:
-			continue
-		var moved: Transform3D = to_torso * skeleton.get_bone_pose(
-				SkaterBodySkeleton.COLUMN_BONE_BASE + column_bind)
-		verts[v] = moved * verts[v]
-		normals[v] = (moved.basis * normals[v]).normalized()
-	skeleton.free()
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return mesh
+		step(1.0 / 60.0, Vector3(0.0, -gravity_m_s2, 0.0), i == SETTLE_STEPS - 1)
 
 
 # The skater's acceleration, skeleton space: what the balance lean leans toward
 # (BalanceRules — atan(|a| / g)), so it is read back off the lean.
 func _acceleration() -> Vector3:
+	if _skater == null:
+		return Vector3.ZERO
 	var tilt: Vector2 = _skater.balance_tilt()
 	var angle: float = tilt.length()
 	if angle < 1e-5:

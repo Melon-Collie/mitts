@@ -4,21 +4,20 @@ extends RefCounted
 # Low-poly faceted geometry for the skater. Cosmetic only — gameplay reads the
 # Marker3D anchors and collision shapes, never these meshes.
 #
-# The two skinned meshes it assembles are shared_upper_skin_mesh (UpperBone /
-# UpperSurface) and shared_leg_skin_mesh (LegBone / LegSurface). Every mesh here
-# is cached and shared by the whole roster — per-skater colour is a surface
-# override, per-build sizing rides the scale in a bone's pose — so nothing is
-# ever mutated per instance.
+# The rigid parts (SkaterRigidParts lays them on the body skeleton), the bone
+# and paint-zone enums the body is addressed by, the torso's rest stations the
+# connected skin is built round, and the goalie's and the gear tools' shared
+# pieces. Every mesh here is cached and shared by the whole roster — per-skater
+# colour is a paint zone, per-build sizing rides the scale in a bone's pose — so
+# nothing is ever mutated per instance.
 #
-# UV layouts replicate the Godot primitives they replace, because
-# SkaterUniformCoordinator paints against those exact conventions:
+# UV layouts replicate the Godot primitives they replaced:
 #   - Lathed (cylinder-style) parts: side U wraps from +Z toward +X with the
 #     side occupying V ∈ [0, 0.5] top→bottom; the top cap disk lands in the
-#     U ∈ [0, 0.5], V ∈ [0.5, 1] quadrant (where the jersey yoke paints), the
-#     bottom cap in U ∈ [0.5, 1] of the same half.
+#     U ∈ [0, 0.5], V ∈ [0.5, 1] quadrant, the bottom cap in U ∈ [0.5, 1] of
+#     the same half.
 #   - Ball (sphere-style) parts: equirect, U from +Z toward +X, V from 0 at
-#     the top pole to 1 at the bottom (where the shoulder-number decal paints).
-# Change a painter convention there and the matching generator here together.
+#     the top pole to 1 at the bottom.
 #
 # Everything is flat-shaded (smooth_group(-1)) — the faceting IS the art
 # style; per-face normals are what make the shaped silhouettes read.
@@ -30,14 +29,14 @@ extends RefCounted
 const _TORSO_PROFILE: Array[Vector2] = [
 	Vector2(0.275, 0.125),   # collar, around the neck's trapezius flare
 	Vector2(0.255, 0.185),   # trapezius slope over the shoulder pads
-	Vector2(0.215, 0.222),   # shoulder line — the pads' widest, the caps seat into it
+	Vector2(0.215, 0.222),   # shoulder line — the pads' widest
 	Vector2(0.130, 0.222),   # chest — from here the sweater hangs nearly straight,
 	Vector2(0.000, 0.212),   # barely in at the waist
 	Vector2(-0.070, 0.214),  # bunches over a tuck's pad (SkaterJerseyHem.BUNCH_Y_M)
 	Vector2(-0.125, 0.218),  # goes in under a tuck's pad (SkaterJerseyHem.PAD_Y_M)
 	Vector2(-0.150, 0.219),  # the pants' waistband line (SkaterJerseyHem.BELT_Y_M)
 	Vector2(-0.210, 0.232),  # from here the tail hangs over the pants, flaring
-	Vector2(-0.280, 0.263),  # out round the thigh domes' widest
+	Vector2(-0.280, 0.263),  # out round the thighs' widest
 	Vector2(-0.350, 0.278),  # hem, just under the hip pivots (SkaterJerseyHem.HEM_Y_M)
 ]
 # The yoke paints the torso side from the collar down to the shoulder line
@@ -50,67 +49,15 @@ const TORSO_YOKE_SIDE_FRACTION: float = (_TORSO_PROFILE[0].x - _TORSO_PROFILE[2]
 # over it, while the chest rings stay centered so the belly keeps its line.
 const _TORSO_REAR_SWAY: Array[float] = [
 	0.0, 0.0, 0.0, 0.0, 0.006, 0.012, 0.018, 0.020, 0.026, 0.032, 0.036]
-# The pelvis, in the waist's space (y 0 is the trunk's fold pivot, the hip
-# pivots sit at −0.13): the pants from the waistband down, and the seat the
-# torso does NOT carry. A real pelvis does not fold with the spine, so this one
-# does not fold with the torso (SkaterArmRig.repose_bone leaves it out of the
-# texture) and fills the seat at every angle.
-#
-# Under a loose jersey it hides entirely, even with the trunk twisted on it: both
-# lathes are wider than deep, so the waistband is narrow enough that its wide
-# axis fits the jersey's deep one. A tuck goes in at the waistband, and stands
-# the waistband and its lip up into the pad (SkaterJerseyHem.pad_ring).
-const _PELVIS_PROFILE: Array[Vector2] = [
-	Vector2(0.056, 0.184),   # the lip, turned in off the waistband's top
-	Vector2(0.050, 0.186),   # the waistband, just over the jersey's belt line
-	Vector2(0.000, 0.190),
-	Vector2(-0.060, 0.196),
-	Vector2(-0.120, 0.205),  # the seat
-	Vector2(-0.170, 0.190),
-	Vector2(-0.215, 0.152),  # the leg line
-	Vector2(-0.260, 0.100),  # buried in the thighs
-]
-# Hockey-butt sway, peaked at the seat.
-const _PELVIS_REAR_SWAY: Array[float] = [0.006, 0.006, 0.010, 0.016, 0.028, 0.024, 0.012, 0.0]
+# Each ring's share of _TORSO_Z_SCALE: the chest 0.34 m deep, a 6'1" man's
+# ~0.26 m under his pads and sweater, easing at the waist into the hockey pants'
+# full depth, which the tail hangs over.
+const _TORSO_DEPTH: Array[float] = [
+	0.875, 0.875, 0.875, 0.875, 0.94, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
-# The thigh, with the hip joint on top of it. The upper four stations are a
-# DOME centred on the hip pivot (_HIP_PIVOT_IN_THIGH above the part's origin,
-# _THIGH_DOME_RADIUS across): a sphere centred on the joint it turns about is
-# the one shape whose surface does not move when the leg does, so it seals the
-# hip at any splay or stride angle — where the pelvis, being static, cannot
-# follow the leg out. It replaces the hip ball, which used to do this job as a
-# separate part, and is why the pants' side stripe now runs up over the hip
-# instead of stopping at it.
-# test_skater_scene_mirrors.gd holds the dome on the pivot the scene authors.
-const _HIP_PIVOT_IN_THIGH: float = 0.13
-const _THIGH_DOME_RADIUS: float = 0.150
-const _THIGH_PROFILE: Array[Vector2] = [
-	Vector2(0.275, 0.038),   # dome pole, buried in the pelvis
-	Vector2(0.240, 0.102),
-	Vector2(0.190, 0.137),
-	Vector2(0.130, 0.150),   # the hip pivot — the dome's equator
-	Vector2(0.050, 0.150),   # breezers: no taper below the hip — the thigh guard holds them out
-	Vector2(-0.080, 0.152),
-	Vector2(-0.125, 0.152),
-	Vector2(-0.150, 0.136),  # the leg hem, turned in over the shin guard
-]
-const _SOCK_PROFILE: Array[Vector2] = [
-	Vector2(0.150, 0.088),
-	Vector2(0.070, 0.094),   # calf bulge
-	Vector2(-0.040, 0.086),
-	Vector2(-0.150, 0.076),  # ankle
-]
-# The collar ENDS just below its node origin: the scene seats that origin at
-# the boot's heel-top line, so the cuff perches ON the boot with ~1 cm of
-# overlap seal instead of dropping past the heel as a column.
-const _SKATE_PROFILE: Array[Vector2] = [
-	Vector2(0.100, 0.090),   # boot collar
-	Vector2(0.020, 0.082),
-	Vector2(-0.010, 0.078),
-]
-
-# Chest reads wider than deep — lateral/depth scale on the torso lathe. The
-# legs keep circular sections (hockey pants and socks are round enough).
+# Chest reads wider than deep — lateral/depth scale on the torso's rings: 0.47 m
+# across the shoulder pads by 0.34 m deep at the chest, a 6'1" man's ~0.26 m
+# chest under his pads and sweater.
 const _TORSO_X_SCALE: float = 1.05
 const _TORSO_Z_SCALE: float = 0.88
 
@@ -139,11 +86,10 @@ const _HELMET_RADIUS: float = 0.155
 const _HELMET_FRONT_CUT: float = 0.40
 const _HELMET_BACK_CUT: float = 0.76
 const _HELMET_DROP_START_C: float = 0.34
-# Ear loops: a localized rim dip centered on each side (|sin θ| = 1),
-# narrowed by the exponent so it reads as an ear cover, not a lower brim.
-# At the nearest sampled azimuths the dip reaches ear-top depth (y ≈ −0.03);
-# it fades to nothing at the face and inside the nape drop.
-const _HELMET_EAR_DIP: float = 0.22
+# Over the ears: a shallow, narrow rim dip centered on each side
+# (|sin θ| = 1), the shell stopping above the ear; it fades to nothing at the
+# face and inside the nape drop.
+const _HELMET_EAR_DIP: float = 0.08
 const _HELMET_EAR_DIP_POWER: float = 6.0
 # The shell closes with a fan to an apex HIGH inside the dome (this fraction
 # of the radius up), not a floor at rim height — a low floor reads as a
@@ -152,6 +98,7 @@ const _HELMET_EAR_DIP_POWER: float = 6.0
 # glimpse near the rim.
 const _HELMET_LINER_APEX_FRAC: float = 0.5
 const _HELMET_LON: int = 10
+const _HELMET_LAT: int = 4
 const HEAD_RADIUS: float = 0.135
 # The head ball's facet grid (_build_ball's lon × lat). SkaterFaceMesh and
 # SkaterHairMesh lay their pieces on these same facets.
@@ -163,38 +110,16 @@ const HEAD_LAT: int = 5
 # _HELMET_RADIUS or the face pokes through the shell at the front equator.
 const HEAD_FORWARD_M: float = 0.015
 
-# A loose sleeve's radius at its full-width end; Skater, the cap and the lobby
-# figures read it. The elbow pad only fills the bend, just proud of it.
+# A loose sleeve's radius at its full-width end; Skater and the glove read it.
+# The elbow's pad is just proud of it.
 const SLEEVE_RADIUS_M: float = 0.080
 const ELBOW_PAD_RADIUS_M: float = SLEEVE_RADIUS_M * 1.04
 
-# Shoulder cap: the pad under the sleeve. Its +Y end (SkaterArmRig points it
-# into the trap) is a blunt base tucked under the torso's trapezius slope; the
-# −Y end stays at the sleeve's radius so the cap flows into the upper arm. The
-# origin is the arm root, so the profile sits below it to continue the
-# neck-to-arm slope. Stations are (y, radius, equirect v), v keeping the sphere
-# mapping the shoulder number paints against, its band on the equator.
-const _SHOULDER_PROFILE: Array[Vector3] = [
-	Vector3(0.050, 0.056, 0.12),   # blunt torso-side base (flat-capped)
-	Vector3(0.025, 0.080, 0.30),
-	Vector3(-0.015, 0.090, 0.50),  # equator — the number band
-	Vector3(-0.060, 0.088, 0.68),
-	Vector3(-0.105, 0.084, 0.85),
-	Vector3(-0.140, SLEEVE_RADIUS_M, 1.0),   # arm-side end, at the sleeve's own radius
-]
-
-# The yoke crosses the cap at its second ring, so the top of the shoulder
-# matches the jersey and the cap's own color starts below it.
-const SHOULDER_CAP_YOKE_V: float = _SHOULDER_PROFILE[1].z
-
-const _KNEE_RADIUS: float = 0.095
-
 # Gloved fist, swept along local Y from the wrist (+Y, toward the elbow) to the
-# curled fingertips, its knuckle roll across local X; SkaterArmRig.glove_basis
+# curled fingertips, its knuckle roll across local X; SkaterArmPoses.glove_basis
 # aims it. UNIT-scale (stations are y, half_w, half_d multiples of
 # hand_sphere_radius). A fist off the stick takes its roll from world up, so the
-# section stays near-square: no face of it can be the back of the hand or carry
-# a thumb.
+# section stays near-square: no face of it can be the back of the hand.
 const _GLOVE_FINGER_STATION: int = 3
 # The fist's width across the knuckle roll, in hand radii.
 const GLOVE_FIST_SPAN: float = 2.2
@@ -210,66 +135,64 @@ const _GLOVE_FIST_STATIONS: Array[Vector3] = [
 	Vector3(-0.78, 0.96, 0.90),
 	Vector3(-1.0, 0.70, 0.66),    # fingertips, turned under
 ]
+# The thumb's pad on the fist's +X end of the knuckle roll, where a shaft held
+# like a sword leaves the hand toward the blade (SkaterArmPoses.glove_basis):
+# (y, half width, half depth, x of its middle), in hand radii as the fist's,
+# from its root by the back of the hand to its tip beside the fingers. It sits
+# _GLOVE_THUMB_PALM toward the palm, wrapped round the shaft, so the fist is a
+# right or a left one: the glove's +Z (its +X across its +Y, the wrist) is the
+# back of a right hand and the palm of a left.
+const _GLOVE_THUMB_PALM: float = 0.5
+# The back of the hand's pad, standing off the back of the fist: (y, half
+# width, half depth, how far toward the back its middle sits), in hand radii.
+const _GLOVE_BACK_PAD_STATIONS: Array[Vector4] = [
+	Vector4(0.80, 0.70, 0.12, 0.92),
+	Vector4(0.55, 0.86, 0.18, 1.00),
+	Vector4(0.20, 0.86, 0.18, 1.00),
+	Vector4(0.02, 0.70, 0.12, 0.94),
+]
+# The fingers as their own padded rolls, the fist's span split four ways with
+# a groove between them (half its width, in hand radii). Each leaves the knuckle
+# pointing down the fist and bends over round the shaft toward the palm, as a
+# closed fist's do: swept along an arc of _GLOVE_FINGER_BEND_R about a hinge
+# that far palm-ward of the knuckle (_GLOVE_FINGER_KNUCKLE: y, and how far
+# toward the back of the hand), through _GLOVE_FINGER_CURL_DEG in as many
+# segments, its section _GLOVE_FINGER_HALF_DEPTH deep either side of the arc and
+# narrowing to _GLOVE_FINGER_TIP at the tip. The back of the knuckle stands
+# level with the back of the hand, and the bottom of the bend with the fist's
+# own bottom.
+const _GLOVE_FINGERS: int = 4
+const _GLOVE_FINGER_GROOVE: float = 0.02
+const _GLOVE_FINGER_FACE_FRAC: float = 0.6
+const _GLOVE_FINGER_KNUCKLE := Vector2(-0.05, 0.53)
+const _GLOVE_FINGER_BEND_R: float = 0.5
+const _GLOVE_FINGER_HALF_DEPTH: float = 0.45
+const _GLOVE_FINGER_CURL_DEG: float = 150.0
+const _GLOVE_FINGER_SEGMENTS: int = 6
+const _GLOVE_FINGER_TIP: float = 0.8
+const _GLOVE_THUMB_STATIONS: Array[Vector4] = [
+	Vector4(0.60, 0.20, 0.55, 0.95),
+	Vector4(0.30, 0.34, 0.66, 1.12),
+	Vector4(-0.15, 0.34, 0.62, 1.22),
+	Vector4(-0.50, 0.24, 0.44, 1.16),
+]
 
 # The glove on the arm, for every placer of it (the live rig through Skater's
-# defaults, the locker mannequin, the lobby dummies): the cuff's center sits
+# defaults, the locker and bench figures): the cuff's center sits
 # GLOVE_CUFF_BACK_M up the forearm from the fist's, spanning 0.05–0.13 m.
 const GLOVE_FIST_RADIUS_M: float = 0.064
 const GLOVE_CUFF_RADIUS_M: float = SLEEVE_RADIUS_M * 1.2
 const GLOVE_CUFF_BACK_M: float = 0.09
 
 # Arm-rig fixed dimensions. The cuff/knob heights are placement inputs on the
-# skater side (SkaterArmRig._pose_cuff / SkaterStickRig offset along the bone by
+# skater side (SkaterArmPoses.cuff_pose / SkaterStickRig offset along the bone by
 # half the height), so they live here with the geometry they measure.
-const _ARM_TAPER: float = 0.88   # distal end radius fraction (top of mesh = proximal)
-# The forearm is the arm bone with a wrist: from 0.3 L off the hand it necks
-# down to a radius the fist hides by 0.2 L, so the sleeve stops in the glove. The
-# cuff is metric, so the neck must start under it (0.3 L <= 0.13 m) and be thin
-# before it ends (0.2 L >= 0.05 m): forearms of 0.25–0.43 m
-# (test_glove_hides_the_sleeve.gd).
-const _FOREARM_PROFILE: Array[Vector2] = [
-	Vector2(0.5, 1.0),
-	Vector2(-0.2, 1.0 - (1.0 - _ARM_TAPER) * 0.7),   # on the plain taper
-	Vector2(-0.3, 0.6),
-	Vector2(-0.5, 0.6),
-]
 const CUFF_HEIGHT_M: float = 0.08
 const KNOB_HEIGHT_M: float = 0.05
 const _KNOB_TOP_RADIUS: float = 0.035
 const _KNOB_BOTTOM_RADIUS: float = 0.03
 
-# Boot stations heel→toe in the Foot node's local frame. That node's scene
-# transform is rotated: local −Y is the toe direction, local +Z is DOWN, X is
-# lateral (see the FootL/R note in SkaterAppearanceCoordinator). Each station
-# is (y, half_width, top_z, sole_z) — top_z is negative (up), sole_z positive
-# (down). Envelope matches the prolate foot sphere it replaces (r 0.08, half
-# length 0.125).
-# Station the toe cap starts at — the boot sweep commits stations 0..N as the
-# quarter and N..last as the cap, so the two pieces share this ring and meet
-# with no gap. The front band is the whole cap, which is the proportion a real
-# toe cap covers.
-const _BOOT_TOE_STATION: int = 3
-const _BOOT_STATIONS: Array[Vector4] = [
-	# Heel top rises toward the collar like a real boot's quarter, meeting the
-	# collar's bottom so ankle and boot read as one piece from the side. The
-	# rearmost station runs the quarter back UNDER the collar's footprint (the
-	# cuff seats 0.10 heel-ward of this frame's origin, so its underside
-	# otherwise hangs bare behind the heel) — sole tucked well up so the
-	# stride's heel-kick arc can't drag it through the ice.
-	Vector4(0.155, 0.042, -0.062, 0.030),   # heel counter, under the cuff
-	Vector4(0.115, 0.052, -0.070, 0.045),   # heel
-	Vector4(0.045, 0.060, -0.072, 0.046),   # instep rise
-	Vector4(-0.045, 0.058, -0.048, 0.046),  # forefoot
-	Vector4(-0.115, 0.040, -0.012, 0.040),  # toe
-]
-# Skate blade — its own steel-colored child mesh under each Foot node (the
-# boot paints dark, so a fused same-color fin never read as a blade). Same
-# rotated frame as _BOOT_STATIONS: toe −Y, +Z down. The holder's two towers
-# drop from the sole and are bridged by a bottom rail, leaving the arch open
-# between them; the thin runner spans the length and bottoms out at the
-# replaced sphere's ice-contact depth (z = 0.080).
-#
-# A MID gray: the holder is a paintable zone, so a near-white runner under a
+# The runner's steel. A MID gray: the holder is a paintable zone, so a near-white runner under a
 # white holder would lose the skate's bottom edge entirely. Dark enough to
 # separate from GearModelRegistry.WHITE, bright enough to read against a black
 # boot. Public so the display figures (FigureKit) and the gear capture tool
@@ -288,42 +211,54 @@ const SKATE_LIFT_M: float = 0.04
 const BLADE_ICE_Z: float = 0.080 + SKATE_LIFT_M
 const RUNNER_TOE_Y: float = -0.088
 const RUNNER_HEEL_Y: float = 0.098
-# Skate accent stripe (see shared_skate_stripe): band height, its center on
-# the collar's local Y, and a radius just proud of the collar's sidewall at
-# that height (~0.085) so the band never z-fights the lathe under it.
-const SKATE_STRIPE_HEIGHT_M: float = 0.04
-const _SKATE_STRIPE_Y: float = 0.045
-const _SKATE_STRIPE_RADIUS: float = 0.092
-# Skate laces, drawn-on as geometry: thin rungs laid across the instep, each
-# (y, z) pair the rung's center on the boot's top line — z interpolated from
-# the _BOOT_STATIONS top_z at that y, so every rung seats on the surface it
-# crosses (ankle → forefoot). _LACE_COLOR is only the pre-uniform placeholder;
-# the gear style's lace pick repaints them (SkaterUniformCoordinator).
-const _LACE_RUNGS: Array[Vector2] = [
-	Vector2(0.070, -0.0711),
-	Vector2(0.035, -0.0693),
-	Vector2(0.000, -0.0600),
-	Vector2(-0.035, -0.0507),
+# The steel's side profile, (y, z) in the same frame, round from its top at the
+# toe: the nose curving up ahead of the holder, the flat the blade stands on
+# from RUNNER_TOE_Y to RUNNER_HEEL_Y, and the tail rising behind the heel tower.
+# Both curves leave the ice at ~30°, so a blade pitched less than that still
+# touches it at the line's ends, where the contact solve stands it.
+const _RUNNER_PROFILE: Array[Vector2] = [
+	Vector2(-0.103, 0.090),
+	Vector2(-0.1055, 0.097),
+	Vector2(-0.1045, 0.104),
+	Vector2(-0.1005, 0.110),
+	Vector2(-0.094, 0.1165),
+	Vector2(RUNNER_TOE_Y, BLADE_ICE_Z),
+	Vector2(RUNNER_HEEL_Y, BLADE_ICE_Z),
+	Vector2(0.1025, 0.1175),
+	Vector2(0.1065, 0.1125),
+	Vector2(0.109, 0.106),
+	Vector2(0.1095, 0.090),
 ]
-const _LACE_HALF_W: float = 0.030
-const _LACE_HALF_T: float = 0.006   # rung thickness along the instep (local Y)
-# Rung depth is biased PROUD of the surface rather than centered on it: the
-# top line slopes ~0.46 across the heel→instep segment, so a surface-centered
-# box leaves barely 2 mm showing there. Sink keeps the underside buried so no
-# gap opens as the slope crosses the rung.
-const _LACE_PROUD: float = 0.008    # rise above the top surface
-const _LACE_SINK: float = 0.003     # burial below it
-const _LACE_COLOR := Color(0.88, 0.88, 0.86)
-
+const _RUNNER_HALF_W: float = 0.0035
+# The holder's side profiles, wound as _RUNNER_PROFILE is: the toe tower, its
+# front sweeping down toward the steel's nose; the heel tower, the two leaning
+# apart toward the rail; and the rail the
+# steel seats into, joining them under the window between, which is what a real
+# holder is recognised by. Their tops tuck up into the boot's sole
+# (test_skate_upper.gd holds the seat). Wide where it bolts to the boot,
+# narrowing to wrap the steel at the rail.
+const _HOLDER_TOE: Array[Vector2] = [
+	Vector2(-0.088, 0.042), Vector2(-0.098, 0.094), Vector2(-0.094, 0.100),
+	Vector2(-0.038, 0.100), Vector2(-0.020, 0.042),
+]
+const _HOLDER_HEEL: Array[Vector2] = [
+	Vector2(0.016, 0.042), Vector2(0.036, 0.100), Vector2(0.100, 0.100),
+	Vector2(0.106, 0.092), Vector2(0.100, 0.042),
+]
+const _HOLDER_RAIL: Array[Vector2] = [
+	Vector2(-0.094, 0.086), Vector2(-0.094, 0.100), Vector2(0.100, 0.100), Vector2(0.100, 0.086),
+]
+const _HOLDER_TOP_HALF_W: float = 0.011
+const _HOLDER_RAIL_HALF_W: float = 0.0055
 # Neck: skin tube from chin to collar, a child of the Helmet node like the
 # head so it rides the same head-bulk scaling and skeleton offsets. Stations
-# are helmet-local (helmet origin y 0.65, torso top 0.47): the top hides
-# inside the head ball, the bottom flares into the traps where it sinks
-# into the torso.
+# are helmet-local (the helmet at y 0.7 drawn at 0.75 scale, the torso's top
+# at 0.52, so 0.24 local reaches it): the top hides inside the head ball, the
+# bottom sinks into the collar barely wider than the throat.
 const NECK_PROFILE: Array[Vector2] = [
-	Vector2(-0.095, 0.064),
-	Vector2(-0.155, 0.070),
-	Vector2(-0.190, 0.092),  # trapezius flare into the collar
+	Vector2(-0.095, 0.085),
+	Vector2(-0.175, 0.093),
+	Vector2(-0.245, 0.100),  # into the collar, a column rather than a cone
 ]
 
 static var _cache: Dictionary = {}
@@ -356,72 +291,14 @@ static func _shared(key: String, builder: Callable) -> ArrayMesh:
 	return built
 
 
-# ── Arm-rig meshes (unit radius — size with node scale, never mesh mutation) ──
-
-
-# Bone prism for the arm wrappers: unit height (the wrapper's per-frame Z
-# scale stretches it to the bone length), unit proximal radius (the visual's
-# X/Z scale sets thickness), tapering toward the distal end — look_at points
-# both bones' mesh-top at the proximal joint. Side UVs follow the cylinder
-# convention because the uniform's sleeve stripes wrap on it.
-static func shared_arm_bone() -> ArrayMesh:
-	return _shared("arm_bone", func() -> ArrayMesh:
-		var profile: Array[Vector2] = [Vector2(0.5, 1.0), Vector2(-0.5, _ARM_TAPER)]
-		return _radial_side_normals(_build_lathe(profile, _LEG_SIDES, 1.0, 1.0)))
-
-
-# The forearm's prism (_FOREARM_PROFILE): its rings sit on the plain bone's
-# taper and V, so a sleeve's stripes land where they did.
-static func shared_forearm_bone() -> ArrayMesh:
-	return _shared("forearm_bone", func() -> ArrayMesh:
-		return _radial_side_normals(_build_lathe(_FOREARM_PROFILE, _LEG_SIDES, 1.0, 1.0)))
-
-
-# Rewrites a Y-axis solid's SIDE normals to be purely radial — no component
-# along the axis — leaving the caps alone. Only the arm bones and the glove cuff
-# need this, and they need it because they are the parts whose scale is
-# strongly non-uniform.
-#
-# Godot's skinning transforms a normal by the bone matrix itself, not by its
-# inverse transpose (an ordinary MeshInstance3D gets the proper normal matrix).
-# Under a bone scale of (r, r, length) that skews any normal with an axial
-# component the WRONG way and by the ratio length/r — about 4:1 on an arm — so
-# the 6.8° taper cone shaded as a 27° one, and worse, the shading then changed
-# with the bone's length as the arm stretched on an over-reach.
-#
-# A normal with no axial component is immune: scaling it by (r, r, length)
-# multiplies it by r and normalizes back to itself.
-#
-# Baking the sides radial is not the art compromise it looks like: the proper
-# normal matrix divides the axial component by length and the radial one by r,
-# so at an arm's r/length (~0.23) the 6.8° taper already flattens to 1.6° off
-# radial. What baking buys is that the shading stops depending on r/length at
-# all, so an over-reach that stretches the forearm cannot change how it is lit.
-static func _radial_side_normals(src: ArrayMesh) -> ArrayMesh:
-	var arrays: Array = src.surface_get_arrays(0)
-	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	for i: int in normals.size():
-		var n: Vector3 = normals[i]
-		# Caps point straight up the axis; flattening them would zero them.
-		if absf(n.y) > 0.99:
-			continue
-		n.y = 0.0
-		normals[i] = n.normalized()
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	var out := ArrayMesh.new()
-	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return out
-
-
-# ── The leg rig: one skinned mesh, sixteen bones ─────────────────────────────
-# Unlike the upper rig (UpperBone, flat), the legs are a CHAIN: LegL/R carry hip
-# pitch and roll, ShinL/R hang off them and carry the knee, and the six meshes
+# ── The leg bones ────────────────────────────────────────────────────────────
+# Unlike the upper bones (UpperBone, flat), the legs are a CHAIN: LegL/R carry
+# hip pitch and roll, ShinL/R hang off them and carry the knee, and the parts
 # per leg ride whichever of the two they belong to. Keep the parents below
 # mirroring that — flattening the chain means re-deriving the shin's world frame
 # by hand on every gait tick.
 #
-# Bone order is L then R, pivot first. LEG_* and SHIN_* carry no vertices; they
-# exist to be rotated.
+# Bone order is L then R, pivot first.
 enum LegBone {
 	LEG_L, THIGH_L, KNEE_L, SHIN_L, SOCK_L, SKATE_L, FOOT_L,
 	LEG_R, THIGH_R, KNEE_R, SHIN_R, SOCK_R, SKATE_R, FOOT_R,
@@ -445,11 +322,12 @@ const LEG_BONE_NODE: Array[String] = [
 	"LegR/ShinR", "LegR/ShinR/SockR", "LegR/ShinR/SkateR", "LegR/ShinR/FootR",
 ]
 
-# Surfaces of the leg mesh. Not one per bone: the skate collar carries its accent
-# stripe, and the boot carries its toe cap, its blade holder, its steel runner
-# and its laces — so those parts contribute several surfaces to one bone. Each
-# extra surface is a piece a gear MODEL paints on its own (GearModelRegistry);
-# the runner is the exception that stays steel by construction.
+# The legs' paint zones (zone = LegSurface). Not one per bone: the skate's one
+# upper (SkateUpperMesh) is painted in its collar, accent stripe, quarter (SHELL),
+# toe cap and laces, and the blade in its holder and steel runner — each a piece
+# a gear MODEL paints on its own (GearModelRegistry); the runner stays steel by
+# construction. The thigh, knee and sock zones are the connected skin's
+# (SkaterConnectedPants).
 enum LegSurface {
 	THIGH_L, KNEE_L, SOCK_L,
 	SKATE_L_COLLAR, SKATE_L_STRIPE,
@@ -461,113 +339,30 @@ enum LegSurface {
 const LEG_SURFACE_COUNT: int = 20
 
 
-static func shared_leg_skin_mesh() -> ArrayMesh:
-	return _shared("leg_skin", func() -> ArrayMesh:
-		var m := ArrayMesh.new()
-		var thigh: ArrayMesh = _shared("thigh", _build_thigh)
-		var knee: ArrayMesh = _shared("knee", _build_knee)
-		var sock: ArrayMesh = _shared("sock", _build_sock)
-		var skate: ArrayMesh = shared_skate_assembly()
-		var boot: ArrayMesh = shared_boot_assembly()
-		# Appended in LegSurface order — see the enum.
-		for side: int in 2:
-			var leg: int = LegBone.LEG_L if side == 0 else LegBone.LEG_R
-			var shin: int = LegBone.SHIN_L if side == 0 else LegBone.SHIN_R
-			_append_skinned_surface(m, thigh, leg + 1)
-			_append_skinned_surface(m, knee, leg + 2)
-			_append_skinned_surface(m, sock, shin + 1)
-			_append_skinned_surface(m, skate, shin + 2, SKATE_SURF_COLLAR)
-			_append_skinned_surface(m, skate, shin + 2, SKATE_SURF_STRIPE)
-			_append_skinned_surface(m, boot, shin + 3, BOOT_SURF_SHELL)
-			_append_skinned_surface(m, boot, shin + 3, BOOT_SURF_TOE)
-			_append_skinned_surface(m, boot, shin + 3, BOOT_SURF_HOLDER)
-			_append_skinned_surface(m, boot, shin + 3, BOOT_SURF_RUNNER)
-			_append_skinned_surface(m, boot, shin + 3, BOOT_SURF_LACES)
-		return m)
-
-
-# The legs as the rig draws them: every LegSurface as one zone of one surface
-# (BodyZoneMesh), painted by the skater's BodyZonePaint. Zone = LegSurface.
-static func shared_leg_body_mesh() -> ArrayMesh:
-	return _shared("leg_body", func() -> ArrayMesh:
-		return BodyZoneMesh.merge(shared_leg_skin_mesh(), 0))
-
-
-static func shared_leg_skin() -> Skin:
-	if _leg_skin == null:
-		_leg_skin = Skin.new()
-		for i: int in LEG_BONE_COUNT:
-			_leg_skin.add_bind(SkaterBodySkeleton.LEG_BONE_OFFSET + i, Transform3D.IDENTITY)
-	return _leg_skin
-
-
-static var _leg_skin: Skin = null
-
-
 # ── Merged assemblies ────────────────────────────────────────────────────────
 # A part that never moves relative to its parent is a SURFACE, not a node, even
-# when it needs its own material (the steel runner, the gear-coloured laces).
-# These hang under a foot the gait moves every frame, so a node would cost a
-# transform propagation and a global recompute, per skater, per frame.
-#
-# NON-NEGOTIABLE for any merged mesh: nothing may set material_override on it.
-# That property overrides EVERY surface at once, so it would erase the steel and
-# the laces the moment the boot was painted. The parent's own colour lives on
-# surface 0 like everything else — see SkaterUniformCoordinator's BOOT_* slots.
-const BOOT_SURF_SHELL: int = 0
-const BOOT_SURF_TOE: int = 1
-const BOOT_SURF_HOLDER: int = 2
-const BOOT_SURF_RUNNER: int = 3
-const BOOT_SURF_LACES: int = 4
-const SKATE_SURF_COLLAR: int = 0
-const SKATE_SURF_STRIPE: int = 1
-# Surfaces WITHIN a part mesh, for the three parts that split into pieces a
-# gear model paints separately (see _build_boot / _build_skate_blade /
-# shared_glove_fist).
-const BOOT_PART_QUARTER: int = 0
-const BOOT_PART_TOE: int = 1
+# when it needs its own material (the steel runner). Surfaces within a part
+# mesh, for the parts that split into pieces a gear model paints separately.
 const BLADE_PART_HOLDER: int = 0
 const BLADE_PART_RUNNER: int = 1
 const FIST_PART_BACK: int = 0
 const FIST_PART_FINGERS: int = 1
+const FIST_PART_THUMB: int = 2
 const HELMET_SURF_SHELL: int = 0
 const HELMET_SURF_SKIN: int = 1
-
-
-# The per-instance material for one surface, created from the surface's shared
-# default on first use. Every writer must go through this: the default lives on
-# the CACHED mesh that all skaters share, so painting it directly would repaint
-# the whole roster. Returns a material that is safe to mutate.
-static func surface_override(mesh: MeshInstance3D, surface: int) -> StandardMaterial3D:
-	var mat: StandardMaterial3D = mesh.get_surface_override_material(surface) as StandardMaterial3D
-	if mat != null:
-		return mat
-	var shared: StandardMaterial3D = mesh.mesh.surface_get_material(surface) as StandardMaterial3D
-	mat = shared.duplicate() as StandardMaterial3D if shared != null else StandardMaterial3D.new()
-	mesh.set_surface_override_material(surface, mat)
-	return mat
-
-
-static func shared_skate_assembly() -> ArrayMesh:
-	return _shared("skate_assembly", _build_skate_assembly)
-
-
-static func _build_skate_assembly() -> ArrayMesh:
-	var m := ArrayMesh.new()
-	_append_surface(m, _shared("skate", _build_skate))
-	# The stripe carried its offset and radius as node transform, so unlike the
-	# boot's parts it has to be baked. Safe because the collar's own scaling is
-	# axis-aligned and the stripe has no rotation — diagonal scales commute, so
-	# baking cannot shear it the way a rotated child would.
-	_append_surface(m, shared_skate_stripe(), Transform3D(
-			Basis.IDENTITY.scaled(Vector3(_SKATE_STRIPE_RADIUS, 1.0, _SKATE_STRIPE_RADIUS)),
-			Vector3(0.0, _SKATE_STRIPE_Y, 0.0)))
-	var stripe := StandardMaterial3D.new()
-	stripe.albedo_color = Color(0.08, 0.08, 0.08)
-	stripe.roughness = 0.42
-	BodyRim.apply(stripe)
-	m.surface_set_material(SKATE_SURF_STRIPE, stripe)
-	return m
+# The helmet's hardware (shared_helmet_hardware): the chin strap.
+const HELMET_HARDWARE_STRAP: int = 0
+# The chin strap: a band from under the shell's rim in front of each ear,
+# along the jaw to under the chin, just off the skin (the head ball's side is
+# at 0.135 from the helmet's centre), from this azimuth (rad, +X side) and
+# latitude to this one under the chin, this wide (half, as latitude), in
+# `_STRAP_STEPS` pieces a side.
+const _STRAP_HALF_V: float = 0.022
+const _STRAP_STEPS: int = 6
+const _STRAP_RADIUS: float = 0.146
+const _STRAP_FROM: float = PI * 0.5 + 0.2
+const _STRAP_V := Vector2(0.5, 0.86)
+const _STRAP_COLOR := Color(0.07, 0.07, 0.08)
 
 
 # The head ball and its face, centred on the origin, face toward −Z, white but
@@ -577,8 +372,58 @@ static func shared_head() -> ArrayMesh:
 	return _shared("head", _build_head)
 
 
+# The shell alone at a finer facet grid, for the body's own helmet
+# (SkaterRigidParts).
+static func shared_helmet_shell(lon: int, lat: int) -> ArrayMesh:
+	return _shared("helmet_%d_%d" % [lon, lat], func() -> ArrayMesh:
+		return _build_helmet(lon, lat))
+
+
 static func shared_helmet_assembly() -> ArrayMesh:
 	return _shared("helmet_assembly", _build_helmet_assembly)
+
+
+# The chin strap, helmet-local, a surface wearing its own fixed finish (black
+# webbing whatever the kit), which SkaterRigidParts seeds into the body's paint.
+static func shared_helmet_hardware() -> ArrayMesh:
+	return _shared("helmet_hardware", _build_helmet_hardware)
+
+
+static func _build_helmet_hardware() -> ArrayMesh:
+	var m := ArrayMesh.new()
+	var strap := SurfaceTool.new()
+	strap.begin(Mesh.PRIMITIVE_TRIANGLES)
+	strap.set_smooth_group(-1)  # flat shading — see class doc block
+	# θ = PI is the face; each side runs from its guard's front foot round to it.
+	for side: float in [1.0, -1.0]:
+		var from: float = _STRAP_FROM
+		var th0: float = from if side > 0.0 else PI
+		var th1: float = PI if side > 0.0 else TAU - from
+		for k: int in _STRAP_STEPS:
+			var ta: float = lerpf(th0, th1, float(k) / float(_STRAP_STEPS))
+			var tb: float = lerpf(th0, th1, float(k + 1) / float(_STRAP_STEPS))
+			var va: float = _strap_v(ta, from)
+			var vb: float = _strap_v(tb, from)
+			_uv_quad(strap,
+					_sphere_point(_STRAP_RADIUS, va - _STRAP_HALF_V, ta), Vector2.ZERO,
+					_sphere_point(_STRAP_RADIUS, vb - _STRAP_HALF_V, tb), Vector2(0.1, 0.0),
+					_sphere_point(_STRAP_RADIUS, vb + _STRAP_HALF_V, tb), Vector2(0.1, 0.1),
+					_sphere_point(_STRAP_RADIUS, va + _STRAP_HALF_V, ta), Vector2(0.0, 0.1))
+	strap.generate_normals()
+	strap.commit(m)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = _STRAP_COLOR
+	mat.roughness = 0.8
+	BodyRim.apply(mat)
+	m.surface_set_material(HELMET_HARDWARE_STRAP, mat)
+	return m
+
+
+# The strap's latitude at azimuth `theta`: from under the rim (`from`, or its
+# mirror) down along the jaw to under the chin at the face (θ = PI).
+static func _strap_v(theta: float, from: float) -> float:
+	var t: float = clampf(1.0 - absf(theta - PI) / (PI - from), 0.0, 1.0)
+	return lerpf(_STRAP_V.x, _STRAP_V.y, t)
 
 
 static func _build_helmet_assembly() -> ArrayMesh:
@@ -597,37 +442,6 @@ static func _build_helmet_assembly() -> ArrayMesh:
 	return m
 
 
-static func shared_boot_assembly() -> ArrayMesh:
-	return _shared("boot_assembly", _build_boot_assembly)
-
-
-static func _build_boot_assembly() -> ArrayMesh:
-	var m := ArrayMesh.new()
-	var boot: ArrayMesh = _shared("boot", _build_boot)
-	var blade: ArrayMesh = _shared("skate_blade", _build_skate_blade)
-	_append_surface(m, boot, Transform3D.IDENTITY, BOOT_PART_QUARTER)
-	_append_surface(m, boot, Transform3D.IDENTITY, BOOT_PART_TOE)
-	_append_surface(m, blade, Transform3D.IDENTITY, BLADE_PART_HOLDER)
-	_append_surface(m, blade, Transform3D.IDENTITY, BLADE_PART_RUNNER)
-	_append_surface(m, shared_laces())
-	# Defaults for the merged surfaces, standing in for the material_override
-	# their child nodes used to carry — so an unpainted rig (a spawn before the
-	# uniform pass) still shows steel and white laces rather
-	# than untextured white. Surface 0 is left null on purpose: _swap_instance
-	# carries the scene primitive's material onto it, exactly as before.
-	var steel := StandardMaterial3D.new()
-	steel.albedo_color = BLADE_STEEL_COLOR
-	steel.roughness = 0.25
-	BodyRim.apply(steel)
-	m.surface_set_material(BOOT_SURF_RUNNER, steel)
-	var lace := StandardMaterial3D.new()
-	lace.albedo_color = _LACE_COLOR
-	lace.roughness = 0.9
-	BodyRim.apply(lace)
-	m.surface_set_material(BOOT_SURF_LACES, lace)
-	return m
-
-
 # Appends one surface of `src` to `target` as a new surface. Callers that pass
 # no transform rely on the part already sitting at identity in its parent's
 # frame, which is what keeps the merge geometry-preserving.
@@ -639,43 +453,16 @@ static func _append_surface(target: ArrayMesh, src: ArrayMesh,
 	st.commit(target)
 
 
-# The same prism with 90°-about-X baked into the vertices, so its long axis is
-# local Z — the axis the arm rig's looking_at basis aims. That alignment is what
-# lets a single bone transform carry (radius, radius, length) with no rotated
-# child under it.
-static func shared_arm_bone_z() -> ArrayMesh:
-	return _shared("arm_bone_z", func() -> ArrayMesh:
-		return _along_z(shared_arm_bone()))
-
-
-static func _forearm_bone_z() -> ArrayMesh:
-	return _shared("forearm_bone_z", func() -> ArrayMesh:
-		return _along_z(shared_forearm_bone()))
-
-
-static func _along_z(src: ArrayMesh) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.append_from(src, 0, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO))
-	return st.commit()
-
-
-# ── The upper-body rig: one skinned mesh ─────────────────────────────────────
-# Fifteen bones of the body skeleton — both arms, the torso, the helmet/head
-# unit, the two deltoid caps, the pelvis — driving one mesh, so posing a part costs an entry in
-# the skeleton's pose array rather than a Node3D transform write (which dirties
-# a subtree and pushes a global to the RenderingServer).
-#
-# Four properties make a pose write mean a plain local transform, and all four
-# have to hold: every vertex is weighted 1.0 to a single bone (the jersey's tail is
-# the one exception — SkaterJerseyHem), the bone rests
-# are identity, the skin binds are identity, and each part's geometry is left in
-# its own local space. A skinned vertex is then exactly `bone_pose * v`.
+# ── The upper bones ──────────────────────────────────────────────────────────
+# Thirteen bones of the body skeleton — both arms, the torso, the helmet/head
+# unit, the pelvis. The rigid parts on them
+# (SkaterRigidParts) are bound at identity, rigid to one bone each and left in
+# their own local space, so a skinned vertex is exactly `bone_pose * v`.
 #
 # The shell parts hang from the SPINE bone and the pelvis from WAIST
-# (SkaterBodySkeleton.upper_bone_parent); their poses are authored in a space that equals the old
-# UpperBody space while those two rest at identity. The arm parts are roots,
-# placed by IK straight in skeleton space.
+# (SkaterBodySkeleton.upper_bone_parent); their poses are authored in a space
+# that equals UpperBody's while those two rest at identity. The arm parts are
+# roots, placed by IK straight in skeleton space.
 enum UpperBone {
 	TOP_UPPER_ARM,
 	TOP_FOREARM,
@@ -689,26 +476,14 @@ enum UpperBone {
 	BOTTOM_CUFF,
 	TORSO,
 	HELMET,
-	SHOULDER_L,
-	SHOULDER_R,
 	PELVIS,
 }
-const UPPER_BONE_COUNT: int = 15
-# The upper skin's binds for the jersey's tail, after the parts' own: TAIL, then
-# two per torso facet column — the segment from the belt to the bend, then the
-# one from the bend to the hem (SkaterBodySkeleton.column_bone, in that order).
-const UPPER_TAIL_BIND: int = UPPER_BONE_COUNT
-const UPPER_COLUMN_BIND_BASE: int = UPPER_BONE_COUNT + 1
-
-# Surfaces. One per bone for the first thirteen; the helmet is the exception,
-# carrying the shell and the head/neck skin as two surfaces of one bone (they
-# never move relative to each other, they only need separate materials).
-#
-# The two FINGERS surfaces ride the hand bones but are listed LAST, out of
-# anatomical order, on purpose: for the first ten entries a surface index and
-# its bone index coincide, and the uniform painter passes UpperBone values to
-# the surface seams on the strength of it. Inserting the fingers next to the
-# hands would break that silently. Append new arm surfaces here, at the end.
+const UPPER_BONE_COUNT: int = 13
+# The upper paint zones (zone = UPPER_ZONE_BASE + UpperSurface). For the first
+# ten a zone and its bone share a number, which the arm's surface seams rely on,
+# so new zones go at the end. The connected skin paints TORSO, PELVIS and the
+# two sleeves (SkaterConnectedMesh.sleeve_surface); the helmet's bone carries
+# three zones, its shell, the head/neck skin and the chin strap.
 enum UpperSurface {
 	TOP_UPPER_ARM,
 	TOP_FOREARM,
@@ -723,203 +498,163 @@ enum UpperSurface {
 	TORSO,
 	HELMET_SHELL,
 	HELMET_SKIN,
-	SHOULDER_L,
-	SHOULDER_R,
 	TOP_FINGERS,
 	BOTTOM_FINGERS,
 	PELVIS,
+	HELMET_STRAP,
 }
-const UPPER_SURFACE_COUNT: int = 18
+const UPPER_SURFACE_COUNT: int = 17
 # The body's paint zones: the leg surfaces, then the upper ones.
 const UPPER_ZONE_BASE: int = LEG_SURFACE_COUNT
 const BODY_ZONE_COUNT: int = LEG_SURFACE_COUNT + UPPER_SURFACE_COUNT
-# Scene node name per bone for the four parts whose placement is authored in
+# Scene node name per bone for the two parts whose placement is authored in
 # Scenes/Skater.tscn rather than derived (the arm parts are placed by IK). Read
 # by SkaterArmRig.build, which then frees them — same deal as LEG_BONE_NODE.
 # Indices 0-9 are unused; the arm parts have no scene node.
 const UPPER_BONE_NODE: Array[String] = [
 	"", "", "", "", "", "", "", "", "", "",
-	"UpperBodyMesh", "Helmet", "ShoulderL", "ShoulderR", "",
+	"UpperBodyMesh", "Helmet", "",
 ]
 
 
-# One per GearModelRegistry TUCK_* option, alike but for the torso surface's
-# drape, so a skater's tuck is which shared mesh it wears.
-static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
-	if not GearModelRegistry.is_valid_tuck(tuck):
-		tuck = GearModelRegistry.TUCK_NONE
-	return _shared("upper_skin_%d" % tuck, func() -> ArrayMesh:
-		var m := ArrayMesh.new()
-		var bone: ArrayMesh = shared_arm_bone_z()
-		var forearm: ArrayMesh = _forearm_bone_z()
-		var ball: ArrayMesh = shared_elbow_pad()
-		var fist: ArrayMesh = shared_glove_fist()
-		var cuff: ArrayMesh = shared_cuff()
-		var helmet: ArrayMesh = shared_helmet_assembly()
-		var shoulder: ArrayMesh = _shared("shoulder", _build_shoulder)
-		# Appended in UpperSurface order. For the ten arm parts the surface index
-		# and the bone index coincide, which is why they can share a number.
-		_append_skinned_surface(m, bone, UpperBone.TOP_UPPER_ARM)
-		_append_skinned_surface(m, forearm, UpperBone.TOP_FOREARM)
-		_append_skinned_surface(m, bone, UpperBone.BOTTOM_UPPER_ARM)
-		_append_skinned_surface(m, forearm, UpperBone.BOTTOM_FOREARM)
-		_append_skinned_surface(m, ball, UpperBone.TOP_ELBOW)
-		_append_skinned_surface(m, ball, UpperBone.BOTTOM_ELBOW)
-		_append_skinned_surface(m, fist, UpperBone.TOP_HAND, FIST_PART_BACK)
-		_append_skinned_surface(m, fist, UpperBone.BOTTOM_HAND, FIST_PART_BACK)
-		_append_skinned_surface(m, cuff, UpperBone.TOP_CUFF)
-		_append_skinned_surface(m, cuff, UpperBone.BOTTOM_CUFF)
-		SkaterJerseyHem.append_torso(m, shared_torso(), shared_torso(tuck), tuck,
-				TAU * TORSO_U_PHASE, UpperBone.TORSO, UPPER_TAIL_BIND, _TORSO_SIDES,
-				UPPER_COLUMN_BIND_BASE, _TORSO_PROFILE[TORSO_BEND_STATION].x)
-		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SHELL)
-		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SKIN)
-		_append_skinned_surface(m, shoulder, UpperBone.SHOULDER_L)
-		_append_skinned_surface(m, shoulder, UpperBone.SHOULDER_R)
-		# Out of anatomical order — see the UpperSurface doc block.
-		_append_skinned_surface(m, fist, UpperBone.TOP_HAND, FIST_PART_FINGERS)
-		_append_skinned_surface(m, fist, UpperBone.BOTTOM_HAND, FIST_PART_FINGERS)
-		_append_skinned_surface(m, shared_pelvis(tuck), UpperBone.PELVIS)
-		return m)
-
-
-# The upper body as the rig draws it: every UpperSurface as one zone of one
-# surface, zone = UPPER_ZONE_BASE + UpperSurface.
-static func shared_upper_body_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
-	if not GearModelRegistry.is_valid_tuck(tuck):
-		tuck = GearModelRegistry.TUCK_NONE
-	return _shared("upper_body_%d" % tuck, func() -> ArrayMesh:
-		return BodyZoneMesh.merge(shared_upper_skin_mesh(tuck), UPPER_ZONE_BASE))
-
-
-# Identity binds, so the skinned vertex is the bone pose alone (the tail's
-# column bones are roots SkaterHemFlaps poses in skeleton space). Shared by every
-# skater: Godot builds a per-instance SkinReference from one Skin resource.
-static func shared_upper_skin() -> Skin:
-	if _upper_skin == null:
-		_upper_skin = Skin.new()
-		for i: int in UPPER_BONE_COUNT:
-			_upper_skin.add_bind(i, Transform3D.IDENTITY)
-		_upper_skin.add_bind(SkaterBodySkeleton.TAIL_BONE, Transform3D.IDENTITY)
-		for column: int in _TORSO_SIDES:
-			for joint: int in 2:
-				_upper_skin.add_bind(SkaterBodySkeleton.column_bone(column, joint),
-						Transform3D.IDENTITY)
-	return _upper_skin
-
-
-static var _upper_skin: Skin = null
-
-
-# ── The jersey tail's sim seams ──────────────────────────────────────────────
-# Stations of _TORSO_PROFILE the flaps hang the tail by: the belt it hangs
-# from, the bend between its two segments, and the hem.
+# ── The torso's rest stations ────────────────────────────────────────────────
+# Stations of _TORSO_PROFILE the jersey's tail hangs by: the belt it hangs from,
+# the bend between its two segments, and the hem.
 const TORSO_BELT_STATION: int = 7
 const TORSO_BEND_STATION: int = 9
 const TORSO_HEM_STATION: int = 10
 
 
-# One torso ring as the lathe builds it (sides + 1 points, the last repeating
-# the first), torso-local, draped as `tuck` drapes it.
-static func torso_ring(station: int, tuck: int) -> PackedVector3Array:
+# One torso ring (sides + 1 points, the last repeating the first), torso-local.
+static func torso_ring(station: int) -> PackedVector3Array:
 	var s: Vector2 = _TORSO_PROFILE[station]
-	var phase: float = TAU * TORSO_U_PHASE
-	var z_off: float = _TORSO_REAR_SWAY[station]
-	var ring: PackedVector3Array = _ring(s.x, s.y, _TORSO_X_SCALE, _TORSO_Z_SCALE,
-			_TORSO_SIDES, phase)
+	var ring: PackedVector3Array = _ring(s.x, s.y, _TORSO_X_SCALE,
+			_TORSO_Z_SCALE * _TORSO_DEPTH[station], _TORSO_SIDES, TAU * TORSO_U_PHASE)
 	for k: int in ring.size():
-		ring[k].z += z_off
-	return SkaterJerseyHem.tuck_ring(ring, s.x, s.y, z_off, tuck, phase,
-			_TORSO_X_SCALE, _TORSO_Z_SCALE)
+		ring[k].z += _TORSO_REAR_SWAY[station]
+	return ring
 
 
-# The pants at waist-space height `y`: (radius, rear sway), radius < 0 outside
-# their span. Their lathe is wider than deep by PELVIS_XZ_SCALE.
-static func pelvis_ring(y: float) -> Vector2:
-	for i: int in _PELVIS_PROFILE.size() - 1:
-		var hi: Vector2 = _PELVIS_PROFILE[i]
-		var lo: Vector2 = _PELVIS_PROFILE[i + 1]
-		if y <= hi.x and y >= lo.x:
-			var t: float = (hi.x - y) / maxf(hi.x - lo.x, 1e-6)
-			return Vector2(lerpf(hi.y, lo.y, t),
-					lerpf(_PELVIS_REAR_SWAY[i], _PELVIS_REAR_SWAY[i + 1], t))
-	return Vector2(-1.0, 0.0)
+# How far `p` (torso-local) lies outside the torso's rest rings, metres, negative
+# inside (TorsoSection.clearance on this torso's section).
+static func torso_clearance(p: Vector3) -> float:
+	return TorsoSection.clearance(p, _TORSO_PROFILE, _TORSO_REAR_SWAY, _TORSO_DEPTH,
+			Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE))
 
 
+# The torso's share of its depth scale at height `y` (torso-local), between its
+# stations (_TORSO_DEPTH): 1 at and below the waist's last station.
+static func torso_depth_at(y: float) -> float:
+	if y >= _TORSO_PROFILE[0].x:
+		return _TORSO_DEPTH[0]
+	for i: int in _TORSO_PROFILE.size() - 1:
+		var a: Vector2 = _TORSO_PROFILE[i]
+		var b: Vector2 = _TORSO_PROFILE[i + 1]
+		if y >= b.x:
+			return lerpf(_TORSO_DEPTH[i], _TORSO_DEPTH[i + 1], (a.x - y) / (a.x - b.x))
+	return _TORSO_DEPTH[_TORSO_DEPTH.size() - 1]
+
+
+# The pants are wider than deep by this, as the torso is.
 const PELVIS_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
+# torso_clearance's section, for the arms' C++ port (NativeArmRig.configure_torso).
+const TORSO_PROFILE: Array[Vector2] = _TORSO_PROFILE
+const TORSO_REAR_SWAY: Array[float] = _TORSO_REAR_SWAY
+const TORSO_DEPTH: Array[float] = _TORSO_DEPTH
+const TORSO_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
+# The shoulder pads' half-width outside at rest, at the shoulder line.
+const SHOULDER_HALF_WIDTH_M: float = _TORSO_PROFILE[2].y * _TORSO_X_SCALE
 
 
-# The pants' lathe as (y, radius, rear sway) per station, top down, waist-space.
-static func pelvis_stations() -> PackedFloat64Array:
-	var out := PackedFloat64Array()
-	for i: int in _PELVIS_PROFILE.size():
-		out.append_array([_PELVIS_PROFILE[i].x, _PELVIS_PROFILE[i].y, _PELVIS_REAR_SWAY[i]])
-	return out
-# The thigh as a capsule in its LEG bone's frame: from the hip pivot, whose dome
-# is the capsule's top, down to where the breezers turn in at the leg hem.
-const THIGH_CAPSULE_LENGTH_M: float = 0.26
-const THIGH_CAPSULE_RADIUS_M: float = 0.152
-
-
-# Copies a single-surface mesh into `target` verbatim, adding the bone/weight
-# attributes that make every one of its vertices rigid to `bone`.
-#
-# Goes through surface_get_arrays rather than SurfaceTool: SurfaceTool
-# re-processes what it is handed (re-indexing, possibly re-deriving normals),
-# and this mesh must stay vertex-for-vertex identical to the unskinned source.
-static func _append_skinned_surface(target: ArrayMesh, src: ArrayMesh, bone: int,
-		src_surface: int = 0) -> void:
-	var arrays: Array = src.surface_get_arrays(src_surface)
-	var vertex_count: int = (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
-	var bones := PackedInt32Array()
-	bones.resize(vertex_count * 4)
-	var weights := PackedFloat32Array()
-	weights.resize(vertex_count * 4)
-	# resize() zero-fills, so influences 1-3 are already bone 0 at weight 0.
-	for i: int in vertex_count:
-		bones[i * 4] = bone
-		weights[i * 4] = 1.0
-	arrays[Mesh.ARRAY_BONES] = bones
-	arrays[Mesh.ARRAY_WEIGHTS] = weights
-	target.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	# Carry the source surface's shared default across, so surface_override()
-	# still has something to duplicate for parts that ship with one (the boot's
-	# steel and laces).
-	var shared: Material = src.surface_get_material(src_surface)
-	if shared != null:
-		target.surface_set_material(target.get_surface_count() - 1, shared)
-
-
-# Elbow ball, unit radius.
-static func shared_joint_ball() -> ArrayMesh:
-	return _shared("joint_ball", func() -> ArrayMesh:
-		return _build_ball(1.0, 8, 4, 1.0))
-
-
-# Elbow pad, unit radius: a ball drawn out to a soft point at +Y, which the arm
-# rig points out of the bend (SkaterArmRig._pose_elbow) — the pad's shape just
-# showing through a thick sleeve.
-const _ELBOW_PAD_PROFILE: Array[Vector2] = [
-	Vector2(1.08, 0.30), Vector2(0.92, 0.74), Vector2(0.56, 0.98), Vector2(0.1, 1.02),
-	Vector2(-0.45, 0.9), Vector2(-0.82, 0.55), Vector2(-0.98, 0.18),
-]
-static func shared_elbow_pad() -> ArrayMesh:
-	return _shared("elbow_pad", func() -> ArrayMesh:
-		return _build_lathe(_ELBOW_PAD_PROFILE, _LEG_SIDES, 1.0, 1.0))
-
-
-# Gloved fist (see _GLOVE_FIST_STATIONS): the BACK of the hand on surface 0
-# and the FINGERS on surface 1, each closed at the knuckle ring they share.
-static func shared_glove_fist() -> ArrayMesh:
-	return _shared("glove_fist", func() -> ArrayMesh:
+# Gloved fist (see _GLOVE_FIST_STATIONS), a right or a left one: the BACK of the
+# hand, closed at the seam, and its pad on surface 0, the FINGERS' four rolls on
+# surface 1, and the THUMB on surface 2.
+static func shared_glove_fist(right: bool = true) -> ArrayMesh:
+	# The palm's side of the glove's Z: the thumb wraps toward it, the back of
+	# the hand's pad stands off the other.
+	var palm: float = -1.0 if right else 1.0
+	return _shared("glove_fist_r" if right else "glove_fist_l", func() -> ArrayMesh:
 		var loops: Array[PackedVector3Array] = []
 		for s: Vector3 in _GLOVE_FIST_STATIONS:
 			loops.append(_octagon_loop(s.x, s.y, s.z, _GLOVE_FACE_FRAC, _GLOVE_SIDE_FRAC))
 		var m := ArrayMesh.new()
-		_commit_sweep_segment(m, loops, 0, _GLOVE_FINGER_STATION, _fist_loop_center)
-		_commit_sweep_segment(m, loops, _GLOVE_FINGER_STATION, loops.size() - 1,
-				_fist_loop_center)
+		var back: SurfaceTool = _flat_surface()
+		_add_sweep(back, loops.slice(0, _GLOVE_FINGER_STATION + 1), _fist_loop_center)
+		var pad: Array[PackedVector3Array] = []
+		for t: Vector4 in _GLOVE_BACK_PAD_STATIONS:
+			pad.append(_shifted(_octagon_loop(t.x, t.y, t.z, _GLOVE_FACE_FRAC,
+					_GLOVE_SIDE_FRAC), Vector3(0.0, 0.0, -palm * t.w)))
+		_add_sweep(back, pad, _loop_centroid)
+		_commit_flat(back, m)
+		var fingers: SurfaceTool = _flat_surface()
+		for f: int in _GLOVE_FINGERS:
+			_add_sweep(fingers, _finger_roll(f, palm), _loop_centroid)
+		_commit_flat(fingers, m)
+		var thumb: Array[PackedVector3Array] = []
+		for t: Vector4 in _GLOVE_THUMB_STATIONS:
+			thumb.append(_shifted(_octagon_loop(t.x, t.y, t.z, _GLOVE_FACE_FRAC,
+					_GLOVE_SIDE_FRAC), Vector3(t.w, 0.0, palm * _GLOVE_THUMB_PALM)))
+		var thumb_st: SurfaceTool = _flat_surface()
+		_add_sweep(thumb_st, thumb, _loop_centroid)
+		_commit_flat(thumb_st, m)
 		return m)
+
+
+# Finger `f` of the fist's _GLOVE_FINGERS rolls, counted from the little
+# finger (−X) to the index (+X, the thumb's side), its loops square to its arc.
+static func _finger_roll(f: int, palm: float) -> Array[PackedVector3Array]:
+	var share: float = GLOVE_FIST_SPAN / _GLOVE_FINGERS
+	var x: float = -GLOVE_FIST_SPAN * 0.5 + share * (f + 0.5)
+	# The arc in the fist's (y, z): down the fist, then round toward the palm.
+	var down := Vector2(-1.0, 0.0)
+	var palm_way := Vector2(0.0, palm)
+	var knuckle := Vector2(_GLOVE_FINGER_KNUCKLE.x, -palm * _GLOVE_FINGER_KNUCKLE.y)
+	var hinge: Vector2 = knuckle + palm_way * _GLOVE_FINGER_BEND_R
+	var roll: Array[PackedVector3Array] = []
+	for k: int in _GLOVE_FINGER_SEGMENTS + 1:
+		var u: float = float(k) / _GLOVE_FINGER_SEGMENTS
+		var a: float = deg_to_rad(_GLOVE_FINGER_CURL_DEG) * u
+		var out: Vector2 = -palm_way * cos(a) + down * sin(a)
+		var at: Vector2 = hinge + out * _GLOVE_FINGER_BEND_R
+		var taper: float = lerpf(1.0, _GLOVE_FINGER_TIP, u * u)
+		var flat: PackedVector3Array = _octagon_loop(0.0,
+				(share * 0.5 - _GLOVE_FINGER_GROOVE) * taper, _GLOVE_FINGER_HALF_DEPTH * taper,
+				_GLOVE_FINGER_FACE_FRAC, _GLOVE_SIDE_FRAC)
+		var loop := PackedVector3Array()
+		loop.resize(flat.size())
+		for i: int in flat.size():
+			# The flat loop's z is its depth, outward (the back of the hand's way
+			# at the knuckle) round the bend.
+			var depth: Vector2 = at + out * flat[i].z * -palm
+			loop[i] = Vector3(x + flat[i].x, depth.x, depth.y)
+		roll.append(loop)
+	return roll
+
+
+static func _shifted(loop: PackedVector3Array, by: Vector3) -> PackedVector3Array:
+	for k: int in loop.size():
+		loop[k] += by
+	return loop
+
+
+static func _flat_surface() -> SurfaceTool:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)  # flat shading — see class doc block
+	return st
+
+
+static func _commit_flat(st: SurfaceTool, target: ArrayMesh) -> void:
+	st.generate_normals()
+	st.commit(target)
+
+
+# A closed sweep through `loops`, capped at both ends, onto `st`.
+static func _add_sweep(st: SurfaceTool, loops: Array[PackedVector3Array],
+		center_of: Callable) -> void:
+	_sweep_loops(st, loops)
+	_loop_cap(st, loops[0], center_of.call(loops[0]), true)
+	_loop_cap(st, loops[-1], center_of.call(loops[-1]), false)
 
 
 # A fist loop's axis point — the sweep runs along local Y, so the caps fan to
@@ -928,12 +663,17 @@ static func _fist_loop_center(loop: PackedVector3Array) -> Vector3:
 	return Vector3(0.0, loop[0].y, 0.0)
 
 
+static func _loop_centroid(loop: PackedVector3Array) -> Vector3:
+	var sum := Vector3.ZERO
+	for p: Vector3 in loop:
+		sum += p
+	return sum / loop.size()
+
+
 # Glove cuff: the fist's chamfered box section, posed in the fist's frame. x/z
 # are multiples of the cuff radius; its height is real (CUFF_HEIGHT_M), since the
 # along-bone placement offsets by it. Tapered: the open end clears the sleeve
 # going into it, the wrist end closes onto the back of the fist with a lip.
-# Its pose scale is (radius, 1, radius), ~10:1, so its sides need the arm
-# bone's radial normals (_radial_side_normals) or the taper shades them black.
 const _CUFF_STATIONS: Array[Vector3] = [
 	Vector3(0.5, 0.94, 0.875),   # open end, toward the elbow
 	Vector3(-0.5, 0.75, 0.69),   # wrist end, around the back of the fist
@@ -946,7 +686,7 @@ static func shared_cuff() -> ArrayMesh:
 					_GLOVE_FACE_FRAC, _GLOVE_SIDE_FRAC))
 		var m := ArrayMesh.new()
 		_commit_sweep_segment(m, loops, 0, loops.size() - 1, _fist_loop_center)
-		return _radial_side_normals(m))
+		return m)
 
 
 # Butt-end knob at its real dimensions (never rescaled).
@@ -961,38 +701,6 @@ static func shared_knob() -> ArrayMesh:
 # ── Part builders ─────────────────────────────────────────────────────────────
 
 
-# Torso scales and facet count, so the seat continues the same silhouette it
-# emerges from rather than reading as a separate object under the jersey.
-static func _build_pelvis(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
-	var deform := Callable()
-	if tuck != GearModelRegistry.TUCK_NONE:
-		var lip: float = _PELVIS_PROFILE[0].x
-		var waistband: float = _PELVIS_PROFILE[1].x
-		deform = func(ring: PackedVector3Array, y: float, radius: float,
-				z_off: float) -> PackedVector3Array:
-			if y < waistband - 1e-5:
-				return ring
-			var is_lip: bool = y > lip - 1e-5
-			return SkaterJerseyHem.pad_ring(ring, y, radius, z_off, tuck,
-					_TORSO_X_SCALE, _TORSO_Z_SCALE,
-					SkaterJerseyHem.PAD_RISE_M * (1.0 if is_lip else SkaterJerseyHem.PAD_BULGE_SHARE),
-					0.0 if is_lip else SkaterJerseyHem.PAD_FLARE_M)
-	return _build_lathe(_PELVIS_PROFILE, _TORSO_SIDES, _TORSO_X_SCALE, _TORSO_Z_SCALE,
-			_PELVIS_REAR_SWAY, 0.0, deform)
-
-
-static func _build_torso(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
-	var phase: float = TAU * TORSO_U_PHASE
-	var deform := Callable()
-	if tuck != GearModelRegistry.TUCK_NONE:
-		deform = func(ring: PackedVector3Array, y: float, radius: float,
-				z_off: float) -> PackedVector3Array:
-			return SkaterJerseyHem.tuck_ring(ring, y, radius, z_off, tuck, phase,
-					_TORSO_X_SCALE, _TORSO_Z_SCALE)
-	return _build_lathe(_TORSO_PROFILE, _TORSO_SIDES, _TORSO_X_SCALE, _TORSO_Z_SCALE,
-			_TORSO_REAR_SWAY, phase, deform)
-
-
 # Head ball at HEAD_RADIUS, sitting HEAD_FORWARD_M ahead of the helmet center,
 # with its face (SkaterFaceMesh) — every vertex carries the tint the skin
 # material multiplies, white but for the face's darker features.
@@ -1003,84 +711,6 @@ static func _build_head() -> ArrayMesh:
 	st.append_from(SkaterFaceMesh.build(HEAD_RADIUS, HEAD_LON, HEAD_LAT), 0, Transform3D.IDENTITY)
 	return st.commit()
 
-
-
-# Shared part accessors for out-of-game figures (the lobby's bench dummies, the
-# locker mannequin) so every rendered player body — live or furniture — wears
-# the same faceted set from the same cache.
-# The torso as a GearModelRegistry TUCK_* option drapes it, vertex for vertex
-# the loose one with its tail moved.
-static func shared_torso(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
-	if tuck == GearModelRegistry.TUCK_NONE or not GearModelRegistry.is_valid_tuck(tuck):
-		return _shared("torso", _build_torso)
-	return _shared("torso_tuck_%d" % tuck, _build_torso.bind(tuck))
-
-
-# The pants as a GearModelRegistry TUCK_* option stands their pad up.
-static func shared_pelvis(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
-	if tuck == GearModelRegistry.TUCK_NONE or not GearModelRegistry.is_valid_tuck(tuck):
-		return _shared("pelvis", _build_pelvis)
-	return _shared("pelvis_tuck_%d" % tuck, _build_pelvis.bind(tuck))
-
-
-static func shared_head_ball() -> ArrayMesh:
-	return _shared("head", _build_head)
-
-
-static func shared_shoulder_cap() -> ArrayMesh:
-	return _shared("shoulder", _build_shoulder)
-
-
-static func shared_thigh() -> ArrayMesh:
-	return _shared("thigh", _build_thigh)
-
-
-# The joint balls that close the leg chain. A figure built from thigh and sock
-# alone has a hole where each knee should be — the thigh ends at leg-local
-# −0.28 and the sock starts at −0.35, and the ball is what spans it. Both are
-# built at their real radii, so a placer scales them only by the build's dials.
-static func shared_knee_ball() -> ArrayMesh:
-	return _shared("knee", _build_knee)
-
-
-static func shared_sock() -> ArrayMesh:
-	return _shared("sock", _build_sock)
-
-
-static func shared_boot() -> ArrayMesh:
-	return _shared("boot", _build_boot)
-
-
-static func shared_skate_collar() -> ArrayMesh:
-	return _shared("skate", _build_skate)
-
-
-# Skate accent stripe: a thin unit-radius band that rings the collar proud of
-# its sidewall — the one piece the skate-color cosmetic paints (the boot and
-# collar themselves stay dark). Unit radius like the glove cuff; the creation
-# site scales it to sit just off the collar.
-static func shared_skate_stripe() -> ArrayMesh:
-	return _shared("skate_stripe", func() -> ArrayMesh:
-		var h: float = SKATE_STRIPE_HEIGHT_M * 0.5
-		var profile: Array[Vector2] = [Vector2(h, 1.0), Vector2(-h, 1.0)]
-		return _build_lathe(profile, _LEG_SIDES, 1.0, 1.0))
-
-
-# Drawn-on skate laces (see _LACE_RUNGS): one mesh of instep rungs in the
-# boot's rotated frame, shared like every other part.
-static func shared_laces() -> ArrayMesh:
-	return _shared("laces", func() -> ArrayMesh:
-		var st := SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		st.set_smooth_group(-1)  # flat shading — see class doc block
-		for rung: Vector2 in _LACE_RUNGS:
-			_box(st,
-					Vector3(-_LACE_HALF_W, rung.x - _LACE_HALF_T, rung.y - _LACE_PROUD),
-					Vector3(_LACE_HALF_W, rung.x + _LACE_HALF_T, rung.y + _LACE_SINK))
-		st.generate_normals()
-		return st.commit())
-
-
 static func shared_skate_blade() -> ArrayMesh:
 	return _shared("skate_blade", _build_skate_blade)
 
@@ -1090,12 +720,61 @@ static func shared_skate_blade() -> ArrayMesh:
 # center — those closure faces hide inside the head ball, and closing keeps the
 # solid's winding testable. Same ring orientation as _build_ball, so the shared
 # quad ordering stays outward.
-static func _build_helmet() -> ArrayMesh:
+# `lon` × `lat` facets; the rig's shell is the defaults, and everything fitted
+# under a helmet (hair, face gear) is fitted to that one.
+static func _build_helmet(lon: int = _HELMET_LON, lat: int = _HELMET_LAT) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see class doc block
-	var lon: int = _HELMET_LON
-	var lat: int = 4
+	var rings: Array[PackedVector3Array] = _helmet_rings(lon, lat)
+	for j in rings.size() - 1:
+		for k in lon:
+			var a: Vector3 = rings[j][k]
+			var b: Vector3 = rings[j][k + 1]
+			var c: Vector3 = rings[j + 1][k + 1]
+			var d: Vector3 = rings[j + 1][k]
+			if _helmet_splits_ac(a, b, c, d):
+				_uv_quad(st, a, Vector2.ZERO, b, Vector2(0.1, 0.0), c, Vector2(0.1, 0.1),
+						d, Vector2(0.0, 0.1))
+			else:
+				_tri(st, a, Vector2.ZERO, b, Vector2(0.1, 0.0), d, Vector2(0.0, 0.1))
+				_tri(st, b, Vector2(0.1, 0.0), c, Vector2(0.1, 0.1), d, Vector2(0.0, 0.1))
+	var apex := Vector3(0.0, _HELMET_RADIUS * _HELMET_LINER_APEX_FRAC, 0.0)
+	_cap(st, rings[rings.size() - 1], apex, Vector2(0.5, 0.9), false, 0.05)
+	st.generate_normals()
+	return st.commit()
+
+
+# The shell's outer faces as a triangle list, helmet-local, without the liner
+# that closes it — what anything worn under the helmet has to stay inside.
+static func helmet_shell_triangles() -> PackedVector3Array:
+	var rings: Array[PackedVector3Array] = _helmet_rings()
+	var out := PackedVector3Array()
+	for j in rings.size() - 1:
+		for k in _HELMET_LON:
+			var a: Vector3 = rings[j][k]
+			var b: Vector3 = rings[j][k + 1]
+			var c: Vector3 = rings[j + 1][k + 1]
+			var d: Vector3 = rings[j + 1][k]
+			if _helmet_splits_ac(a, b, c, d):
+				out.append_array([a, b, c, a, c, d])
+			else:
+				out.append_array([a, b, d, b, c, d])
+	return out
+
+
+# Whether a shell quad (a, b, c, d round its edge) splits along a–c rather than
+# b–d: whichever diagonal stands further out from the centre. Where the rim's
+# cut drops between two azimuths (brow to ear loop) the quad twists, and the
+# inner diagonal would fold the shell in through the temple under it.
+static func _helmet_splits_ac(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> bool:
+	return (a + c).length() >= (b + d).length()
+
+
+# The shell's rings from the crown down to the rim, each closed (its first
+# point repeated at the end).
+static func _helmet_rings(lon: int = _HELMET_LON, lat: int = _HELMET_LAT) \
+		-> Array[PackedVector3Array]:
 	var rings: Array[PackedVector3Array] = []
 	for j in lat + 1:
 		var ring := PackedVector3Array()
@@ -1107,17 +786,7 @@ static func _build_helmet() -> ArrayMesh:
 			var ring_r: float = _HELMET_RADIUS * sin(PI * v)
 			ring[k] = Vector3(sin(theta) * ring_r, y, cos(theta) * ring_r)
 		rings.append(ring)
-	for j in lat:
-		for k in lon:
-			_uv_quad(st,
-					rings[j][k], Vector2.ZERO,
-					rings[j][k + 1], Vector2(0.1, 0.0),
-					rings[j + 1][k + 1], Vector2(0.1, 0.1),
-					rings[j + 1][k], Vector2(0.0, 0.1))
-	var apex := Vector3(0.0, _HELMET_RADIUS * _HELMET_LINER_APEX_FRAC, 0.0)
-	_cap(st, rings[lat], apex, Vector2(0.5, 0.9), false, 0.05)
-	st.generate_normals()
-	return st.commit()
+	return rings
 
 
 # The rim's latitude fraction at azimuth θ (helmet-local, θ = 0 the back).
@@ -1146,7 +815,7 @@ static func helmet_rim_y(theta: float) -> float:
 # latitude convention: the shields are one solid patch each, the cage is the
 # same patch emitted as thin strips (its bars). Looks (color/alpha/roughness)
 # live in GearModelRegistry.FACE_*; the meshes carry no default material —
-# SkaterUniformCoordinator.make_face_gear_material is the one paint source.
+# make_face_gear_material is the one paint source.
 
 const _FACE_SHIELD_RADIUS: float = 0.158  # proud of the 0.155 shell
 # Visor: brow to just under the eye line (the equator). Ends short of the ear
@@ -1167,6 +836,20 @@ const _CAGE_V1: float = 0.72
 const _CAGE_HALF_ARC: float = 1.15
 const _CAGE_H_BAR_COUNT: int = 4
 const _CAGE_V_BAR_OFFSETS: Array[float] = [-0.84, -0.42, 0.0, 0.42, 0.84]
+
+
+# Distance along `dir` from `at` (helmet-local, inside the face gear) to the
+# innermost face piece's sphere, where the widest piece (the fishbowl) covers;
+# INF where the ray leaves under or beside it.
+static func face_gear_room(at: Vector3, dir: Vector3) -> float:
+	var radius: float = minf(_CAGE_RADIUS, _FACE_SHIELD_RADIUS)
+	var b: float = at.dot(dir)
+	var t: float = -b + sqrt(maxf(b * b - at.length_squared() + radius * radius, 0.0))
+	var hit: Vector3 = at + dir * t
+	var off_front: float = absf(wrapf(atan2(hit.x, hit.z) - PI, -PI, PI))
+	if off_front > _FISHBOWL_HALF_ARC or hit.y < _FACE_SHIELD_RADIUS * cos(PI * _FISHBOWL_V1):
+		return INF
+	return t
 
 
 # The face piece's fixed look — the one gear piece whose colors never resolve
@@ -1290,62 +973,13 @@ static func _make_skin_mat() -> StandardMaterial3D:
 	return mat
 
 
-static func _build_shoulder() -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_smooth_group(-1)  # flat shading — see class doc block
-	var lon: int = 10
-	var n: int = _SHOULDER_PROFILE.size()
-	var rings: Array[PackedVector3Array] = []
-	for s: Vector3 in _SHOULDER_PROFILE:
-		rings.append(_ring(s.x, s.y, 1.0, 1.0, lon))
-	for i in n - 1:
-		for k in lon:
-			var u0: float = float(k) / float(lon)
-			var u1: float = float(k + 1) / float(lon)
-			_uv_quad(st,
-					rings[i][k], Vector2(u0, _SHOULDER_PROFILE[i].z),
-					rings[i][k + 1], Vector2(u1, _SHOULDER_PROFILE[i].z),
-					rings[i + 1][k + 1], Vector2(u1, _SHOULDER_PROFILE[i + 1].z),
-					rings[i + 1][k], Vector2(u0, _SHOULDER_PROFILE[i + 1].z))
-	# Caps sample the decal's pole regions (plain shoulder color).
-	_cap(st, rings[0], Vector3(0.0, _SHOULDER_PROFILE[0].x, 0.0),
-			Vector2(0.5, 0.06), true, 0.05)
-	_cap(st, rings[n - 1], Vector3(0.0, _SHOULDER_PROFILE[n - 1].x, 0.0),
-			Vector2(0.5, 0.97), false, 0.02)
-	st.generate_normals()
-	return st.commit()
-
-
-static func _build_knee() -> ArrayMesh:
-	return _build_ball(_KNEE_RADIUS, 8, 4, 1.0)
-
-
-static func _build_thigh() -> ArrayMesh:
-	return _build_lathe(_THIGH_PROFILE, _LEG_SIDES, 1.02, 0.96)
-
-
-static func _build_sock() -> ArrayMesh:
-	return _build_lathe(_SOCK_PROFILE, _LEG_SIDES, 1.0, 1.0)
-
-
-static func _build_skate() -> ArrayMesh:
-	return _build_lathe(_SKATE_PROFILE, _LEG_SIDES, 1.0, 1.0)
-
-
 # ── Lathe (cylinder-convention) parts ─────────────────────────────────────────
 
 
 # Faceted solid of revolution over (y, radius) stations, with the cylinder UV
-# convention from the class doc block. Both end caps are emitted — the torso's
-# top cap is where the jersey yoke paints.
-# `ring_deform`, when given, takes each ring as built (with its rest height,
-# profile radius and rear shift) and returns where its points go instead; the
-# UVs stay the rest ring's.
+# convention from the class doc block. Both end caps are emitted.
 static func _build_lathe(profile: Array[Vector2], sides: int,
-		x_scale: float, z_scale: float,
-		z_offsets: Array[float] = [], phase: float = 0.0,
-		ring_deform: Callable = Callable()) -> ArrayMesh:
+		x_scale: float, z_scale: float) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see class doc block
@@ -1356,18 +990,7 @@ static func _build_lathe(profile: Array[Vector2], sides: int,
 	var vs := PackedFloat32Array()
 	for i in profile.size():
 		var s: Vector2 = profile[i]
-		var ring: PackedVector3Array = _ring(s.x, s.y, x_scale, z_scale, sides, phase)
-		# Optional per-ring Z shift (index-aligned with the profile; short or
-		# empty array = centered). Rings stay circular — the shift moves the
-		# whole ring, giving the lathe an asymmetric sway (the torso's seat)
-		# while the angular UV convention is untouched.
-		var z_off: float = z_offsets[i] if i < z_offsets.size() else 0.0
-		if z_off != 0.0:
-			for k in ring.size():
-				ring[k].z += z_off
-		if ring_deform.is_valid():
-			ring = ring_deform.call(ring, s.x, s.y, z_off)
-		rings.append(ring)
+		rings.append(_ring(s.x, s.y, x_scale, z_scale, sides))
 		vs.append(0.5 * (y_top - s.x) / span)
 	for i in profile.size() - 1:
 		for k in sides:
@@ -1378,21 +1001,8 @@ static func _build_lathe(profile: Array[Vector2], sides: int,
 					rings[i][k + 1], Vector2(u1, vs[i]),
 					rings[i + 1][k + 1], Vector2(u1, vs[i + 1]),
 					rings[i + 1][k], Vector2(u0, vs[i + 1]))
-	var top_off: float = z_offsets[0] if z_offsets.size() > 0 else 0.0
-	var bot_off: float = z_offsets[profile.size() - 1] \
-			if z_offsets.size() >= profile.size() else 0.0
-	var top_centre := Vector3(0.0, y_top, top_off)
-	var bot_centre := Vector3(0.0, y_bot, bot_off)
-	if ring_deform.is_valid():
-		var first: PackedVector3Array = rings[0]
-		var last: PackedVector3Array = rings[rings.size() - 1]
-		top_centre = Vector3.ZERO
-		bot_centre = Vector3.ZERO
-		for k in sides:
-			top_centre += first[k] / float(sides)
-			bot_centre += last[k] / float(sides)
-	_cap(st, rings[0], top_centre, Vector2(0.25, 0.75), true)
-	_cap(st, rings[rings.size() - 1], bot_centre, Vector2(0.75, 0.75), false)
+	_cap(st, rings[0], Vector3(0.0, y_top, 0.0), Vector2(0.25, 0.75), true)
+	_cap(st, rings[rings.size() - 1], Vector3(0.0, y_bot, 0.0), Vector2(0.75, 0.75), false)
 	st.generate_normals()
 	return st.commit()
 
@@ -1471,29 +1081,7 @@ static func _build_ball(radius: float, lon: int, lat: int, v_end: float,
 	return st.commit()
 
 
-# ── Boot ──────────────────────────────────────────────────────────────────────
-
-
-# The boot in the Foot node's rotated local frame (see _BOOT_STATIONS): a
-# 6-point chamfered cross-section swept heel→toe, emitted as its two paintable
-# pieces — the QUARTER (heel through instep) on surface 0 and the TOE cap on
-# surface 1. Both are closed solids: each caps the ring they share, so the
-# junction faces are interior and the winding stays testable (same reasoning as
-# the helmet's liner closure). Solid-painted, so UVs are nominal.
-static func _build_boot() -> ArrayMesh:
-	var loops: Array[PackedVector3Array] = []
-	for s: Vector4 in _BOOT_STATIONS:
-		loops.append(_boot_loop(s.x, s.y, s.z, s.w))
-	var m := ArrayMesh.new()
-	_commit_sweep_segment(m, loops, 0, _BOOT_TOE_STATION, _boot_loop_center)
-	_commit_sweep_segment(m, loops, _BOOT_TOE_STATION, loops.size() - 1, _boot_loop_center)
-	return m
-
-
-# A boot loop's axis point, midway between its top and sole edges — the apex
-# each end cap fans to.
-static func _boot_loop_center(loop: PackedVector3Array) -> Vector3:
-	return Vector3(0.0, loop[0].y, (loop[0].z + loop[2].z) * 0.5)
+# ── Blade ──────────────────────────────────────────────────────────────────────
 
 
 # Sweeps `loops[first..last]` into a new closed surface of `target`, capping
@@ -1512,59 +1100,64 @@ static func _commit_sweep_segment(target: ArrayMesh, loops: Array[PackedVector3A
 	st.commit(target)
 
 
-# The blade as its two pieces: the HOLDER on surface 0 and the steel RUNNER on
-# surface 1 (see the _BLADE_* constants' doc). They are separate surfaces
-# because they are separate materials in life — the holder is molded plastic a
-# player picks the color of, the runner is steel and always will be.
-#
-# The holder is one piece, not two posts: two towers dropping from the sole
-# (they tuck up into it — z 0.042 < the boot's 0.045 sole line) bridged along
-# the bottom by the RAIL the runner seats into, so only the steel's last few
-# millimetres show below it. The arch between the towers stays open above the
-# rail, which is the window a real holder is recognised by.
+# The blade on the FOOT bone, in its rotated frame (SkateUpperMesh.SKATE_FROM_FOOT:
+# toe −Y, +Z down), as its two pieces: the HOLDER on surface 0 and the steel
+# RUNNER on surface 1. They are separate surfaces because they are separate
+# materials in life — the holder is molded plastic a player picks the color of,
+# the runner is steel and always will be, so it ships steel and an unpainted rig
+# still shows it.
 static func _build_skate_blade() -> ArrayMesh:
 	var m := ArrayMesh.new()
 	var holder := SurfaceTool.new()
 	holder.begin(Mesh.PRIMITIVE_TRIANGLES)
 	holder.set_smooth_group(-1)  # flat shading — see class doc block
-	_box(holder, Vector3(-0.008, 0.036, 0.042), Vector3(0.008, 0.094, 0.098))    # heel tower
-	_box(holder, Vector3(-0.008, -0.080, 0.042), Vector3(0.008, -0.026, 0.098))  # toe tower
-	# Rail: tower to tower along the bottom, ending where the towers do, so the
-	# runner's heel and toe tips still show past it.
-	_box(holder, Vector3(-0.008, -0.080, 0.084), Vector3(0.008, 0.094, 0.098))
+	var taper := Vector4(_HOLDER_TOP_HALF_W, _HOLDER_RAIL_HALF_W,
+			_HOLDER_TOE[0].y, _HOLDER_RAIL[1].y)
+	for piece: Array[Vector2] in [_HOLDER_TOE, _HOLDER_HEEL, _HOLDER_RAIL]:
+		_extrude_profile(holder, piece, taper)
 	holder.generate_normals()
 	holder.commit(m)
 	var runner := SurfaceTool.new()
 	runner.begin(Mesh.PRIMITIVE_TRIANGLES)
 	runner.set_smooth_group(-1)
-	_box(runner, Vector3(-0.0035, RUNNER_TOE_Y, 0.090),
-			Vector3(0.0035, RUNNER_HEEL_Y, BLADE_ICE_Z))
+	_extrude_profile(runner, _RUNNER_PROFILE,
+			Vector4(_RUNNER_HALF_W, _RUNNER_HALF_W, 0.0, 1.0))
 	runner.generate_normals()
 	runner.commit(m)
+	var steel := StandardMaterial3D.new()
+	steel.albedo_color = BLADE_STEEL_COLOR
+	steel.roughness = 0.25
+	BodyRim.apply(steel)
+	m.surface_set_material(BLADE_PART_RUNNER, steel)
 	return m
 
 
-# Boot cross-section at one station: narrowed top, full-width sidewall, tucked
-# sole edge. Wound counter-clockwise as seen from +Y (the heel side) to match
-# the lathe rings' winding sense, so the shared band-quad ordering stays
-# outward-facing. Local +Z is DOWN in this frame, so top_z < sole_z.
-static func _boot_loop(y: float, half_w: float, top_z: float, sole_z: float) -> PackedVector3Array:
-	var mid_z: float = lerpf(top_z, sole_z, 0.55)
-	var pts := PackedVector3Array()
-	pts.resize(6)
-	pts[0] = Vector3(-half_w * 0.62, y, top_z)
-	pts[1] = Vector3(-half_w, y, mid_z)
-	pts[2] = Vector3(-half_w * 0.72, y, sole_z)
-	pts[3] = Vector3(half_w * 0.72, y, sole_z)
-	pts[4] = Vector3(half_w, y, mid_z)
-	pts[5] = Vector3(half_w * 0.62, y, top_z)
-	return pts
+# A convex side profile, (y, z), stood up across x as a closed solid: its two
+# faces fanned from the first point and the rim between them. `taper` is the
+# half-width at one depth and at another, (x at z1, x at z2, z1, z2), held
+# linear in z between them and flat past them, so each face stays a plane.
+static func _extrude_profile(st: SurfaceTool, profile: Array[Vector2], taper: Vector4) -> void:
+	var z0 := Vector2.ZERO
+	var n: int = profile.size()
+	var near := PackedVector3Array()
+	var far := PackedVector3Array()
+	for p: Vector2 in profile:
+		var half_w: float = lerpf(taper.x, taper.y, clampf((p.y - taper.z) / (taper.w - taper.z),
+				0.0, 1.0))
+		near.append(Vector3(half_w, p.x, p.y))
+		far.append(Vector3(-half_w, p.x, p.y))
+	for k: int in range(1, n - 1):
+		_tri(st, near[0], z0, near[k], z0, near[k + 1], z0)
+		_tri(st, far[0], z0, far[k + 1], z0, far[k], z0)
+	for k: int in n:
+		var k1: int = (k + 1) % n
+		_uv_quad(st, near[k], z0, far[k], z0, far[k1], z0, near[k1], z0)
 
 
 # Band quads between consecutive CLOSED loops (equal point counts, no
 # duplicated seam point — unlike _ring). Contract: loops are wound counter-
 # clockwise as seen from the sweep's START side (the side loops[0] faces) and
-# advance away from it, matching _ring/_boot_loop — the shared quad ordering
+# advance away from it, matching _ring — the shared quad ordering
 # then keeps every face outward. UVs are nominal; sweep parts paint solid.
 # A closed sweep (torus) just appends its first loop again as the last.
 static func _sweep_loops(st: SurfaceTool, loops: Array[PackedVector3Array]) -> void:

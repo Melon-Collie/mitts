@@ -181,17 +181,17 @@ func test_only_reproduction_eliminates_refusals() -> void:
 func test_option_b_shortens_the_span_but_still_refuses() -> void:
 	# The correction to the obvious reading of B. Drawing the puck at H removes
 	# the LEAD from the prediction span, not the trip, so a bad link still
-	# refuses earned claims — just at the rate a link half as long would have.
-	var b_far: RefCounted = H.new().run(_option_b(120.0, 12))
+	# refuses earned claims — just at the rate a link shorter by the lead would.
 	var shipping: RefCounted = _cfg(60.0)
 	shipping.deflect_every_ticks = 12
+	var b_far: RefCounted = H.new().run(_option_b(60.0 + 2.0 * shipping.input_lead_ms, 12))
 	var s: RefCounted = H.new().run(shipping)
 	assert_gt(b_far.false_negatives, 0,
 			"B is not refusal-free — it predicts too, just over a shorter span: "
 			+ b_far.summary())
 	assert_almost_eq(b_far.mean_puck_error_m, s.mean_puck_error_m, 0.02,
-			"B at 120ms should predict about as well as shipping at 60ms — the lead "
-			+ "is worth roughly one RTT here: b120=%s / ship60=%s"
+			"B with a one-way trip longer by the lead should predict about as well as "
+			+ "shipping at 60ms — the lead is worth its own length of trip: b=%s / ship60=%s"
 			% [b_far.summary(), s.summary()])
 
 

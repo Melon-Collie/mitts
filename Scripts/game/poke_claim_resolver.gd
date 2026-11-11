@@ -3,9 +3,9 @@ extends RefCounted
 
 # Host-only resolver for client-initiated poke check claims with lag compensation.
 # Mirrors PickupClaimResolver but with no contest window — first valid claim
-# wins, the carrier loses the puck either way. Two attackers claiming within
-# microseconds of each other are arbitrated by RPC arrival order; the second
-# claim sees carrier == null from the first's apply_poke_check and skips.
+# wins, the carrier loses the puck either way. DeferredClaimQueue releases
+# simultaneous claims in order of their self-view instant; the second sees
+# carrier == null from the first's apply_poke_check and skips.
 #
 # Flow:
 #   receive_claim(peer_id, host_ts, interp_delay, expected_carrier_peer_id,
@@ -127,6 +127,10 @@ func receive_claim(peer_id: int, host_timestamp: float,
 	if skater_snap == null or skater_prev_snap == null:
 		return
 	if skater_snap.is_ghost:
+		return
+	# Committed to a body check, the stick is off the ice: the body or nothing,
+	# as in the host's present-time loop.
+	if skater_snap.hit_committed:
 		return
 	# A committed shot block withdraws the blade from puck play — the same
 	# withdrawal the present-time loop applies in PuckController. Judged from the

@@ -5,7 +5,7 @@ extends GutTest
 # predicting client must step identically.
 
 const Phase = StickCheckRules.Phase
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 # Steps the machine `ticks` times with the button `held` (and pressed on the

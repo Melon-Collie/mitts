@@ -20,6 +20,10 @@ extends GutTest
 #   - "host AI µs per game-second" = brain ticks + all agent dispatches. On
 #     the real host that budget competes with physics + everything else
 #     inside 1_000_000 µs/s (8333 µs per 120 Hz tick).
+#   - The AI's native kernels (the shot-field read, the carry rollout, the
+#     evade read) are installed as GameManager._ready installs them, so the
+#     table is the shipped game's path; MITTS_BENCH_GDSCRIPT_AI=1 measures the
+#     GDScript references instead. The report says which ran.
 #   - The only assertion is a generous sanity ceiling so a catastrophic
 #     regression fails loudly even if nobody reads the table.
 
@@ -168,7 +172,23 @@ func _report() -> void:
 
 
 # One test = the whole matrix, so the report prints as a single block.
+func before_all() -> void:
+	if OS.get_environment("MITTS_BENCH_GDSCRIPT_AI") == "1":
+		return
+	NativeShotOddsFactory.install()
+	NativeCarryRolloutFactory.install()
+	NativeCarrySpaceFactory.install()
+
+
+func after_all() -> void:
+	AIShotOdds.native_factory = Callable()
+	AIShotOdds.attach_native()
+	AICarryRollout.native_factory = Callable()
+	AICarrySpace.native = null
+
+
 func test_ai_host_cost_matrix() -> void:
+	gut.p("AI kernels: %s" % ("native" if AICarrySpace.native != null else "GDScript"))
 	# O-zone cycle: team 0's carrier deep in team 1's end.
 	_run_case("ozone-cycle", 3, 10002, Vector3(0, 0, -24), Vector3(0, 0, -14))
 	_run_case("ozone-cycle", 5, 10002, Vector3(0, 0, -24), Vector3(0, 0, -14))

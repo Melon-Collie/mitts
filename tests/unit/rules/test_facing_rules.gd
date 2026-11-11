@@ -157,7 +157,7 @@ func test_turning_round_to_a_cursor_dead_behind_keeps_the_lean() -> void:
 # ── turn_rate ─────────────────────────────────────────────────────────────────
 
 const _ACCEL: float = 300.0
-const _DT: float = 1.0 / 120.0
+const _DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 func test_a_turn_winds_up_at_the_limit() -> void:

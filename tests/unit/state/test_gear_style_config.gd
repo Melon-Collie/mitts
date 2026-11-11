@@ -21,6 +21,7 @@ func test_default_decodes_to_the_kit_look() -> void:
 	assert_eq(config.facial_hair, HairStyleRegistry.FACIAL_NONE, "and no facial hair")
 	assert_eq(config.hair_color, 0, "in the first palette colour")
 	assert_eq(config.jersey_tuck, GearModelRegistry.TUCK_NONE, "the jersey defaults loose")
+	assert_eq(config.skate_tongue, GearModelRegistry.TONGUE_TUCKED, "the tongue defaults tucked")
 
 
 func test_every_legal_pick_round_trips() -> void:
@@ -88,6 +89,40 @@ func test_every_tuck_round_trips() -> void:
 				"the tuck field leaves the hair fields alone")
 
 
+func test_every_tongue_round_trips() -> void:
+	for tongue: int in GearModelRegistry.tongue_count():
+		var config := GearStyleConfig.new(GearModelRegistry.SKATE_PRO,
+				GearModelRegistry.GLOVE_PRO, 3, 1, GearModelRegistry.FACE_VISOR,
+				HairStyleRegistry.hair_count() - 1, 1, HairStyleRegistry.color_count() - 1,
+				GearModelRegistry.TUCK_FULL, tongue)
+		var back: GearStyleConfig = GearStyleConfig.from_code(config.to_code())
+		assert_eq(back.skate_tongue, tongue)
+		assert_eq(back.jersey_tuck, GearModelRegistry.TUCK_FULL,
+				"the tongue field leaves the tuck alone")
+
+
+# Codes saved before the tongue existed have zeros above the tuck: tucked.
+func test_a_pre_tongue_code_decodes_tucked() -> void:
+	var old_code: int = GearStyleConfig.new(GearModelRegistry.SKATE_RETRO, 0,
+			GearStyleConfig.LACE_DEFAULT_INDEX, 0, GearModelRegistry.FACE_CAGE,
+			HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.FACIAL_NONE, 0,
+			GearModelRegistry.TUCK_LEFT).to_code()
+	assert_eq(GearStyleConfig.from_code(old_code).skate_tongue, GearModelRegistry.TONGUE_TUCKED)
+
+
+# A replay's header carries the code through JSON, as a double: every legal
+# code has to survive that exactly.
+func test_the_fullest_code_survives_a_json_number() -> void:
+	var config := GearStyleConfig.new(GearModelRegistry.skate_count() - 1,
+			GearModelRegistry.glove_count() - 1, TapeColorRegistry.count() - 1,
+			StickModelRegistry.count() - 1, GearModelRegistry.FACE_FISHBOWL,
+			HairStyleRegistry.hair_count() - 1, HairStyleRegistry.facial_count() - 1,
+			HairStyleRegistry.color_count() - 1, GearModelRegistry.tuck_count() - 1,
+			GearModelRegistry.tongue_count() - 1)
+	var code: int = config.to_code()
+	assert_eq(int(JSON.parse_string(JSON.stringify(code))), code)
+
+
 # Every code saved before the tuck existed has zeros above the hair colour, and
 # those players wore the jersey loose.
 func test_a_pre_tuck_code_decodes_loose() -> void:
@@ -110,6 +145,7 @@ func test_garbage_codes_coerce_to_legal_looks() -> void:
 		assert_true(HairStyleRegistry.is_valid_facial(config.facial_hair), "facial hair legal")
 		assert_true(HairStyleRegistry.is_valid_color(config.hair_color), "hair colour legal")
 		assert_true(GearModelRegistry.is_valid_tuck(config.jersey_tuck), "tuck option legal")
+		assert_true(GearModelRegistry.is_valid_tongue(config.skate_tongue), "tongue option legal")
 		# And the coerced look re-packs stably (idempotent coercion).
 		var code2: int = config.to_code()
 		assert_eq(GearStyleConfig.from_code(code2).to_code(), code2)

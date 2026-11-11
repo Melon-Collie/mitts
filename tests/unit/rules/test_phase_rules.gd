@@ -82,3 +82,21 @@ func test_end_of_period_does_not_allow_blade_aim() -> void:
 
 func test_game_over_does_not_allow_blade_aim() -> void:
 	assert_false(PhaseRules.allows_blade_aim_during_lock(GamePhase.Phase.GAME_OVER))
+
+# ── is_after_goal ───────────────────────────────────────────────────────────
+# A replay asks it of recorded frames: the goal-moment frame and its tail are
+# stamped GOAL_CELEBRATION, the live replay window GOAL_SCORED.
+
+func test_after_goal_is_the_celebration_and_the_replay() -> void:
+	assert_true(PhaseRules.is_after_goal(GamePhase.Phase.GOAL_CELEBRATION))
+	assert_true(PhaseRules.is_after_goal(GamePhase.Phase.GOAL_SCORED))
+
+func test_after_goal_excludes_every_other_phase() -> void:
+	for phase: int in [
+		GamePhase.Phase.PLAYING,
+		GamePhase.Phase.FACEOFF_PREP,
+		GamePhase.Phase.FACEOFF,
+		GamePhase.Phase.END_OF_PERIOD,
+		GamePhase.Phase.GAME_OVER,
+	]:
+		assert_false(PhaseRules.is_after_goal(phase), "phase %d is not after a goal" % phase)

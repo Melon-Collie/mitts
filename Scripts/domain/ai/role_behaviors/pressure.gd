@@ -5,12 +5,15 @@ class_name AIRolePressure
 #
 # INVERSE SCORING: each candidate is scored by how much our body there deflates
 # the carrier's best option (AIDefensiveVerbs.carrier_best_option). The argmax
-# takes carrier_stand as the ring's centre and the gap and inside shade as
-# floors, then picks the bearing.
+# takes carrier_stand as the ring's centre, the gap as its radius and the inside
+# shade as a floor, then picks the bearing.
 
 # Engaged/closing boundary: inside it the argmax runs the full polar ring,
 # outside it only the calculated closing stands. 1.5 search steps.
 const PRESSURE_INNER_RING_RANGE_M: float = 4.5
+# Rounds of the rendezvous with a stand that rides the carrier: each skates to
+# where the stand will have got to by the last round's arrival.
+const SET_IN_ROUNDS: int = 3
 
 
 # `cover_priced`: the caller has already priced who picks the play up if the
@@ -26,13 +29,18 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	var carrier_pos: Vector3 = ap.carrier_pos
 
 	# A committed hit loads him on a shoulder at half a stride, so a carrier who
-	# cuts is gone: the last man back never throws one (has_support_behind).
-	if cover_priced or AILastManDiscipline.has_support_behind(ctx):
+	# cuts is gone: the last man back never throws one (has_support_behind) —
+	# until the carrier has drawn level with him in our zone, when the inside he
+	# was keeping is lost or about to be.
+	var level: bool = is_level(ctx, ap)
+	if cover_priced or level or AILastManDiscipline.has_support_behind(ctx):
 		var check: AIBodyCheck.Result = AIDefensiveVerbs.evaluate_body_check(ctx)
 		if check.commit:
 			d.commit_check = true
 			d.target_position = check.target
 			return d
+	if level:
+		return _close_on_him(ctx, ap, d)
 
 	var our_net: Vector3 = ctx.defending_goal_pos
 	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
@@ -60,7 +68,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	else:
 		gap += AIRoleRushD.ladder_gap_m(
 				carrier_pos, ctx.own_goal_dir, ctx.self_blade_reach, cushion)
-	# The stand is angled (AIDefensiveVerbs.carrier_stand), as RUSH_D1's is.
+	# The stand is angled (AIDefensiveVerbs.carrier_stand), as BACK_STRONG's is.
 	var inside_dir := Vector3.ZERO
 	var inside_shade: float = 0.0
 	var search_center: Vector3 = carrier_pos
@@ -76,7 +84,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	# Last man: take the cut-off set, never lunge into it — an ICE-FRAME bound,
 	# so a loose puck only. Never apply it to a live carrier: it would name a
 	# stand wherever the body already is, and a pressurer walked toward his own
-	# net could never close. The gap-up is exempt, as RUSH_D1's is.
+	# net could never close. The gap-up is exempt, as BACK_STRONG's is.
 	var min_depth: float = -INF
 	var depth_dir: Vector3 = Vector3.ZERO
 	if not gapping_up and AIRoleReads.stand_ride_velocity(ctx) == Vector3.ZERO \
@@ -136,9 +144,11 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	var found: bool = false
-	# The ladder is a FLOOR on the gap: the score improves monotonically as you
-	# close, so a free argmax collapses onto him.
-	var min_gap_sq: float = gap * gap
+	# The ladder sets the gap, both ways: closer, the score improves as you
+	# close, so a free argmax collapses onto him; wider, a body on his inside
+	# takes as much off him at three sticks as at one, so it never closes, and
+	# the incumbent holds whatever offset it was picked at.
+	var gap_sq: float = gap * gap
 	for raw: Vector3 in candidates:
 		# A clamp, not a filter: filtering empties the set exactly when the ring
 		# has closed onto the man. The distance is doctrine; the argmax picks the
@@ -147,7 +157,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 		var gx: float = raw.x - carrier_pos.x
 		var gz: float = raw.z - carrier_pos.z
 		var gd_sq: float = gx * gx + gz * gz
-		if gd_sq < min_gap_sq:
+		if gd_sq < gap_sq or (ap.dir_net != Vector3.ZERO and gd_sq > gap_sq):
 			if gd_sq > 0.0001:
 				var k: float = gap / sqrt(gd_sq)
 				c = Vector3(carrier_pos.x + gx * k, 0.0, carrier_pos.z + gz * k)
@@ -171,24 +181,26 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 		if AIStationSearch.too_close_to_teammate(c, our_team_excluding_self):
 			continue
 
-		# Higher = better for us, i.e. lower for the carrier.
+		# Higher = better for us, i.e. lower for the carrier: what he can do from
+		# where he is when we are set there.
 		var pressure_score: float = -AIDefensiveVerbs.carrier_best_option(
 				poss, c, ride, ctx.caps_by_peer.get(ctx.peer_id), carrier_pos,
-				carrier_velocity, our_goalie_pos, opp_teammates, bases) \
-				+ AIStationSearch.incumbent_bonus(ctx, c)
+				carrier_velocity, our_goalie_pos, opp_teammates, bases,
+				_set_in(ctx, ap, c, ride)) \
+				+ AIStationSearch.incumbent_bonus(ctx, raw)
 		if pressure_score > best_score:
 			best_score = pressure_score
 			best_pos = c
 			found = true
 
 	d.target_position = best_pos
-	# Unlike RUSH_D1, the arrival brake stays ON while gapping up: a carrier
+	# Unlike BACK_STRONG, the arrival brake stays ON while gapping up: a carrier
 	# gapped up on isn't coming at pace, so braking onto the stand settles on him
 	# instead of orbiting him.
 	#
 	# Publish the ride only when a candidate survived: otherwise `best_pos` is our
 	# own feet, a HOLD, and a hold that rides a man matches his velocity forever.
-	# The argmax picks the bearing; the route is RUSH_D1's, so the D who owned the
+	# The argmax picks the bearing; the route is BACK_STRONG's, so the D who owned the
 	# rush skates it the same way after the line. A forecheck (the carrier in
 	# his own zone) has no retreat to manage, so its route stays free.
 	if found:
@@ -200,13 +212,84 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 			d.target_position = AIRoleRushD.depth_first(ctx, ap, best_pos, d)
 		AIRoleRushD.set_retreat_floor(ctx, ap, d)
 		if retreating:
-			AIRoleRushD.set_advance_cap(ctx, ap, d, gap)
+			AIRoleRushD.set_advance_cap(ctx, ap, d, gap, not gapping_up)
 		# The gap we just sized is ours to hold (RoleDecision.engaged_peer_id).
 		if ctx.snapshot != null and ctx.snapshot.puck_state != null:
 			var pid: int = ctx.snapshot.puck_state.carrier_peer_id
 			if pid != -1 and ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
 				d.engaged_peer_id = pid
 	return d
+
+
+# A carrier in our zone coming at our net at pace, within a stick of level with
+# me or past me down his line to it: the gap ladder has nothing left to hold —
+# the angle it took gave him the ice past my outside shoulder, and he is taking
+# it to the net. One who is not coming (AIRoleRushD.GAP_UP_CLOSING_M_S) gives me
+# the time to get goal-side of him instead.
+static func is_level(ctx: RoleContext, ap: AICarrierApproach) -> bool:
+	if ap.dir_net == Vector3.ZERO or ctx.snapshot == null or ctx.snapshot.puck_state == null:
+		return false
+	if ap.closing < AIRoleRushD.GAP_UP_CLOSING_M_S:
+		return false
+	var carrier: int = ctx.snapshot.puck_state.carrier_peer_id
+	if carrier == -1 or ctx.team_id_by_peer.get(carrier, -1) == ctx.team_id:
+		return false
+	if AIRoleNeutralZone.depth_of(ctx, ap.carrier_pos) > AIRoleNeutralZone.line_depth_m():
+		return false
+	return _depth_on(ctx, ap) <= AIRoleRushD.stick_m(ctx)
+
+
+# The angle's finish, the level pressurer's last play. Still in front of him with
+# his line to our net inside my stick, step into his path at contact, facing
+# him, so he skates through the body. Otherwise — wider of his line than that,
+# or behind him — the first ice on that line I get to before he does
+# (AIDefensiveVerbs.cut_off_share), riding it as he moves, so whichever way he
+# goes to the net, down the wall and in or straight across, he meets the body
+# or the reach-in there: in front, taken facing him; behind, skated to (not
+# backpedalled). Never step out onto a man whose line I am wide of: level
+# inside a carrier on the wall, that walks me out to him while he cuts in
+# across my front to the net. Chasing his hip instead, a carrier any faster
+# than me is never caught, and cuts in front.
+static func _close_on_him(ctx: RoleContext, ap: AICarrierApproach,
+		d: RoleDecision) -> RoleDecision:
+	var depth: float = _depth_on(ctx, ap)
+	if depth > 0.0 and _off_his_line(ctx, ap, depth) <= AIRoleRushD.stick_m(ctx):
+		d.target_position = ap.carrier_pos + ap.dir_net * (2.0 * GameRules.OFFSIDE_LINE_SLACK)
+		d.target_velocity = ap.carrier_vel
+	else:
+		d.target_position = AIDefensiveVerbs.cut_off(ctx, ap, d)
+		if depth > 0.0:
+			d.face_travel = false
+	d.arrive_at_speed = true
+	d.pressures_puck = true
+	d.engaged_peer_id = ctx.snapshot.puck_state.carrier_peer_id
+	return d
+
+
+# How long until I am set at `stand`, which rides the carrier at `ride`: the
+# arrival clock from where I am and how I am moving, to where the stand will
+# be by then. No later than the carrier's trip to where a ridden retreat ends
+# (AIRoleRushD.RETREAT_FINISH_M), past which there is no stand left to take.
+static func _set_in(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3, ride: Vector3) -> float:
+	var t: float = 0.0
+	for _i: int in SET_IN_ROUNDS:
+		t = AIArrival.time_to_arrive(ctx.self_pos, stand + ride * t, ctx.self_velocity, ctx.self_max_speed,
+				ctx.self_max_accel)
+	if ap.closing <= 0.0:
+		return t
+	return minf(t, maxf(ap.net_dist - AIRoleRushD.RETREAT_FINISH_M, 0.0) / ap.closing)
+
+
+# How far goal-side of the carrier I stand, down his line to our net.
+static func _depth_on(ctx: RoleContext, ap: AICarrierApproach) -> float:
+	return (ctx.self_pos.x - ap.carrier_pos.x) * ap.dir_net.x \
+			+ (ctx.self_pos.z - ap.carrier_pos.z) * ap.dir_net.z
+
+
+# How far across from the carrier's line to our net I stand, `depth` down it.
+static func _off_his_line(ctx: RoleContext, ap: AICarrierApproach, depth: float) -> float:
+	var on_line: Vector3 = ap.carrier_pos + ap.dir_net * depth
+	return Vector2(ctx.self_pos.x - on_line.x, ctx.self_pos.z - on_line.z).length()
 
 
 # True if `c` is on our net's side of the carrier — never lose inside position.

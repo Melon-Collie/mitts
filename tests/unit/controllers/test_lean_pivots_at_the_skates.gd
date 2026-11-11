@@ -6,7 +6,7 @@ extends GutTest
 # skater-animation-plan.md §16). Stepped in the tick and replicated, so it is
 # gameplay geometry and holds the rules that come with that.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const UpperBone = SkaterMeshBuilder.UpperBone
 const LegBone = SkaterMeshBuilder.LegBone
 

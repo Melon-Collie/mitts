@@ -161,7 +161,7 @@ func test_a_puck_resting_inside_the_box_is_ejected() -> void:
 # dimensions the drills stage (tutorial_manager._PASS_WALL_SIZE) so a change to
 # either half that lets a flat shot through fails here.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const ICE: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 const MAX_SPEED: float = 38.0
 const MAX_HEIGHT: float = 3.0

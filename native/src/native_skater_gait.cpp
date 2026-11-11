@@ -10,11 +10,13 @@ using namespace godot;
 namespace mitts {
 
 // GaitPose's leg geometry and reach limits.
-static constexpr double THIGH_LEN = 0.31;
+static constexpr double THIGH_LEN = 0.42;
 static constexpr double SHIN_LEN = 0.45;
 static constexpr double FOOT_FWD = 0.10;
 static constexpr double HIP_HALF_WIDTH = 0.13;
-static constexpr double HIP_DROP = 0.13;
+static constexpr double HIP_DROP = 0.02;
+// LegIK.SOFT_REACH.
+static constexpr double LEG_SOFT_REACH = 0.993;
 static constexpr double PLANT_STROKE_BAND = 0.2;
 static constexpr double REACH_MAX = 0.99;
 static constexpr double REACH_EASE_M = 0.06;
@@ -257,7 +259,11 @@ static void leg_solve(L &leg, double thigh, double shin) {
 	double qy = leg.y;
 	double qz = leg.x * sw + leg.z * cw;
 	const double d = std::sqrt(qx * qx + qy * qy + qz * qz);
-	const double c = (d * d - thigh * thigh - shin * shin) / (2.0 * thigh * shin);
+	// LegIK.soft_reach.
+	const double length = thigh + shin;
+	const double onset = length * LEG_SOFT_REACH;
+	const double r = d <= onset ? d : onset + (length - onset) * std::tanh((d - onset) / (length - onset));
+	const double c = (r * r - thigh * thigh - shin * shin) / (2.0 * thigh * shin);
 	leg.knee = -std::acos(clampd(c, -1.0, 1.0));
 	const double vy = -thigh - shin * std::cos(leg.knee);
 	const double vz = -shin * std::sin(leg.knee);
@@ -1041,7 +1047,9 @@ void NativeSkaterGait::solve(double p_stance, double p_width, const Basis &p_lea
 	gripping = foot_level > 0.0 ? clampd(1.0 - sliding / foot_level, 0.0, 1.0) : 1.0;
 	reach(leg_l, l_dx - p_width, l_dy, l_dz, pivot_yaw_l + l_yaw, foot_level, -1.0);
 	reach(leg_r, r_dx + p_width, r_dy, r_dz, pivot_yaw_r + r_yaw, foot_level, 1.0);
-	plant = plant_share(intensity, edge_floor);
+	// SkaterLocomotion.plant_intensity.
+	plant = plant_share(maxd(speed_t, intensity * (mix.stride + mix.crossover + mix.backward + mix.shuffle)),
+			edge_floor);
 
 	edge_l = clampd(maxd(l_push * intensity, edge_floor), 0.0, 1.0);
 	edge_r = clampd(maxd(r_push * intensity, edge_floor), 0.0, 1.0);

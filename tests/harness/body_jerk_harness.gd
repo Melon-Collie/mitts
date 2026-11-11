@@ -9,7 +9,7 @@ extends GutTest
 # which prints every scenario, and the gate (unit/actors/test_body_stays_smooth.gd),
 # which bounds the transitions.
 
-const DT: float = 1.0 / 120.0
+const DT: float = 1.0 / 120.0  # a fixed step: the script below is timed in it
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const UpperBone = SkaterMeshBuilder.UpperBone
 const LEG: int = SkaterBodySkeleton.LEG_BONE_OFFSET
@@ -24,7 +24,7 @@ const REGIONS: Dictionary = {
 			LEG + 7, LEG + 8, LEG + 9, LEG + 10, LEG + 12, LEG + 13],
 	"trunk": [SkaterBodySkeleton.HIPS_BONE, SkaterBodySkeleton.WAIST_BONE,
 			SkaterBodySkeleton.SPINE_BONE, SkaterBodySkeleton.NECK_BONE,
-			UpperBone.TORSO, UpperBone.PELVIS, UpperBone.SHOULDER_L, UpperBone.SHOULDER_R],
+			UpperBone.TORSO, UpperBone.PELVIS],
 	"head": [UpperBone.HELMET],
 	"top_arm": [UpperBone.TOP_UPPER_ARM, UpperBone.TOP_FOREARM, UpperBone.TOP_HAND],
 	"bot_arm": [UpperBone.BOTTOM_UPPER_ARM, UpperBone.BOTTOM_FOREARM, UpperBone.BOTTOM_HAND],

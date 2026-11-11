@@ -34,11 +34,23 @@ func test_set_squared_goalie_is_fully_settled() -> void:
 func test_cross_seam_one_timer_catches_goalie_moving() -> void:
 	# Goalie was tracking the carrier on the far side (x = -0.18); the puck is
 	# one-timed from the near side (x = +2 → target +0.18). With only the pass
-	# flight to react (~0.21 s), it can't cover the 0.36 m → caught mid-slide.
+	# flight to react (~0.21 s), it can't cover the 0.36 m → caught mid-slide,
+	# moving at his push's speed then.
 	var goalie := _goalie_at(_arc_match_x(-2.0))
 	var u := AIGoalieModel.goalie_unsettled(goalie, GOAL, 0.21, SHOOTER)
-	assert_almost_eq(u, 1.0, 0.001,
-			"a cross-seam one-timer should leave the goalie fully unsettled")
+	var pushed_s: float = 0.21 - AIGoalieModel.goalie_leg_delay_s
+	assert_almost_eq(u, AIGoalieModel.GOALIE_LATERAL_ACCEL_M_S2 * pushed_s
+			/ AIGoalieModel.GOALIE_MAX_LATERAL_SPEED_MPS, 0.001,
+			"a cross-seam one-timer catches the goalie still accelerating across")
+
+
+func test_goalie_who_has_not_reacted_is_not_moving() -> void:
+	# A release sooner than his reaction finds him standing where he was: off the
+	# square (the position prediction's job), but not sliding.
+	var goalie := _goalie_at(_arc_match_x(-2.0))
+	var u := AIGoalieModel.goalie_unsettled(goalie, GOAL,
+			AIGoalieModel.goalie_leg_delay_s * 0.5, SHOOTER)
+	assert_eq(u, 0.0, "a goalie who has not reacted is read standing, not caught moving")
 
 
 func test_goalie_resets_when_given_time() -> void:
@@ -50,14 +62,29 @@ func test_goalie_resets_when_given_time() -> void:
 			"with enough time the goalie re-squares and is no longer unsettled")
 
 
-func test_unsettled_ramps_between_moving_and_set() -> void:
-	# A mid-length release should sit strictly between fully-moving and fully-set.
-	# 0.45 s: the push (react 0.13, then the lateral_accel ramp) covers the 0.36 m
-	# swing with a beat to spare, but less than the full settle window.
+func test_unsettled_follows_the_push() -> void:
+	# Through one re-square his speed rises from rest, peaks, and is gone once he
+	# is set — never past his top speed.
 	var goalie := _goalie_at(_arc_match_x(-2.0))
-	var u := AIGoalieModel.goalie_unsettled(goalie, GOAL, 0.45, SHOOTER)
-	assert_gt(u, 0.0)
-	assert_lt(u, 1.0)
+	var peak: float = 0.0
+	var peak_t: float = 0.0
+	var prev: float = 0.0
+	var rising: bool = true
+	for i: int in 61:
+		var t: float = i * 0.01
+		var u := AIGoalieModel.goalie_unsettled(goalie, GOAL, t, SHOOTER)
+		assert_between(u, 0.0, 1.0)
+		if u > peak:
+			peak = u
+			peak_t = t
+		if not rising:
+			assert_true(u <= prev + 0.0001, "past his peak he only slows (t=%.2f)" % t)
+		elif u < prev - 0.0001:
+			rising = false
+		prev = u
+	assert_gt(peak, 0.0, "he moves across")
+	assert_gt(peak_t, AIGoalieModel.goalie_leg_delay_s, "only after he reacts")
+	assert_eq(prev, 0.0, "and is set by the end")
 
 
 # ── goalie_squared_pos (carry destinations) ─────────────────────────────────

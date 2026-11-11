@@ -6,7 +6,7 @@ extends GutTest
 # from him, or nobody touching, is no press.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 var _skater: Skater = null
 var _other: Skater = null

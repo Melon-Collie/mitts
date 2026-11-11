@@ -2,7 +2,7 @@ class_name StatsSyncGate
 extends RefCounted
 
 # Coalesces high-frequency stat-sync requests into at most one flush per
-# broadcast interval. The 120 Hz contact paths (goalie touches, deflections,
+# broadcast interval. The per-tick contact paths (goalie touches, deflections,
 # blocked shots, possession establishment, credited hits) must not call
 # GameManager._sync_stats_to_clients directly — that is a full-roster
 # WorldStateCodec.encode_stats + reliable RPC per contact, paid inside the

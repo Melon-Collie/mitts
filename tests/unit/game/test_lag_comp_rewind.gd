@@ -67,16 +67,17 @@ func test_forward_predict_ticks_zero_fraction_is_zero() -> void:
 
 
 func test_forward_predict_ticks_full_fraction_is_interp_delay_worth() -> void:
-	# fraction 1.0, 75 ms interp delay, 120 Hz -> 9 ticks (0.075 * 120).
-	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 0.075), 9)
+	# fraction 1.0, 75 ms interp delay -> 0.075 s of ticks.
+	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 0.075), roundi(0.075 * Constants.PHYSICS_TICK))
 
 
 func test_forward_predict_ticks_half_fraction() -> void:
-	assert_eq(LagCompRewind.forward_predict_ticks(0.5, 0.075), 5)  # round(4.5)
+	assert_eq(LagCompRewind.forward_predict_ticks(0.5, 0.075), roundi(0.5 * 0.075 * Constants.PHYSICS_TICK))
 
 
 func test_forward_predict_ticks_clamps_and_guards() -> void:
-	assert_eq(LagCompRewind.forward_predict_ticks(2.0, 0.075), 9, "fraction clamps to 1.0")
+	assert_eq(LagCompRewind.forward_predict_ticks(2.0, 0.075), roundi(0.075 * Constants.PHYSICS_TICK),
+			"fraction clamps to 1.0")
 	assert_eq(LagCompRewind.forward_predict_ticks(-1.0, 0.075), 0, "negative fraction -> 0")
 	assert_eq(LagCompRewind.forward_predict_ticks(1.0, -0.05), 0, "negative delay -> 0")
 
@@ -85,9 +86,10 @@ func test_forward_predict_ticks_caps_hostile_delay() -> void:
 	# The host-side caller feeds this the RAW client-reported interp_delay_ms —
 	# without the 200 ms ceiling (same clamp as remote_view_time) a crafted
 	# claim with a huge delay turns the per-claim integration loop into an
-	# unbounded host stall. 200 ms at 120 Hz -> 24 ticks, the hard ceiling.
-	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 1.0e6), 24)
-	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 0.2), 24, "legit delay at the ceiling")
+	# unbounded host stall. 200 ms of ticks is the hard ceiling.
+	var ceiling: int = roundi(0.2 * Constants.PHYSICS_TICK)
+	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 1.0e6), ceiling)
+	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 0.2), ceiling, "legit delay at the ceiling")
 	assert_eq(LagCompRewind.forward_predict_ticks(1.0, INF), 0, "non-finite -> 0")
 	assert_eq(LagCompRewind.forward_predict_ticks(1.0, NAN), 0, "non-finite -> 0")
 
@@ -446,3 +448,49 @@ func test_self_view_catch_up_depth_is_bounded_by_the_lead_ceiling() -> void:
 			SkaterMovementRules.ForwardResult.new())
 	var ceiling_m: float = 9.0 * NetworkManager.MAX_INPUT_LEAD_SEC + 0.1
 	assert_lt(d.length(), ceiling_m)
+
+
+# ── Claim-carried lead, bounded against the host's ping (#905) ──────────────
+
+func test_an_honest_lead_passes_unchanged() -> void:
+	var rtt: float = 80.0
+	var honest: float = (NetworkManager.INPUT_LEAD_SEC + rtt / 2000.0) * 1000.0
+	assert_almost_eq(LagCompRewind.plausible_input_lead_ms(honest, rtt), honest, 1e-6)
+
+
+func test_an_understated_lead_is_raised_to_the_link() -> void:
+	# The exploit: report the minimum lead to move the reach earlier.
+	var rtt: float = 120.0
+	var expected: float = (NetworkManager.INPUT_LEAD_SEC + rtt / 2000.0) * 1000.0
+	var bounded: float = LagCompRewind.plausible_input_lead_ms(
+			NetworkManager.INPUT_LEAD_SEC * 1000.0, rtt)
+	assert_gt(bounded, NetworkManager.INPUT_LEAD_SEC * 1000.0 + 1.0)
+	assert_lt(expected - bounded, 25.5, "held within the allowance of the link's lead")
+
+
+func test_an_overstated_lead_is_lowered_to_the_link() -> void:
+	var rtt: float = 20.0
+	var expected: float = (NetworkManager.INPUT_LEAD_SEC + rtt / 2000.0) * 1000.0
+	var bounded: float = LagCompRewind.plausible_input_lead_ms(
+			NetworkManager.MAX_INPUT_LEAD_SEC * 1000.0, rtt)
+	assert_lt(bounded - expected, 25.5)
+
+
+func test_no_ping_sample_leaves_the_lead_to_the_absolute_range() -> void:
+	assert_eq(LagCompRewind.plausible_input_lead_ms(40.0, 0.0), 40.0)
+
+
+func test_every_claim_rpc_bounds_the_lead_before_emitting() -> void:
+	var src: String = FileAccess.get_file_as_string("res://Scripts/networking/network_manager.gd")
+	var handlers: int = 0
+	var at: int = src.find("\nfunc receive_")
+	while at != -1:
+		var end: int = src.find("\nfunc ", at + 1)
+		var body: String = src.substr(at, end - at)
+		if body.contains("_claim_received.emit("):
+			handlers += 1
+			var bound_at: int = body.find("LagCompRewind.plausible_input_lead_ms(")
+			assert_gt(bound_at, -1, "%s emits a claim without bounding its lead" % body.split("(")[0].strip_edges())
+			assert_lt(bound_at, body.find("_claim_received.emit("))
+		at = src.find("\nfunc receive_", at + 1)
+	assert_eq(handlers, 5, "expected the five claim RPCs")

@@ -39,6 +39,7 @@ static var _native_obb_checked: bool = false
 # halves local needs no shared counterpart).
 const _NON_BOX_HALF := Vector3(-1.0, -1.0, -1.0)
 const _EMPTY_BODIES: Array[Node] = []
+static var _no_velocities := PackedVector3Array()
 
 
 static func nearest(goalies: Array, prev: Vector3, curr: Vector3, radius: float,
@@ -126,9 +127,12 @@ static func nearest(goalies: Array, prev: Vector3, curr: Vector3, radius: float,
 # then nearest_packed runs the whole slab-test loop natively per sub-step with
 # zero engine reads. Callers gate on the native step being available and fall
 # back to nearest() otherwise; skip rules here MUST mirror nearest()'s.
+# `velocities` false leaves the parts' velocities unread (ZERO): reading them
+# samples Goalie's once-a-frame motion, which only the puck's own tick, after
+# the goalie has moved, may do.
 static func gather_boxes(goalies: Array, packed: PackedFloat32Array,
 		parts: Array, part_goalies: Array,
-		part_velocities: PackedVector3Array) -> int:
+		part_velocities: PackedVector3Array, velocities: bool = true) -> int:
 	parts.clear()
 	part_goalies.clear()
 	var idx: int = 0
@@ -144,7 +148,7 @@ static func gather_boxes(goalies: Array, packed: PackedFloat32Array,
 			shapes = real.get_collision_parts()
 			bodies = real.get_collision_part_bodies()
 			halves = real.get_collision_part_half_extents()
-			vels = real.get_collision_part_velocities()
+			vels = real.get_collision_part_velocities() if velocities else _no_velocities
 		else:
 			shapes = _collision_shapes(goalie)
 		for i: int in shapes.size():
@@ -189,7 +193,7 @@ static func gather_boxes(goalies: Array, packed: PackedFloat32Array,
 			# wider stride would cost every box to serve at most one.
 			if part_velocities.size() <= idx:
 				part_velocities.resize(idx + 1)
-			part_velocities[idx] = vels[i] if real != null else Vector3.ZERO
+			part_velocities[idx] = vels[i] if real != null and velocities else Vector3.ZERO
 			parts.append(body)
 			part_goalies.append(goalie)
 			idx += 1

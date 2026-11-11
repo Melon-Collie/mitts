@@ -61,7 +61,7 @@ const PRESS: float = 0.12
 const RELEASE: float = 0.08
 const FULL: float = 0.92
 const SPRING_RATE: float = 6.0
-const TICK: float = 1.0 / 120.0
+const TICK: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 func test_trigger_held_engages_at_press_and_holds_past_it() -> void:

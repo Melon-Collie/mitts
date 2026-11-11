@@ -9,7 +9,7 @@ extends GutTest
 # has to leave the down pose's stick where the tick put it, or it pops to the
 # cursor until the next tick.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 class StubGameState extends Node:

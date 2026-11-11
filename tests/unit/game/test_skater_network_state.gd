@@ -31,6 +31,7 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	s.pin_role                    = BoardPinRules.Role.PINNED
 	s.pin_strength                = 0.6
 	s.diving                      = true
+	s.slapshot_pinned             = true
 
 	var r := SkaterNetworkState.from_array(s.to_array())
 
@@ -59,21 +60,23 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	assert_eq(r.pin_role, s.pin_role)
 	assert_almost_eq(r.pin_strength, s.pin_strength, 0.00001)
 	assert_eq(r.diving, s.diving)
+	assert_eq(r.slapshot_pinned, s.slapshot_pinned)
 
 
 func test_array_length_sentinel() -> void:
 	# Field-count sentinel — if a field is added without updating to_array /
 	# from_array, this catches the mismatch before it becomes a silent bug.
-	# 32: position, velocity, blade_position, top_hand_position,
+	# 33: position, velocity, blade_position, top_hand_position,
 	# upper_body_rotation_y, facing, last_processed_host_timestamp,
 	# is_ghost, shot_state, shot_charge, facing_angular_velocity,
 	# upper_body_angular_velocity, elevation_level, blade_up,
 	# stagger_timer, move_intent, brake_intent, stance_active, knockdown_timer,
 	# hit_committed, blade_side, balance_tilt, balance_tilt_vel,
 	# torso_lean, posture_lean, recoil_dir, stick_check_phase,
-	# stick_check_elapsed, stick_tied, pin_role, pin_strength, diving.
+	# stick_check_elapsed, stick_tied, pin_role, pin_strength, diving,
+	# slapshot_pinned.
 	var s := SkaterNetworkState.new()
-	assert_eq(s.to_array().size(), 32)
+	assert_eq(s.to_array().size(), 33)
 
 
 func test_blade_up_back_compat_defaults_false() -> void:

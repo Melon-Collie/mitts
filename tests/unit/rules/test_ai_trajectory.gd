@@ -7,7 +7,7 @@ extends GutTest
 
 const Snapshot := preload("res://tests/snapshot.gd")
 const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/puck_trajectory.txt"
-const TICK_S: float = 1.0 / 120.0
+const TICK_S: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 func test_constant_velocity_steps_forward() -> void:

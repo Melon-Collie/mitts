@@ -11,7 +11,7 @@ const STOP_MIN_SPEED: float = 2.5
 # off the loaded blade. Thrust tops out at ~10.5 m/s²
 # (GameRules.DEFAULT_SKATER_THRUST_M_S2) and net acceleration decays toward 0
 # at cruise, so the gate splits "digging in" from "holding speed". The
-# instantaneous quotient is smoothed because velocity steps at the 120 Hz tick
+# instantaneous quotient is smoothed because velocity steps at the physics tick
 # while _process samples between ticks at render rate.
 const ACCEL_SPRAY_MIN_ACCEL: float = 3.5   # m/s² smoothed forward accel to spray at all
 const ACCEL_SMOOTH_RATE: float = 10.0      # 1/s exponential smoothing toward the live value

@@ -39,7 +39,8 @@ const _WIRE_SIDE_LAPSE_TICKS: int = 2
 # regime the hand rides at rest height and the shaft holds the lie exactly, so
 # the factor is identically 0 there. Onset is ~6° past the lie (blade ≈ 0.87 m
 # from the shoulder); full at 18° past it (≈ 0.65 m), holding full from there
-# down to the hand_y_max floor (≈ 0.28 m). Carry-only: the wrists roll the
+# in to the carry's floor (SkaterController.carry_reach_min_m, off the body's
+# centre). Carry-only: the wrists roll the
 # face CLOSED over the puck (signed against the elevation scoop, so a drag
 # visibly cups where a loft opens) and curl the toe in around it (the
 # axial-twist sweep).
@@ -54,14 +55,12 @@ const _BLADE_CRADLE_CUP_DEG: float = 8.0             # axial twist (handedness-s
 # Shoulder anchor offset from body center. The shoulder (top-hand anchor)
 # sits on the OPPOSITE side of the body from the blade: a left-handed shooter
 # (blade on −X) has the top hand on the right shoulder (+X), and vice versa.
-# Matches the ShoulderL/R cap origins in Scenes/Skater.tscn (keep in sync)
-# so the drawn arm roots at the deltoid cap. Sits just inside the torso's
-# shoulder line (x extent ~0.23), so the cap's inner half is under the jersey
-# and its outer half reads as the pad.
-var shoulder_offset: float = 0.22
-# Shoulder Y in upper-body-local space. Matches the ShoulderL/R ball centers
-# in the scene (keep in sync) so the drawn arm hangs from the visible
-# shoulder rather than a point 5 cm below it. Vertical drop from shoulder to
+# The joint, 0.36 m apart (a 6'1" man's), ~5 cm inside the shoulder pads'
+# line (x extent ~0.23), under the skin's armhole (SkaterConnectedMesh is bound
+# with its arm rooted here, which test_skater_scene_mirrors.gd holds).
+var shoulder_offset: float = 0.18
+# Shoulder Y in upper-body-local space, where the skin's sleeve is bound, so
+# the drawn arm hangs from the visible shoulder. Vertical drop from shoulder to
 # hand at rest = shoulder_height − hand_rest_y (mesh-native 0.40 − (−0.10) =
 # 0.50 m; both scale with build height in apply_attributes, so the drop is
 # 0.50 m × height_mult). That drop is subtracted inside the derived ROM
@@ -69,7 +68,7 @@ var shoulder_offset: float = 0.22
 # hand can never be placed beyond the arm's length — raising this shrinks
 # flat-footed reach; the directional reach lean (SkaterPoseCoordinator) buys
 # it back by tilting the whole frame toward the target.
-var shoulder_height: float = 0.40
+var shoulder_height: float = 0.45
 # Blade length (heel to toe). The Blade Marker3D represents the heel (where
 # the shaft meets the blade); the blade mesh extends forward by this distance.
 # The puck plays at the contact point, which is blade_length * 0.5 forward
@@ -96,13 +95,13 @@ var blade_face_twist_deg: float = 7.0
 # its flat heel cap.
 var blade_hosel_length: float = 0.085
 # The stick's built-in lie: the shaft↔ice angle at which the blade sits flat.
-# Derived from the rest pose (hand ~0.87 m above the heel over a
-# sqrt(1.30² − 0.87²) ≈ 0.97 m horizontal run → atan ≈ 42°, i.e. about a
-# real lie 5.5). A shaft off this angle pitches the rigid blade by the
-# difference (_apply_blade_tilt).
-var blade_lie_deg: float = 42.0
+# Derived from the rest pose at the base build (hand 0.96 m above the heel over
+# a sqrt(1.40² − 0.96²) ≈ 1.02 m run → atan ≈ 43.3°, about a real lie 5). A
+# shaft off this angle pitches the rigid blade by the difference
+# (_apply_blade_tilt).
+var blade_lie_deg: float = 43.3
 # Reception ceiling lean from the blade-curve gear (attributes v4): the
-# reception decision sites scale the puck's league deflect ceiling + squared
+# reception decision sites scale the puck's league deflect ceiling + on-the-line
 # bonus by this — a flatter pattern soaks a harder feed. Set by
 # SkaterController.apply_attributes; never touches pickup_max_speed (the
 # always-catches floor stays build-independent, which keeps the client's
@@ -197,7 +196,7 @@ var carry_repush_margin: float = 1.2
 # What a stroke is, as against a hand's wobble: the speed is read through a
 # filter of carry_stroke_smoothing_s, and no face changes until the puck has
 # gone carry_flip_distance (m) the new way.
-var carry_stroke_smoothing_s: float = 0.04
+var carry_stroke_smoothing_s: float = 0.06
 var carry_flip_distance: float = 0.04
 # A release hop lands as the free puck stops (CarryStrokeState.stop_in_s), the
 # far face there to catch it, within [min, carry_transit_hop_time].
@@ -269,7 +268,7 @@ var carry_contact_high_u: float = 0.70
 # 0.33 per segment ≈ real shoulder→elbow and elbow→fist-center at the mesh's
 # native 5'10" — the distal bone ends at the FIST, so it carries the hand's
 # length too, which is also why the two split evenly. One arm = 0.70 m; with the
-# shoulder caps at ±0.22 that is a wingspan ≈ 1.84 m on a 1.78 m body, ~103% of
+# shoulders at ±0.22 that is a wingspan ≈ 1.84 m on a 1.78 m body, ~103% of
 # height and inside the 100–104% real athletes run.
 var upper_arm_length: float = 0.33
 var forearm_length: float = 0.33
@@ -297,10 +296,21 @@ var hand_sphere_radius: float = SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
 # Gap along the forearm between the fist's center and the cuff's wrist end.
 var cuff_wrist_offset: float = SkaterMeshBuilder.GLOVE_CUFF_BACK_M \
 		- SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
-# A glove on the shaft turns its fist square across it, bending the wrist off
-# the forearm by up to this much — inside the wrist's ~20° radial and ~30° ulnar
-# deviation, the plane a stick held across the palm bends it in.
-var wrist_break_max_deg: float = 25.0
+# A glove on the shaft holds it like a sword (SkaterArmPoses.glove_basis): the
+# shaft crosses the palm at the grip angle to the hand's long axis — the top
+# hand's diagonally, the knob in the heel of the hand and the shaft out between
+# thumb and index finger; the bottom hand's nearly square across the fingers —
+# and the wrist deviates to keep it there, within the wrist's ~35° toward the
+# little finger (ulnar) and ~20° toward the thumb (radial).
+var top_grip_angle_deg: float = 65.0
+var bottom_grip_angle_deg: float = 80.0
+var wrist_ulnar_max_deg: float = 35.0
+var wrist_radial_max_deg: float = 20.0
+# And the wrist flexes, rolling the fist round the shaft, up to
+# wrist_flex_max_deg, so the forearm need not twist more than
+# forearm_twist_max_deg off its neutral (SkaterArmPoses.grip_roll).
+var wrist_flex_max_deg: float = 70.0
+var forearm_twist_max_deg: float = 80.0
 
 # ── Balance posture (SkaterController steps it; BalanceRules) ────────────────
 # Natural frequency of the lean's spring: a held lean arrives in ~1 s, and
@@ -421,6 +431,10 @@ var _swing_anchor_up: Vector3 = Vector3.UP
 var _swing_basis: Basis = Basis.IDENTITY
 var _swing_up: Vector3 = Vector3.UP
 var _swing_weight: float = 0.0
+# The render frame's delta, as _process was handed it: the mesh pass's eases
+# step by it rather than the engine's own, which is not the frame being drawn
+# when the pass is driven by hand.
+var _frame_dt: float = 0.0
 var _swing_from_slap: bool = false
 # The params it was built from, read by the carry seat (_seat_on_puck).
 var _blade_params: StickBladeMeshBuilder.Params = null
@@ -584,7 +598,7 @@ var _drawn_at_tick_start: Array[Transform3D] = [Transform3D.IDENTITY, Transform3
 var _drawn_tick: int = -1
 # Render-rate cosmetic pose hook. The controller registers a Callable(delta)
 # that runs the purely-cosmetic pose passes — the leg gait, head tracking, and
-# off-hand IK — which used to run in the physics tick (120 Hz × every skater,
+# off-hand IK — which used to run in the physics tick (every skater,
 # plus once per replayed input during reconcile). None of them feed the blade's
 # world frame (the gait's stride texture was decoupled from it), so they're pure
 # render concerns: run once per rendered frame here, visibility-gated, like the
@@ -620,7 +634,7 @@ var contact_suspended_provider: Callable = Callable()
 # identical on every machine (get_instance_id() is per-process and would let host
 # and client resolve the same pair from opposite sides, desyncing reconcile).
 var collision_tiebreak_id: int = 0
-# Reused across pairs each tick — no per-pair heap allocation in the 120 Hz
+# Reused across pairs each tick — no per-pair heap allocation in the per-tick
 # resolver (the hot-path "build once, fill scratch" pattern).
 var _collision_result: SkaterCollisionRules.Result = SkaterCollisionRules.Result.new()
 
@@ -640,16 +654,15 @@ func contact_others() -> Array:
 	return others if others != null else _NO_OTHERS
 
 
-# Live (cached) goalie pose list — one Dictionary per goalie with
-# position / rotation_y / is_butterfly — set by GameManager on spawn
-# (get_goalie_data). clamp_body_to_goalies reads it to hold the skater clear of
+# Every goalie's gear but his stick, packed (GameManager.get_goalie_body_boxes),
+# set on spawn. clamp_body_to_goalies reads it to hold the skater clear of
 # each goalie — skater-vs-goalie contact is analytic.
 # Empty Callable (tutorial dummy / test) → no goalie block.
-var _goalie_data_provider: Callable = Callable()
+var _goalie_boxes_provider: Callable = Callable()
 
 
-func set_goalie_data_provider(provider: Callable) -> void:
-	_goalie_data_provider = provider
+func set_goalie_boxes_provider(provider: Callable) -> void:
+	_goalie_boxes_provider = provider
 
 
 # Set true by the analytic containment clamps (rink / net / goalie) on any tick
@@ -717,10 +730,10 @@ var pin_strength: float = 0.0
 var is_diving: bool = false
 var dive_laid_out: bool = false
 var dive_layout: Vector2 = Vector2(0.0, -1.0)
-# Deliberate-deflect intent: a human holding the deflect button (stick_lift, Q)
-# WITHOUT the puck — "redirect this, don't catch it." Set each tick by the
-# controller (SkaterController._wants_deflect) and read host-side by PuckController's
-# loose-puck gate. Recomputed from replayed inputs, so never replicated; bots never set it.
+# Deliberate-deflect intent: holding the deflect button (stick_lift, Q) WITHOUT
+# the puck — "redirect this, don't catch it." Set each tick by the controller
+# (SkaterController._wants_deflect) and read host-side by PuckController's
+# loose-puck gate. Recomputed from replayed inputs, so never replicated.
 var deflect_intent: bool = false
 # Share of blade_lift_height a deflect's press read the puck at (DeflectReachRules).
 var deflect_lift_share: float = 0.0
@@ -807,13 +820,10 @@ var _lean_shift_upper: Vector3 = Vector3.ZERO
 # torso write re-places UpperBody without re-deriving what it cannot change.
 var _lean_trunk_local: Basis = Basis.IDENTITY
 var _block_stance_active: bool = false
-# Slapper one-timer zone — armed only while charging a slapper without the puck
-# (see set_slapper_zone). Plain state: the zone is an ice-plane disc the analytic
-# one-timer scans test against, not anything the engine knows about.
-var _slapper_zone_active: bool = false
-var _slapper_zone_radius: float = 0.0
-# Zone center in skater-local space; get_slapper_zone_global_position rotates it
-# with the body and drops it to the ice plane.
+# Slapper one-timer zone center in skater-local space (see set_slapper_zone);
+# get_slapper_zone_global_position rotates it with the body and drops it to the
+# ice plane. Plain state: the zone is an ice-plane disc the analytic one-timer
+# scans test against, not anything the engine knows about.
 var _slapper_zone_offset: Vector3 = Vector3.ZERO
 var _skeleton_root_offset: float = 0.0  # see set_skeleton_root_offset
 # Sticky carry side: 0 when not carrying, ±1 while carrying — stored in
@@ -916,11 +926,12 @@ var _legs: SkaterLegRig
 var _arms: SkaterArmRig
 var _spine: SkaterSpineRig
 var _stick: SkaterStickRig
+var _connected: SkaterConnectedRig = SkaterConnectedRig.new()
 var _draw: SkaterDrawTracker = SkaterDrawTracker.new()
 var _uniform: SkaterUniformCoordinator
 var _hud: SkaterHUDCoordinator
 var _appearance: SkaterAppearanceCoordinator
-var _shadow: SkaterShadowProxy = SkaterShadowProxy.new()
+var _shadow := SkaterShadows.new()
 # The body's one material: a zone per leg and upper surface, painted through the
 # surface seams below (BodyZonePaint).
 var _paint: BodyZonePaint = _new_body_paint()
@@ -977,11 +988,11 @@ func _ready() -> void:
 
 	_legs = SkaterLegRig.new()
 	_legs.setup(self)
-	_legs.build(body, _paint.material)
+	_legs.build(body)
 
 	_arms = SkaterArmRig.new()
 	_arms.setup(self)
-	_arms.build(body, _paint.material)
+	_arms.build(body)
 
 	_spine = SkaterSpineRig.new()
 	_spine.setup(self)
@@ -989,10 +1000,14 @@ func _ready() -> void:
 
 	_stick = SkaterStickRig.new()
 	_stick.setup(self)
+	_connected.setup(self)
+	_connected.build(body, _paint.material,
+			gear_style.jersey_tuck if gear_style != null else GearModelRegistry.TUCK_NONE,
+			gear_style.skate_tongue if gear_style != null else GearModelRegistry.TONGUE_TUCKED)
 	_shadow.build(body, stick_mesh, blade.get_node_or_null("MeshInstance3D") as MeshInstance3D)
 
 	_uniform = SkaterUniformCoordinator.new()
-	_uniform.setup(self)
+	_uniform.setup(self, _paint)
 
 	_hud = SkaterHUDCoordinator.new()
 	_hud.setup(self)
@@ -1006,6 +1021,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_frame_dt = delta
 	# Cosmetic mesh pass at render rate. The stick and arm meshes are pure
 	# write-only functions of the marker positions (top_hand, blade, shoulder,
 	# bottom_hand) the physics-rate controllers and interpolators maintain, so one
@@ -1036,13 +1052,15 @@ func _process(delta: float) -> void:
 			_spine.update()
 		_arms.update_hem(delta, _on_camera)
 		if _on_camera and (_rig_pose_changed() or _spine.take_moved() or _arms.take_retextured() \
-				or _blade_tilt_dirty or flexed):
+				or _arms.take_steering() or _blade_tilt_dirty or flexed):
 			_blade_tilt_dirty = false
 			update_stick_mesh()
-			update_arm_mesh()
-			update_bottom_arm_mesh()
+			update_arm_mesh(delta)
+			update_bottom_arm_mesh(delta)
 		elif not _on_camera:
 			_hold_blade_mesh()
+		if _on_camera:
+			_connected.update()
 		if _on_camera or not seen:
 			_anim_lod.consumed()
 	# World HUD (ring, name, chevrons, beacon) at RENDER rate: ~10 top_level node
@@ -1115,10 +1133,7 @@ func _physics_process(delta: float) -> void:
 	clamp_body_to_net()
 	clamp_body_to_goalies()
 	_update_blade_elevation(delta)
-	_forced_lift_timer = maxf(_forced_lift_timer - delta, 0.0)
-	_stick_check_cooldown = maxf(_stick_check_cooldown - delta, 0.0)
-	_update_blade_lift(delta)
-	_update_commit_stance(delta)
+	step_tick_state(delta)
 	_update_carry_contact(delta)
 	_latch_press_read()
 	# Position + velocity are now fully settled for this tick (integration,
@@ -1145,7 +1160,7 @@ func _latch_press_read() -> void:
 # Sanitizes the body's velocity/position to finite values right before the tick
 # integrates them. A NaN/Inf transform can't be un-poisoned once written (every
 # derived read — camera, IK, wire state — inherits it), so we clamp at the seam
-# and log where it came from. Cheap value-type checks — hot-path safe at 120 Hz ×
+# and log where it came from. Cheap value-type checks — hot-path safe at the tick rate ×
 # skaters; the string-formatting cost only ever runs on the (should-never) branch.
 func _sanitize_physics_state() -> void:
 	if not velocity.is_finite():
@@ -1293,7 +1308,7 @@ func _backstopped(victim: Skater, from: Skater, delta_v: Vector3, n: Vector3,
 # boundary (the same GameRules.clamp_to_rink_inner the puck-OOB check, blade
 # clamp, and reconcile replay use) and removing any velocity pointing into the
 # boards, so the skater slides smoothly along them. Pure value-type math — no
-# allocation, so it's hot-path safe at 120 Hz × actors. Called live from the
+# allocation, so it's hot-path safe at the tick rate × actors. Called live from the
 # integration step and re-used by LocalController's reconcile replay so both paths
 # agree.
 func clamp_body_to_rink() -> void:
@@ -1346,59 +1361,35 @@ func clamp_body_to_net() -> void:
 	_touched_boundary = true
 
 
-const _GOALIE_REACH_SLACK_M: float = 0.01
-
-
-# Holds the skater clear of every goalie's footprint so you can't walk through the
-# goalie. Mirrors clamp_body_to_net: push the XZ out of the goalie footprint — a
-# cylinder while standing/RVH, an oriented box in the butterfly (the leg pads
-# spread wide) — and strip any velocity pointing into the goalie so the skater
-# slides along it instead of being re-seated next tick. Reads the same
-# host-refreshed goalie pose cache the blade clamp uses (position / rotation_y /
-# is_butterfly). A ghosted skater (crease-dwell / offside) passes through, matching
-# the is_ghost gate in _resolve_player_collisions. Called live after the rink/net
-# clamps; same replay and allocation contract.
+# Holds the skater clear of every goalie's gear so you can't walk through the
+# goalie. Mirrors clamp_body_to_net: push the body, a disc of collision_radius,
+# out of his gear across the ice (GoalieGearCollision.body_out, his save boxes
+# less his stick) and strip any velocity pointing into him so the skater slides
+# along him instead of being re-seated next tick. A ghosted skater (crease-dwell
+# / offside) passes through, matching the is_ghost gate in
+# _resolve_player_collisions. Called live after the rink/net clamps; same replay
+# and allocation contract.
 func clamp_body_to_goalies() -> void:
-	if is_ghost or not _goalie_data_provider.is_valid():
+	if is_ghost or not _goalie_boxes_provider.is_valid():
 		return
-	var goalie_data: Array = _goalie_data_provider.call()
-	if goalie_data == null:
+	var boxes: PackedFloat32Array = _goalie_boxes_provider.call()
+	if boxes.is_empty():
 		return
-	var radius: float = collision_radius()
-	var xz := Vector2(global_position.x, global_position.z)
-	# Farther than either footprint reaches (the cylinder, or the box's corner),
-	# the push-out returns the body untouched; the slack covers the box's rotation
-	# rounding.
-	var reach: float = maxf(GameRules.GOALIE_BLOCK_RADIUS + radius,
-			Vector2(GameRules.GOALIE_BUTTERFLY_HALF_X + radius,
-			GameRules.GOALIE_BUTTERFLY_HALF_Z + radius).length()) + _GOALIE_REACH_SLACK_M
-	var reach_sq: float = reach * reach
-	for data: Dictionary in goalie_data:
-		var gpos: Vector3 = data["position"]
-		var gpos_xz := Vector2(gpos.x, gpos.z)
-		if xz.distance_squared_to(gpos_xz) > reach_sq:
-			continue
-		var pushed: Vector2 = GameRules.push_out_of_goalie(
-				xz, gpos_xz, data["rotation_y"], data["is_butterfly"],
-				GameRules.GOALIE_BLOCK_RADIUS + radius,
-				GameRules.GOALIE_BUTTERFLY_HALF_X + radius,
-				GameRules.GOALIE_BUTTERFLY_HALF_Z + radius)
-		if xz.distance_squared_to(pushed) <= 1e-6:
-			continue
-		var out_dir: Vector2 = (pushed - xz).normalized()
-		var vel_xz := Vector2(velocity.x, velocity.z)
-		var into_goalie: float = vel_xz.dot(out_dir)
-		if into_goalie < 0.0:
-			# Velocity points into the goalie — strip that component, keep the
-			# tangential slide so the skater brushes past instead of sticking.
-			vel_xz -= into_goalie * out_dir
-			velocity.x = vel_xz.x
-			velocity.z = vel_xz.y
-		global_position.x = pushed.x
-		global_position.z = pushed.y
-		# Re-seat the working XZ so a second goalie is tested from the new spot.
-		xz = pushed
-		_touched_boundary = true
+	var push: Vector3 = GoalieGearCollision.body_out(global_position, collision_radius(), boxes)
+	if push.length_squared() <= 1e-12:
+		return
+	var out_dir := Vector2(push.x, push.z).normalized()
+	var vel_xz := Vector2(velocity.x, velocity.z)
+	var into_goalie: float = vel_xz.dot(out_dir)
+	if into_goalie < 0.0:
+		# Velocity points into him — strip that component, keep the tangential
+		# slide so the skater brushes past instead of sticking.
+		vel_xz -= into_goalie * out_dir
+		velocity.x = vel_xz.x
+		velocity.z = vel_xz.y
+	global_position.x += push.x
+	global_position.z += push.z
+	_touched_boundary = true
 
 
 # Attribute-scaled shoulder anchor placement. Called from
@@ -1585,7 +1576,7 @@ func _swing_rigid(rot: Basis, marker_basis: Basis, to_hand: Vector3) -> Basis:
 	_swing_basis = (Basis(arc) * _swing_anchor_basis).orthonormalized()
 	_swing_up = arc * _swing_anchor_up
 	_swing_weight = 1.0 if swinging \
-			else move_toward(_swing_weight, 0.0, get_process_delta_time() / SWING_RELEASE_S)
+			else move_toward(_swing_weight, 0.0, _frame_dt / SWING_RELEASE_S)
 	var q: Quaternion = dressed.get_rotation_quaternion().slerp(
 			_swing_basis.get_rotation_quaternion(), _swing_weight)
 	return to_hips.inverse() * Basis(q)
@@ -1709,7 +1700,7 @@ func set_tie_draw_offset(world_offset: Vector3) -> void:
 # The tie's draw slide in the Blade marker's frame, which the mesh hangs in.
 func _tie_draw_local() -> Vector3:
 	_tie_draw_offset = _tie_draw_offset.move_toward(_tie_draw_target,
-			_TIE_DRAW_EASE_M_S * get_process_delta_time())
+			_TIE_DRAW_EASE_M_S * _frame_dt)
 	if _tie_draw_offset == Vector3.ZERO:
 		return Vector3.ZERO
 	return blade.global_transform.basis.inverse() * _tie_draw_offset
@@ -1782,13 +1773,15 @@ func set_tape_config(config: StickTapeConfig) -> void:
 		_uniform.refresh_tape()
 
 
-# Installs a new gear look (models, laces, face gear, hair, tuck) and repaints the
+# Installs a new gear look (models, laces, face gear, hair, tuck, tongue) and repaints the
 # affected parts. Same live-cosmetic contract as set_tape_config.
 func set_gear_style(config: GearStyleConfig) -> void:
 	if config == null:
 		return
 	gear_style = config
 	_arms.apply_gear_meshes()
+	_connected.set_tuck(config.jersey_tuck)
+	_connected.set_tongue(config.skate_tongue)
 	if _uniform != null:
 		_uniform.refresh_gear_style()
 
@@ -1940,6 +1933,35 @@ func grip_choke() -> float:
 # Forcibly pop this skater's blade up for `duration` seconds (opponent stick
 # lift). Takes the max with any in-flight timer so a fresh hook never shortens
 # an existing one. Host-side only; clients receive the resolved blade_up.
+# The per-tick state this skater steps itself that its controller's next tick
+# reads: the stick-check timers (a forced lift decides stick_taken) and the
+# blade-lift and check-commit eases (the check lead moves the loaded blade, and
+# the twist follows it). LocalController's reconcile replay steps it too, from
+# the values its prediction history recorded at the ack (adopt_tick_state).
+func step_tick_state(delta: float) -> void:
+	_forced_lift_timer = maxf(_forced_lift_timer - delta, 0.0)
+	_stick_check_cooldown = maxf(_stick_check_cooldown - delta, 0.0)
+	_update_blade_lift(delta)
+	_update_commit_stance(delta)
+
+
+func forced_lift_remaining() -> float:
+	return _forced_lift_timer
+
+
+func stick_check_cooldown_remaining() -> float:
+	return _stick_check_cooldown
+
+
+func adopt_tick_state(forced_lift_s: float, stick_check_cooldown_s: float,
+		blade_lift_blend: float, commit_lift_blend: float, check_lead: float) -> void:
+	_forced_lift_timer = forced_lift_s
+	_stick_check_cooldown = stick_check_cooldown_s
+	_blade_lift_blend = blade_lift_blend
+	_commit_lift_blend = commit_lift_blend
+	_check_lead = check_lead
+
+
 func force_blade_lift(duration: float) -> void:
 	_forced_lift_timer = maxf(_forced_lift_timer, duration)
 
@@ -2299,6 +2321,23 @@ func carry_bow_m() -> float:
 
 func get_carry_transit_factor() -> float:
 	return sin(PI * _transit_hop)
+
+
+# The two carry-contact values the controller's next tick reads (the side factor
+# places the blade marker, the hop lifts it). _update_carry_contact advances them
+# on the physics tick, which a reconcile replay does not run, so the replay plays
+# back the values each live tick left (LocalController, PredictedState).
+func carry_read_side() -> float:
+	return _carry_side_smoothed
+
+
+func carry_read_hop() -> float:
+	return _transit_hop
+
+
+func adopt_carry_read(side_smoothed: float, hop: float) -> void:
+	_carry_side_smoothed = side_smoothed
+	_transit_hop = hop
 
 
 # Push the wrister's live aim line onto the skater — called every WRISTER_AIM
@@ -2892,6 +2931,21 @@ func set_hand_pump(offset: Vector3) -> void:
 	_hand_pump = offset
 
 
+# The drawn body a stick is held out of, in the skeleton's space: how far
+# `point` is outside the jersey (m, negative inside), each leg's hip, knee and
+# ankle (SkaterLegRig.drawn_joints), and the legs' girth (SkaterLegRig.girth).
+func torso_clearance(point: Vector3) -> float:
+	return _arms.torso_clearance(point)
+
+
+func drawn_leg_joints(out: PackedVector3Array) -> void:
+	_legs.drawn_joints(out)
+
+
+func leg_girth() -> Vector2:
+	return _legs.girth()
+
+
 # ── Bottom Hand ───────────────────────────────────────────────────────────────
 # Where a shoulder marker sits on the visible trunk, in UpperBody's frame
 # (SkaterArmRig.visible_shoulder).
@@ -3024,6 +3078,12 @@ func get_blade_wall_normal() -> Vector3:
 	return _last_wall_normal
 
 
+# The wall normal a blade pass found when it ran natively (NativeBladePass),
+# which clamps the blade to the boards itself.
+func set_blade_wall_normal(normal: Vector3) -> void:
+	_last_wall_normal = normal
+
+
 # ── Stick rig (delegate to SkaterStickRig) ────────────────────────────────────
 
 # The hosel tip the shaft aims at rides the blade's cosmetic pitch, so the tilt
@@ -3067,23 +3127,16 @@ func leg_bone_base_position(bone: int) -> Vector3:
 # laces, the skin's vertex-colour read).
 static func _new_body_paint() -> BodyZonePaint:
 	var paint := BodyZonePaint.new(SkaterMeshBuilder.BODY_ZONE_COUNT)
-	paint.seed_from_mesh(SkaterMeshBuilder.shared_leg_skin_mesh(), 0)
-	paint.seed_from_mesh(SkaterMeshBuilder.shared_upper_skin_mesh(),
-			SkaterMeshBuilder.UPPER_ZONE_BASE)
+	SkaterRigidParts.seed_paint(paint)
 	return paint
-
-
-# Paints a leg surface from `mat`, its record in BodyZonePaint.
-func set_leg_surface_material(surface: int, mat: StandardMaterial3D) -> void:
-	_paint.set_zone(surface, mat)
 
 
 # ── Arm rig (delegate to SkaterArmRig) ────────────────────────────────────────
 
 # The spine first: a physics-rate caller would grow arms from a stale shoulder.
-func update_arm_mesh() -> void:
+func update_arm_mesh(delta: float = -1.0) -> void:
 	_spine.update()
-	_arms.update_top_arm()
+	_arms.update_top_arm(delta)
 
 
 # Where the drawn shaft has bowed away from its straight line near `point`
@@ -3096,23 +3149,18 @@ func stick_grip_axis(point: Vector3) -> Vector3:
 	return _stick.grip_axis(point)
 
 
-func update_bottom_arm_mesh() -> void:
+func update_bottom_arm_mesh(delta: float = -1.0) -> void:
 	_spine.update()
-	_arms.update_bottom_arm()
+	_arms.update_bottom_arm(delta)
 
 
 func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 	_arms.set_trunk_texture(pitch_add, roll_add)
 
 
-# An upper surface's paint record: read it freely, and hand it back through
-# set_upper_surface_material after editing it in place.
+# An upper surface's paint record, to read.
 func upper_surface_material(surface: int) -> StandardMaterial3D:
 	return _paint.zone(SkaterMeshBuilder.UPPER_ZONE_BASE + surface)
-
-
-func set_upper_surface_material(surface: int, mat: StandardMaterial3D) -> void:
-	_paint.set_zone(SkaterMeshBuilder.UPPER_ZONE_BASE + surface, mat)
 
 
 func set_upper_bone_scale(bone: int, part_scale: Vector3) -> void:
@@ -3207,14 +3255,11 @@ func get_body_block_y_range() -> Vector2:
 
 
 # ── Slapper Zone ──────────────────────────────────────────────────────────────
-# Arms the one-timer catch zone: a disc of `radius` centred on `center_local`, an
-# (x, z) point in skater-local space. Disarming keeps the last geometry — every
-# caller gates on is_slapper_zone_active() first.
-func set_slapper_zone(active: bool, radius: float = 0.0, center_local: Vector2 = Vector2.ZERO) -> void:
-	if active and radius > 0.0:
-		_slapper_zone_radius = radius
-		_slapper_zone_offset = Vector3(center_local.x, 0.0, center_local.y)
-	_slapper_zone_active = active
+# Centres the one-timer catch zone on `center_local`, an (x, z) point in
+# skater-local space. The controller owns its radius and when it is live; the
+# one-timer's release reads the zone after the catch, so it keeps this center.
+func set_slapper_zone(center_local: Vector2) -> void:
+	_slapper_zone_offset = Vector3(center_local.x, 0.0, center_local.y)
 
 
 func get_slapper_zone_global_position() -> Vector3:
@@ -3286,15 +3331,8 @@ func name_plate_visible() -> bool:
 	return _hud.name_plate_visible()
 
 
-# Repaints the skin to the player's identity tone, albedo only: the record keeps
-# the vertex-colour read the face's features need. Head and neck are one surface
-# of the helmet mesh (they wear the same material), so there is a single target.
 func set_skin_tone(index: int) -> void:
-	var skin: Color = SkinToneRegistry.color_for(index)
-	var mat: StandardMaterial3D = upper_surface_material(
-			SkaterMeshBuilder.UpperSurface.HELMET_SKIN)
-	mat.albedo_color = Color(skin.r, skin.g, skin.b, mat.albedo_color.a)
-	set_upper_surface_material(SkaterMeshBuilder.UpperSurface.HELMET_SKIN, mat)
+	_uniform.set_skin_tone(index)
 
 
 # ── HUD (delegate to SkaterHUDCoordinator) ────────────────────────────────────

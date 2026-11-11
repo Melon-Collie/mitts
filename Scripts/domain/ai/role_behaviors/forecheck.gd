@@ -1,68 +1,74 @@
 class_name AIRoleForecheck
 
-# The off-puck forecheckers (FORECHECK: they have the puck in THEIR zone). F1 is
-# AIRolePressure, dispatched directly.
+# The off-puck forecheckers (FORECHECK: their puck in THEIR zone, and we can get
+# on it — AIForecheckRead). F1 is AIRolePressure, dispatched directly.
 #
-#   3v3 1-1-1 (decide):
-#     F2_MID — takes away the most dangerous breakout PASS (inverse pass-threat
-#       scoring), staying IN the zone.
-#     F3_HIGH — high safety, strong side, the first man back: holds the opp blue
-#       line only while the shared pinch read allows it.
-#   5v5 1-2-2 (decide_f2): F2_STRONG / F2_WEAK — the same argmax on a lane.
+#   F2_NET (both sizes) — reacts in front of their net: takes away the most
+#     dangerous breakout PASS (inverse pass-threat scoring) from the slot, where
+#     the reverse, the D-to-D behind the net and the net-front outlet run.
+#   F3_HIGH (3v3) — high on the near wall at their line, the first man back:
+#     holds the line only while the shared pinch read allows it.
+#   F3_WALL (5v5) — support on the near wall at half-wall height: the same
+#     argmax, which kills the half-wall outlet; fills the strong point while its
+#     D pinches.
 #
 # Nobody is offside here: the puck is in their zone, so F1 and F2 press freely.
 
-# How far off the strong-side boards F3 holds at the blue line, so it can step
-# to either breakout lane.
+# How far off the strong-side boards 3v3's F3 holds at the blue line, so it can
+# step to either breakout lane.
+const F3_HIGH_WALL_INSET_M: float = 4.0
+
+# F2's read in front of their net: the search centre this far off their goal
+# line (the slot), shaded toward the carrier's side, inside the slot corridor.
+const F2_NET_DEPTH_OFF_GOAL_M: float = 6.0
+const F2_NET_PUCK_SHADE: float = 0.3
+const F2_NET_HALF_WIDTH_M: float = AIZoneCoverage.SLOT_HALF_WIDTH_M
+
+# 5v5's F3 on the near wall at half-wall height: the search centre.
 const F3_WALL_INSET_M: float = 4.0
-
-# How far inside the opp blue line F2_MID's read sets up: the high-zone
-# interceptor, not a second deep pressurer.
-const F2_ZONE_DEPTH_M: float = 4.0
+const F3_WALL_DEPTH_OFF_GOAL_M: float = 12.0
 
 
-# `is_high` selects F3 (the high blue-line safety) vs F2 (the mid read).
-static func decide(ctx: RoleContext, is_high: bool) -> RoleDecision:
-	if is_high:
-		return _decide_high(ctx)
-	return _decide_mid(ctx)
-
-
-# 5v5's 1-2-2 second layer (docs/5v5-ai-plan.md §2): F2_STRONG works his wall
-# at half-wall height (kills the half-wall outlet), F2_WEAK the middle lane
-# (kills the center outlet and the reverse). F2_STRONG's search center:
-const F2_STRONG_WALL_INSET_M: float = 4.0
-const F2_STRONG_DEPTH_OFF_GOAL_M: float = 12.0
-
-
-static func decide_f2(ctx: RoleContext, is_strong: bool) -> RoleDecision:
-	# The 1-2-2's high forward is the one who fills when the strong D pinches.
-	if not is_strong:
-		var fill: RoleDecision = AIRoleDefenseman.rotate_up_to_point(
-				ctx, AIRoleSlots.Slot.DP_STRONG)
-		if fill != null:
-			return fill
+# ── F2: the read in front of their net ───────────────────────────────────────
+static func decide_net(ctx: RoleContext) -> RoleDecision:
 	var carrier_pos: Vector3 = AIRoleReads.resolve_defensive_play_ref(ctx)
 	if not carrier_pos.is_finite():
 		var d := RoleDecision.new()
 		d.target_position = ctx.self_pos
 		return d
-	var center: Vector3
-	if is_strong:
-		center = Vector3(
-				ctx.strong_x * (GameRules.RINK_HALF_WIDTH - F2_STRONG_WALL_INSET_M),
-				0.0,
-				-ctx.own_goal_dir * (GameRules.GOAL_LINE_Z - F2_STRONG_DEPTH_OFF_GOAL_M))
-	else:
-		center = _mid_search_center(ctx, carrier_pos)
-	return _decide_mid_at(ctx, carrier_pos, center)
+	var center := Vector3(
+			clampf(carrier_pos.x * F2_NET_PUCK_SHADE, -F2_NET_HALF_WIDTH_M,
+					F2_NET_HALF_WIDTH_M),
+			0.0,
+			-ctx.own_goal_dir * (GameRules.GOAL_LINE_Z - F2_NET_DEPTH_OFF_GOAL_M))
+	return _decide_read_at(ctx, carrier_pos, center)
 
 
-# ── F3: high safety — hold the line only while the race home is winnable ─────
-static func _decide_high(ctx: RoleContext) -> RoleDecision:
+# ── F3_WALL: support on the near wall ────────────────────────────────────────
+static func decide_wall(ctx: RoleContext) -> RoleDecision:
+	# The 1-2-2's high forward on the strong side is the one who fills when the
+	# strong D pinches down his wall.
+	var fill: RoleDecision = AIRoleDefenseman.rotate_up_to_point(
+			ctx, AIRoleSlots.Slot.DP_STRONG)
+	if fill != null:
+		return fill
+	var carrier_pos: Vector3 = AIRoleReads.resolve_defensive_play_ref(ctx)
+	if not carrier_pos.is_finite():
+		var d := RoleDecision.new()
+		d.target_position = ctx.self_pos
+		return d
+	var center := Vector3(
+			ctx.strong_x * (GameRules.RINK_HALF_WIDTH - F3_WALL_INSET_M),
+			0.0,
+			-ctx.own_goal_dir * (GameRules.GOAL_LINE_Z - F3_WALL_DEPTH_OFF_GOAL_M))
+	return _decide_read_at(ctx, carrier_pos, center)
+
+
+# ── F3_HIGH: high safety — hold the line only while the race home is winnable ─
+static func decide_high(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 	var blue_z: float = -ctx.own_goal_dir * GameRules.BLUE_LINE_Z
-	var wall_x: float = ctx.strong_x * (GameRules.RINK_HALF_WIDTH - F3_WALL_INSET_M)
+	var wall_x: float = ctx.strong_x * (GameRules.RINK_HALF_WIDTH - F3_HIGH_WALL_INSET_M)
 
 	# A rim keep-in is still the line, so the last man stays the last man.
 	var keepin: Vector3 = AIRoleDefenseman.wall_rim_keepin(ctx, ctx.strong_x)
@@ -80,19 +86,10 @@ static func _decide_high(ctx: RoleContext) -> RoleDecision:
 	return d
 
 
-# ── F2: mid-lane breakout-pass read ──────────────────────────────────────────
-static func _decide_mid(ctx: RoleContext) -> RoleDecision:
-	var carrier_pos: Vector3 = AIRoleReads.resolve_defensive_play_ref(ctx)
-	if not carrier_pos.is_finite():
-		var d := RoleDecision.new()
-		d.target_position = ctx.self_pos
-		return d
-	return _decide_mid_at(ctx, carrier_pos, _mid_search_center(ctx, carrier_pos))
-
-
-# The F2 argmax, shared by F2_MID and the 5v5 lane pair: minimize the carrier's
-# best breakout feed (on PRESSURE's inverse pass-threat surface).
-static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
+# The forecheck's second-layer argmax, F2's and F3_WALL's: minimize the carrier's
+# best breakout feed (on PRESSURE's inverse pass-threat surface) around
+# `search_center`.
+static func _decide_read_at(ctx: RoleContext, carrier_pos: Vector3,
 		search_center: Vector3) -> RoleDecision:
 	var d := RoleDecision.new()
 
@@ -141,15 +138,6 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 
 	d.target_position = best_pos
 	return d
-
-
-# F2_MID / F2_WEAK's search center: F2_ZONE_DEPTH_M inside the opp blue line,
-# shaded halfway to the carrier's side — between the strong lane and the middle.
-static func _mid_search_center(ctx: RoleContext, carrier_pos: Vector3) -> Vector3:
-	var blue_z: float = -ctx.own_goal_dir * GameRules.BLUE_LINE_Z
-	var z: float = blue_z - ctx.own_goal_dir * F2_ZONE_DEPTH_M
-	var x: float = carrier_pos.x * 0.5
-	return Vector3(x, 0.0, z)
 
 
 # The biggest threat the carrier's feed to any teammate carries

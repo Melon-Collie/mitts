@@ -116,8 +116,8 @@ var _peak_physics_ms: float = 0.0
 #
 # Whether that sawtooth is visible is purely a sampling question. Rendered motion
 # is smooth only when every frame advances the sim by the same whole number of
-# ticks, which needs the frame rate to DIVIDE the tick rate — 120, 60, 40, 30
-# against a 120 Hz sim, where each frame samples the sawtooth at the same phase
+# ticks, which needs the frame rate to DIVIDE the tick rate — 90, 45, 30 against
+# a 90 Hz sim, where each frame samples the sawtooth at the same phase
 # and it aliases away entirely. Any other rate samples it mid-sweep. Note the
 # direction of that test: 240 fps is not a clean multiple but the worst case,
 # because half its frames advance no tick at all.
@@ -315,6 +315,10 @@ func _copy_session_digest() -> void:
 			"vsync_mode": _vsync_mode_name(),
 			"fps_cap": Engine.max_fps,
 			"refresh_hz": DisplayServer.screen_get_refresh_rate(),
+			# Safe renders on the main thread, so cpu_render_ms is serial with it;
+			# Separate gives it a thread of its own. Read from ProjectSettings, which
+			# an override.cfg beside the executable writes, so an A/B can show it took.
+			"thread_model": _thread_model_name(),
 			"bound_by": _frame_bound_verdict(_ema_frame_ms, _main_thread_ms(_ema_frame_ms)),
 			"skaters": get_tree().get_nodes_in_group("skaters").size(),
 			"frame_ms": _ema_frame_ms,
@@ -533,6 +537,8 @@ func _render_client(t: NetworkTelemetry) -> void:
 	_context(_band(pdv, 8.0, 20.0), "Delay spread", "%.1f ms (floor %.0f)" % [pdv, NetworkManager.get_packet_delay_floor_ms()],
 		"jitter measured vs the host CLOCK, ignores clumping; if Jitter is high but this is low, packets are clumping, not the path being jittery")
 	_info("Updates in", "%.0f/s" % t.world_state_hz, "world snapshots received; matches host send rate")
+	_info("Your input queue", "%d frames at the host" % t.input_queue_depth_median,
+		"how many of your inputs the host held waiting, echoed back; the host's own row judges it")
 	_sim_line(t)
 
 	# End-to-end latency decomposed into its named terms, so a netcode change
@@ -556,6 +562,8 @@ func _render_client(t: NetworkTelemetry) -> void:
 	if t.reconcile_per_sec > 0.5:
 		_info("Reconcile cause", "pos %.0f · vel %.0f · rot %.0f /s · off %+.1ft · resid %.0fcm" % [t.recon_pos_per_sec, t.recon_vel_per_sec, t.recon_ubody_per_sec, t.pos_offset_ticks_avg, t.post_replay_residual_avg * 100.0],
 			"resid = distance from server AFTER the snap+replay. At rest it should be ~0; if resid stays ~9cm the replay isn't converging (offset rebuilds), vs ~0 = rebuild is in normal physics")
+		_info("Reconcile size", "blade %.0fcm · lead %.0fcm" % [t.blade_reconcile_mag_avg * 100.0, t.prediction_divergence_avg * 100.0],
+			"blade = how far a correction moved your blade; lead = your prediction's distance ahead of the server's last position when one fired, which grows with ping × speed by design (not a fault)")
 	_metric(_band(t.extrapolation_pct, NetworkTelemetry.EXTRAPOLATION_WARN_PCT,
 			NetworkTelemetry.EXTRAPOLATION_BAD_PCT), "Guessing ahead", "%.0f%% of frames (%.0f fps)" % [t.extrapolation_pct, t.client_fps],
 		"share of rendered frames dead-reckoning a remote past the buffer (framerate-independent). If high on a clumpy link, the jitter cushion is too thin — see Smoothing delay")
@@ -566,15 +574,22 @@ func _render_client(t: NetworkTelemetry) -> void:
 	_metric(_band(t.remote_correction_avg_m * 100.0, 10.0, 30.0), "Remote predict err",
 		"%.1f cm avg · %.0f cm peak" % [t.remote_correction_avg_m * 100.0, t.remote_correction_max_m * 100.0],
 		"same pre-damp error on remote skater bodies; steady growth = intent decay / hard cuts outrunning the prediction")
+	_metric(_band(100.0 - t.keeper_confirm_pct, 50.0, 90.0), "Goalie predict",
+		"%.0f%% confirmed · %.1f re-steps/s · gap %.0f cm avg, %.0f peak" % [t.keeper_confirm_pct,
+			t.keeper_resteps_per_sec, t.keeper_restep_gap_avg_m * 100.0, t.keeper_restep_gap_max_m * 100.0],
+		"snapshots whose goalie state the predictor already had (confirmed) vs ones that re-seeded and re-stepped him; gap = how far his gear was off the host's at that snapshot. Re-steps follow hidden releases, saves and any world the client predicts off the host's")
+	_metric(_band(t.keeper_predict_us_p95, 4000.0, 8000.0), "Goalie predict cost",
+		"%.0f us/frame avg · %.0f p95" % [t.keeper_predict_us_avg, t.keeper_predict_us_p95],
+		"main-thread time stepping both predicted goalies per physics frame; p95 is the re-step frames")
 
 	_section("Smoothing buffers")
 	_info("Interp depth", "skater %d · puck %d · goalie %d" % [t.buffer_depth_skater, t.buffer_depth_puck, t.buffer_depth_goalie],
-		"frames queued to smooth motion; ~2-4 healthy, 0-1 risks stutter")
+		"frames queued to smooth motion, the shallowest remote of each kind; ~2-4 healthy, 0-1 risks stutter")
 	_info("Smoothing delay", "%.0f ms" % (NetworkManager.get_target_interpolation_delay() * 1000.0),
 		"intentional delay to hide jitter; sized off Delay spread (de-clumped path jitter), grows with RTT. If Guessing ahead climbs, this is under-cushioning")
 	if t.ws_gap_histogram != "—":
 		_info("Packet spacing", t.ws_gap_histogram,
-			"% of updates by gap (ms); steady ~8ms is smooth, split low+high = clumping")
+			"% of updates by gap (ms); steady ~22ms is smooth, split low+high = clumping")
 
 	_info("Bandwidth", "%.1f KB/s down" % (t.bytes_received_per_sec / 1024.0),
 		"game data received per second (payload only, excludes Steam framing)")
@@ -595,10 +610,11 @@ func _render_host(t: NetworkTelemetry) -> void:
 		"world states broadcast per second, counted once per broadcast rather than per recipient (Bandwidth below is the per-peer total); constant at the send rate in every phase")
 	_sim_line(t)
 
-	if not peers.is_empty():
+	if t.host_input_queue_depth_samples > 0:
 		_section("Client input queue")
-		_metric(_queue_health(t.input_queue_depth_median), "Queue depth", "%d frames" % t.input_queue_depth_median,
-			"client inputs waiting to apply; ~1-3 healthy, 0 = starving, high = backed up")
+		_metric(queue_health(t.host_input_queue_depth_max), "Queue depth",
+			"peak %d frames (healthy ~%.0f)" % [t.host_input_queue_depth_max, _queue_margin_ticks()],
+			"the deepest client input queue this second: the input lead's margin holds it at ~%.1f; 0 = starving, high = backed up" % _queue_margin_ticks())
 		_metric(_band(t.input_lead_avg_ms, 10.0, 30.0), "Input lead", "%.1f ms" % t.input_lead_avg_ms,
 			"how late inputs arrive vs schedule; want near 0")
 		_metric(_band(t.input_starvations_per_sec, NetworkTelemetry.STARVATION_WARN_PER_SEC,
@@ -662,11 +678,11 @@ func _frame_health(t: NetworkTelemetry) -> void:
 #                  not their size, and every shadow-casting light re-submits the
 #                  casters in its range. A hundred small MeshInstance3Ds cost
 #                  here, not on the GPU.
-#   • Script     — _process + _physics_process on the main thread. At a 120 Hz
+#   • Script     — _process + _physics_process on the main thread. At a 90 Hz
 #                  sim, roughly one physics tick runs inside every rendered
 #                  frame, so per-tick work is charged straight to frame time.
 #                  Note this stays invisible to "Sim rate": the sim can hold a
-#                  perfect 120 Hz while still eating half the frame budget.
+#                  perfect 90 Hz while still eating half the frame budget.
 # Verdict-neutral throughout (_context / _info) — the header verdict is about the
 # NETWORK, and a GPU-bound frame is not a network problem.
 func _render_frame_cost() -> void:
@@ -677,16 +693,17 @@ func _render_frame_cost() -> void:
 	var frame_ms: float = _ema_frame_ms
 	var main_ms: float = _main_thread_ms(frame_ms)
 	_info("Frame", "%.2f ms (%.0f fps)" % [frame_ms, 1000.0 / maxf(frame_ms, 0.001)],
-		"wall-clock per rendered frame; the three costs below run CONCURRENTLY (the GPU and render thread trail the main thread by a frame), so the frame is set by the largest, not their sum")
+		"wall-clock per rendered frame; the GPU trails the CPU by a frame, so the frame is set by the larger of the two, not their sum. CPU render shares the main thread under the Safe thread model and has its own under Separate")
 	_context(_band(_frac(_ema_gpu_ms, frame_ms), 0.60, 0.85), "GPU",
 		"%.2f ms (%.0f%% of frame)" % [_ema_gpu_ms, _frac(_ema_gpu_ms, frame_ms) * 100.0],
 		"drawing cost — resolution, MSAA, shadow maps, transparent overdraw, post FX")
 	_context(_band(_frac(_ema_cpu_render_ms, frame_ms), 0.60, 0.85), "CPU render",
-		"%.2f ms (%.0f%% of frame)" % [_ema_cpu_render_ms, _frac(_ema_cpu_render_ms, frame_ms) * 100.0],
-		"render thread building draw commands; scales with the draw-call count below, not with pixels")
+		"%.2f ms (%.0f%% of frame) · %s" % [_ema_cpu_render_ms, _frac(_ema_cpu_render_ms, frame_ms) * 100.0,
+				_thread_model_name()],
+		"the CPU building draw commands; scales with the draw-call count below, not with pixels. Under Safe it runs on the main thread, after the game's own work; under Separate on its own thread, alongside it")
 	_context(_band(_frac(main_ms, frame_ms), 0.60, 0.85), "Main thread",
 		"%.2f ms (%.0f%% of frame)" % [main_ms, _frac(main_ms, frame_ms) * 100.0],
-		"the frame MINUS the render terms — your _process/_physics_process, the physics server, and engine work. Not measured directly: it is what neither the GPU nor the render thread accounts for, so an idle wait on vsync lands here too (the verdict rules that out first)")
+		"the frame MINUS the render terms — your _process/_physics_process, the physics server, and engine work. Not measured directly: it is what neither the GPU nor CPU render accounts for, so an idle wait on vsync lands here too (the verdict rules that out first)")
 	_info("Peak step (last 1 s)", "process %.2f ms · physics %.2f ms" % [_peak_process_ms, _peak_physics_ms],
 		"engine's WORST single step in the last second, not an average — a peak above the frame budget is a hitch you feel, but it does not mean the typical step costs this")
 	_info("Scene", "%d draws · %d objects · %.1f M prims" % [
@@ -776,7 +793,7 @@ func _render_sim_phase() -> void:
 	var health: Health = _band(uneven_frac, 0.02, 0.10)
 	_info("Rates", "%d Hz sim · %.0f fps · %.2f ticks/frame" % [
 			Constants.PHYSICS_TICK, fps, float(Constants.PHYSICS_TICK) / maxf(fps, 0.001)],
-		"the frame rate has to DIVIDE the sim rate for every frame to advance it equally — 120 / 60 / 40 / 30 against a 120 Hz sim. Not the other way round: above the sim rate some frames must advance no tick at all, so 240 fps is the worst case here, not a clean multiple")
+		"the frame rate has to DIVIDE the sim rate for every frame to advance it equally — 90 / 45 / 30 against a 90 Hz sim. Not the other way round: above the sim rate some frames must advance no tick at all, so 180 fps is the worst case here, not a clean multiple")
 	_context(health, "Ticks per frame", "%s (%.0f%% uneven)" % [pattern.strip_edges(), uneven_frac * 100.0],
 		"ticks×frames over the last second. One bucket = every frame sampled the motion at the same phase and it looks smooth. A second bucket IS the visible jitter, and its share is how much of each second you spend seeing it")
 	var speed: float = _local_skater_speed()
@@ -799,12 +816,13 @@ func _phase_hist_dict() -> Dictionary:
 
 
 # Derived rather than measured: the part of the frame that neither the GPU nor
-# the render thread explains. The three run concurrently (Godot's render thread
-# and the GPU each trail the main thread by a frame), so the frame length is set
-# by the LARGEST of them, not their sum — which makes `frame - max(render terms)`
-# a sound lower bound on what the main thread cost. A lower bound, not an exact
-# figure: on a capped frame rate the idle wait is charged here too, which is why
-# the verdict rules the cap out before naming this.
+# CPU render explains. The GPU trails the main thread by a frame, so the frame
+# is as long as the larger of the two, not their sum. CPU render runs on the
+# main thread itself under the Safe thread model (the default) and on its own
+# thread only under Separate; either way `frame - max(render terms)` is a sound
+# lower bound on the main thread's own work. Not an exact figure: on a capped
+# frame rate the idle wait is charged here too, which is why the verdict rules
+# the cap out before naming this.
 func _main_thread_ms(frame_ms: float) -> float:
 	return maxf(frame_ms - maxf(_ema_gpu_ms, _ema_cpu_render_ms), 0.0)
 
@@ -848,6 +866,16 @@ func _host_ai_cost_dict() -> Dictionary:
 		"worker_behind_pct": HostCostProbe.worker_busy_pct(),
 		"sections": sections,
 	}
+
+
+const _THREAD_MODELS: Array[String] = ["Unsafe", "Safe", "Separate"]
+
+
+func _thread_model_name() -> String:
+	var model: int = int(ProjectSettings.get_setting("rendering/driver/threads/thread_model", 1))
+	if model < 0 or model >= _THREAD_MODELS.size():
+		return "unknown (%d)" % model
+	return _THREAD_MODELS[model]
 
 
 func _vsync_mode_name() -> String:
@@ -935,11 +963,21 @@ func _when_positive(value: float, bad: float) -> Health:
 		return Health.WARN
 	return Health.OK
 
-# Input queue: starving (0) and backed up (high) are both bad; ~1-3 is healthy.
-func _queue_health(depth: int) -> Health:
-	if depth == 0 or depth > 12:
+# The depth the input lead's margin holds a client's queue at, in ticks: the lead
+# pays the trip, so only the margin queues.
+static func _queue_margin_ticks() -> float:
+	return NetworkManager.INPUT_LEAD_SEC * float(Constants.PHYSICS_TICK)
+
+
+# The host's peak client input queue this window, judged against the margin:
+# empty at every sample is starving; ~45 ms of extra input latency past the
+# margin is backing up, ~100 ms is backed up.
+static func queue_health(peak: int) -> Health:
+	var margin: float = _queue_margin_ticks()
+	var extra: float = float(peak) - margin
+	if peak == 0 or extra > 0.1 * float(Constants.PHYSICS_TICK):
 		return Health.BAD
-	if depth > 6:
+	if extra > 0.045 * float(Constants.PHYSICS_TICK):
 		return Health.WARN
 	return Health.OK
 

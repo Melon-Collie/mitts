@@ -18,6 +18,11 @@ extends RefCounted
 # of nothing else.
 
 const _OFFSET: int = SkaterBodySkeleton.LEG_BONE_OFFSET
+# Each leg's hip, knee and ankle bones, left then right (drawn_joints).
+const _JOINT_BONES: Array[int] = [SkaterMeshBuilder.LegBone.LEG_L,
+		SkaterMeshBuilder.LegBone.KNEE_L, SkaterMeshBuilder.LegBone.SKATE_L,
+		SkaterMeshBuilder.LegBone.LEG_R, SkaterMeshBuilder.LegBone.KNEE_R,
+		SkaterMeshBuilder.LegBone.SKATE_R]
 # Ice height in the skater's own frame: the origin rides FACEOFF_SPAWN_HEIGHT
 # above it (Y-axis locked), so this holds wherever the skater stands — a preview
 # placed off the rink included — and the height attribute's scaling about the
@@ -47,15 +52,14 @@ const _PLANT_WALK_STEPS: int = 7
 # stop's hips turn across, and a reaching leg finds the ice past the hump its
 # blade's tilt makes — so the correction eases rather than popping a leg. Well
 # above the stroke's own knee speeds (the stride's thigh peaks near 2 rad/s), so
-# it binds only on those jumps.
-const _PLANT_RATE_RAD_S: float = 8.0
+# it binds only on those jumps; ~2.5 m/s at the knee on the thigh's length.
+const _PLANT_RATE_RAD_S: float = 6.0
 # How much higher than the lowest corner of a downed skate another may sit and
 # still share in where its leg swings to the ice (_soft_low).
 const _REST_SOFT_M: float = 0.02
 
 var _skater: Skater
 var _skeleton: Skeleton3D = null
-var _mesh: MeshInstance3D = null
 var _basis: Array[Basis] = []
 var _scale: PackedVector3Array = PackedVector3Array()
 var _pos: PackedVector3Array = PackedVector3Array()
@@ -74,8 +78,8 @@ var _level_r: float = 0.0
 # The hips' frame against the ice, which the level give-back lays the blade
 # flat on.
 var _ice := Basis.IDENTITY
-# The bounds of a skate's two assemblies, in their bones' frames: the boot
-# (shell, holder, runner) on FOOT, the cuff on SKATE.
+# The bounds of a skate's two halves, in their bones' frames: the boot and blade
+# on FOOT, the cuff on SKATE.
 var _skate_boxes: Array[AABB] = []
 # Untouched baselines the sizing seam multiplies against, captured off the scene
 # subtree before it is freed.
@@ -138,9 +142,8 @@ func setup(skater: Skater) -> void:
 # Reading the scene rather than hard-coding the offsets keeps Scenes/Skater.tscn
 # the place leg proportions are authored — the nodes are still what you edit to
 # move a knee, they just stop existing at runtime. Hard-coding them here would
-# fork the numbers into two files that no test compares. `body_material` is the
-# skater's BodyZonePaint, which the legs' one surface wears.
-func build(skeleton: Skeleton3D, body_material: Material) -> void:
+# fork the numbers into two files that no test compares.
+func build(skeleton: Skeleton3D) -> void:
 	var count: int = SkaterMeshBuilder.LEG_BONE_COUNT
 	var lower_body: Node3D = _skater.lower_body
 	_basis.resize(count)
@@ -182,15 +185,32 @@ func build(skeleton: Skeleton3D, body_material: Material) -> void:
 	lower_body.get_node("LegL").free()
 	lower_body.get_node("LegR").free()
 
-	_skate_boxes = [SkaterMeshBuilder.shared_boot_assembly().get_aabb(),
-			SkaterMeshBuilder.shared_skate_assembly().get_aabb()]
-	_mesh = MeshInstance3D.new()
-	_mesh.name = "LegMesh"
-	_mesh.mesh = SkaterMeshBuilder.shared_leg_body_mesh()
-	_mesh.set_surface_override_material(0, body_material)
-	_mesh.skin = SkaterMeshBuilder.shared_leg_skin()
-	_mesh.skeleton = NodePath("..")
-	_skeleton.add_child(_mesh)
+	_skate_boxes = _skate_part_boxes()
+
+
+# The upper's points, either way its tongue is worn, each go to the bone carrying
+# most of them (SkateUpperMesh.foot_share), in that bone's frame; the blade is
+# the foot's. A
+# point blended across the ankle is drawn between where the two would carry it,
+# so these bound it only loosely; test_knockdown_lies_on_the_ice.gd holds the
+# skinned skates above the ice.
+static func _skate_part_boxes() -> Array[AABB]:
+	var foot: AABB = SkaterMeshBuilder.shared_skate_blade().get_aabb()
+	var cuff := AABB()
+	var cuff_empty: bool = true
+	var foot_from_skate: Transform3D = SkateUpperMesh.SKATE_FROM_FOOT.affine_inverse()
+	for tongue: int in GearModelRegistry.tongue_count():
+		var upper: ArrayMesh = SkateUpperMesh.shared(tongue)
+		for s: int in upper.get_surface_count():
+			for p: Vector3 in upper.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array:
+				if SkateUpperMesh.foot_share(p) >= 0.5:
+					foot = foot.expand(foot_from_skate * p)
+				elif cuff_empty:
+					cuff = AABB(p, Vector3.ZERO)
+					cuff_empty = false
+				else:
+					cuff = cuff.expand(p)
+	return [foot, cuff]
 
 
 func _sync_native_sides() -> void:
@@ -730,6 +750,33 @@ func bone_position(bone: int) -> Vector3:
 
 func bone_base_scale(bone: int) -> Vector3:
 	return _base_scale[bone]
+
+
+# Each leg's hip, knee and ankle as drawn, in the skeleton's space, into `out`
+# (left then right).
+func drawn_joints(out: PackedVector3Array) -> void:
+	out.resize(_JOINT_BONES.size())
+	for i: int in _JOINT_BONES.size():
+		out[i] = _skeleton.get_bone_global_pose(_OFFSET + _JOINT_BONES[i]).origin
+
+
+# How far the pants stand off the thigh's bone (x) and the sock off the shin's
+# (y), m: their rings' mean (SkaterConnectedPants.leg_stations), as wide as the
+# build makes them.
+func girth() -> Vector2:
+	var thigh: float = _mean_radius(SkaterConnectedPants.leg_stations(false))
+	var shin: float = _mean_radius(SkaterConnectedPants.leg_stations(true))
+	return Vector2(thigh * _scale[SkaterMeshBuilder.LegBone.THIGH_L].x
+			/ _base_scale[SkaterMeshBuilder.LegBone.THIGH_L].x,
+			shin * _scale[SkaterMeshBuilder.LegBone.SOCK_L].x
+			/ _base_scale[SkaterMeshBuilder.LegBone.SOCK_L].x)
+
+
+static func _mean_radius(stations: PackedVector3Array) -> float:
+	var sum: float = 0.0
+	for s: Vector3 in stations:
+		sum += s.y
+	return sum / maxf(float(stations.size()), 1.0)
 
 
 func bone_base_position(bone: int) -> Vector3:

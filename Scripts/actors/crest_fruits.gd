@@ -7,23 +7,24 @@ extends RefCounted
 # real fruit's, listed in the order they claim a team color (TeamCrest snaps
 # them), and read here by index.
 
-# Dragonfruit's bracts keep this green unsnapped: no team carries a green, and
-# in the skin's pink they read as petals.
+# Greens a crest keeps as drawn rather than snapping to the team's (keeps):
+# they read as the plant, not the team. Dragonfruit's bracts are petals in the
+# skin's pink; every other leaf and stem would take a team's purple, blue or
+# black when its kit has no green.
 const DRAGONFRUIT_GREEN: Color = Color("#7BBF3A")
-
-const _LEAF: Color = Color("#3E7D3A")
+const PLANT_GREEN: Color = Color("#3E8E3A")
 
 const _COLORS: Dictionary = {
-	"blackberry": [Color("#2A1735"), Color("#7A5A9A"), _LEAF],
-	"blueberry": [Color("#3B5BA8"), Color("#22355F"), _LEAF],
-	"cherry": [Color("#C8102E"), _LEAF],
+	"blackberry": [Color("#4A2050"), Color("#1E1420"), PLANT_GREEN],
+	"blueberry": [Color("#3B5BA8"), Color("#22355F"), PLANT_GREEN],
+	"cherry": [Color("#C8102E"), PLANT_GREEN],
 	"coconut": [Color("#6B4226"), Color("#F5F0E1"), Color("#5A3A22")],
 	"dragonfruit": [Color("#E0306F"), Color("#FFFFFF"), Color("#1A1A1A"), DRAGONFRUIT_GREEN],
-	"lemon": [Color("#F7D52A"), Color("#FFF3A6"), _LEAF],
+	"lemon": [Color("#F7D52A"), Color("#FFF3A6"), PLANT_GREEN],
 	"lime": [Color("#3F7F1F"), Color("#EAF5C8"), Color("#A6D84A")],
-	"peach": [Color("#F4A06B"), Color("#D9643F"), _LEAF],
+	"peach": [Color("#F08A66"), Color("#D9643F"), PLANT_GREEN],
 	"pineapple": [Color("#F2B233"), Color("#3E8E4A"), Color("#9C6418")],
-	"plum": [Color("#5B2A6E"), Color("#A57BBE"), Color("#6B4A2A")],
+	"plum": [Color("#5B2A6E"), Color("#F0A23A"), Color("#6B4A2A"), PLANT_GREEN],
 	"pomegranate": [Color("#9E1B2C"), Color("#F3E3CF"), Color("#E0405A")],
 	"watermelon": [Color("#2F7D3A"), Color("#EEF6DA"), Color("#E8485C"), Color("#1A1A1A")],
 }
@@ -32,6 +33,10 @@ const _COLORS: Dictionary = {
 # silhouette pass, which TeamCrest stacks under the fruit as its keylines.
 static var _grow: float = 0.0
 static var _grow_color: Color = Color.WHITE
+
+
+static func keeps(color: Color) -> bool:
+	return color == DRAGONFRUIT_GREEN or color == PLANT_GREEN
 
 
 static func has(fruit: String) -> bool:
@@ -192,15 +197,16 @@ static func _pineapple(c: CanvasItem, k: Array) -> void:
 				_poly(c, _star(center + at, 0.07, 0.07, 2), k[2])
 
 
+# Halved through the stone: the skin's rim, the flesh, and the almond stone.
 static func _plum(c: CanvasItem, k: Array) -> void:
-	var skin: Color = k[0]
-	var shine: Color = k[1]
-	var tilt := Transform2D(0.25, Vector2(0.0, 0.12))
-	_line(c, Vector2(0.15, -0.62), Vector2(0.3, -0.98), k[2], 0.1)
-	_poly(c, _transformed(tilt, _ellipse(Vector2.ZERO, Vector2(0.66, 0.8))), skin)
-	_curve(c, tilt * Vector2(0.0, -0.72), tilt * Vector2(0.3, 0.0),
-			tilt * Vector2(0.08, 0.7), 0.06, shine)
-	_poly(c, _ellipse(tilt * Vector2(-0.32, -0.28), Vector2(0.09, 0.2)), shine)
+	var leaf: Color = k[3]
+	# Stem and leaf stay below the crest's top, where the sweater's collar hangs.
+	_line(c, Vector2(0.0, -0.5), Vector2(0.05, -0.74), k[2], 0.09)
+	_leaf(c, Vector2(0.04, -0.7), Vector2(0.6, -0.8), 0.22, leaf)
+	var center := Vector2(0.0, 0.24)
+	_poly(c, _ellipse(center, Vector2(0.72, 0.74)), k[0])
+	_poly(c, _ellipse(center, Vector2(0.58, 0.6)), k[1])
+	_leaf(c, center + Vector2(0.0, -0.37), center + Vector2(0.0, 0.37), 0.4, k[0])
 
 
 # Halved across: the crown, rind, pith, and the seeds packed inside it.

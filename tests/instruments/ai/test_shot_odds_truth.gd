@@ -8,10 +8,12 @@ extends GutTest
 #
 #   outcomes — FLAT / LOW / HIGH, each a string of AIM_POINTS characters across
 #              the mouth post to post: what that shot does, fired clean at full
-#              wrister pace (G goal, s save, P post, w wide). The release is
-#              deterministic, so this IS the goalie's open set; the odds for a
-#              shooter of any scatter are this spread by his placement
-#              distribution (test_shot_odds_vs_truth.gd does that).
+#              wrister pace (G goal, s save, P post, w wide); and each loft's
+#              goal intervals, the sweep's goal edges bisected
+#              (open_set_edges.gd). The release is deterministic, so this IS the
+#              goalie's open set; the odds for a shooter of any scatter are the
+#              intervals spread by his placement distribution
+#              (test_shot_odds_vs_truth.gd does that).
 #   picked   — the shot the field itself picks (AIShotOdds.pick_shot_now) from
 #              the same read, and what it did.
 #   read     — the replicated GoalieNetworkState at DECISION time: what a bot
@@ -107,10 +109,11 @@ func _row(spot: Vector3, scenario: int) -> String:
 		pre = GoalieNetworkState.new()
 		pre.copy_from(_s.pre_feed_read)
 	var patterns: PackedStringArray = _s.open_set(stage, one_timer, caught)
-	return "%.2f\t%.2f\t%s\t%.3f\t%.3f\t%s\t%s\t%s\t%.3f\t%d\t%s\t%s\t%s" % [
+	return "%.2f\t%.2f\t%s\t%.3f\t%.3f\t%s\t%s\t%s\t%.3f\t%d\t%s\t%s\t%s\t%s\t%s\t%s" % [
 			release.x, release.z - GOAL_Z, SCENARIO_NAMES[scenario], spot.x, spot.z - GOAL_Z,
 			patterns[0], patterns[1], patterns[2], picked_aim.x, picked_loft, picked,
-			Stager.read_fields(gs), Stager.read_fields(pre)]
+			Stager.read_fields(gs), Stager.read_fields(pre), patterns[3], patterns[4],
+			patterns[5]]
 
 
 func test_measure_the_shot_odds() -> void:
@@ -119,7 +122,8 @@ func test_measure_the_shot_odds() -> void:
 				+ "MITTS_WRITE_SHOT_ODDS=1; never hand-edit.",
 		"# release_x\trelease_fwd\tscenario\tspot_x\tspot_fwd\tflat\tlow\thigh"
 				+ "\tpicked_aim_x\tpicked_loft\tpicked\tread(7: pos_x pos_z rot state five"
-				+ " vel_x vel_z)\tread before the feed left (7, = read when there is no feed)",
+				+ " vel_x vel_z)\tread before the feed left (7, = read when there is no feed)"
+				+ "\tflat / low / high goal intervals (mm across the net, edges bisected)",
 	]
 	for spot: Vector3 in _spots():
 		for scenario: int in SCENARIO_NAMES.size():

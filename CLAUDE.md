@@ -114,8 +114,30 @@ keeper (`Scripts/domain/keeper/`) in every taught stance from the
 front, side, three-quarter, the shooter's spot on the dot line and behind, with
 the mouth as a straight-on shot sees him (seams red), save boxes overlaid, to
 `.preview/keeper/` (`tools/keeper_capture.gd`), and diffs each sheet against
-a baseline recorded with `--baseline`. `.claude/hooks/render-keeper-strip.sh`
+a baseline recorded with `--baseline`. No taught stance raises an arm, so
+`KEEPER_CAPTURE_STANCES` also takes its reaches (`reach_glove_high`,
+`reach_glove_out`, `reach_both_high`: a hand put where a save takes it), which
+is where his sleeves' hang shows. `.claude/hooks/render-keeper-strip.sh`
 draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recovery, the sink into the low ready and the drop from it, the butterfly slide and the rotation on his knees, the RVH's ways in and out and the push off the post, a whole sequence of them through `KeeperMotor`, goals given to it with the moves `KeeperRoute` picks, the first brain tracking a puck round the zone, his saves against a shot read as in a match, and a puck dribbling in to his feet covered) frame by frame (`tools/keeper_strip.gd`).
+
+**To see the BODY's skin, render it.** `.claude/hooks/render-body.sh
+[--only=a,b]` runs pose_capture's poses on the skater's skin
+(`SkaterConnectedMesh`, `Scripts/actors/CLAUDE.md`), four sides each, one sheet a
+pose to `.preview/body/` (`tools/body_preview_runner.gd`); `--pants` draws the
+pants alone, and `--audit` skins the body on the CPU per pose and counts the
+faces folded inside out, by paint zone — what shows as a hole; `--head` frames
+the helmet, `--shoulders` the yoke square on, `--waist` the belt, where a tuck
+goes in, and `--skate` the near skate; `--tile=900` draws each view that many
+pixels square, which is what a seam needs. `BODY_PREVIEW_RENDERER=forward_plus`
+draws it on the renderer the game ships instead (software Vulkan here): the
+check for a change to the body's shader.
+
+**To see HAIR, render it.** `.claude/hooks/render-hair.sh [shots]` draws every
+hair style against every facial-hair style, one head each, from the front, side,
+back, below and above, to `.preview/hair/` (`tools/hair_capture.gd`).
+`HAIR_PREVIEW_BARE=1` leaves the helmet shell off, which is how the scalp is
+judged; `HAIR_PREVIEW_HAIRS`, `HAIR_PREVIEW_FACIALS` and `HAIR_PREVIEW_ZOOM` narrow
+and enlarge it.
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`
 skates scripted inputs (a start, a stride, a reach for a loose puck, a held arc,
@@ -124,6 +146,15 @@ through the real controller and captures a frame every few ticks from behind,
 beside and ahead, printing the locomotion mix per frame — which state the legs
 skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot
 show a stroke or a state firing at the wrong time.
+
+**To see the ARMS round the body, sweep them.** `.claude/hooks/render-arms.sh
+[scenarios]` walks the cursor round a carrier (the facing held, so the blade
+goes round the body; standing; skating with the puck round each side) and draws
+each step from the chest, both sides and overhead to `user://arm_sweep`,
+printing per frame each arm's closest approach to the torso
+(`SkaterArmRig.torso_clearance`) and how the shaft sits in each glove, and for
+the moving scenarios the blade against the cursor tick by tick — where a turn
+that catches shows (`tools/arm_sweep_runner.gd`; `--list` prints the names).
 
 **To see the PUCK's tilt and spin, render a strip.** `.claude/hooks/render-puck.sh
 [scenarios]` drives the real `Puck` through the host's analytic drive (a board
@@ -144,7 +175,7 @@ set takes several minutes. Name only the shots you need.
 
 **To see a KIT, lay it flat.** `.claude/hooks/render-kits.sh [teams]` writes
 one PNG per team to `.preview/kits/`: home and away, jersey front and back with
-sleeves and shoulder caps, pants, the helmet, socks, the default glove, and a legend of every color and stripe
+sleeves, pants, the helmet, socks, the default glove, and a legend of every color and stripe
 keyed by its path in `data/team_colors.json` (`tools/kit_capture.gd`). The
 garments are the rink's meshes flattened and painted by the game's own decals and
 stripe textures, so it is the check for a kit edit. It loads through
@@ -160,11 +191,22 @@ Run it on a machine with a graphics card for real times; here it runs on softwar
 Vulkan, where draw calls are exact and times only rank the settings. The impact
 tiers in Options → Video come from it.
 
+**To see what the MAIN THREAD costs by player count, measure it.**
+`.claude/hooks/measure-frame-cost.sh [counts]` plays a match against bots
+headless at each skater count (2..10). For each count it reports the process
+step per frame and the tick, composed into the main thread at 90 fps, plus
+`HostCostProbe`'s per-section tick, in `.preview/frame_cost.md`
+(`tools/frame_cost_runner.gd`; results in `docs/performance-findings.md` →
+*Main thread by skater count*). `FRAME_COST_RENDER=1` also draws the match and
+adds CPU render time and draw calls. No playtest needed, so it is the A/B for
+CPU-side performance work: compare runs on the same machine, never a run here
+against a number from someone else's machine.
+
 A render answers *how it reads*; it does not answer *whether two placements
-agree*. When the question is the second one — does the pad still sit on the arm,
-does the mirrored side land where the near side does — measure it in a test
-(`tests/unit/actors/test_check_stance_rig.gd` builds the live rig and compares
-the two code paths' numbers). Eyeballing a 384 px tile is how a 4 cm
+agree*. When the question is the second one — does the sleeve stay inside the
+glove, does the mirrored side land where the near side does — measure it in a
+test (`tests/unit/actors/test_glove_hides_the_sleeve.gd` poses the live rig,
+skins the sleeve on the CPU and measures it against the glove). Eyeballing a 384 px tile is how a 4 cm
 disagreement gets called fine.
 
 Run the suite after touching domain code and report results. **AI perf changes
@@ -391,8 +433,8 @@ the *model*, not by bolting on a corrective hack. Feel tunables (staging offsets
 loft heights, difficulty knobs) are legitimately hand-picked; the line is
 evaluation vs. feel. Full rules: `Scripts/domain/ai/CLAUDE.md`.
 
-**Hot-path discipline — the 120 Hz tick multiplies every cost.** Anything reached
-from `_physics_process` or a per-tick `update()` runs 120×/second × actor count
+**Hot-path discipline — the 90 Hz tick multiplies every cost.** Anything reached
+from `_physics_process` or a per-tick `update()` runs 90×/second × actor count
 (6 skaters + 2 goalies + puck), and reconcile replay re-runs the per-tick body
 once *per replayed input* — so the cost is amplified exactly when the network is
 bad. When the host's tick budget overruns, physics dilates and the broadcast
@@ -415,7 +457,7 @@ sampled at that instant. Moving visual work to `_process` is therefore safe only
 when nothing still on the tick shares a spatial relationship with it — and the
 camera shares one with every actor, so it can never move alone. Moving *it* to
 render rate while actors stayed on the tick is what put a one-tick-of-travel
-sawtooth into every skater's screen position above 120 fps (see
+sawtooth into every skater's screen position above the tick rate (see
 `GameCamera._process`). Either everything visible moves together, or the
 tick-rate half is interpolated up to render time; `physics/common/
 physics_interpolation` now does the latter, which is why actor teleports must

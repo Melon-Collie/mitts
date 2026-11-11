@@ -62,9 +62,8 @@ func apply_slapper_blade_position() -> void:
 	hand_pos = rigid.hand
 	pos = _skater.clamp_blade_to_walls(rigid.blade)
 	var blade_world: Vector3 = _skater.upper_body_to_global(pos)
-	var clamped_heel: Vector3 = blade_world
-	if _controller.has_puck:
-		clamped_heel = _ik.clamp_blade_from_goalies(clamped_heel)
+	var clamped_heel: Vector3 = blade_world + _ik.resolve_blade_against_goalies(blade_world,
+			_skater.upper_body_to_global(hand_pos))
 	clamped_heel += _ik.resolve_blade_against_net(clamped_heel).offset
 	if clamped_heel != blade_world:
 		pos = _skater.upper_body_to_local(clamped_heel)
@@ -137,7 +136,7 @@ func apply_block_blade_position() -> void:
 	_skater.set_blade_position(rigid.blade)
 
 # Seconds the celebration's raised stick eases in and back out over: the shaft
-# swings ~150° on a 1.3 m lever, and quicker than this its tip's turn alone
+# swings ~150° on a 1.4 m lever, and quicker than this its tip's turn alone
 # outruns the body's smoothness bounds (test_body_stays_smooth.gd).
 const CELEBRATION_EASE_S: float = 0.4
 

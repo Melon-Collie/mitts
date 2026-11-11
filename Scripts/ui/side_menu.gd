@@ -18,6 +18,7 @@ signal closed
 signal bug_report_requested
 
 const _PANEL_WIDTH: float = 340.0
+const _PLAYER_CARD_NAME_SIZE: int = 24
 
 var _root: Control = null
 var _panel: PanelContainer = null
@@ -322,10 +323,11 @@ func _build_player_card(parent: VBoxContainer) -> void:
 
 	_player_card_name = Label.new()
 	_player_card_name.add_theme_font_override("font", MenuStyle.NAME_FONT)
-	_player_card_name.add_theme_font_size_override("font_size", 24)
+	_player_card_name.add_theme_font_size_override("font_size", _PLAYER_CARD_NAME_SIZE)
 	_player_card_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_player_card_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_player_card_name.clip_text = true
+	_player_card_name.resized.connect(_fit_player_card_name)
 	main_row.add_child(_player_card_name)
 
 	# Right column mirrors the lobby card: position badge pinned top, the
@@ -827,6 +829,7 @@ func _refresh_player_card() -> void:
 	_player_card_number.text = str(PlayerPrefs.jersey_number)
 	_player_card_number.add_theme_color_override("font_color", _player_card_text)
 	_player_card_name.text = PlayerPrefs.player_name.to_upper()
+	_fit_player_card_name()
 	_player_card_name.add_theme_color_override("font_color", _player_card_text)
 	var badge: String = PlayerRules.position_name(PlayerPrefs.preferred_position)
 	_player_card_position.text = ("< %s" % badge) if PlayerPrefs.is_left_handed \
@@ -834,6 +837,10 @@ func _refresh_player_card() -> void:
 	_player_card_position.add_theme_color_override("font_color",
 			Color(_player_card_text, 0.7))
 	_player_card_edit_icon.modulate = Color(_player_card_text, 0.6)
+
+
+func _fit_player_card_name() -> void:
+	MenuStyle.fit_label_to_width(_player_card_name, _PLAYER_CARD_NAME_SIZE)
 
 
 func _on_play_pressed() -> void:

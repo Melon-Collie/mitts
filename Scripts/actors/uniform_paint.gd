@@ -21,8 +21,6 @@ const ROUGH_GLOVE: float = 0.6     # glove leather and nylon
 const CYLINDER_SIDE_V_FRACTION: float = 0.5
 const STRIPE_TEX_HEIGHT_PX: int = 128
 const STRIPE_TEX_WIDTH_PX: int = 4
-# Sphere-convention parts (the shoulder caps) map V over the whole image.
-const CAP_TEX_HEIGHT_PX: int = 128
 
 
 static func solid(color: Color, roughness: float = ROUGH_CLOTH) -> StandardMaterial3D:
@@ -54,55 +52,59 @@ static func collar_color(jersey: Dictionary) -> Color:
 	return collar if collar is Color else yoke_color(jersey)
 
 
-# The jersey's stripes with the yoke band first, over the torso side down to the
-# shoulder line — for h_stripes painters; JerseyDecal paints the same bands.
-static func jersey_stripes(jersey: Dictionary) -> Array:
-	var frac: float = SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION
-	var out: Array = [{"pos": frac * 0.5, "width": frac, "color": yoke_color(jersey)}]
-	for stripe: Dictionary in jersey.stripes:
-		out.append(jersey_side_stripe(stripe))
-	return out
-
-
 # The side height the kits' jersey stripe fractions are authored against. A band
-# in its lower half is a hem band and keeps its place above the hem; one in the
-# upper half keeps its place under the collar — so a sweater of another length
-# moves each band with the edge it trims, at the same width.
+# above the first of _STRIPE_TRIMS trims the collar and keeps its place under
+# it; one below the second trims the hem and keeps its place above it; between
+# them its place blends from one to the other, so a band across the chest can
+# sit at any height. A sweater of another length moves each band with the edge
+# it trims, at the same width.
 const JERSEY_STRIPE_DESIGN_HEIGHT_M: float = 0.55
+const _STRIPE_TRIMS: Vector2 = Vector2(0.25, 0.75)
 
 
-# A kit jersey stripe {pos, width, color} as fractions of the torso side it
-# paints on.
-static func jersey_side_stripe(stripe: Dictionary) -> Dictionary:
-	var side_m: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
-	var pos: float = float(stripe.pos)
-	var centre_m: float = pos * JERSEY_STRIPE_DESIGN_HEIGHT_M
-	if pos > 0.5:
-		centre_m += side_m - JERSEY_STRIPE_DESIGN_HEIGHT_M
-	return {"pos": centre_m / side_m,
-			"width": float(stripe.width) * JERSEY_STRIPE_DESIGN_HEIGHT_M / side_m,
+# Metres down a jersey side `side_m` tall that a kit stripe's `pos` centres at.
+static func jersey_stripe_centre_m(pos: float, side_m: float) -> float:
+	var hem_share: float = clampf(inverse_lerp(_STRIPE_TRIMS.x, _STRIPE_TRIMS.y, pos), 0.0, 1.0)
+	return pos * JERSEY_STRIPE_DESIGN_HEIGHT_M + hem_share * (side_m - JERSEY_STRIPE_DESIGN_HEIGHT_M)
+
+
+# A kit jersey stripe {pos, width, color, peak?, fill_below?} as fractions of a torso side
+# `side_m` tall, the skater's by default; a peak's depth is a height like the width.
+static func jersey_side_stripe(stripe: Dictionary,
+		side_m: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M) -> Dictionary:
+	var scale: float = JERSEY_STRIPE_DESIGN_HEIGHT_M / side_m
+	var centre_m: float = jersey_stripe_centre_m(float(stripe.pos), side_m)
+	var side := {"pos": centre_m / side_m, "width": float(stripe.width) * scale,
 			"color": stripe.color}
+	if stripe.has("fill_below"):
+		side.fill_below = stripe.fill_below
+	if stripe.has("peak"):
+		var peak: Dictionary = stripe.peak.duplicate()
+		peak.depth = float(peak.depth) * scale
+		side.peak = peak
+	return side
 
 
-# A shoulder cap without its number: the yoke over its top, the cap's own color
-# below. ShoulderDecal paints the same split under the number.
-static func shoulder_cap(jersey: Dictionary, cap_color: Color) -> ImageTexture:
-	var img := Image.create(STRIPE_TEX_WIDTH_PX, CAP_TEX_HEIGHT_PX, false, Image.FORMAT_RGBA8)
-	img.fill(cap_color)
-	img.fill_rect(Rect2i(0, 0, STRIPE_TEX_WIDTH_PX,
-			int(round(SkaterMeshBuilder.SHOULDER_CAP_YOKE_V * float(CAP_TEX_HEIGHT_PX)))),
-			yoke_color(jersey))
-	return ImageTexture.create_from_image(img)
+# A kit polygon filled with its slanted edges anti-aliased, as canvas polygons
+# are not on any renderer: a smooth hairline over each. Over an edge inside a
+# stripe, between two of its pieces, the line is the stripe's own color and
+# vanishes. Level and upright edges do not step and stay hard, which keeps a
+# flat band crisp and a clip's straight cut from bleeding past it.
+static func fill_smooth(canvas: CanvasItem, polygon: PackedVector2Array, color: Color) -> void:
+	canvas.draw_colored_polygon(polygon, color)
+	var n: int = polygon.size()
+	for i: int in n:
+		var a: Vector2 = polygon[i]
+		var b: Vector2 = polygon[(i + 1) % n]
+		if absf(a.x - b.x) > 0.01 and absf(a.y - b.y) > 0.01:
+			canvas.draw_line(a, b, color, 1.0, true)
 
 
 # Horizontal bands across a cylinder's curved side. Each stripe is `pos` (centre,
 # as a fraction of the side region) and `width` (also a fraction), so a uniform
 # authored once lands at the same proportion of every part regardless of its
-# real length. `top_cap`, when a Color, fills the cylinder's end-cap half of the
-# atlas — used where a capped part would otherwise show the base colour on its
-# flat end.
-static func h_stripes(base: Color, stripes: Array,
-		top_cap: Variant = null) -> ImageTexture:
+# real length.
+static func h_stripes(base: Color, stripes: Array) -> ImageTexture:
 	var img := Image.create(STRIPE_TEX_WIDTH_PX, STRIPE_TEX_HEIGHT_PX, false, Image.FORMAT_RGBA8)
 	img.fill(base)
 	var side_px: int = int(round(CYLINDER_SIDE_V_FRACTION * float(STRIPE_TEX_HEIGHT_PX)))
@@ -113,7 +115,4 @@ static func h_stripes(base: Color, stripes: Array,
 		var y1: int = clampi(int(round(center_px + half_px)), 0, side_px)
 		if y1 > y0:
 			img.fill_rect(Rect2i(0, y0, STRIPE_TEX_WIDTH_PX, y1 - y0), s.color)
-	if top_cap is Color:
-		img.fill_rect(Rect2i(0, side_px, STRIPE_TEX_WIDTH_PX / 2,
-				STRIPE_TEX_HEIGHT_PX - side_px), top_cap)
 	return ImageTexture.create_from_image(img)

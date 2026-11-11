@@ -14,7 +14,7 @@ extends GutTest
 # built.
 
 const REPS: int = 20000
-const DELTA: float = 1.0 / 120.0
+const DELTA: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 var _results: Array[Dictionary] = []
 var _bench_roots: Array[Node3D] = []

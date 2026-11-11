@@ -24,7 +24,7 @@ static func check_deflect(
 		puck_prev: Vector3, puck_curr: Vector3,
 		blade_prev: Vector3, blade_curr: Vector3,
 		radius: float, vertical_reach: float) -> bool:
-	var st: Vector2 = _segment_segment_params(
+	var st: Vector2 = SegmentDistance.params(
 			Vector3(puck_prev.x, 0.0, puck_prev.z), Vector3(puck_curr.x, 0.0, puck_curr.z),
 			Vector3(blade_prev.x, 0.0, blade_prev.z), Vector3(blade_curr.x, 0.0, blade_curr.z))
 	var puck_at: Vector3 = puck_prev.lerp(puck_curr, st.x)
@@ -59,7 +59,7 @@ static func _swept_reach(
 		puck_prev: Vector3, puck_curr: Vector3,
 		blade_prev: Vector3, blade_curr: Vector3,
 		radius: float) -> bool:
-	var st: Vector2 = _segment_segment_params(puck_prev, puck_curr, blade_prev, blade_curr)
+	var st: Vector2 = SegmentDistance.params(puck_prev, puck_curr, blade_prev, blade_curr)
 	var puck_at: Vector3 = puck_prev.lerp(puck_curr, st.x)
 	var blade_at: Vector3 = blade_prev.lerp(blade_curr, st.y)
 	if puck_at.distance_squared_to(blade_at) > radius * radius:
@@ -77,7 +77,7 @@ static func _swept_reach(
 static func sweep_separation(
 		puck_prev: Vector3, puck_curr: Vector3,
 		blade_prev: Vector3, blade_curr: Vector3) -> float:
-	return sqrt(_segment_segment_dist_sq(puck_prev, puck_curr, blade_prev, blade_curr))
+	return sqrt(SegmentDistance.dist_sq(puck_prev, puck_curr, blade_prev, blade_curr))
 
 
 # Body-block trigger: the puck's swept path (puck_prev→puck_curr) passes through the blocker's
@@ -165,52 +165,3 @@ static func _closest_point_on_segment(p: Vector3, a: Vector3, b: Vector3) -> Vec
 		return a
 	var t: float = clampf((p - a).dot(ab) / ab_len_sq, 0.0, 1.0)
 	return a + ab * t
-
-
-# Minimum squared distance between two line segments.
-static func _segment_segment_dist_sq(
-		p0: Vector3, p1: Vector3,
-		q0: Vector3, q1: Vector3) -> float:
-	var st: Vector2 = _segment_segment_params(p0, p1, q0, q1)
-	return p0.lerp(p1, st.x).distance_squared_to(q0.lerp(q1, st.y))
-
-
-# Parameters (s on p0→p1, t on q0→q1) of the closest approach between two line
-# segments (Eberly analytical solution). Degenerates correctly when either or
-# both segments have zero length.
-static func _segment_segment_params(
-		p0: Vector3, p1: Vector3,
-		q0: Vector3, q1: Vector3) -> Vector2:
-	var d1: Vector3 = p1 - p0
-	var d2: Vector3 = q1 - q0
-	var r: Vector3 = p0 - q0
-	var a: float = d1.dot(d1)
-	var e: float = d2.dot(d2)
-	var f: float = d2.dot(r)
-	var s: float
-	var t: float
-	if a <= 1e-10 and e <= 1e-10:
-		return Vector2.ZERO
-	if a <= 1e-10:
-		s = 0.0
-		t = clampf(f / e, 0.0, 1.0)
-	else:
-		var c: float = d1.dot(r)
-		if e <= 1e-10:
-			t = 0.0
-			s = clampf(-c / a, 0.0, 1.0)
-		else:
-			var b: float = d1.dot(d2)
-			var denom: float = a * e - b * b
-			if abs(denom) > 1e-10:
-				s = clampf((b * f - c * e) / denom, 0.0, 1.0)
-			else:
-				s = 0.0
-			t = (b * s + f) / e
-			if t < 0.0:
-				t = 0.0
-				s = clampf(-c / a, 0.0, 1.0)
-			elif t > 1.0:
-				t = 1.0
-				s = clampf((b - c) / a, 0.0, 1.0)
-	return Vector2(s, t)

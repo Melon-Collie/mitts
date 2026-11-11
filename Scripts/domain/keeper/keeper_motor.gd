@@ -52,6 +52,9 @@ const LEAD_MAX_RAD: float = deg_to_rad(30.0)
 # A goal on his feet that moves this fast he skates to as it moves, however
 # far (KeeperGlide); a still one when the route plans it.
 const MOVING_M_S: float = 0.05
+# Moves asked for and not yet started, as many as the wire carries: a match
+# gives him goals and asks none.
+const WIRE_ASKS: int = 2
 
 var x: float = 0.0
 var z: float = 0.0
@@ -94,6 +97,8 @@ var _spot_velocity := Vector2.ZERO
 var _spot_since: float = 0.0
 # Whether the goal on his feet is skated to however far it is.
 var _skate: bool = false
+# A butterfly dropped into from a glide, let go as it lands (`_drop_carrying`).
+var _landing: bool = false
 # Frozen where he is and turned as he is (`freeze`), no move started.
 var _frozen: bool = false
 var _frozen_at := Vector2.ZERO
@@ -245,6 +250,7 @@ func can_save(down: bool) -> bool:
 
 # The low save `low` to `side`, cutting in now.
 func save(low: int, side: float) -> void:
+	_landing = false
 	pose(_cut)
 	save_move.fall = fall
 	low_ready.cut()
@@ -321,12 +327,17 @@ func step(dt: float) -> void:
 		yaw = _frozen_yaw
 	# Sunk while set on his feet, shuffling or skating with the play and asked, out of it
 	# with any other move; a drop or a save goes from where he has sunk to
-	# (KeeperDrop.drop_from, `save`).
-	var with_play: bool = _mover == Mover.GLIDE and glide.velocity.length() <= glide.shuffle_speed \
+	# (KeeperDrop.drop_from, `save`). Skating with the play is across his line no
+	# faster than he shuffles, in depth at any glide: backing in on a rush he
+	# glides back in his stance.
+	var with_play: bool = _mover == Mover.GLIDE and absf(glide.velocity.rotated(yaw).x) <= glide.shuffle_speed \
 			or _mover == Mover.FOOTWORK and footwork.move == KeeperFootwork.Move.SHUFFLE
 	low_ready.step(dt, rest == Rest.FEET and (_mover == Mover.NONE or with_play))
 	_velocity = (Vector2(x, z) - was) / maxf(dt, 1e-6)
 	fall = maxf(sqrt(1.0 - drop.down), KeeperLowReady.fall_share_at(1.0)) if _mover == Mover.DROP else low_ready.fall_share()
+	# What a slide from his feet would fall from, for the route to price it.
+	if _mover != Mover.SLIDE:
+		slide.fall = low_ready.fall_share()
 
 
 func _step_mover(dt: float) -> void:
@@ -379,10 +390,18 @@ func _step_mover(dt: float) -> void:
 			save_move.step(dt)
 			x = save_move.x
 			z = save_move.z
-			if save_move.is_done():
+			if _landing and save_move.is_set():
+				_landing = false
+				save_move.state = KeeperSaveMove.State.NONE
+				_rest_on(Rest.DOWN)
+			elif save_move.is_done():
 				_rest_on(Rest.DOWN if save_move.rests_down() else Rest.FEET)
 		Mover.GLIDE:
 			_step_glide(dt)
+		Mover.NONE:
+			# Down at rest, the last slide's stop still easing out of him.
+			if rest == Rest.DOWN:
+				slide.step(dt)
 
 
 # Whether the goal is one he skates to as it moves: on his feet, standing, near
@@ -404,6 +423,9 @@ func _start_glide() -> void:
 # after it; done once he is on a spot at rest, square, his legs settled. A goal
 # that is no longer on his feet, or none, he stops for first where he is.
 func _step_glide(dt: float) -> void:
+	if _goal and route.rest == Rest.DOWN and glide.velocity.length() > MOVING_M_S:
+		_drop_carrying()
+		return
 	if not _goal or route.rest != Rest.FEET:
 		glide.step(dt, Vector2(glide.x, glide.z), Vector2.ZERO, yaw)
 		x = glide.x
@@ -427,6 +449,14 @@ func _step_glide(dt: float) -> void:
 		yaw = route.facing
 		if glide.is_settled():
 			_mover = Mover.NONE
+
+
+# Down from a glide, its speed carried: into the butterfly as a low save drops
+# him, held only until he lands in it.
+func _drop_carrying() -> void:
+	save(KeeperSaveMove.Low.BUTTERFLY, 1.0)
+	save_move.edges = false
+	_landing = true
 
 
 func _rest_on(r: int) -> void:
@@ -497,7 +527,15 @@ func _start(what: int, spot: Vector2, side: float, top: float) -> bool:
 			if what == Do.SLIDE:
 				slide.slide_to(spot, top)
 			else:
-				slide.slide_from_feet(spot, top)
+				# Out of the stance he is in, the fall from the low ready the
+				# shorter (KeeperDrop.drop_from).
+				slide.fall = low_ready.fall_share()
+				if low_ready.share > 0.0:
+					pose(_cut)
+					low_ready.cut()
+					slide.slide_from_feet(spot, top, _cut)
+				else:
+					slide.slide_from_feet(spot, top)
 			_mover = Mover.SLIDE
 		Do.ROTATE:
 			if rest != Rest.DOWN:
@@ -624,3 +662,59 @@ func _pose_mover(p: KeeperPose) -> void:
 # `v` on the ice in his own frame, turned `turn` into the stances' frame.
 static func _turned(v: Vector2, turn: float) -> Vector2:
 	return Vector2(v.x * cos(turn) + v.y * sin(turn), -v.x * sin(turn) + v.y * cos(turn))
+
+
+# His state on the wire (KeeperWire), his movers' with it; the route's movers
+# are these, written once.
+func wire(w: KeeperWire) -> void:
+	x = w.s16(x, KeeperWire.MM)
+	z = w.s16(z, KeeperWire.MM)
+	yaw = w.s32(yaw, KeeperWire.ANGLE)
+	lead = w.s32(lead, KeeperWire.ANGLE)
+	rest = w.s8(rest)
+	refused = w.s8(refused)
+	footwork.wire(w)
+	drop.wire(w)
+	slide.wire(w)
+	post.wire(w)
+	route.wire(w)
+	save_move.wire(w)
+	glide.wire(w)
+	low_ready.wire(w)
+	fall = w.s16(fall, KeeperWire.FRACTION)
+	_wire_queue(w)
+	_goal = w.bit(_goal)
+	_mover = w.s8(_mover)
+	_face = w.s32(_face, KeeperWire.ANGLE)
+	_turn_rate = w.s32(_turn_rate, KeeperWire.ANGLE)
+	_anchor = w.v2_16(_anchor, KeeperWire.MM)
+	_anchor_yaw = w.s32(_anchor_yaw, KeeperWire.ANGLE)
+	_velocity = w.v2_32(_velocity, KeeperWire.SPEED)
+	_spot_velocity = w.v2_32(_spot_velocity, KeeperWire.SPEED)
+	_spot_since = w.s32(_spot_since, KeeperWire.MS)
+	_skate = w.bit(_skate)
+	_landing = w.bit(_landing)
+	_frozen = w.bit(_frozen)
+	_frozen_at = w.v2_16(_frozen_at, KeeperWire.MM)
+	_frozen_yaw = w.s32(_frozen_yaw, KeeperWire.ANGLE)
+
+
+# The queue in WIRE_ASKS slots, the unused ones zero; one past them is dropped.
+func _wire_queue(w: KeeperWire) -> void:
+	var n: int = w.s8(mini(_queue.size(), WIRE_ASKS))
+	if _queue.size() != n:
+		_queue.resize(n)
+	for i: int in WIRE_ASKS:
+		var ask: _Ask = _queue[i] if i < n else null
+		if ask == null and i < n:
+			ask = _Ask.new(Do.NONE, Vector2.ZERO, 0.0, INF)
+			_queue[i] = ask
+		var what: int = w.s8(ask.what if ask != null else Do.NONE)
+		var spot: Vector2 = w.v2_16(ask.spot if ask != null else Vector2.ZERO, KeeperWire.MM)
+		var side: float = w.s32(ask.side if ask != null else 0.0, KeeperWire.ANGLE)
+		var top: float = w.s16(ask.top if ask != null else INF, KeeperWire.SPEED)
+		if ask != null:
+			ask.what = what
+			ask.spot = spot
+			ask.side = side
+			ask.top = top

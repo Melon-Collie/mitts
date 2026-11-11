@@ -15,7 +15,7 @@ extends GutTest
 # of every tick (the physics_frame signal fires after the engine's pump), lerped
 # to its transform after the skater's render pass by the frame's fraction.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 

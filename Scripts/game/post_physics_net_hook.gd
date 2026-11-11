@@ -9,7 +9,7 @@ extends Node
 # same tick it was simulated. Never capture from GameManager's own
 # _physics_process instead: as an autoload it runs BEFORE the scene's actors, so
 # it takes the PREVIOUS tick's result at the start of the next one — every
-# snapshot pays a tick (~8.3 ms) of departure latency, skater velocity (updated
+# snapshot pays a tick of departure latency, skater velocity (updated
 # at −1) is captured one phase ahead of position, and the label overstates the
 # content's age by a tick. See Scripts/networking/CLAUDE.md
 # (host capture / broadcast timing).

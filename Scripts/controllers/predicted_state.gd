@@ -33,6 +33,34 @@ var upper_body_rotation_y: float
 var twist_whip: float
 var twist_follow: float
 var twist_follow_vel: float
+# Skater.step_tick_state's state after this input: the replay adopts the ack's
+# and steps it forward rather than reading the live, end-of-window values.
+var forced_lift_s: float
+var stick_check_cooldown_s: float
+var blade_lift_blend: float
+var commit_lift_blend: float
+var check_lead: float
+# The carry contact's two reads as this live tick left them (Skater.carry_read_*).
+# Recorded live only: the replay plays them back rather than re-deriving them.
+var carry_side_smoothed: float
+var carry_hop: float
+# The blade smoother's dangle velocity after this input: the reconcile seeds the
+# smoother from the host's blade at the ack moving at this, since the wire
+# carries the blade's place but not its motion.
+var blade_dangle_vel: Vector3
+
+
+func record_tick_state(skater: Skater) -> void:
+	forced_lift_s = skater.forced_lift_remaining()
+	stick_check_cooldown_s = skater.stick_check_cooldown_remaining()
+	blade_lift_blend = skater.get_blade_lift_blend()
+	commit_lift_blend = skater.get_commit_lift_blend()
+	check_lead = skater.get_check_lead()
+
+
+func adopt_tick_state(skater: Skater) -> void:
+	skater.adopt_tick_state(forced_lift_s, stick_check_cooldown_s,
+			blade_lift_blend, commit_lift_blend, check_lead)
 
 
 # Binary search for the snapshot at exactly target_ts. Returns null when the
@@ -47,8 +75,8 @@ var twist_follow_vel: float
 # f64 the local history stores is 0.05ms — constant regardless of session
 # length, which an f32 encoding would not be (its ULP grows with host uptime).
 # 1ms is comfortably
-# above that and well below the 8.33ms gap between adjacent 120 Hz-stamped
-# inputs, so no risk of off-by-one matches.
+# above that and well below the gap between adjacent tick-stamped inputs
+# (11.1 ms at 90 Hz), so no risk of off-by-one matches.
 const TS_MATCH_EPSILON: float = 1e-3
 
 static func find_at(history: Array[PredictedState], target_ts: float) -> PredictedState:

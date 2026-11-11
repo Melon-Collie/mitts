@@ -157,6 +157,26 @@ func test_stopping_spares_a_chaser_his_escape_gate() -> void:
 	assert_gt(_carry_at(behind, 8.0), _carry_at(behind, 8.0, false))
 
 
+func test_a_chaser_out_pacing_the_carry_is_on_it_where_it_ends() -> void:
+	# A backchecker a stride behind a carrier slowing into the crease, skating his
+	# way: chasing the carry, he is after the carrier, not coasting to a spot, and
+	# runs it down where it ends. Read as coasting until a last lunge, his momentum
+	# carried him past the crease and it read clear.
+	var opps: Array[Vector3] = [Vector3(-0.55, 0, -18.77)]
+	var vels: Array[Vector3] = [Vector3(3.86, 0, -7.81)]
+	var from := Vector3(-2.6, 0, -21.5)
+	var end := Vector3(-1.13, 0, -24.08)
+	var carry: Vector3 = end - from
+	var dir := Vector2(carry.x, carry.z).normalized()
+	var speed: float = carry.length()
+	var at: Vector3 = end + carry * 0.25
+	var window: float = AICarrySpace.CARRY_LUNGE_WINDOW_S
+	assert_lt(AICarrySpace.reach_clearance(at, 1.25, opps, vels, [], window, dir, speed,
+			-INF, from), 0.0, "on the carry where it ends")
+	assert_gt(AICarrySpace.reach_clearance(at, 1.25, opps, vels, [], window, dir, speed),
+			0.0, "where coasting would have left him clear of it")
+
+
 func test_handling_threads_a_tighter_seam() -> void:
 	# In a tight spot (stationary wall), a better handler holds the puck further
 	# off his body and finds room a plodder can't. Skill expression, grounded in

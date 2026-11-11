@@ -4,7 +4,8 @@ extends RefCounted
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 # CARRIER role behavior: the puck-carrying utility AI. Scores SHOOT (wrister),
-# PASS (AICarrierPassSearch) and CARRY (AICarrierCarrySearch) on one scale every
+# PASS (AICarrierPassSearch), the dump-in (AICarrierDumpSearch) and CARRY
+# (AICarrierCarrySearch) on one scale every
 # PICK_ACTION_PERIOD_TICKS ticks. The searches all read this carrier's
 # AICarrierField; this file owns the compete — the shot sweep, the
 # protect / evade reads, the bars, the argmax and its commitment.
@@ -23,8 +24,8 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 const INTENT_CARRY: int = 0
 const INTENT_SHOOT: int = 1
 const INTENT_PASS: int = 3
-# The rim PASS's release — fire the puck to a location (no receiver). The state
-# machine maps it onto a PASS_PRESSED release aimed at `dump_target`.
+# A release to a location rather than a receiver — the rim PASS, or the dump-in.
+# The state machine maps it onto a PASS_PRESSED release aimed at `dump_target`.
 const INTENT_DUMP: int = 5
 # How far down the rim's bearing its aim point is placed. The charged release
 # converges its blade's side offset onto this point, so a far point keeps the
@@ -42,8 +43,9 @@ const RIM_AIM_STANDOFF_M: float = 20.0
 const SHOT_MIN_VALUE: float = 0.05
 # A PASS that connects keeps possession, and its odds of not connecting are
 # already priced by the lane term, so it is held only to rejecting a release
-# into nothing — a numerical residual on a dead lane. (A receiver at centre ice
-# is worth ~0.017 as a shooter and is still the right play.)
+# into nothing — a numerical residual on a dead lane — by a carrier with the
+# puck worth keeping. One who would lose it where he stands has that loss off
+# the bar (_pick_commit_phase).
 const PASS_MIN_VALUE: float = 0.02
 
 # ── Settle doubt ─────────────────────────────────────────────────────────────
@@ -58,6 +60,21 @@ func _settle_penalty(ctx: RoleContext) -> float:
 		return 0.0
 	return ctx.settle_penalty_frac * exp(
 			-_settle_elapsed_s / maxf(ctx.settle_penalty_tau_s, 0.001))
+
+
+# The play this shooter's keeper last saw (AIShotOdds.History), each until he
+# has had time to set on the shooter again (AIGoalieModel.goalie_reset_s): come
+# out from behind the net, he is sealed on the post the carrier came round; a
+# pass just taken leaves him set on the passer, across the royal road or on the
+# shooter's side of it; otherwise, and held longer, he has tracked the carry.
+func _shot_history() -> int:
+	var reset_s: float = AIGoalieModel.goalie_reset_s()
+	if _since_behind_s < reset_s:
+		return AIShotOdds.History.WRAPPED
+	if _settle_elapsed_s >= reset_s or not _fed_from.is_finite():
+		return AIShotOdds.History.CARRIED
+	return AIShotOdds.History.FED_ACROSS if AIShotOdds.crosses_royal_road(_fed_from.x, _self_x) \
+			else AIShotOdds.History.FED_SAME
 
 
 # Move `value` away from being chosen by `penalty` of its own magnitude: a
@@ -76,14 +93,23 @@ const SHOT_MIN_FORWARD_OF_LINE_M: float = 0.3
 # ── Where the shot is held (shoot-now eval) ──────────────────────────────────
 # The share of pace the winning hold's load gives the committed shot.
 var _shot_sample_share: float = 1.0
-# True when the winning shoot read is the TIP rip (AIActionScoring.tip_ev):
-# fired flat at full pace THROUGH the net-front teammate's blade at the net
-# centre — the commit path aims it there instead of at a direct-model hole.
-var _shot_sample_is_tip: bool = false
 # The puck's spot off the body (world XZ) the last shoot-now sweep's winner
 # fires from. Fresh every eval, so the state machine's fire-tracking carry
 # holds the puck there while a shot look is live; ZERO until a sweep scores.
 var shoot_now_hold: Vector3 = Vector3.ZERO
+# The same for the best pass this eval (AICarrierPassSearch.best_hold_offset;
+# ZERO: none), and the odds the puck is kept through the pull there and the
+# charge, so the carry can rest the puck there while a pass is near the lead.
+var pass_now_hold: Vector3 = Vector3.ZERO
+var pass_now_keep: float = 1.0
+# The odds the puck is kept carried as it is (the evadability read the hold's
+# keep-probability uses), for comparing a rest in the pass's hold against.
+var carry_keep: float = 1.0
+# The commit phase's best value of any option (shot, pass, dump, carry, the
+# hold for a developing feed), and whether that hold is what is keeping the
+# puck.
+var lead_score: float = 0.0
+var holding_for_feed: bool = false
 # ── Smart-ping obedience ─────────────────────────────────────────────────────
 # EV multipliers a live human ping applies inside the normal compete — a
 # tactical ORDER, not an evaluation curve. A bias rather than a force: the
@@ -131,6 +157,13 @@ var _hold_elapsed_s: float = 0.0
 # press-state bail back to CARRY is the same possession.
 var _settle_arm_pending: bool = true
 var _settle_elapsed_s: float = 0.0
+# Seconds since he was last behind the goal line he attacks, this possession
+# (INF: not yet): a shot out of a wrap (_shot_history).
+var _since_behind_s: float = INF
+# Where the pass he took this possession left from (RoleContext.fed_from; INF:
+# none), and where he is (_shot_history).
+var _fed_from: Vector3 = Vector3.INF
+var _self_x: float = 0.0
 
 # Set when intent commits to PASS (or to a rim, released as a DUMP). Consumed by
 # the state machine entering PASS_PRESSED. -1 = no current pass target.
@@ -167,6 +200,11 @@ var shot_power_t: float = 1.0
 # The state machine carries the puck to it and presses once the load is there.
 var shot_hold_offset: Vector3 = Vector3.ZERO
 var shot_hold_share: float = 1.0
+# The same for a committed pass, rim or dump-in: where the press holds it (a
+# pocket, or where the puck sits when it already carries the pace) and the
+# share it waits for there (0: no hold, aim the ring).
+var pass_hold_offset: Vector3 = Vector3.ZERO
+var pass_hold_share: float = 0.0
 
 # Cached carry destination from the most recent re-eval. Read by the
 # state machine to drive steering during CARRY.
@@ -185,6 +223,8 @@ var carry_brake: bool = false
 var dump_target: Vector3 = Vector3.INF
 # Launch pace (m/s) the rim fires at: its searched pace.
 var dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S
+# Whether the dump is chipped over the sticks: every dump-in is, a rim never.
+var dump_lofted: bool = false
 
 # ── Puck-protect mirror (read by the state machine's carry blade aim) ────────
 # Where in the blade's handling envelope the puck is safest right now, as an
@@ -231,6 +271,10 @@ var _ticks_since_pick: int = 0
 #     would halve their decision cadence).
 var _commit_phase_pending: bool = false
 var _full_eval_pending: bool = true
+# Which plan the carry's stick is on (the rolled move or the drive-in floor),
+# NONE until the possession's first eval.
+enum CarryPlan { NONE, ROLLED, DRIVE_IN }
+var _carry_plan: CarryPlan = CarryPlan.NONE
 # Fire-phase products consumed by the commit phase (instance fields so a
 # sliced eval hands them across the dispatch boundary):
 var _phase_current_safety: float = 0.0
@@ -243,6 +287,10 @@ var _phase_best_pass_frac: float = 1.0
 var _phase_best_pass_rim_dir: Vector3 = Vector3.ZERO
 # The winning pass's rim pace, carried to the release with its bearing.
 var _phase_best_pass_rim_pace: float = 0.0
+# The best dump-in's value (−INF: none), bearing and pace.
+var _phase_dump_score: float = -INF
+var _phase_dump_dir: Vector3 = Vector3.ZERO
+var _phase_dump_pace: float = 0.0
 # The field's shot from this eval's base release (_pick_fire_phase): the holds
 # are solved toward its aim, and a committed SHOOT fires it.
 var _shot_pick := AIShotOdds.Pick.new()
@@ -252,6 +300,9 @@ var _shot_pick := AIShotOdds.Pick.new()
 var _field := AICarrierField.new()
 var _pass := AICarrierPassSearch.new(_field)
 var _carry := AICarrierCarrySearch.new(_field)
+var _dump := AICarrierDumpSearch.new(_field)
+# The committed INTENT_DUMP is the dump-in, not a rim (the hysteresis's incumbent).
+var _dumping_in: bool = false
 
 # Directional-filtered opponents for the puck-protect read: the full opponent
 # set minus defenders the carrier's body already screens (see
@@ -285,11 +336,17 @@ func decide(ctx: RoleContext) -> RoleDecision:
 	# Each call spans this many physics ticks; draining the cooldown by the real
 	# span keeps the re-eval cadence in wall time at every difficulty tier.
 	var step_ticks: int = maxi(1, ctx.dispatch_period_ticks)
+	var step_s: float = float(step_ticks) / float(_PhysicsConstants.PHYSICS_TICK)
 	if _settle_arm_pending:
 		_settle_arm_pending = false
 		_settle_elapsed_s = 0.0
 	else:
-		_settle_elapsed_s += float(step_ticks) / float(_PhysicsConstants.PHYSICS_TICK)
+		_settle_elapsed_s += step_s
+	_since_behind_s += step_s
+	if (ctx.self_pos.z - ctx.attacking_goal_pos.z) * signf(ctx.attacking_goal_pos.z) > 0.0:
+		_since_behind_s = 0.0
+	_fed_from = ctx.fed_from
+	_self_x = ctx.self_pos.x - ctx.attacking_goal_pos.x
 	_ticks_since_pick += step_ticks
 	if _commit_phase_pending:
 		# Second dispatch of a sliced re-eval (see _commit_phase_pending). The
@@ -347,10 +404,20 @@ func reset() -> void:
 	shot_hold_offset = Vector3.ZERO
 	shot_hold_share = 1.0
 	shoot_now_hold = Vector3.ZERO
+	pass_now_hold = Vector3.ZERO
+	pass_now_keep = 1.0
+	carry_keep = 1.0
+	lead_score = 0.0
+	holding_for_feed = false
+	pass_hold_offset = Vector3.ZERO
+	pass_hold_share = 0.0
 	last_carry_anchor = Vector3.ZERO
 	carry_move = -1
+	_carry_plan = CarryPlan.NONE
 	dump_target = Vector3.INF
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
+	dump_lofted = false
+	_dumping_in = false
 	protect_offset = Vector3.ZERO
 	protect_gain = 0.0
 	forward_puck_clearance = AICarrySpace.EVADE_SAFE_MARGIN_M
@@ -362,6 +429,8 @@ func reset() -> void:
 	_full_eval_pending = true
 	_settle_arm_pending = true
 	_settle_elapsed_s = 0.0
+	_since_behind_s = INF
+	_fed_from = Vector3.INF
 	_carry.reset()
 
 
@@ -376,6 +445,8 @@ func clear_intent() -> void:
 	pass_should_saucer = false
 	dump_target = Vector3.INF
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
+	dump_lofted = false
+	_dumping_in = false
 	_pick_action_cooldown = 0
 	_ticks_since_pick = 0
 	# The next decide() answers in one call: a press bail is a timing-critical
@@ -414,6 +485,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	_phase_current_safety = AICarrySpace.clearance_to_safety(
 			AICarrySpace.reach_clearance(evade_seam, AICarrySpace.EVADE_HORIZON_S,
 					_field.opponents, _field.opponent_vels, _field.opponent_caps))
+	carry_keep = _phase_current_safety
 
 	# Puck-protect read (see protect_offset / protect_gain) against the
 	# directional opponent set (see PROTECT_SCREEN_BEHIND_M). Pure stick work:
@@ -496,12 +568,13 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 					and goalie_now.distance_to(attacking_goal)
 							< AIActionScoring.THREAT_GOALIE_HOME_M)
 
-	# Top-level SHOOT: the hold sweep over AIShotHolds (the puck where it is, the
-	# loaded pocket, a reach to either side of the shot line). Each hold prices
-	# its release at the pace its load allows, its pull's time in the goalie's
-	# budget, at the odds the puck survives the pull and the charge
-	# (price_keep). The as-is hold is scored first and the compare is strictly
-	# greater, so a tie keeps the release that needs no pull.
+	# Top-level SHOOT: the hold sweep over AIShotHolds' listed spots (the loaded
+	# pocket, a reach to either side of the shot line, the snapshot out front).
+	# Each hold
+	# prices its release at the pace its load allows, its pull's time in the
+	# goalie's budget, at the odds the puck survives the pull and the charge
+	# (price_keep). The compare is strictly greater, so a tie keeps the first
+	# listed: the pocket.
 	# The shot is the field's pick (AIShotOdds) from the base release, so the
 	# hold, its load share, the aim and the loft all describe one shot: a hold
 	# solved toward the net centre for an aim elsewhere prices a load the press
@@ -519,7 +592,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		keeper_yaw = opp_keeper.rotation_y
 		if not shot_unavailable:
 			AIShotOdds.pick_shot_now(wrister_base_release, attacking_goal, keeper_now,
-					keeper_vel_x, keeper_stance, _shot_pick, keeper_yaw)
+					keeper_vel_x, keeper_stance, _shot_pick, keeper_yaw, null, _shot_history())
 	var shot_target: Vector3 = _shot_pick.aim if _shot_pick.aim.is_finite() else attacking_goal
 	var shot_dir: Vector3 = shot_target - wrister_base_release
 	shot_dir.y = 0.0
@@ -543,9 +616,11 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var share: float = _field.holds.share[k]
 		var pull_s: float = _field.holds.pull_s[k]
 		var sample_speed: float = ctx.self_wrister_shot_speed * share
-		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
-				self_pos + hold + horizontal_velocity
-						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s),
+		var released_at: Vector3 = self_pos + hold + horizontal_velocity \
+				* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s)
+		if not _shootable_from(released_at, attacking_goal, goalie_now):
+			continue
+		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(released_at,
 				attacking_goal, goalie_now)
 		# Priced through the seam like the carry and pass legs, against the
 		# keeper as he reads now: the field prices what he does over the wind-up
@@ -554,38 +629,15 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var s: float = AIActionScoring.score_shoot_value(
 				release, attacking_goal, keeper_now, _field.opponents_release,
 				keeper_vel_x, keeper_stance, sample_speed,
-				_field.opponent_caps, -1.0, keeper_yaw) * _field.holds.keep[k]
+				_field.opponent_caps, -1.0, keeper_yaw, true, _shot_history()) \
+				* _field.holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_share = share
 			shoot_now_hold = hold
 
-	# Shoot-for-tip: the same rip can score by DEFLECTION off a net-front
-	# teammate. An alternative AIM of the same fire action, so it competes with
-	# the direct read by max(), never additively. Scored against the in-zone
-	# teammates gathered for the pass options, with the goalie taken set at his
-	# current spot (conservative). Fired from the faster hold.
-	_shot_sample_is_tip = false
-	if not shot_unavailable and not _field.receiver_pos.is_empty():
-		var tip_k: int = 1 if _field.holds.share[1] > _field.holds.share[0] else 0
-		var tip_hold := Vector3(_field.holds.offset[tip_k].x, 0.0, _field.holds.offset[tip_k].y)
-		var tip_share: float = _field.holds.share[tip_k]
-		var tip_pull_s: float = _field.holds.pull_s[tip_k]
-		var tip_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
-				self_pos + tip_hold + horizontal_velocity
-						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + tip_pull_s),
-				attacking_goal, goalie_now)
-		var tip_speed: float = ctx.self_wrister_shot_speed * tip_share
-		for tip_man: Vector3 in _field.receiver_pos:
-			var tip_s: float = AIActionScoring.tip_ev(
-					tip_release, tip_man, attacking_goal, goalie_now,
-					_field.opponents_release,
-					tip_speed, _field.opponent_caps) * _field.holds.keep[tip_k]
-			if tip_s > _phase_shoot_score:
-				_phase_shoot_score = tip_s
-				_shot_sample_share = tip_share
-				shoot_now_hold = tip_hold
-				_shot_sample_is_tip = true
+	# The shot is the direct one only: a rip for a net-front teammate to tip is
+	# not priced, since nothing measured backs a tip's redirect (#736).
 
 	var self_state: SkaterNetworkState = snapshot.skater_states[ctx.peer_id]
 	_pass.search(ctx, self_state.facing, _field.teammate_ids)
@@ -595,6 +647,33 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	_phase_best_pass_rim_dir = _pass.best_rim_dir
 	_phase_best_pass_rim_pace = _pass.best_rim_pace
 	_phase_best_pass_frac = _pass.best_pace_frac
+	pass_now_hold = _pass.best_hold_offset
+	pass_now_keep = _pass.best_hold_keep
+	# A numbers advantage is not dumped away: a tactical rule, as the one-way
+	# valve is, standing in for the pass option the possession read cannot
+	# price yet (#892).
+	if ctx.numbers_up:
+		_phase_dump_score = -INF
+		_phase_dump_dir = Vector3.ZERO
+		_phase_dump_pace = 0.0
+	else:
+		_dump.search(ctx)
+		_phase_dump_score = _dump.best_score
+		_phase_dump_dir = _dump.best_dir
+		_phase_dump_pace = _dump.best_pace
+
+
+# Whether a shot released at `released_at` can score at all, by the proofs the
+# fire phase gates the puck where it is on: in front of the goal line, and inside
+# the zone unless their keeper has left his net. The release is where the shot
+# leaves from, so a point man backing over the line or a carrier skating behind
+# the goal line through his pull and wind-up has no shot to price.
+static func _shootable_from(released_at: Vector3, attacking_goal: Vector3,
+		goalie_now: Vector3) -> bool:
+	if (released_at.z - attacking_goal.z) * -signf(attacking_goal.z) <= SHOT_MIN_FORWARD_OF_LINE_M:
+		return false
+	return AIActionScoring.in_offensive_zone(released_at, attacking_goal) \
+			or goalie_now.distance_to(attacking_goal) >= AIActionScoring.THREAT_GOALIE_HOME_M
 
 
 # COMMIT phase of the compete: the CARRY candidate argmax, and the
@@ -643,7 +722,19 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var drive_in_value: float = _field.receiver_drive_in_value(
 			ctx, self_pos, ctx.caps_by_peer.get(ctx.peer_id), ctx.self_velocity,
 			Vector3.INF, 0.0, true)
-	if drive_in_value > carry_score:
+	# The rolled carry and the drive-in are two plans for the same stick: the one
+	# being skated keeps it unless the other beats it by the hysteresis margin, or
+	# near-equal reads trade the stick every re-eval and the turns between them
+	# spend the speed. The compete below still sees the winner's honest value.
+	var carry_key: float = carry_score
+	var drive_key: float = drive_in_value
+	var keep_margin: float = 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
+	if _carry_plan == CarryPlan.DRIVE_IN and drive_key > 0.0:
+		drive_key *= keep_margin
+	elif _carry_plan == CarryPlan.ROLLED and carry_key > 0.0:
+		carry_key *= keep_margin
+	_carry_plan = CarryPlan.DRIVE_IN if drive_key > carry_key else CarryPlan.ROLLED
+	if _carry_plan == CarryPlan.DRIVE_IN:
 		carry_score = drive_in_value
 		last_carry_anchor = _field.drive_in_reached
 		carry_move = -1
@@ -653,8 +744,12 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# defensive-zone regime. Never give CARRY a bonus: stand-still's shot branch
 	# IS the raw shoot-now score, so a bonus would lift it above fire on every
 	# re-eval and the bot would never fire.
+	var dump_score: float = _phase_dump_score
 	if intended_action == INTENT_SHOOT and shoot_score > 0.0:
 		shoot_score *= 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
+	elif intended_action == INTENT_DUMP and _dumping_in:
+		if dump_score > 0.0:
+			dump_score *= 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
 	elif (intended_action == INTENT_PASS or intended_action == INTENT_DUMP) \
 			and best_pass_score > 0.0:
 		best_pass_score *= 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
@@ -672,23 +767,48 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 
 	var settle_penalty: float = _settle_penalty(ctx)
 
+	# Retention is hopeless only when BOTH reads of keeping the puck fail, because each is blind
+	# where the other sees: the raw carry is one beat ahead and cannot see the
+	# entry a carrier skates into by beating his man; the drive-in sees that but
+	# is one straight line, blind to the carry's other routes. In our own zone the
+	# drive-in gets no vote: it is positive for any carrier with a sliver of a lane,
+	# and would keep a doomed carrier from moving the puck in front of his own net.
+	var in_own_zone: bool = AIActionScoring.in_offensive_zone(
+			self_pos, ctx.defending_goal_pos)
+	var keep_value: float = raw_carry_score if in_own_zone \
+			else maxf(raw_carry_score, drive_in_value)
+	var retention_hopeless: bool = keep_value <= 0.0
+
 	# Best fire option — the best of those that clear their OWN giveaway bar.
 	# Qualify each option before the max, never after: taking the max first lets
 	# a mediocre shot mask a legal outlet pass, so raising the shot's bar would
 	# silently suppress passing too. Nothing qualifying leaves fire at -INF, which
 	# loses every compete below.
 	#
-	# The bar is cleared by the DOUBTED value, the compete is entered at the
-	# HONEST one: the doubt says whether this option is worth the puck yet, not
-	# what it is worth (see _settle_penalty).
+	# The bar is cleared by the DOUBTED value (the pass's bar raised by the same
+	# doubt instead), the compete is entered at the HONEST one: the doubt says
+	# whether this option is worth the puck yet, not what it is worth (see
+	# _settle_penalty).
 	var fire_score: float = -INF
 	var fire_intent: int = best_shot_intent
 	if _settle_handicap(best_shot_score, settle_penalty) > SHOT_MIN_VALUE:
 		fire_score = best_shot_score
-	if _settle_handicap(best_pass_score, settle_penalty) > PASS_MIN_VALUE \
-			and best_pass_score > fire_score:
+	# A pass is weighed against keeping the puck, so a carrier who would lose it
+	# where he stands has that loss off the bar, up to the whole bar: what is left
+	# is his settle doubt's raise, or nothing, which is what a search that found
+	# no pass returns.
+	var pass_bar: float = PASS_MIN_VALUE / maxf(1.0 - settle_penalty, 0.001) \
+			- clampf(-keep_value, 0.0, PASS_MIN_VALUE)
+	if best_pass_score > pass_bar and best_pass_score > fire_score:
 		fire_score = best_pass_score
 		fire_intent = INTENT_PASS
+	# A dump-in gives the puck up unless we win it back, and that loss is priced
+	# in its value, so it is held to the pass's bar.
+	var dump_in: bool = false
+	if dump_score > pass_bar and dump_score > fire_score:
+		fire_score = dump_score
+		fire_intent = INTENT_DUMP
+		dump_in = true
 
 	# Fire vs carry: FIRE WINS TIES (stand-still's shot branch is the shoot-now
 	# score itself), so carry wins only on a STRICTLY better future-action value.
@@ -706,17 +826,10 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var hold_value: float = (_pass.developing_feed_value(ctx)
 			* keep_prob * AIActionScoring.delay_discount(_hold_elapsed_s))
 
+	lead_score = maxf(maxf(maxf(fire_score, carry_score), hold_value),
+			maxf(best_pass_score, dump_score))
+	holding_for_feed = hold_value > carry_score and hold_value > 0.0
 	var new_intent: int
-	# Retention is hopeless only when BOTH reads of keeping the puck fail, because each is blind
-	# where the other sees: the raw carry is one beat ahead and cannot see the
-	# entry a carrier skates into by beating his man; the drive-in sees that but
-	# is one straight line, blind to the carry's other routes. In our own zone the
-	# drive-in gets no vote: it is positive for any carrier with a sliver of a lane,
-	# and would keep a doomed carrier from moving the puck in front of his own net.
-	var in_own_zone: bool = AIActionScoring.in_offensive_zone(
-			self_pos, ctx.defending_goal_pos)
-	var retention_hopeless: bool = raw_carry_score <= 0.0 \
-			and (in_own_zone or drive_in_value <= 0.0)
 	# Fire if it beats retention (carrying, or holding for the developing play) —
 	# or, when retention is hopeless, at all: there is nothing to compare it with,
 	# and an unqualified fire arrives as -INF and loses both.
@@ -725,7 +838,16 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			and not staggered:
 		_hold_elapsed_s = 0.0
 		new_intent = fire_intent
-		if new_intent == INTENT_PASS and best_pass_rim_dir != Vector3.ZERO:
+		_dumping_in = dump_in
+		if dump_in:
+			# Released as a FLAT charged dump along its bearing at its searched pace,
+			# like a rim; nobody's tape to lead.
+			pass_target_peer_id = -1
+			dump_target = puck_now + _phase_dump_dir * RIM_AIM_STANDOFF_M
+			dump_launch_speed = _phase_dump_pace
+			dump_lofted = true
+			_lock_dump_hold(ctx, _phase_dump_dir, dump_launch_speed)
+		elif new_intent == INTENT_PASS and best_pass_rim_dir != Vector3.ZERO:
 			# The rim: chosen as a pass, released as a FLAT charged dump along
 			# its bearing at its searched pace (the aim is the boards, not the
 			# receiver).
@@ -733,11 +855,13 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			pass_target_peer_id = best_pass_peer
 			dump_target = puck_now + best_pass_rim_dir * RIM_AIM_STANDOFF_M
 			dump_launch_speed = _phase_best_pass_rim_pace
+			dump_lofted = false
+			_lock_pass_hold(ctx, dump_launch_speed)
 		elif new_intent == INTENT_PASS:
 			pass_target_peer_id = best_pass_peer
 			# Every pass is a paced wrister: distance-adaptive launch speed, soft for
 			# a close feed and harder (still catchable) for a long one, capped at
-			# what its load can carry.
+			# what its load can carry from the pocket the search priced it from.
 			var receiver: SkaterNetworkState = ctx.snapshot.skater_states.get(best_pass_peer)
 			if receiver != null:
 				# Receiver-relative launch at the pace the search priced: harder onto
@@ -748,32 +872,24 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 				var pass_dir: Vector3 = to_receiver.normalized()
 				pass_target_speed = AIPuckLane.pass_launch_speed(
 						puck_now.distance_to(receiver.position),
-						_field.pass_launch_cap(ctx, pass_dir,
-								ctx.snapshot.skater_states[ctx.peer_id].facing),
+						ctx.self_wrister_shot_speed * _pass.best_hold_cap,
 						ctx.pass_speed_scale * _phase_best_pass_frac, receiver.velocity, pass_dir)
 			else:
 				pass_target_speed = AIPuckLane.PASS_SPEED_M_S * ctx.pass_speed_scale
 			# A saucer's launch is capped at the receivability bound for the
-			# distance — a flip still airborne at the tape flies over the
-			# receiver's grounded blade — even after the receiver-relative solve.
+			# distance to where his stick takes it — a flip still airborne at the
+			# tape flies over the receiver's grounded blade — even after the
+			# receiver-relative solve.
 			pass_should_saucer = best_pass_saucer
 			if best_pass_saucer and receiver != null:
 				pass_target_speed = clampf(
 						AIPuckLane.saucer_max_launch_speed(
-								puck_now.distance_to(receiver.position)),
+								puck_now.distance_to(receiver.position)
+								- AICarrierPassSearch.receiver_gate_m(
+										ctx.caps_by_peer.get(best_pass_peer))),
 						AIPuckLane.SOFTEST_FEED_M_S,
 						pass_target_speed)
-		elif new_intent == INTENT_SHOOT and _shot_sample_is_tip:
-			# TIP rip at the net centre — the line the tipper's reactive mode
-			# steps onto (AIRoleFinisher._try_reactive_decision). Flat keeps the
-			# puck on the blade plane; full pace keeps the arrival above the
-			# deflect threshold so contact redirects instead of catching.
-			shot_loft_level = ShotMechanics.ELEVATION_FLAT
-			shot_aim_point = Vector3(
-					attacking_goal.x, 0.0, attacking_goal.z)
-			shot_power_t = 1.0
-			shot_hold_offset = shoot_now_hold
-			shot_hold_share = _shot_sample_share
+			_lock_pass_hold(ctx, pass_target_speed)
 		elif new_intent == INTENT_SHOOT:
 			# Aim and loft are the shot field's pick the holds were solved toward
 			# (_pick_fire_phase); at a net with no keeper replicated, flat at the
@@ -802,6 +918,32 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 		new_intent = INTENT_CARRY
 
 	intended_action = new_intent
+	if new_intent != INTENT_DUMP:
+		_dumping_in = false
+
+
+# The committed pass's hold: the pocket the search priced it from (so the carry
+# resting the puck there for it is where the press holds it), and the share of
+# `pace` it waits for, no more than the pocket carries.
+func _lock_pass_hold(ctx: RoleContext, pace: float) -> void:
+	pass_hold_offset = pass_now_hold
+	pass_hold_share = 0.0 if pass_now_hold == Vector3.ZERO else minf(
+			pace / maxf(ctx.self_wrister_shot_speed, 0.001), _pass.best_hold_cap)
+
+
+# The committed dump-in's hold: where it leaves from for its bearing `dir` and
+# pace, as its search priced it (AICarrierDumpSearch).
+func _lock_dump_hold(ctx: RoleContext, dir: Vector3, pace: float) -> void:
+	var self_state: SkaterNetworkState = ctx.snapshot.skater_states[ctx.peer_id]
+	var puck: Vector3 = ctx.self_pos if ctx.snapshot.puck_state == null \
+			else ctx.snapshot.puck_state.position
+	_field.holds.configure_from(ctx)
+	_field.holds.solve_pass(Vector2(dir.x, dir.z),
+			Vector2(puck.x - ctx.self_pos.x, puck.z - ctx.self_pos.z),
+			Vector2(ctx.self_velocity.x, ctx.self_velocity.z), self_state.facing,
+			pace / maxf(ctx.self_wrister_shot_speed, 0.001))
+	pass_hold_offset = Vector3(_field.holds.pass_from.x, 0.0, _field.holds.pass_from.y)
+	pass_hold_share = _field.holds.pass_share
 
 
 # Refills the directional protect-opponent triple from the full opponent lists,

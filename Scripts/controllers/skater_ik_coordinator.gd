@@ -20,6 +20,9 @@ const State = SkaterStateMachine.State
 const _OPEN_ICE_MARGIN_M: float = 0.05
 # Seconds the stride's pump takes to hand the drawn hand to a shot and back.
 const PUMP_HANDOFF_S: float = 0.15
+# Times the goalie is resolved again against the arm rebuilt for a clamped
+# blade: each rebuild turns the toe, so the hold settles over a few.
+const GOALIE_SETTLE_PASSES: int = 4
 
 # ── References ────────────────────────────────────────────────────────────────
 var _skater: Skater = null
@@ -66,6 +69,12 @@ var _bh_release_vel: float = 0.0
 var _held_free_hand := Vector3.ZERO
 var _held_free_weight: float = 0.0
 var _pump_hold: float = 1.0
+# The drawn top hand's swing round the blade that holds the drawn shaft out of
+# the body (_shaft_clearance; UpperBody's frame), its rate, and the legs' joints
+# it reads.
+var _clear_offset := Vector3.ZERO
+var _clear_vel := Vector3.ZERO
+var _leg_joints := PackedVector3Array()
 
 # ── Cached Solver Objects ─────────────────────────────────────────────────────
 # The IK configs read only controller @exports, which change exclusively in
@@ -94,6 +103,27 @@ var _native_top: RefCounted = null
 var _native_dangle: RefCounted = null
 # The tie state the dangle config was last synced for (the blade cap follows it).
 var _dangle_synced_tied: bool = false
+# The whole blade pass in C++ (null = extension absent or stale: the GDScript
+# below runs). It drives the two kernels above, so they keep one state between
+# the paths. native_pass_enabled routes round it for the parity test.
+var _native_pass: RefCounted = null
+var native_pass_enabled: bool = true
+var _pass_scalars := PackedFloat64Array()
+var _pass_vectors := PackedVector3Array()
+var _no_goalies := PackedFloat32Array()
+# NativeBladePass.run's inputs, by index (its Scalar and Vec enums).
+enum PassS {
+	DELTA, HOLD_BLADE, HOLD_SEAT, HAS_PUCK, LEFT_HANDED, WRISTER_AIM, TRUNK_FOLD,
+	ADDRESS, FOREHAND_FACTOR, TRANSIT_FACTOR, LIFT_BLEND, COMMIT_BLEND, GRIP_CHOKE,
+	CHECK_LEAD, HAS_PUCK_NODE, PURPOSE_RIM, BLADE_LENGTH, CARRY_BLADE_OFFSET,
+	CARRY_TRANSIT_LIFT, WALL_SQUEEZE_THRESHOLD, WALL_PIN_INWARD_BIAS, BOTTOM_REACH,
+	GLOVE_SPACING, HAS_NET_ANCHOR, REACH_PURPOSE, CHEST_FOLD, CARRY_FLOOR, HAND_FORWARD,
+	COUNT,
+}
+enum PassV {
+	TARGET, SHOULDER, BOTTOM_SHOULDER, BLADE_MARKER, BLADE_FORWARD, PREV_CONTACT,
+	PUCK_POS, PUCK_VEL, VELOCITY, UB_ROTATION, LAST_TARGET, NET_ANCHOR, COUNT,
+}
 
 func setup(skater: Skater, controller: SkaterController,
 		skating: SkaterSkatingCoordinator) -> void:
@@ -103,17 +133,29 @@ func setup(skater: Skater, controller: SkaterController,
 	if ClassDB.class_exists(&"NativeTopHandIK"):
 		_native_top = ClassDB.instantiate(&"NativeTopHandIK")
 		# Stale-binary guard, one level finer than NativeKernels' class census:
-		# two_hand_reach is the newest thing ADDED to an existing kernel, so a
-		# binary predating it still registers the class and passes that check. Fall
-		# back to GDScript, which is slower and correct, rather than call a method
-		# the binary does not have.
-		if not _native_top.has_method(&"two_hand_reach"):
-			push_warning("NativeTopHandIK predates two_hand_reach — "
+		# the forehand floor (set_hand_forward) is the newest thing ADDED to an
+		# existing kernel, so a binary predating it still registers the class and
+		# passes that check. Fall back to GDScript, which is slower and correct,
+		# rather than solve without it.
+		if not _native_top.has_method(&"set_hand_forward"):
+			push_warning("NativeTopHandIK predates the forehand floor — "
 					+ "using the GDScript solver. Rebuild native/ (bash native/build.sh).")
 			_native_top = null
 	if ClassDB.class_exists(&"NativeBladeDangle"):
 		_native_dangle = ClassDB.instantiate(&"NativeBladeDangle")
 		_sync_dangle_config()
+	if _native_top != null and _native_dangle != null and ClassDB.class_exists(&"NativeBladePass"):
+		_native_pass = ClassDB.instantiate(&"NativeBladePass")
+		_native_pass.bind(_native_top, _native_dangle)
+		_native_pass.set_rink(GameRules.INNER_HALF_WIDTH, GameRules.INNER_HALF_LENGTH,
+				GameRules.INNER_CORNER_RADIUS, GameRules.CORNER_CENTER_X, GameRules.CORNER_CENTER_Z)
+		_native_pass.set_net(GameRules.GOAL_LINE_Z, GameRules.NET_HALF_WIDTH,
+				GameRules.NET_POST_RADIUS, GameRules.NET_DEPTH, GameRules.NET_TOP_DEPTH,
+				GameRules.NET_HEIGHT, GameRules.NET_BACK_HALF_WIDTH, GameRules.NET_CROWN_HALF_WIDTH,
+				GameRules.NET_MOUTH_CORNER_RADIUS, GameRules.NET_BLADE_MESH_GIVE)
+		_pass_scalars.resize(PassS.COUNT)
+		_pass_vectors.resize(PassV.COUNT)
+		_sync_pass_config()
 
 # Drop the cached configs so the next solve rebuilds them from the controller
 # exports. Called by SkaterController.apply_attributes (stick length, ROM, and
@@ -123,6 +165,47 @@ func invalidate_configs() -> void:
 	_cached_bottom_cfg = null
 	_purpose_rim = -1.0
 	_sync_dangle_config()
+	_sync_pass_config()
+
+
+# The tunables the native pass reads, on the moment they change (apply_attributes).
+# A binary older than one of them takes the GDScript path.
+func _sync_pass_config() -> void:
+	if _native_pass == null:
+		return
+	var c: SkaterController = _controller
+	var ok: bool = _native_pass.configure({
+		"hand_rest_y": c.hand_rest_y, "hand_y_max": c.hand_y_max,
+		"faceoff_center_hand_rise": c.faceoff_center_hand_rise,
+		"faceoff_center_lean_deg": c.faceoff_center_lean_deg,
+		"stick_length": c.stick_length, "rom_forward_reach_max": c.rom_forward_reach_max,
+		"rom_forehand_reach_max": c.rom_forehand_reach_max,
+		"rom_backhand_reach_max": c.rom_backhand_reach_max,
+		"rom_forehand_angle_max": deg_to_rad(c.rom_forehand_angle_max_deg),
+		"rom_backhand_angle_max": deg_to_rad(c.rom_backhand_angle_max_deg),
+		"net_blade_half_thickness": c.net_blade_half_thickness,
+		"blade_height": c.blade_height, "blade_lift_height": c.blade_lift_height,
+		"hit_commit_blade_lift_m": c.hit_commit_blade_lift_m,
+		"bh_release_angle_deg": c.bh_release_angle_deg,
+		"reach_purpose_lookahead_s": c.reach_purpose_lookahead_s,
+		"reach_purpose_near_m": c.reach_purpose_near_m,
+		"reach_purpose_far_m": c.reach_purpose_far_m,
+		"hit_commit_hand_local_x": c.hit_commit_hand_local_x,
+		"hit_commit_hand_local_y": c.hit_commit_hand_local_y,
+		"hit_commit_hand_local_z": c.hit_commit_hand_local_z,
+		"hit_commit_blade_bearing_x": c.hit_commit_blade_bearing_x,
+		"hit_commit_blade_bearing_z": c.hit_commit_blade_bearing_z,
+		"hit_commit_blade_sweep": c.hit_commit_blade_sweep,
+		"bottom_hand_grip_fraction": c.bottom_hand_grip_fraction,
+		"faceoff_center_grip_fraction": c.faceoff_center_grip_fraction,
+		"twist_limit": SkaterSpineRig.TWIST_LIMIT,
+		"top_hand_forward_none_m": c.top_hand_forward_none_m,
+		"top_hand_forward_full_m": c.top_hand_forward_full_m,
+	})
+	if not ok:
+		push_warning("NativeBladePass lacks a tunable — using the GDScript blade pass. "
+				+ "Rebuild native/ (bash native/build.sh).")
+		_native_pass = null
 
 # The dangle tunables are plain controller @exports (not part of the cached IK
 # configs), so they sync here — covered by the same invalidate_configs moment
@@ -160,15 +243,21 @@ func reset_blade_smoothing() -> void:
 # choreographed the blade directly, so without re-seeding the blade would snap
 # back to that stale spot and dangle forward again. Seeding it to the FT's final
 # blade lets the normal dangle continue from where the finish left it.
-func seed_blade_smoothing(world_pos: Vector3) -> void:
+# `velocity`: the dangle's own, for a seed taken mid-dangle (a reconcile's, from
+# the ack); a follow-through's finish choreographed the blade directly, so the
+# dangle resumes from rest there.
+func seed_blade_smoothing(world_pos: Vector3, velocity: Vector3 = Vector3.ZERO) -> void:
 	_smoothed_blade_world = Vector3(world_pos.x, 0.0, world_pos.z)
 	_prev_skater_pos = Vector3(_skater.global_position.x, 0.0, _skater.global_position.z)
 	_smoothed_blade_initialized = true
-	# The follow-through choreographed the blade directly; the dangle resumes
-	# from rest at the seeded position.
-	_blade_dangle_vel = Vector3.ZERO
+	_blade_dangle_vel = velocity
 	if _native_dangle != null:
-		_native_dangle.seed(world_pos, _skater.global_position)
+		_native_dangle.seed_moving(world_pos, _skater.global_position, velocity)
+
+
+# The dangle's velocity after the last solve — what a reconcile seeds back from.
+func blade_dangle_velocity() -> Vector3:
+	return _native_dangle.get_dangle_velocity() if _native_dangle != null else _blade_dangle_vel
 
 # ── Blade From Mouse (Top-Hand IK) ────────────────────────────────────────────
 # Input is treated as a desired blade position. The top hand is solved as a
@@ -183,6 +272,12 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 # (a slapshot's set-up taking the puck to the strike spot).
 func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = false,
 		hold_seat: bool = false) -> void:
+	# The pass drives the two kernels it was bound to; with either taken away it
+	# would keep driving the stale one.
+	if _native_pass != null and native_pass_enabled and _native_top != null \
+			and _native_dangle != null:
+		_native_blade_toward(target_world, delta, hold_blade, hold_seat)
+		return
 	var mouse_world: Vector3 = target_world
 	mouse_world.y = 0.0
 
@@ -224,6 +319,8 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 		target_blade_world.y = 0.0
 		last_target_blade_world = target_blade_world
 	else:
+		if _controller.has_puck:
+			mouse_world = _held_out(mouse_world)
 		var shoulder: Vector3 = arm_shoulder()
 		var shoulder_world: Vector3 = _skater.upper_body_to_global(shoulder)
 		shoulder_world.y = 0.0
@@ -451,12 +548,11 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 					back = -_skater.global_transform.basis.z
 				_controller._do_release(back.normalized(), 3.0)
 
-	# Goalie body clamp (strips puck on contact) + the net.
+	# The goalie, then the net, both pure collision: neither strips.
 	# All work in world space; convert back once at the end.
 	var heel_world: Vector3 = _skater.upper_body_to_global(wall_clamped)
-	var clamped_heel: Vector3 = heel_world
-	if _controller.has_puck:
-		clamped_heel = clamp_blade_from_goalies(clamped_heel)
+	var clamped_heel: Vector3 = heel_world + resolve_blade_against_goalies(heel_world,
+			_skater.upper_body_to_global(hand_local))
 	# The net is pure collision here — no strip, no legality. The blade stops on
 	# iron and sinks into twine; whether the PUCK survives that is the puck's own
 	# collision to resolve (SkaterController._collide_pinned_puck_with_net), which
@@ -476,28 +572,96 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 	# Skipped when nothing moved: the reconstruction is an exact inverse of the
 	# solve there, so it would only redo work.
 	if wall_clamped != intended_blade:
-		var tilt: Basis = _level_tilt()
-		var clamped_level: Vector3 = tilt * wall_clamped
-		hand_local = tilt.transposed() * TopHandIK.hand_for_clamped_blade(
-				tilt * arm_shoulder(),
-				Vector2(clamped_level.x, clamped_level.z),
-				clamped_level.y,
-				blade_side_sign,
-				_level_config((tilt * _trunk_shoulder()).y, blade_y_local(), INF))
-		# The rebuild bounds the ARM but leaves stick length free, so a clamp that
-		# puts the blade past arm + stick has nowhere to put the difference except
-		# the shaft — which is a stretched stick, the one thing a rigid object
-		# cannot do. Reaching in through the open mouth is where that bites here:
-		# the reach limit deliberately leaves the mouth unbounded (net-front play
-		# depends on it), so the twine is free to move the blade a long way. Inert
-		# whenever the blade is reachable, which is every ordinary tick.
-		var rigid: TopHandIK.Result = rigid_stick(
-				hand_local, wall_clamped, blade_side_sign)
-		hand_local = rigid.hand
-		wall_clamped = rigid.blade
+		var arm: TopHandIK.Result = _arm_for_clamped_blade(wall_clamped, blade_side_sign)
+		# The rebuilt hand turns the blade along its new shaft, and the toe with it,
+		# which can swing it into the goalie the first resolve held it off.
+		for _settle: int in GOALIE_SETTLE_PASSES:
+			var settled_heel: Vector3 = _skater.upper_body_to_global(arm.blade)
+			var more: Vector3 = resolve_blade_against_goalies(settled_heel,
+					_skater.upper_body_to_global(arm.hand))
+			if more == Vector3.ZERO:
+				break
+			arm = _arm_for_clamped_blade(_skater.upper_body_to_local(settled_heel + more),
+					blade_side_sign)
+		hand_local = arm.hand
+		wall_clamped = arm.blade
 
 	_skater.set_top_hand_position(hand_local)
 	_skater.set_blade_position(wall_clamped)
+
+# apply_blade_toward in C++ (NativeBladePass): its inputs gathered once, its
+# releases fired where the GDScript fires them (mid-pass, each resumed with
+# the live has_puck), the reach target and wall normal written before them and
+# the markers after, as there.
+func _native_blade_toward(target_world: Vector3, delta: float, hold_blade: bool,
+		hold_seat: bool) -> void:
+	if _skater.stick_tied != _dangle_synced_tied:
+		_sync_dangle_config()
+	var has_puck: bool = _controller.has_puck
+	var puck: Puck = _controller.puck
+	var s: PackedFloat64Array = _pass_scalars
+	s[PassS.DELTA] = delta
+	s[PassS.HOLD_BLADE] = 1.0 if hold_blade else 0.0
+	s[PassS.HOLD_SEAT] = 1.0 if hold_seat else 0.0
+	s[PassS.HAS_PUCK] = 1.0 if has_puck else 0.0
+	s[PassS.LEFT_HANDED] = 1.0 if _skater.is_left_handed else 0.0
+	s[PassS.WRISTER_AIM] = 1.0 if _controller.get_shot_state() == State.WRISTER_AIM else 0.0
+	s[PassS.TRUNK_FOLD] = _skater.trunk_fold()
+	s[PassS.ADDRESS] = _address_blend()
+	s[PassS.FOREHAND_FACTOR] = _skater.get_carry_forehand_factor() if has_puck else 0.0
+	s[PassS.TRANSIT_FACTOR] = _skater.get_carry_transit_factor() \
+			if has_puck and _skater.carry_transit_lift > 0.0 else 0.0
+	s[PassS.LIFT_BLEND] = _skater.get_blade_lift_blend()
+	s[PassS.COMMIT_BLEND] = _skater.get_commit_lift_blend()
+	s[PassS.GRIP_CHOKE] = _skater.grip_choke()
+	s[PassS.CHECK_LEAD] = _skater.get_check_lead()
+	s[PassS.HAS_PUCK_NODE] = 1.0 if puck != null else 0.0
+	if puck != null and not has_puck and _purpose_rim < 0.0:
+		_purpose_rim = full_blade_reach()
+	s[PassS.PURPOSE_RIM] = _purpose_rim
+	s[PassS.BLADE_LENGTH] = _skater.blade_length
+	s[PassS.CARRY_BLADE_OFFSET] = _skater.carry_blade_offset
+	s[PassS.CARRY_TRANSIT_LIFT] = _skater.carry_transit_lift
+	s[PassS.WALL_SQUEEZE_THRESHOLD] = _skater.wall_squeeze_threshold
+	s[PassS.WALL_PIN_INWARD_BIAS] = _skater.wall_pin_inward_bias
+	s[PassS.BOTTOM_REACH] = (_skater.upper_arm_length + _skater.forearm_length) \
+			* _skater.arm_working_extension + _skater.shoulder_reach_m
+	s[PassS.GLOVE_SPACING] = _glove_spacing()
+	s[PassS.HAS_NET_ANCHOR] = 1.0 if _has_net_side_anchor else 0.0
+	s[PassS.REACH_PURPOSE] = reach_purpose
+	s[PassS.CHEST_FOLD] = chest_fold()
+	s[PassS.CARRY_FLOOR] = carry_reach_floor() if has_puck else 0.0
+	s[PassS.HAND_FORWARD] = _hand_forward()
+	var v: PackedVector3Array = _pass_vectors
+	v[PassV.TARGET] = target_world
+	v[PassV.SHOULDER] = _skater.shoulder.position
+	v[PassV.BOTTOM_SHOULDER] = _skater.bottom_shoulder.position
+	v[PassV.BLADE_MARKER] = _skater.get_blade_position()
+	v[PassV.BLADE_FORWARD] = -_skater.blade.global_transform.basis.z
+	v[PassV.PREV_CONTACT] = _skater.get_prev_blade_contact_global()
+	if puck != null:
+		v[PassV.PUCK_POS] = puck.global_position
+		v[PassV.PUCK_VEL] = puck.linear_velocity
+	v[PassV.VELOCITY] = _skater.velocity
+	v[PassV.UB_ROTATION] = _skater.upper_body.rotation
+	v[PassV.LAST_TARGET] = last_target_blade_world
+	v[PassV.NET_ANCHOR] = _net_side_anchor
+	_native_pass.run(_skater.global_transform, _skater.upper_body.global_transform,
+			s, v, _goalie_boxes())
+	if _native_pass.get_skipped():
+		return
+	last_target_blade_world = _native_pass.get_last_target()
+	reach_purpose = _native_pass.get_reach_purpose()
+	_smoothed_blade_world = _native_pass.get_smoothed_blade()
+	_smoothed_blade_initialized = true
+	_skater.set_blade_wall_normal(_native_pass.get_wall_normal())
+	while _native_pass.get_pending():
+		_controller._do_release(_native_pass.get_pending_dir(), _native_pass.get_pending_power())
+		_native_pass.resume(_controller.has_puck)
+	_net_side_anchor = _native_pass.get_net_anchor()
+	_has_net_side_anchor = _native_pass.get_has_net_anchor()
+	_skater.set_top_hand_position(_native_pass.get_hand())
+	_skater.set_blade_position(_native_pass.get_blade())
 
 # ── Board Reach Limit ─────────────────────────────────────────────────────────
 # How far the blade may sit from the shoulder along the aim toward
@@ -540,6 +704,27 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 			NetGeometry.ray_to_net(
 					origin, unit, _controller.blade_height,
 					_controller.net_blade_half_thickness))
+
+# A carrier's cursor (on the ice) no closer in than carry_reach_floor, measured
+# across the ice in the facing's frame: the chest's pitches with a lean, and
+# reads a cursor at his skates as one well out.
+func _held_out(cursor_world: Vector3) -> Vector3:
+	var facing: Transform3D = _skater.global_transform
+	var local: Vector3 = facing.affine_inverse() * cursor_world
+	var held: Vector2 = CarryPostureRules.held_out(Vector2(local.x, local.z),
+			carry_reach_floor())
+	var world: Vector3 = facing * Vector3(held.x, local.y, held.y)
+	world.y = 0.0
+	return world
+
+
+# How close in a carried puck comes (m off his centre), from his skating fold:
+# tick state on every peer, so the floor needs no wire field.
+func carry_reach_floor() -> float:
+	var folded: float = clampf(-_skater.trunk_fold()
+			/ deg_to_rad(_controller.velocity_lean_forward_max_deg), 0.0, 1.0)
+	return _controller.carry_reach_min_m + _controller.carry_reach_fold_m * folded
+
 
 # The solve places the Blade marker, the heel, but the blade plays the puck at
 # mid-blade (Skater.get_blade_contact_global, where a carried puck pins and every
@@ -606,9 +791,9 @@ func _solve_top_hand(desired_blade_xz: Vector2, blade_side_sign: float,
 # the shaft (TopHandIK.two_hand_reach), in the solve's level frame.
 func _two_hand_reach(tilt: Basis, shoulder: Vector3, target_xz: Vector2,
 		blade_side_sign: float, cfg: TopHandIK.Config) -> float:
-	var bottom: Vector3 = tilt * SkaterSpineRig.shoulder_in_frame(
-			_skater.bottom_shoulder.position, _skater.upper_body.rotation, 0.0,
-			_skater.trunk_fold())
+	var bottom: Vector3 = tilt * CarryPostureRules.folded_shoulder(
+			SkaterSpineRig.shoulder_in_frame(_skater.bottom_shoulder.position,
+			_skater.upper_body.rotation, 0.0, _skater.trunk_fold()), chest_fold())
 	var reach: float = (_skater.upper_arm_length + _skater.forearm_length) \
 			* _skater.arm_working_extension + _skater.shoulder_reach_m
 	if _native_top != null:
@@ -661,7 +846,8 @@ func _reach_purpose(skater_pos: Vector3) -> float:
 func full_blade_reach() -> float:
 	var c: SkaterController = _controller
 	return TopHandIK.full_reach(_skater.shoulder.position,
-			deg_to_rad(c.velocity_lean_forward_max_deg + c.upper_body_lean_forward_max_deg),
+			deg_to_rad(maxf(c.velocity_lean_forward_max_deg, c.carry_fold_deg)
+					+ c.upper_body_lean_forward_max_deg),
 			GameRules.FACEOFF_SPAWN_HEIGHT + _skater.upper_body.position.y,
 			_skater.shoulder.position.y - c.hand_rest_y, c.rom_forward_reach_max, c.stick_length,
 			c.blade_height, _skater.blade_length * 0.5, GameRules.FACEOFF_SPAWN_HEIGHT)
@@ -728,10 +914,25 @@ func _level_config(hang_y: float, blade_y: float, max_blade_reach: float) -> Top
 # crosses the release bands in a tick or two and the hand jumped ~0.4 m between
 # shaft and rest. A let-go hand swings with the stride.
 const BH_GRIP_SLIDE_BAND: float = 0.08
+# The drawn shaft held out of the body: where along it from the top hand it is
+# measured (below the top fist, which sits on it, to above the blade, which the
+# hand's swing barely moves), at how many points, over how many passes, how
+# far clear of the pants and the jersey (m), the swing's most (m) and its
+# spring (rad/s).
+const _CLEAR_FROM: float = 0.12
+const _CLEAR_TO: float = 0.85
+const _CLEAR_SAMPLES: int = 10
+const _CLEAR_PASSES: int = 4
+const _CLEAR_MARGIN_M: float = 0.01
+const _CLEAR_MAX_M: float = 0.4
+const _CLEAR_OMEGA: float = 12.0
+const _SHAFT_RADIUS_M: float = 0.015
 
 func update_bottom_hand(delta: float = -1.0) -> void:
 	var blade_local: Vector3 = _skater.drawn_blade().origin
-	_skater.set_hand_pump(_stride_pump(delta))
+	var pump: Vector3 = _stride_pump(delta)
+	_skater.set_hand_pump(pump)
+	_skater.set_hand_pump(pump + _shaft_clearance(_skater.drawn_top_hand(), blade_local, delta))
 	var hand_local: Vector3 = _skater.drawn_top_hand()
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length
@@ -804,11 +1005,105 @@ func _stride_pump(delta: float) -> Vector3:
 			* smoothstep(0.0, 1.0, _pump_hold)
 	return _controller.stride_hand_pump_m * (sin(_skating.stride_phase) * drive)
 
+# The drawn top hand (`hand_local`, UpperBody's frame, the pump on it) swung
+# round the drawn blade, the stick keeping its length, until the drawn shaft is
+# out of the jersey and the legs: the offset that takes it there, eased on a critically
+# damped spring (`delta` below 0 lands at once). Mesh only: the markers, the
+# blade and the puck stay where the tick put them. Each pass moves the hand by
+# what lifts the deepest point clear, more the nearer that point is to the
+# blade, the pivot.
+func _shaft_clearance(hand_local: Vector3, blade_local: Vector3, delta: float) -> Vector3:
+	var ub: Transform3D = _skater.drawn_upper_body()
+	var blade: Vector3 = ub * blade_local
+	var start: Vector3 = ub * hand_local
+	var hand: Vector3 = start
+	var length: float = hand.distance_to(blade)
+	if length > 0.001:
+		_skater.drawn_leg_joints(_leg_joints)
+		var girth: Vector2 = _skater.leg_girth()
+		for _pass: int in _CLEAR_PASSES:
+			var worst: float = 0.0
+			var push := Vector3.ZERO
+			var at: float = 0.0
+			for k: int in _CLEAR_SAMPLES:
+				var t: float = lerpf(_CLEAR_FROM, _CLEAR_TO, float(k) / float(_CLEAR_SAMPLES - 1))
+				var out: Vector4 = _into_body(hand.lerp(blade, t), girth)
+				if out.w > worst:
+					worst = out.w
+					push = Vector3(out.x, out.y, out.z)
+					at = t
+			if worst <= 0.0:
+				break
+			hand += push * (worst / (1.0 - at))
+			hand = blade + (hand - blade).normalized() * length
+	var target: Vector3 = (ub.affine_inverse() * hand - ub.affine_inverse() * start) \
+			.limit_length(_CLEAR_MAX_M)
+	# The spring carries its state frame to frame, so one non-finite input would
+	# hold the drawn stick and both arms at NaN, undrawn, for the rest of the
+	# match. Such a frame holds the last offset; a state already poisoned lands.
+	if not target.is_finite():
+		return _clear_offset if _clear_offset.is_finite() else Vector3.ZERO
+	if delta < 0.0 or not (_clear_offset.is_finite() and _clear_vel.is_finite()):
+		_clear_offset = target
+		_clear_vel = Vector3.ZERO
+	elif delta > 0.0:
+		var x: Vector3 = _clear_offset - target
+		var decay: float = exp(-_CLEAR_OMEGA * delta)
+		var kick: Vector3 = _clear_vel + x * _CLEAR_OMEGA
+		_clear_offset = target + (x + kick * delta) * decay
+		_clear_vel = (_clear_vel - kick * (_CLEAR_OMEGA * delta)) * decay
+	return _clear_offset
+
+
+# How deep `point` (the skeleton's space) sits in the jersey or the legs past
+# the shaft's thickness and the margin (w, m), and the way out (xyz): the
+# deepest of the jersey and each thigh and shin.
+func _into_body(point: Vector3, girth: Vector2) -> Vector4:
+	var reach: float = _SHAFT_RADIUS_M + _CLEAR_MARGIN_M
+	var clear: float = _skater.torso_clearance(point)
+	var best := Vector4(0.0, 0.0, 0.0, reach - clear)
+	if best.w > 0.0:
+		var e: float = 0.01
+		var grad := Vector3(
+				_skater.torso_clearance(point + Vector3(e, 0.0, 0.0)) - clear,
+				_skater.torso_clearance(point + Vector3(0.0, e, 0.0)) - clear,
+				_skater.torso_clearance(point + Vector3(0.0, 0.0, e)) - clear)
+		grad = grad.normalized() if grad.length_squared() > 1e-12 else Vector3.BACK
+		best = Vector4(grad.x, grad.y, grad.z, best.w)
+	for leg: int in 2:
+		for seg: int in 2:
+			var a: Vector3 = _leg_joints[leg * 3 + seg]
+			var b: Vector3 = _leg_joints[leg * 3 + seg + 1]
+			var q: Vector3 = Geometry3D.get_closest_point_to_segment(point, a, b)
+			var off: Vector3 = point - q
+			var d: float = off.length()
+			var depth: float = (girth.x if seg == 0 else girth.y) + reach - d
+			if depth > best.w:
+				var n: Vector3 = off / d if d > 1e-5 else Vector3.BACK
+				best = Vector4(n.x, n.y, n.z, depth)
+	return best
+
+
 # ── The shoulder the top hand works from ───────────────────────────────────────
 # Where the top arm is drawn from — the trunk's shoulder, then the faceoff
-# address's fold — from tick state alone (Scripts/controllers/CLAUDE.md).
+# address's fold or the chest's over the stick — from tick state alone
+# (Scripts/controllers/CLAUDE.md).
 func arm_shoulder() -> Vector3:
-	return address_shoulder(_trunk_shoulder())
+	return CarryPostureRules.folded_shoulder(address_shoulder(_trunk_shoulder()), chest_fold())
+
+
+# How far the chest folds over the stick (CarryPostureRules), from the blade
+# marker where the tick has it and the posture's own fold; the centre's address
+# folds it instead, and a shot or the block, which pose their own stick, not at
+# all. The gait draws the same fold (GaitCarryLayer), and the arms root where
+# it puts the shoulders.
+func chest_fold() -> float:
+	if _skater == null or not _controller.has_puck or SkaterPoseBridge.owner_of(_controller.get_shot_state() as State) \
+			!= SkaterPoseBridge.Owner.TRACKED:
+		return 0.0
+	var blade: Vector3 = _skater.upper_body.transform * _skater.blade.position
+	return CarryPostureRules.fold(Vector2(blade.x, blade.z), _skater.trunk_fold(),
+			deg_to_rad(_controller.carry_fold_deg)) * (1.0 - _address_blend())
 
 
 func _trunk_shoulder() -> Vector3:
@@ -929,6 +1224,26 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 #
 # The tracked path does not need it — it authors its pose through TopHandIK, which
 # is rigid by construction, and rebuilds through the exact inverse.
+# The arm rebuilt to reach a blade a clamp put at `blade_local`. The rebuild
+# bounds the ARM but leaves stick length free, so a clamp that puts the blade
+# past arm + stick has nowhere to put the difference except the shaft — a
+# stretched stick, the one thing a rigid object cannot do. Reaching in through
+# the open mouth is where that bites: the reach limit deliberately leaves the
+# mouth unbounded (net-front play depends on it), so the twine is free to move
+# the blade a long way. The rigid pass is inert whenever the blade is reachable.
+# Returns the shared rigid_stick Result.
+func _arm_for_clamped_blade(blade_local: Vector3, blade_side_sign: float) -> TopHandIK.Result:
+	var tilt: Basis = _level_tilt()
+	var clamped_level: Vector3 = tilt * blade_local
+	var hand_local: Vector3 = tilt.transposed() * TopHandIK.hand_for_clamped_blade(
+			tilt * arm_shoulder(),
+			Vector2(clamped_level.x, clamped_level.z),
+			clamped_level.y,
+			blade_side_sign,
+			_level_config((tilt * _trunk_shoulder()).y, blade_y_local(), INF))
+	return rigid_stick(hand_local, blade_local, blade_side_sign)
+
+
 func rigid_stick(hand_local: Vector3, blade_local: Vector3,
 		blade_side_sign: float) -> TopHandIK.Result:
 	TopHandIK.enforce_rigid_stick(
@@ -972,64 +1287,29 @@ func _blade_toe_for(heel_world: Vector3) -> Vector3:
 		return heel_world
 	return heel_world + forward.normalized() * _skater.blade_length
 
-# ── Goalie Body / Butterfly Clamp ─────────────────────────────────────────────
-# Pushes blade_world out of every goalie's collision zone and strips the puck
-# on contact. Standing/RVH use an XZ cylinder; butterfly uses an oriented box
-# around the leg pads. Returns the adjusted world position.
-func clamp_blade_from_goalies(blade_world: Vector3) -> Vector3:
-	if not _controller._game_state.has_method("get_goalie_data"):
-		return blade_world
-	var goalie_data: Array[Dictionary] = _controller._game_state.get_goalie_data()
-	var result: Vector3 = blade_world
-	for data: Dictionary in goalie_data:
-		var gpos: Vector3 = data["position"]
-		if data["is_butterfly"]:
-			var prev: Vector3 = result
-			result = _clamp_blade_butterfly_box(result, gpos, data["rotation_y"])
-			if result != prev and _controller.has_puck:
-				break
-		else:
-			var to_blade := Vector2(result.x - gpos.x, result.z - gpos.z)
-			var dist: float = to_blade.length()
-			if dist < _controller.goalie_block_radius:
-				var push_dir: Vector2 = to_blade.normalized() if dist > 0.001 else Vector2(0.0, -sign(gpos.z) if gpos.z != 0.0 else 1.0)
-				result.x = gpos.x + push_dir.x * _controller.goalie_block_radius
-				result.z = gpos.z + push_dir.y * _controller.goalie_block_radius
-				if _controller.has_puck:
-					_controller._do_release(Vector3(push_dir.x, 0.0, push_dir.y), _controller.goalie_strip_power)
-					break
-	return result
+# ── The goalie ────────────────────────────────────────────────────────────────
+# The translation that holds the blade at `heel_world` out of every goalie's
+# gear (GoalieGearCollision): a wall it slides along, carrying or not, that
+# never strips. Swept from the blade's middle at the start of the tick. The
+# blade lies along the shaft from this tick's hand at `hand_world`, as
+# Skater.set_blade_position will turn it, not along last tick's facing: a stick
+# swept across him turns a long way in a tick, and its toe with it.
+func resolve_blade_against_goalies(heel_world: Vector3, hand_world: Vector3) -> Vector3:
+	var boxes: PackedFloat32Array = _goalie_boxes()
+	if boxes.is_empty():
+		return Vector3.ZERO
+	var along: Vector3 = heel_world - hand_world
+	along.y = 0.0
+	var toe: Vector3 = heel_world + along.normalized() * _skater.blade_length \
+			if along.length_squared() > 0.000001 else heel_world
+	return GoalieGearCollision.resolve(_skater.get_prev_blade_contact_global(), heel_world, toe,
+			_controller.net_blade_half_thickness, boxes)
 
-# Pushes blade_world out of the goalie's butterfly leg-pad box in goalie local XZ.
-# Strips the puck on contact. Returns the adjusted world position (unchanged if outside).
-func _clamp_blade_butterfly_box(blade_world: Vector3, gpos: Vector3, rot_y: float) -> Vector3:
-	var dx: float = blade_world.x - gpos.x
-	var dz: float = blade_world.z - gpos.z
-	var local_x: float = dx * cos(rot_y) + dz * sin(rot_y)
-	var local_z: float = -dx * sin(rot_y) + dz * cos(rot_y)
-	if abs(local_x) >= _controller.butterfly_pad_half_x or abs(local_z) >= _controller.butterfly_pad_half_z:
-		return blade_world
-	# Inside box — escape along shortest axis.
-	var ox: float = _controller.butterfly_pad_half_x - abs(local_x)
-	var oz: float = _controller.butterfly_pad_half_z - abs(local_z)
-	var escaped_local_x: float
-	var escaped_local_z: float
-	if ox < oz:
-		escaped_local_x = _controller.butterfly_pad_half_x * signf(local_x) if local_x != 0.0 else _controller.butterfly_pad_half_x
-		escaped_local_z = local_z
-	else:
-		escaped_local_x = local_x
-		escaped_local_z = _controller.butterfly_pad_half_z * signf(local_z) if local_z != 0.0 else _controller.butterfly_pad_half_z
-	var world_dx: float = escaped_local_x * cos(rot_y) - escaped_local_z * sin(rot_y)
-	var world_dz: float = escaped_local_x * sin(rot_y) + escaped_local_z * cos(rot_y)
-	var result: Vector3 = blade_world
-	result.x = gpos.x + world_dx
-	result.z = gpos.z + world_dz
-	if _controller.has_puck:
-		var escape := Vector2(world_dx - dx, world_dz - dz)
-		var push_dir: Vector2 = escape.normalized() if escape.length_squared() > 0.0001 else Vector2(world_dx, world_dz).normalized()
-		_controller._do_release(Vector3(push_dir.x, 0.0, push_dir.y), _controller.goalie_strip_power)
-	return result
+
+func _goalie_boxes() -> PackedFloat32Array:
+	if not _controller._game_state.has_method("get_goalie_boxes"):
+		return _no_goalies
+	return _controller._game_state.get_goalie_boxes()
 
 # ── Geometry Helpers ──────────────────────────────────────────────────────────
 # Converts the world-space blade_height to upper-body-local Y.
@@ -1120,12 +1400,28 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 	_cached_top_cfg.max_blade_reach = max_blade_reach
 	_cached_top_cfg.stick_length = solve_stick_length()
 	_cached_top_cfg.hand_y_max = _address_hand_ceiling()
+	_cached_top_cfg.hand_forward = _hand_forward()
+	_cached_top_cfg.hand_forward_none = _controller.top_hand_forward_none_m
+	_cached_top_cfg.hand_forward_full = _controller.top_hand_forward_full_m
 	if _native_top != null:
 		_native_top.blade_y = blade_y
 		_native_top.max_blade_reach = max_blade_reach
 		_native_top.stick_length = _cached_top_cfg.stick_length
 		_native_top.hand_y_max = _cached_top_cfg.hand_y_max
+		_native_top.hand_forward = _cached_top_cfg.hand_forward
+		_native_top.hand_forward_none = _cached_top_cfg.hand_forward_none
+		_native_top.hand_forward_full = _cached_top_cfg.hand_forward_full
 	return _cached_top_cfg
+
+# The forehand floor's strength (TopHandIK.Config.hand_forward): the centre's
+# address holds its own hands (its ceiling, its fold), and a shot or the block,
+# posing their own stick, keep the floorless solve.
+func _hand_forward() -> float:
+	if SkaterPoseBridge.owner_of(_controller.get_shot_state() as State) \
+			!= SkaterPoseBridge.Owner.TRACKED:
+		return 0.0
+	return _controller.top_hand_forward_m * (1.0 - _address_blend())
+
 
 func _bottom_hand_ik_config() -> BottomHandIK.Config:
 	if _cached_bottom_cfg == null:

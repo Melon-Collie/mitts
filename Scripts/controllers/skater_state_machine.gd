@@ -72,6 +72,14 @@ static func state_loads_one_timer(state: int) -> bool:
 	return state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
 			or state == State.ONE_TIMER_RETENTION
 
+# A shot or pass whose aim is being chosen or has just been committed: the
+# wrister's charge, the carried slapper's wind-up, and the one-timer's swing. The
+# puckless one-timer wind-up is not one — it is still waiting on the feed.
+static func state_aims_shot(state: int) -> bool:
+	return state == State.WRISTER_AIM \
+			or state == State.SLAPPER_CHARGE_WITH_PUCK \
+			or state == State.ONE_TIMER_RETENTION
+
 # Controller operations injected at setup. All methods that need @export params
 # or actor/puck references stay on SkaterController and are wired as Callables
 # so the state machine only owns transition logic.
@@ -330,7 +338,7 @@ func _enter_wrister_aim(skater: Skater, input: InputState) -> void:
 	# Pin the aim ORIGIN at stroke start (the puck's on-blade contact point, where
 	# the shot will fire from) for the positional-aim wrister — see
 	# SkaterAimingBehavior.wrister_origin_world. Anchoring here, before the blade
-	# sweeps, is what keeps origin→cursor stable through the stroke.
+	# addresses and the torso coils, keeps origin→cursor off the swinging blade.
 	var origin_world: Vector3 = skater.get_blade_contact_global()
 	# Skater position at the pin (XZ): what the frozen puck rides along from
 	# (WristerLoad).

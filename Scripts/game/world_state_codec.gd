@@ -7,7 +7,7 @@ extends RefCounted
 #
 # Two wire formats are defined here:
 #
-# 1. World state  (STATE_RATE = 60 Hz, unreliable_ordered) — single flat
+# 1. World state  (STATE_RATE = 45 Hz, unreliable_ordered) — single flat
 #    PackedByteArray, sized once and written at offsets (see encode_world_state):
 #      u16 ws_sequence, u32 host_capture_time (0.1ms units), u8 num_skaters
 #      [u32 peer_id, skater_bytes(58), u8 queue_depth] × num_skaters
@@ -15,8 +15,10 @@ extends RefCounted
 #      u8 num_goalies, [goalie_bytes(142)] × num_goalies
 #      u8 score0, u8 score1, u8 phase, u8 period, u16 time_remaining
 #
-#    Total for 6 players + 2 goalies: 689 bytes (10 players: 941) — stays in a
-#    single packet, well under Steam's ~1200-byte unreliable cap. This matters: Steam (unlike ENet)
+#    Total for 6 players + 2 goalies: 689 bytes (10 players: 941), plus
+#    NetworkManager's trailing carrier-event block (1 B idle, +17 B per event in
+#    the last second, up to 16). That is the raw layout every reader sees;
+#    NetworkManager compresses it for the wire (WirePacking, ~656 B at 10). This matters: Steam (unlike ENet)
 #    does NOT fragment unreliable messages, so an oversized snapshot would be
 #    dropped at send rather than split across datagrams.
 #
@@ -25,7 +27,7 @@ extends RefCounted
 #                      blade 3×s16@1cm, top_hand 3×s16@1cm,
 #                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
 #                      facing_angular_velocity s16@PI*10 rad/s, upper_body_angular_velocity s16@PI*10 rad/s,
-#                      last_processed_ts f32,
+#                      last_processed_ts u32@0.1ms,
 #                      flags u8 (shot_state[2:0]+elevation_level[4:3]+ghost[5]+blade_up[6]+stick_tied[7] v71),
 #                      shot_charge u8, stagger_timer u8@0.01s,
 #                      knockdown_timer u8@0.01s,
@@ -34,7 +36,8 @@ extends RefCounted
 #                      torso_lean 2×s16 + posture_lean s16, all @π/32767 rad (v62),
 #                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63),
 #                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v70),
-#                      body lock u8 (pin_role[1:0] BoardPinRules.Role (v74) + diving[2] (v75)),
+#                      body lock u8 (pin_role[1:0] BoardPinRules.Role (v74) + diving[2] (v75)
+#                                    + slapshot_pinned[3] (v91)),
 #                      pin_strength u8@1/255 (v74)
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie (142 B): root (12 B) + the keeper's pose (KeeperPoseCodec, 130 B).
@@ -121,6 +124,10 @@ var _peers_scratch: Array[int] = []
 # index space carrier_idx resolves against. Same reuse argument — it is consumed
 # entirely within decode_world_state and never escapes.
 var _decoded_peers_scratch: Array[int] = []
+# The local skater's block, held until the rest of the packet is buffered.
+var _local_controller: LocalController = null
+var _local_state: SkaterNetworkState = null
+var _local_depth: int = 0
 
 
 # The packet is sized ONCE and written at offsets — one allocation per
@@ -225,9 +232,10 @@ func decode_world_state(data: PackedByteArray) -> void:
 	# game-state block lands at the right offset.
 	var skip_actors: bool = NetworkManager.is_replay_mode()
 	# Skaters — collect peer_ids in packet order so we can resolve the puck carrier
-	# index below. The roster scratch is cleared and refilled per packet (60 Hz).
+	# index below. The roster scratch is cleared and refilled per packet.
 	var decoded_peers: Array[int] = _decoded_peers_scratch
 	decoded_peers.clear()
+	var puck_xz: Vector2 = _decode_puck_xz(data, o + num_skaters * SKATER_BLOCK_SIZE)
 	for _i: int in num_skaters:
 		# decode_s32 to match the encoder; negative ids are AI bots.
 		var peer_id: int = data.decode_s32(o); o += 4
@@ -240,9 +248,11 @@ func decode_world_state(data: PackedByteArray) -> void:
 		if record == null:
 			continue
 		var skater_state := _decode_skater_quantized(data, skater_off)
+		_fill_pin_offset(skater_state, puck_xz)
 		if record.is_local and not NetworkManager.is_replay_mode():
-			(record.controller as LocalController).reconcile(skater_state)
-			queue_depth_feedback.emit(depth)
+			_local_controller = record.controller as LocalController
+			_local_state = skater_state
+			_local_depth = depth
 		else:
 			record.controller.apply_network_state(skater_state, host_ts)
 	# Puck: 12B pos+vel + 1B carrier index. 0xFF is the "no carrier"
@@ -260,11 +270,13 @@ func decode_world_state(data: PackedByteArray) -> void:
 	for gi: int in mini(num_goalies, goalie_controllers.size()):
 		if o + GOALIE_BLOCK_SIZE > data.size():
 			push_warning("WorldStateCodec: truncated goalie block %d" % gi)
+			_reconcile_local()
 			return
 		if not skip_actors:
 			goalie_controllers[gi].apply_state(_decode_goalie_quantized(data, o), host_ts)
 		o += GOALIE_BLOCK_SIZE
 	o += maxi(0, num_goalies - goalie_controllers.size()) * GOALIE_BLOCK_SIZE
+	_reconcile_local()
 	# Game state
 	if data.size() < o + GAME_STATE_BLOCK_SIZE:
 		return
@@ -274,6 +286,22 @@ func decode_world_state(data: PackedByteArray) -> void:
 	var period: int = data.decode_u8(o + 3)
 	var t_remaining: float = float(data.decode_u16(o + 4))
 	_apply_game_state(score0, score1, new_phase, period, t_remaining)
+
+
+# The local reconcile runs once every remote, the puck and the goalies of this
+# packet are buffered: its replay samples remotes (contacts, the press) out of
+# their buffers, and a remote decoded after the local block would otherwise be
+# read a broadcast stale, by packet order.
+func _reconcile_local() -> void:
+	if _local_controller == null:
+		return
+	var controller: LocalController = _local_controller
+	var state: SkaterNetworkState = _local_state
+	_local_controller = null
+	_local_state = null
+	if is_instance_valid(controller):
+		controller.reconcile(state)
+		queue_depth_feedback.emit(_local_depth)
 
 
 func _apply_game_state(score0: int, score1: int, new_phase: GamePhase.Phase,
@@ -330,12 +358,15 @@ func decode_for_replay(data: PackedByteArray) -> Dictionary:
 
 	var skaters: Dictionary = {}
 	var decoded_peers: Array[int] = []
+	var puck_xz: Vector2 = _decode_puck_xz(data, o + num_skaters * SKATER_BLOCK_SIZE)
 	for _i: int in num_skaters:
 		var peer_id: int = data.decode_s32(o); o += 4
 		decoded_peers.append(peer_id)
 		var skater_off: int = o; o += SKATER_STATE_BYTES
 		o += 1  # queue_depth (not needed for replay)
-		skaters[peer_id] = _decode_skater_quantized(data, skater_off)
+		var skater_state := _decode_skater_quantized(data, skater_off)
+		_fill_pin_offset(skater_state, puck_xz)
+		skaters[peer_id] = skater_state
 
 	var puck_state := _decode_puck_quantized(data, o); o += 12
 	var carrier_idx: int = data.decode_u8(o); o += 1
@@ -526,13 +557,14 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	# peaks near 13°, so a half step tilts the torso by well under 0.2°.
 	b.encode_u8(o, posmod(roundi(atan2(s.recoil_dir.x, s.recoil_dir.y) / TAU * 256.0), 256)); o += 1
 	b.encode_u8(o, StickCheckRules.pack(s.stick_check_phase, s.stick_check_elapsed)); o += 1
-	b.encode_u8(o, (s.pin_role & 0x03) | (0x04 if s.diving else 0)); o += 1
+	b.encode_u8(o, (s.pin_role & 0x03) | (0x04 if s.diving else 0)
+			| (0x08 if s.slapshot_pinned else 0)); o += 1
 	b.encode_u8(o, clampi(roundi(s.pin_strength * 255.0), 0, 255)); o += 1
 	return o
 
 
 # Allocating wrapper: the standalone round-trip API the codec tests drive. The
-# broadcast path uses _write_skater_quantized directly (see _encode_buf).
+# broadcast path writes in place through _write_skater_quantized (encode_world_state).
 static func _encode_skater_quantized(s: SkaterNetworkState) -> PackedByteArray:
 	var b := PackedByteArray()
 	b.resize(SKATER_STATE_BYTES)
@@ -556,7 +588,7 @@ static func quantize_move_intent(v: Vector2) -> Vector2:
 
 # `offset` mirrors _write_skater_quantized: the packet decodes in place at a
 # cursor rather than being sliced into a per-actor copy first (~600 throwaway
-# PackedByteArrays/s across skaters, puck and goalies at the 60 Hz packet rate).
+# PackedByteArrays/s across skaters, puck and goalies at the broadcast rate).
 static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> SkaterNetworkState:
 	if b.size() < offset + SKATER_STATE_BYTES:
 		push_warning("WorldStateCodec: truncated skater block (%d bytes)" % (b.size() - offset))
@@ -616,6 +648,7 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	var lock: int = b.decode_u8(o); o += 1
 	s.pin_role = lock & 0x03 if (lock & 0x03) <= BoardPinRules.Role.PINNED else 0
 	s.diving = (lock & 0x04) != 0
+	s.slapshot_pinned = (lock & 0x08) != 0
 	s.pin_strength = b.decode_u8(o) / 255.0
 	return s
 
@@ -657,6 +690,15 @@ static func _decode_puck_quantized(b: PackedByteArray, offset: int = 0) -> PuckN
 	s.velocity.y = b.decode_s16(o) / 50.0; o += 2
 	s.velocity.z = b.decode_s16(o) / 50.0
 	return s
+
+
+# The puck block's ground position alone, for the skaters decoded ahead of it.
+static func _decode_puck_xz(b: PackedByteArray, offset: int) -> Vector2:
+	return Vector2(b.decode_s16(offset) / 100.0, b.decode_s16(offset + 4) / 100.0)
+
+
+static func _fill_pin_offset(s: SkaterNetworkState, puck_xz: Vector2) -> void:
+	s.slapshot_pin_offset = puck_xz - Vector2(s.position.x, s.position.z)
 
 
 # Goalie: the 12-byte root, then his pose. See top-of-file layout comment.

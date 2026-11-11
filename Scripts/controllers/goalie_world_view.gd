@@ -8,7 +8,7 @@ extends RefCounted
 # Six reads need a skater scan every tick — nearest opponent to the puck, nearest
 # teammate to the puck, opposing positions for the sweep-lane model, "is any
 # shooter near the puck", the backdoor depth cap, and the screen occlusion set.
-# Run independently that is 12 walks of the registry per frame at 120 Hz x 2
+# Run independently that is 12 walks of the registry per tick x 2
 # goalies to answer questions one walk answers, so the world is read ONCE into
 # plain data here and every decision runs against the data rather than against
 # live nodes.

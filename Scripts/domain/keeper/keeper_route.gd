@@ -195,7 +195,7 @@ func _standing(at: Vector2, turn: float) -> float:
 	if off <= FACED_RAD:
 		return walk if _glides_last else _settled(walk)
 	if off <= _lead_max and _step_do != Do.NONE and _step_legs == 1:
-		return walk + maxf(KeeperFootwork.SETTLE_S, off / _pivot_rate)
+		return walk + maxf(KeeperFootwork.SETTLE_S, pivot_time(off))
 	walk = _on_feet(at, facing, spot)
 	_way_do = Do.FACE
 	_way_spot = Vector2.ZERO
@@ -489,7 +489,7 @@ static func _settled(walk: float) -> float:
 
 # Slides one after another to `d` away, each as far as its push carries; the
 # first setting out `from` (KeeperSlide.From). A slide that carries as far as it goes
-# coasts to rest; the last, stopped on its spot by the edge, settles.
+# coasts to rest; the last stops on its spot by the edge.
 func _slides_time(d: float, from: int) -> float:
 	var reach: float = _slide.glide_reach(_slide.push_speed)
 	var t: float = 0.0
@@ -497,7 +497,7 @@ func _slides_time(d: float, from: int) -> float:
 		t += _slide.time_to(reach, INF, from)
 		d -= reach
 		from = KeeperSlide.From.BUTTERFLY
-	return t + _slide.time_to(d, INF, from) + KeeperSlide.SETTLE_S
+	return t + _slide.time_to(d, INF, from)
 
 
 func _push_time(d: float) -> float:
@@ -529,3 +529,16 @@ static func _local(v: Vector2, turn: float) -> Vector2:
 
 static func _world(v: Vector2, turn: float) -> Vector2:
 	return Vector2(v.x * cos(turn) + v.y * sin(turn), -v.x * sin(turn) + v.y * cos(turn))
+
+
+# Where he is asked to be and the way's first move, on the wire (KeeperWire);
+# the movers are the motor's, the rest the plan's scratch.
+func wire(w: KeeperWire) -> void:
+	rest = w.s8(rest)
+	spot = w.v2_16(spot, KeeperWire.MM)
+	facing = w.s32(facing, KeeperWire.ANGLE)
+	iron = w.v2_16(iron, KeeperWire.MM)
+	side = w.s16(side, KeeperWire.MM)
+	first = w.s8(first)
+	first_spot = w.v2_16(first_spot, KeeperWire.MM)
+	first_side = w.s16(first_side, KeeperWire.MM)

@@ -142,7 +142,7 @@ func transitions(team_id: int, from_state: int, to_state: int) -> int:
 
 # The most frequent shape transitions for `team_id`, most frequent first, as
 # Vector3i(from_state, to_state, count). Allocates — this is a read-out for the
-# debug overlay (4 Hz) and the JSON dump, never the 120 Hz accumulate path.
+# debug overlay (4 Hz) and the JSON dump, never the per-tick accumulate path.
 func top_transitions(team_id: int, limit: int = 4) -> Array[Vector3i]:
 	var out: Array[Vector3i] = []
 	if team_id < 0 or team_id >= TEAM_COUNT:

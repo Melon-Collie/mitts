@@ -24,13 +24,12 @@ extends RefCounted
 # is one rigid piece (test_stick_is_rigid.gd). A small overrun keeps the
 # hosel's tip cap buried inside the shaft.
 const _SHAFT_TIP_OVERRUN_M: float = 0.03
-# The butt end extends past the TOP HAND so the knob rides visibly above the
-# fist — a real grip holds the shaft just below the knob, not on top of it.
-# Sized so the whole knob clears the fist (~7 cm half-width at the knuckle roll)
-# with a finger's width of wrapped shaft showing between fist and knob.
+# The butt end extends past the TOP HAND so the knob rides on the top of the
+# fist, as a gloved grip holds a stick: the fist is ~7 cm across from its middle
+# at the knuckle roll, more along a shaft crossing it at the grip's angle.
 # Public: the display mannequin and the stick capture tool extend their shafts
 # to match.
-const SHAFT_BUTT_EXTEND_M: float = 0.13
+const SHAFT_BUTT_EXTEND_M: float = 0.09
 # The knob's cap sits slightly proud of the shaft's butt end (wrapped tape).
 const _KNOB_PROUD_M: float = 0.01
 # Shaft subdivisions the bend shader needs along the length.
@@ -98,7 +97,9 @@ func update_mesh(blade_mesh: MeshInstance3D) -> void:
 	var stick_mesh: MeshInstance3D = _skater.stick_mesh
 	var stick_origin: Vector3 = _skater.drawn_top_hand()
 	var to_tip: Vector3 = _hosel_tip_upper_body(blade_mesh) - stick_origin
-	if to_tip.length_squared() < 0.0001:
+	# A non-finite frame holds the last pose too: written, the shaft is undrawn
+	# and both gloves, which take their axis from it (grip_axis), with it.
+	if to_tip.length_squared() < 0.0001 or not to_tip.is_finite():
 		return
 	var dir: Vector3 = to_tip.normalized()
 	_flex_axis = _solve_flex_axis(dir)
@@ -116,10 +117,9 @@ func update_mesh(blade_mesh: MeshInstance3D) -> void:
 	# a convenience fallback: world UP pulled into upper-body space, or through a
 	# slapshot the up the swing has carried (Skater.shaft_roll_up), where any
 	# other choice would spin the wrap.
-	# Z scale is the only component this owns; x/y are the shaft thickness the
-	# sizing seams set, so they are read back rather than overwritten.
-	var shaft_scale: Vector3 = stick_mesh.scale
-	shaft_scale.z = shaft_len
+	# The shaft's section is its BoxMesh's; the node scales only its length. Never
+	# read the scale back off the transform: one bad write would then keep it.
+	var shaft_scale := Vector3(1.0, 1.0, shaft_len)
 	var up_local: Vector3 = _skater.shaft_roll_up(dir)
 	stick_mesh.transform = Transform3D(
 			Basis.looking_at(dir, up_local).scaled_local(shaft_scale),
@@ -252,10 +252,10 @@ func _update_knob(stick_origin: Vector3, to_shaft_end: Vector3,
 	# Post-multiplied X(+90°) maps the cylinder's long axis onto the aim, which
 	# is what rotate_object_local did. Safe to compose directly here because the
 	# knob carries no node scale (SkaterUniformCoordinator._rebuild_stick_knob
-	# never sets one) — with scale present this is the trap SkaterArmRig's
+	# never sets one) — with scale present this is the trap SkaterArmPoses'
 	# cuff pose documents.
 	knob.transform = Transform3D(
-			Basis.looking_at(up_shaft, SkaterArmRig.up_for_look_at(up_shaft))
+			Basis.looking_at(up_shaft, SkaterArmPoses.up_for_look_at(up_shaft))
 					* Basis(Vector3.RIGHT, PI * 0.5),
 			knob_center)
 

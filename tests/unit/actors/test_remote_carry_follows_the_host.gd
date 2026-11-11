@@ -1,7 +1,7 @@
 extends GutTest
 
 # A client draws someone else's carry on the host's side. The carrier is the
-# real controller; every other tick it is broadcast as the host does (60 Hz,
+# real controller; every other tick it is broadcast as the host does (45 Hz,
 # blade and hand at the wire's centimetre) and a second skater is drawn from the
 # snapshots the way RemoteController draws one: the blade lerped between them
 # some ticks behind, the blade side off the wire. It must change face when the
@@ -11,7 +11,7 @@ extends GutTest
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SNAP_TICKS: int = 2
 const DELAY_TICKS: int = 5
 const WIRE_M: float = 0.01
@@ -124,6 +124,11 @@ func _broadcast(half_width_m: float, hz: float, tremor_m: float, fps: float,
 		r.set_facing(from.facing)
 		r.set_balance_tilt(from.balance_tilt, Vector2.ZERO)
 		r.set_upper_body_rotation(lerpf(from.upper_body_rotation_y, to.upper_body_rotation_y, f))
+		# The wire's lean before its blade, which is local to the tilted frame
+		# (SkaterPoseCoordinator.apply_wire_lean): a carrier folds over the puck.
+		var posture: float = lerpf(from.posture_lean, to.posture_lean, f)
+		var torso: Vector2 = from.torso_lean.lerp(to.torso_lean, f)
+		r.set_upper_body_lean(torso.x + posture, torso.y, posture)
 		r.set_top_hand_position(from.top_hand_position.lerp(to.top_hand_position, f))
 		r.set_blade_position(from.blade_position.lerp(to.blade_position, f))
 		r.current_shot_state = to.shot_state
@@ -169,12 +174,13 @@ func test_a_remote_changes_face_with_the_carrier() -> void:
 		# two sit a tick or two apart at each flip, and never between.
 		assert_lte(r.disagree_ticks, 2 * r.owner_changes + 2, "%s: and on the same side" % what)
 		# The wire's centimetre, outside a flip; through one the remote eases
-		# the blade across itself, a tick or so off the carrier — but never by a
-		# whole side's offset, which is what deciding the side itself left.
+		# the blade across itself, a tick or so off the carrier — but well short
+		# of the swing from one side's offset to the other's, which is what
+		# deciding the side itself left.
 		assert_lt(r.pin_errors[r.pin_errors.size() / 2], 0.015,
 				"%s: its puck pinned where the carrier's is" % what)
 		var c: SkaterController = _make_carrier()
-		assert_lt(r.pin_errors[-1], c.skater.carry_blade_offset * 1.5,
+		assert_lt(r.pin_errors[-1], c.skater.carry_blade_offset * 2.0 * 0.85,
 				"%s: and only a flip's worth off through one" % what)
 
 

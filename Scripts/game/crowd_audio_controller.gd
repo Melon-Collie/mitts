@@ -39,6 +39,7 @@ var _phase: int = -1
 # posed by the replay, and the carrier comes from the recorded frame.
 var _replaying: bool = false
 var _replay_carrier_team: int = -1
+var _replay_after_goal: bool = false
 
 const _CHEER_POOL_SIZE: int = 3
 const _ARENA_BUS: StringName = &"Arena"
@@ -99,6 +100,7 @@ func _on_phase_changed(new_phase: int) -> void:
 
 
 func _on_goal_replay_started() -> void:
+	_replay_after_goal = false
 	for p: AudioStreamPlayer in _cheer_pool:
 		if p.playing:
 			var fade: Tween = create_tween()
@@ -110,9 +112,16 @@ func _on_goal_replay_started() -> void:
 		_tween.kill()
 
 
-func _on_goal_replay_frame(_game_state: Dictionary, carrier_team: int) -> void:
+# The replay's goal frame cheers again, as the goal did live: the start of the
+# replay faded the live cheer out.
+func _on_goal_replay_frame(game_state: Dictionary, carrier_team: int) -> void:
 	_replaying = true
 	_replay_carrier_team = carrier_team
+	var after_goal: bool = PhaseRules.is_after_goal(
+			int(game_state.get("phase", GamePhase.Phase.PLAYING)))
+	if after_goal and not _replay_after_goal:
+		_cheer()
+	_replay_after_goal = after_goal
 
 
 func _on_goal_replay_stopped() -> void:

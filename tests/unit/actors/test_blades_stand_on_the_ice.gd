@@ -7,7 +7,7 @@ extends GutTest
 # the render pass the game runs, from the runner mesh's own vertices rather than
 # from the edge the solve reads, so a solve that seats the wrong points fails.
 
-const DT: float = 1.0 / 120.0
+const DT: float = 1.0 / 120.0  # a fixed step: the script below is timed in it
 const LegBone = SkaterMeshBuilder.LegBone
 const WARMUP_TICKS: int = 300
 const MEASURE_TICKS: int = 300
@@ -71,8 +71,8 @@ func before_each() -> void:
 	# that freezes facing (SkaterPoseCoordinator.apply_facing).
 	_controller._pose.facing = Vector2(0.0, -1.0)
 	_skater.set_facing(Vector2(0.0, -1.0))
-	var boot: ArrayMesh = SkaterMeshBuilder.shared_boot_assembly()
-	_runner = boot.surface_get_arrays(SkaterMeshBuilder.BOOT_SURF_RUNNER)[Mesh.ARRAY_VERTEX] \
+	var blade: ArrayMesh = SkaterMeshBuilder.shared_skate_blade()
+	_runner = blade.surface_get_arrays(SkaterMeshBuilder.BLADE_PART_RUNNER)[Mesh.ARRAY_VERTEX] \
 			as PackedVector3Array
 
 

@@ -6,10 +6,10 @@ extends GutTest
 #   1. Winding — Godot front faces are clockwise-from-outside, so an outward-
 #      wound closed solid has NEGATIVE signed volume. An inside-out part still
 #      "works" headless but renders as a hollow shell in game.
-#   2. UV conventions — SkaterUniformCoordinator paints against the engine
-#      primitive layouts (cylinder side V ∈ [0, 0.5], sphere equirect V ∈
-#      [0, 1], everything inside [0, 1]). A part whose UVs drift out of range
-#      wraps its jersey paint somewhere unintended.
+#   2. UV conventions — the parts keep the engine primitive layouts (cylinder
+#      side V ∈ [0, 0.5], sphere equirect V ∈ [0, 1], everything inside
+#      [0, 1]). A part whose UVs drift out of range wraps its paint somewhere
+#      unintended.
 #   3. Envelope — each part must stay inside the primitive it replaced (plus
 #      millimetres), because ice contact, board clearance, and the gear that
 #      overlaps it were all tuned around the primitive silhouettes.
@@ -41,76 +41,35 @@ class PartSpec:
 		surface = p_surface
 
 
-# Envelopes come from the primitives in Scenes/Skater.tscn: torso cylinder
-# r 0.22 h 0.55, helmet sphere r 0.155, knee r 0.095, thigh
-# cylinder r 0.14 h 0.3, sock r 0.09 h 0.3, skate r 0.09 h 0.2, foot prolate
-# sphere r 0.08 half-length 0.125. Two deliberate exceptions: the shoulder cap
-# is prolate along its pole (it leans along the arm, high on the torso — no
-# ice/boards to poke), and the arm-rig meshes are unit-sized (node scale is
-# the real dimension), so their bounds are the nominal unit envelopes.
+# Envelopes come from the primitives in Scenes/Skater.tscn: helmet sphere
+# r 0.155. The skate's upper has its own test (test_skate_upper.gd).
+# The glove's meshes are unit-sized (the bone's scale is the real dimension),
+# so their bounds are the nominal unit envelopes.
 func _parts() -> Array[PartSpec]:
 	return [
-		# The jersey's tail outgrows the torso primitive on purpose: it hangs over
-		# the pants and flares out round the thigh domes, the hips' own width,
-		# and still sits well inside the body's 0.35 m collision disc.
-		PartSpec.new("torso", SkaterMeshBuilder._build_torso(),
-				Vector3(0.59, 0.625, 0.48), true),
 		PartSpec.new("helmet", SkaterMeshBuilder._build_helmet(),
 				Vector3(0.31, 0.31, 0.31), false),
 		PartSpec.new("head", SkaterMeshBuilder._build_ball(
 				SkaterMeshBuilder.HEAD_RADIUS, 10, 5, 1.0),
 				Vector3(0.27, 0.27, 0.27), false),
+		# Helmet-local, drawn at the helmet's 0.75 scale.
 		PartSpec.new("neck", SkaterMeshBuilder._build_neck(),
-				Vector3(0.19, 0.10, 0.19), true),
+				Vector3(0.25, 0.155, 0.25), true),
 		PartSpec.new("blade_holder", SkaterMeshBuilder._build_skate_blade(),
-				Vector3(0.02, 0.19, 0.06), false, SkaterMeshBuilder.BLADE_PART_HOLDER),
+				Vector3(0.023, 0.21, 0.06), false, SkaterMeshBuilder.BLADE_PART_HOLDER),
 		PartSpec.new("blade_runner", SkaterMeshBuilder._build_skate_blade(),
-				Vector3(0.01, 0.19, 0.04), false, SkaterMeshBuilder.BLADE_PART_RUNNER),
-		PartSpec.new("shoulder", SkaterMeshBuilder._build_shoulder(),
-				Vector3(0.21, 0.28, 0.21), false),
-		PartSpec.new("arm_bone", SkaterMeshBuilder.shared_arm_bone(),
-				Vector3(2.0, 1.0, 2.0), true),
-		PartSpec.new("forearm_bone", SkaterMeshBuilder.shared_forearm_bone(),
-				Vector3(2.0, 1.0, 2.0), true),
-		# The elbow pad's cap runs past the unit ball on the side the bend faces.
-		PartSpec.new("elbow_pad", SkaterMeshBuilder.shared_elbow_pad(),
-				Vector3(2.05, 2.21, 2.05), true),
-		PartSpec.new("joint_ball", SkaterMeshBuilder.shared_joint_ball(),
-				Vector3(2.0, 2.0, 2.0), false),
+				Vector3(0.01, 0.22, 0.04), false, SkaterMeshBuilder.BLADE_PART_RUNNER),
+		# Its depth takes the back of the hand's pad, as deep as the fist is wide.
 		PartSpec.new("glove_back", SkaterMeshBuilder.shared_glove_fist(),
-				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_BACK),
+				Vector3(2.2, 1.0, 2.2), false, SkaterMeshBuilder.FIST_PART_BACK),
 		PartSpec.new("glove_fingers", SkaterMeshBuilder.shared_glove_fist(),
 				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_FINGERS),
+		PartSpec.new("glove_thumb", SkaterMeshBuilder.shared_glove_fist(),
+				Vector3(0.85, 1.15, 1.35), false, SkaterMeshBuilder.FIST_PART_THUMB),
 		PartSpec.new("cuff", SkaterMeshBuilder.shared_cuff(),
 				Vector3(2.0, SkaterMeshBuilder.CUFF_HEIGHT_M, 2.0), false),
 		PartSpec.new("knob", SkaterMeshBuilder.shared_knob(),
 				Vector3(0.07, SkaterMeshBuilder.KNOB_HEIGHT_M, 0.07), true),
-		# The pelvis replaces no primitive — it is the seat the rig never had, and
-		# what actually bounds it is the jersey it hides under
-		# (tests/unit/actors/test_pelvis_fills_the_seat.gd). The box here is its
-		# own nominal envelope, so a runaway edit still trips something.
-		PartSpec.new("pelvis", SkaterMeshBuilder._build_pelvis(),
-				Vector3(0.44, 0.36, 0.38), true),
-		PartSpec.new("knee", SkaterMeshBuilder._build_knee(),
-				Vector3(0.19, 0.19, 0.19), false),
-		# The thigh carries the hip joint's dome, so its envelope is the thigh
-		# cylinder PLUS the r-0.138 ball that used to sit on the pivot as a part
-		# of its own — the same volume, one piece.
-		PartSpec.new("thigh", SkaterMeshBuilder._build_thigh(),
-				Vector3(0.31, 0.43, 0.29), true),
-		PartSpec.new("sock", SkaterMeshBuilder._build_sock(),
-				Vector3(0.19, 0.30, 0.19), true),
-		PartSpec.new("skate", SkaterMeshBuilder._build_skate(),
-				Vector3(0.18, 0.20, 0.18), true),
-		# Boot length re-pinned +0.02 over the replaced prolate sphere: the
-		# heel counter deliberately runs the quarter back under the skate
-		# collar's footprint. Heel-ward only — toward the shin column, with
-		# the extension's sole tucked above the tread line — so the tuned
-		# ice/board contact silhouette is unchanged.
-		PartSpec.new("boot_quarter", SkaterMeshBuilder._build_boot(),
-				Vector3(0.16, 0.21, 0.16), false, SkaterMeshBuilder.BOOT_PART_QUARTER),
-		PartSpec.new("boot_toe", SkaterMeshBuilder._build_boot(),
-				Vector3(0.13, 0.08, 0.13), false, SkaterMeshBuilder.BOOT_PART_TOE),
 	]
 
 
@@ -165,19 +124,39 @@ func test_every_part_stays_inside_its_primitive_envelope() -> void:
 
 
 func test_arm_rig_meshes_keep_their_placement_dimensions() -> void:
-	# These heights are PLACEMENT inputs, not just looks: the bone wrapper's
-	# per-frame Z scale assumes a unit-height prism, and the cuff/knob sit
+	# These heights are PLACEMENT inputs, not just looks: the cuff and knob sit
 	# offset along their bone by half their baked height (Skater reads the
 	# CUFF_HEIGHT_M / KNOB_HEIGHT_M constants). A drifted mesh height slides
 	# every cuff off the wrist silently.
-	assert_almost_eq(SkaterMeshBuilder.shared_arm_bone().get_aabb().size.y, 1.0, 0.001,
-			"bone prism must be unit height")
 	assert_almost_eq(SkaterMeshBuilder.shared_cuff().get_aabb().size.y,
 			SkaterMeshBuilder.CUFF_HEIGHT_M, 0.001,
 			"cuff mesh height must match CUFF_HEIGHT_M")
 	assert_almost_eq(SkaterMeshBuilder.shared_knob().get_aabb().size.y,
 			SkaterMeshBuilder.KNOB_HEIGHT_M, 0.001,
 			"knob mesh height must match KNOB_HEIGHT_M")
+
+
+# The torso's clearance query measures the rings the jersey is built on: each
+# ring's corners lie on it, its middle is inside, and a corner pushed out along
+# its radius clears it by the push.
+func test_torso_clearance_measures_the_rest_rings() -> void:
+	for station: int in SkaterMeshBuilder.TORSO_HEM_STATION + 1:
+		var ring: PackedVector3Array = SkaterMeshBuilder.torso_ring(station)
+		var middle := Vector3.ZERO
+		for k: int in ring.size() - 1:
+			middle += ring[k]
+		middle /= float(ring.size() - 1)
+		assert_lt(SkaterMeshBuilder.torso_clearance(middle), -0.05,
+				"station %d's middle is inside" % station)
+		for k: int in ring.size() - 1:
+			var corner: Vector3 = ring[k]
+			assert_almost_eq(SkaterMeshBuilder.torso_clearance(corner), 0.0, 0.0005,
+					"station %d corner %d is on the surface" % [station, k])
+			var out: Vector3 = corner - middle
+			out.y = 0.0
+			assert_almost_eq(SkaterMeshBuilder.torso_clearance(
+					corner + out.normalized() * 0.05), 0.05, 0.005,
+					"station %d corner %d pushed out 5 cm clears by 5 cm" % [station, k])
 
 
 func test_helmet_opens_at_the_face() -> void:
@@ -208,9 +187,13 @@ func test_skate_blade_reaches_the_lifted_ice_depth() -> void:
 			0.08 + SkaterMeshBuilder.SKATE_LIFT_M, 0.002,
 			"the steel runner should bottom out at the lifted ice-contact depth")
 	# The boot itself must stay well above the ice — the blade carries it.
-	var boot: AABB = SkaterMeshBuilder._build_boot().get_aabb()
-	assert_lt(boot.position.z + boot.size.z, 0.05,
-			"the boot sole should ride on the blade, clear of the ice")
+	var upper: ArrayMesh = SkateUpperMesh.shared()
+	var foot_from_skate: Transform3D = SkateUpperMesh.SKATE_FROM_FOOT.affine_inverse()
+	var sole: float = -INF
+	for s: int in upper.get_surface_count():
+		for v: Vector3 in upper.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array:
+			sole = maxf(sole, (foot_from_skate * v).z)
+	assert_lt(sole, 0.05, "the boot sole should ride on the blade, clear of the ice")
 
 
 # Face gear is the one open-sheet family (millimetre glazing and cage wire —
@@ -264,85 +247,64 @@ func _signed_volume(mesh: ArrayMesh, surface: int = 0) -> float:
 	return total
 
 
-# The upper-body and leg rigs are only exact replacements for the nodes they replaced
-# because every vertex is RIGID — weight 1.0 on one bone, nothing on the other
-# three. Blended weights would make a bone pose an approximation of the node
-# transform it stands in for, and the pose diff would start reporting drift with
-# no obvious cause. Cheap to check here, invisible in a render. The torso is the
-# one deliberate blend (its tail rides the jersey's own bones) and has its own
-# test below.
-func test_skinned_rigs_are_rigidly_weighted() -> void:
-	var rigs: Array = [
-		["upper", SkaterMeshBuilder.shared_upper_skin_mesh(),
-				SkaterMeshBuilder.UPPER_SURFACE_COUNT, SkaterMeshBuilder.UPPER_BONE_COUNT],
-		["leg", SkaterMeshBuilder.shared_leg_skin_mesh(),
-				SkaterMeshBuilder.LEG_SURFACE_COUNT, SkaterMeshBuilder.LEG_BONE_COUNT],
-	]
-	for rig: Array in rigs:
-		var label: String = rig[0]
-		var mesh: ArrayMesh = rig[1]
-		assert_eq(mesh.get_surface_count(), int(rig[2]),
-				"%s rig surface count must match its enum" % label)
-		for surface: int in mesh.get_surface_count():
-			if label == "upper" and surface == SkaterMeshBuilder.UpperSurface.TORSO:
-				continue
-			var arrays: Array = mesh.surface_get_arrays(surface)
-			var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-			var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
-			var verts: int = (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
-			assert_eq(bones.size(), verts * 4,
-					"%s surface %d needs four bone influences per vertex" % [label, surface])
-			var bone: int = bones[0]
-			assert_between(bone, 0, int(rig[3]) - 1,
-					"%s surface %d bone index in range" % [label, surface])
-			var uniform_bone: bool = true
-			var rigid: bool = true
-			for v: int in verts:
-				if bones[v * 4] != bone:
-					uniform_bone = false
-				if not is_equal_approx(weights[v * 4], 1.0) \
-						or weights[v * 4 + 1] != 0.0 \
-						or weights[v * 4 + 2] != 0.0 \
-						or weights[v * 4 + 3] != 0.0:
-					rigid = false
-			assert_true(uniform_bone,
-					"%s surface %d must ride ONE bone" % [label, surface])
-			assert_true(rigid,
-					"%s surface %d must be weight 1.0 on that bone alone" % [label, surface])
-
-
-# The torso is rigid on its own bone down to where the tail hangs free, then
-# blends onto TAIL, every vertex's weights summing to one; from the belt ring
-# down each vertex rides one flap bone, the one of its facet column and segment.
-func test_only_the_jersey_tail_blends() -> void:
-	var rest_arrays: Array = SkaterMeshBuilder.shared_torso().surface_get_arrays(0)
-	var rest: PackedVector3Array = rest_arrays[Mesh.ARRAY_VERTEX]
-	var bend_y: float = SkaterMeshBuilder._TORSO_PROFILE[SkaterMeshBuilder.TORSO_BEND_STATION].x
-	for tuck: int in GearModelRegistry.tuck_count():
-		var arrays: Array = SkaterMeshBuilder.shared_upper_skin_mesh(tuck).surface_get_arrays(
-				SkaterMeshBuilder.UpperSurface.TORSO)
+# The rigid parts (SkaterRigidParts) are rigid: every vertex weight 1.0 on one
+# bone and nothing on the other three, so a bone pose places its part exactly.
+# The skate's upper is the exception: its weight is split between its side's
+# SKATE bone and the foot's bind (SKATE_UPPER_FOOT_BIND), summing to 1.0, in
+# whichever order the mesh keeps them.
+# Cheap to check here, invisible in a render.
+func test_the_rigid_parts_are_rigidly_weighted() -> void:
+	for rig: Array in [
+			["upper", SkaterRigidParts.upper_body_mesh(), SkaterMeshBuilder.UPPER_BONE_COUNT],
+			["leg", SkaterRigidParts.leg_body_mesh(), SkaterMeshBuilder.LEG_BONE_COUNT]]:
+		var arrays: Array = (rig[1] as ArrayMesh).surface_get_arrays(0)
 		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
 		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
-		assert_eq((arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), rest.size(),
-				"tuck %d drapes the loose torso vertex for vertex" % tuck)
-		var flapped: int = 0
-		for v: int in rest.size():
-			assert_almost_eq(weights[v * 4] + weights[v * 4 + 1] + weights[v * 4 + 2]
-					+ weights[v * 4 + 3], 1.0, 1e-4, "the weights share the whole vertex")
-			if rest[v].y >= SkaterJerseyHem.PIVOT_Y_M:
-				assert_eq(bones[v * 4], SkaterMeshBuilder.UpperBone.TORSO)
-				assert_almost_eq(weights[v * 4], 1.0, 1e-4, "above the pivot the jersey is rigid")
-			elif bones[v * 4] >= SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE:
-				assert_lt(rest[v].y, SkaterJerseyHem.BELT_Y_M + 1e-4, "flaps start at the belt")
-				assert_almost_eq(weights[v * 4], 1.0, 1e-4, "on one flap bone")
-				var segment: int = (bones[v * 4] - SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE) % 2
-				assert_eq(segment, 1 if rest[v].y <= bend_y + 1e-4 else 0,
-						"the lower segment from the bend down")
-				flapped += 1
-			else:
-				assert_eq(bones[v * 4 + 1], SkaterMeshBuilder.UPPER_TAIL_BIND)
-		assert_gt(flapped, 0, "the tail below the belt rides the flaps")
-	var skin: Skin = SkaterMeshBuilder.shared_upper_skin()
-	assert_eq(skin.get_bind_bone(SkaterMeshBuilder.UPPER_TAIL_BIND), SkaterBodySkeleton.TAIL_BONE)
-	assert_eq(skin.get_bind_bone(SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE + 3),
-			SkaterBodySkeleton.column_bone(1, 1))
+		var verts: int = (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+		assert_eq(bones.size(), verts * 4, "%s: four influences per vertex" % rig[0])
+		var bad: int = 0
+		var bent: int = 0
+		for v: int in verts:
+			if weights[v * 4 + 2] != 0.0 or weights[v * 4 + 3] != 0.0:
+				bad += 1
+			elif rig[0] == "leg" and _ankle_weighted(bones, weights, v):
+				bent += 1
+			elif bones[v * 4] < 0 or bones[v * 4] >= int(rig[2]) \
+					or not is_equal_approx(weights[v * 4], 1.0) or weights[v * 4 + 1] != 0.0:
+				bad += 1
+		assert_eq(bad, 0, "%s: every vertex weight 1.0 on one bone in range" % rig[0])
+		if rig[0] == "leg":
+			assert_gt(bent, 0, "the skate uppers bend across the ankle")
+
+
+func _ankle_weighted(bones: PackedInt32Array, weights: PackedFloat32Array, v: int) -> bool:
+	for side: int in 2:
+		var skate: int = SkaterMeshBuilder.LegBone.SKATE_L if side == 0 \
+				else SkaterMeshBuilder.LegBone.SKATE_R
+		var foot: int = SkaterRigidParts.SKATE_UPPER_FOOT_BIND + side
+		var pair: Array[int] = [bones[v * 4], bones[v * 4 + 1]]
+		var named: bool = pair == [skate, foot] or pair == [foot, skate] \
+				or (weights[v * 4 + 1] == 0.0 and (pair[0] == skate or pair[0] == foot))
+		if named:
+			# Stored at 16 bits a weight.
+			return absf(weights[v * 4] + weights[v * 4 + 1] - 1.0) < 1e-3
+	return false
+
+
+# The head sits a centimetre or two inside the shell all round; where the rim's
+# cut twists a shell quad, a fold the wrong way cuts through the temple.
+func test_the_head_stays_inside_the_helmet_shell() -> void:
+	var shell: PackedVector3Array = SkaterMeshBuilder.helmet_shell_triangles()
+	var ball: PackedVector3Array = SkaterMeshBuilder.shared_head() \
+			.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
+	var crossings: int = 0
+	for i: int in range(0, ball.size(), 3):
+		for e: int in 3:
+			var a: Vector3 = ball[i + e] + centre
+			var b: Vector3 = ball[i + (e + 1) % 3] + centre
+			for t: int in range(0, shell.size(), 3):
+				if Geometry3D.segment_intersects_triangle(a, b, shell[t], shell[t + 1],
+						shell[t + 2]) != null:
+					crossings += 1
+	assert_eq(crossings, 0, "head edges crossing the shell")

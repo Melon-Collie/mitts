@@ -26,6 +26,12 @@ static func is_movement_locked(phase: GamePhase.Phase) -> bool:
 static func is_puck_pickup_locked_phase(phase: GamePhase.Phase) -> bool:
 	return is_dead_puck_phase(phase) or phase == GamePhase.Phase.GOAL_CELEBRATION
 
+# The puck is in the net: the celebration and the replay after it. Takes the
+# raw phase byte because replays ask it of recorded frames, whose goal-moment
+# frame and post-goal tail are stamped GOAL_CELEBRATION.
+static func is_after_goal(phase: int) -> bool:
+	return phase == GamePhase.Phase.GOAL_CELEBRATION or phase == GamePhase.Phase.GOAL_SCORED
+
 # True for phases where body translation is locked but the player should still
 # be able to angle their stick via mouse — today that's FACEOFF_PREP, so
 # centers can pre-aim the draw during the countdown. Goal celebration and

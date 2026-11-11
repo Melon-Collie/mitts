@@ -35,6 +35,14 @@ const EVADE_SAMPLE_ANGLES: int = 12
 # is the only currency.
 const EVADE_SAFE_CLEAR_MIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
 
+# NativeCarrySpace, installed by the application layer (NativeCarrySpaceFactory)
+# when the extension is built: carry_safety, carry_strip_point and
+# AIEvadeRead.evade_safety run in it, held to the GDScript references by
+# test_native_carry_space_parity.gd. Null: the GDScript. AI worker only, as the
+# reads are; the caps it takes are packed into one scratch (pack_caps).
+static var native: RefCounted = null
+static var _native_caps: PackedFloat64Array = PackedFloat64Array()
+
 
 # Gap (metres) from a puck point to the nearest board; negative outside the
 # playing surface. INNER extents (the surface the puck lives on), rounded
@@ -71,7 +79,7 @@ static func reach_clearance(
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], maneuver_time: float = -1.0,
 		carry_dir: Vector2 = Vector2.ZERO, carry_speed: float = 0.0,
-		abort_below: float = -INF) -> float:
+		abort_below: float = -INF, carried_from: Vector3 = Vector3.INF) -> float:
 	var n: int = opponents.size()
 	if n == 0 or opponent_vels.size() != n:
 		return EVADE_SAFE_MARGIN_M   # nothing to evade — fully clear
@@ -82,7 +90,9 @@ static func reach_clearance(
 	# CARRY_LUNGE_WINDOW_S): the defender isn't credited with committing to the
 	# catch spot for the whole flight — the in-flight interception is the lane
 	# model's ledger, and at a carry's arrival the carrier is established and
-	# protecting.
+	# protecting. A man chasing a carry from `carried_from` to `puck_point`
+	# commits the whole window regardless (_chases): he is after the carrier, not
+	# a spot.
 	var w: float = time if maneuver_time < 0.0 else minf(time, maneuver_time)
 	var has_caps: bool = opponent_caps.size() == n
 	var gated: bool = carry_speed > 0.0
@@ -129,8 +139,11 @@ static func reach_clearance(
 			v_along_carry = opponent_vels[i].x * carry_dir.x \
 					+ opponent_vels[i].z * carry_dir.y
 			accel *= clampf(1.0 - maxf(v_along_carry, 0.0) / carry_speed, 0.0, 1.0)
+		var w_i: float = w
+		if _chases(carried_from, puck_point, opponents[i], opponent_vels[i]):
+			w_i = time
 		var clear: float = _reach_clearance_one(
-				puck_point.x, puck_point.z, time, w,
+				puck_point.x, puck_point.z, time, w_i,
 				opponents[i].x, opponents[i].z,
 				opponent_vels[i].x, opponent_vels[i].z, accel, stick, vmax, grip)
 		if v_along_carry > 0.0 and w < time:
@@ -147,6 +160,19 @@ static func reach_clearance(
 			if worst < abort_below:
 				return worst
 	return worst
+
+
+# Whether a man at `pos` moving at `vel` is chasing a carry from `from` to `to`:
+# behind where it starts along it and skating its way, so where it ends is where
+# he is going and he is on it the whole window, never coasting past it. One
+# level with the carrier or in front of the carry is not: he has to cut across
+# to it, which is the reach the lunge prices.
+static func _chases(from: Vector3, to: Vector3, pos: Vector3, vel: Vector3) -> bool:
+	if not from.is_finite():
+		return false
+	var cx: float = to.x - from.x
+	var cz: float = to.z - from.z
+	return vel.x * cx + vel.z * cz > 0.0 and (pos.x - from.x) * cx + (pos.z - from.z) * cz < 0.0
 
 
 # One defender's nominal reach clearance (see reach_clearance): coast on
@@ -272,8 +298,10 @@ const CARRY_LUNGE_WINDOW_S: float = EVADE_HORIZON_S
 # blade / poke rules, across pace, miss distance and closing geometry), the
 # meeting outcome is a pure DISTANCE band on the contact envelope's own radii,
 # not a speed or dwell-time effect:
-#   core = blade_span − POKE_CONTACT_RADIUS_M   → keep 0 (swept at any pace)
-#   edge = blade_span                            → keep 1 (grazed at pace)
+#   core = reach                         → keep 0 (swept at any pace)
+#   edge = reach + POKE_CONTACT_RADIUS_M  → keep 1 (grazed at pace)
+# where reach is his full blade reach (the build's max_blade_reach): the blade
+# sent at the puck, the poke's contact past its tip.
 #
 # A PROTECTING carrier (puck ridden on the handle envelope away from the
 # threat) shifts the whole band by CROSSING_PROTECT_SHIFT_M. The shift is a
@@ -285,7 +313,20 @@ const CARRY_LUNGE_WINDOW_S: float = EVADE_HORIZON_S
 #
 # Slow grazes are stripped by pursuit, not the meeting, and pursuit is what the
 # mid/end transit samples price. Only the window INTERIOR is sampled here.
-const CROSSING_PROTECT_SHIFT_M: float = 0.8
+#
+# Measured by tests/instruments/ai/test_crossing_band.gd: a carrier held past a
+# planted poker who leads the carry keeps the puck once his line passes his
+# full reach + ~0.15 m, at every pace and on either side. The shield rides the
+# puck ~0.3 m off by then (0.8 m only once the stick is already inside it), and
+# the band's half width takes the rest.
+const CROSSING_PROTECT_SHIFT_M: float = 0.1
+
+
+# A defender's crossing span, the band's edge before any shield: his full reach
+# plus the poke's contact.
+static func _crossing_span(caps: AISkaterCaps) -> float:
+	return (caps.max_blade_reach if caps != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M) \
+			+ POKE_CONTACT_RADIUS_M
 
 
 static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
@@ -311,11 +352,7 @@ static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
 	var worst_l: float = INF
 	var worst_r: float = INF
 	for i: int in n:
-		var span: float = EVADE_STICK_REACH_M
-		if has_caps:
-			var caps: AISkaterCaps = opponent_caps[i]
-			if caps != null:
-				span = caps.blade_span
+		var span: float = _crossing_span(opponent_caps[i] if has_caps else null)
 		var r0x: float = from.x - opponents[i].x
 		var r0z: float = from.z - opponents[i].z
 		# PRESCREEN (exact): the meeting can't come nearer than the current
@@ -380,6 +417,17 @@ static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
 static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], apply_escape: bool = false) -> float:
+	if native != null:
+		return native.carry_safety(from, to, arrival_time, opponents, opponent_vels,
+				pack_caps(opponent_caps, opponents.size()), apply_escape)
+	return carry_safety_reference(from, to, arrival_time, opponents, opponent_vels,
+			opponent_caps, apply_escape)
+
+
+# carry_safety in GDScript: the reference NativeCarrySpace is held to.
+static func carry_safety_reference(from: Vector3, to: Vector3, arrival_time: float,
+		opponents: Array[Vector3], opponent_vels: Array[Vector3],
+		opponent_caps: Array = [], apply_escape: bool = false) -> float:
 	var carry_dir := Vector2.ZERO
 	var carry_speed: float = 0.0
 	var dx: float = to.x - from.x
@@ -424,6 +472,17 @@ static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 # strip happens first. Mirrors lane_loss_point for passes; from == to is a stand.
 # `covered_only`: how far the carry GETS — nothing covered reaches `to`.
 static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
+		opponents: Array[Vector3], opponent_vels: Array[Vector3],
+		opponent_caps: Array = [], apply_escape: bool = false, covered_only: bool = false) -> Vector3:
+	if native != null:
+		return native.carry_strip_point(from, to, arrival_time, opponents, opponent_vels,
+				pack_caps(opponent_caps, opponents.size()), apply_escape, covered_only)
+	return carry_strip_point_reference(from, to, arrival_time, opponents, opponent_vels,
+			opponent_caps, apply_escape, covered_only)
+
+
+# carry_strip_point in GDScript: the reference NativeCarrySpace is held to.
+static func carry_strip_point_reference(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], apply_escape: bool = false, covered_only: bool = false) -> Vector3:
 	var carry_dir := Vector2.ZERO
@@ -471,11 +530,7 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 				continue
 			var mx: float = r0x + rvx * t_star
 			var mz: float = r0z + rvz * t_star
-			var span: float = EVADE_STICK_REACH_M
-			if has_caps:
-				var caps: AISkaterCaps = opponent_caps[i]
-				if caps != null:
-					span = caps.blade_span
+			var span: float = _crossing_span(opponent_caps[i] if has_caps else null)
 			var margin: float = sqrt(mx * mx + mz * mz) - span
 			if dirx * (-mz) - dirz * (-mx) >= 0.0:
 				worst_l = minf(worst_l, margin)
@@ -504,11 +559,7 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 					continue
 				var mx2: float = r0x2 + rvx2 * t_star2
 				var mz2: float = r0z2 + rvz2 * t_star2
-				var span2: float = EVADE_STICK_REACH_M
-				if has_caps:
-					var caps2: AISkaterCaps = opponent_caps[i]
-					if caps2 != null:
-						span2 = caps2.blade_span
+				var span2: float = _crossing_span(opponent_caps[i] if has_caps else null)
 				var margin2: float = sqrt(mx2 * mx2 + mz2 * mz2) - span2
 				var left: bool = dirx * (-mz2) - dirz * (-mx2) >= 0.0
 				var eff: float = margin2 + CROSSING_PROTECT_SHIFT_M
@@ -718,3 +769,29 @@ static func carry_lane_clearance(from: Vector3, to: Vector3, arrival_time: float
 	if min_perp_sq == INF:
 		return 1.0
 	return clampf(sqrt(min_perp_sq) / CARRY_PATH_CLEAR_RADIUS_M, 0.0, 1.0)
+
+
+# `opponent_caps` as NativeCarrySpace takes them: max_accel, blade_span,
+# max_speed, lateral_grip and max_blade_reach per opponent, a null one at the
+# league's; empty when the caps do not index-match (every opponent at the
+# league's). Fills one scratch, so the result lives until the next call.
+static func pack_caps(opponent_caps: Array, n: int) -> PackedFloat64Array:
+	if opponent_caps.size() != n:
+		_native_caps.resize(0)
+		return _native_caps
+	_native_caps.resize(n * 5)
+	for i: int in n:
+		var caps: AISkaterCaps = opponent_caps[i]
+		if caps == null:
+			_native_caps[i * 5] = MANEUVER_ACCEL_M_S2
+			_native_caps[i * 5 + 1] = EVADE_STICK_REACH_M
+			_native_caps[i * 5 + 2] = AIArrival.SKATER_REF_SPEED_M_S
+			_native_caps[i * 5 + 3] = 1.0
+			_native_caps[i * 5 + 4] = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
+		else:
+			_native_caps[i * 5] = caps.max_accel
+			_native_caps[i * 5 + 1] = caps.blade_span
+			_native_caps[i * 5 + 2] = caps.max_speed
+			_native_caps[i * 5 + 3] = caps.lateral_grip
+			_native_caps[i * 5 + 4] = caps.max_blade_reach
+	return _native_caps

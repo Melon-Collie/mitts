@@ -265,38 +265,33 @@ var blade_height: float = 0.03
 # (0.0675 above the ice), or some pucks are touchable by neither plane. 0.52 sits
 # at the top, so a deflect reaches a net-front feed arriving at 0.9–1.1 m.
 var blade_lift_height: float = 0.52
-# Fixed, rigid shaft length (hand to blade heel). Baseline 1.30 m ≈ adult
-# senior stick shaft (butt-to-heel). The blade mesh extends forward from the
+# Fixed, rigid shaft length (top hand to blade heel). Baseline 1.40 m, a
+# senior stick on a 6'1" player (docs/body-proportions-plan.md). The blade mesh extends forward from the
 # heel; see Skater.blade_length. Total hand-to-toe is stick_length + blade_length.
 var stick_length: float = GameRules.DEFAULT_STICK_LENGTH_M
 # Hand Y in upper-body-local space. Baseline resting position (used in the FAR
 # regime); in the CLOSE regime the hand rises toward `hand_y_max` so the stick
 # tilts more vertical and the blade can tuck in close to the body.
 #
-# This export is the MESH-NATIVE (Size L2, 5'10") value; apply_attributes scales it
-# by height_mult, matching the appearance pass scaling the whole skeleton about the
-# ice plane — so the hand sits at the same body point (0.50 m × height below the
-# shoulder) on every build instead of pinning to one absolute height.
-#
-# The upper body rides at height_mult × 1.0 m world Y (FACEOFF_SPAWN_HEIGHT is the
-# physics origin for every build — only the mesh skeleton scales; the cosmetic
-# skating crouch lowers it up to ~7 cm at speed) and the blade at blade_height
-# (~ice), so -0.10 gives a hand world Y of 0.90 m × height (hip height on each
-# frame) and a rest stick angle of ~42° at L2, approaching a real lie-5 address
-# (~45°). The steeper stick pulls the rest carry circle in ~6 cm (stick_horiz
-# 1.03 → 0.97), but the shallower shoulder-to-hand drop re-aims the arm budget
-# sideways (derived backhand ROM 0.37 → 0.46 m of hand displacement), so rim reach
-# is roughly preserved and the directional reach lean stays pure bonus on top.
-var hand_rest_y: float = -0.10
+# Mesh-native (5'10"), scaled by height_mult as the skeleton is: the top hand at
+# the hips' height (~0.95 m × height on skates), half the height below the
+# shoulder, and the stick at rest ~43° from the ice, near a real lie-5 address.
+var hand_rest_y: float = -0.05
 # Ceiling for hand Y in the CLOSE regime. When aiming very close to the
 # skater, the hand rises to shorten the stick's horizontal projection; this
-# cap keeps the pose anatomical (0.30 local = 1.30 m world at L2 — the hand
-# won't climb past chest level). Mesh-native like hand_rest_y; apply_
-# attributes scales it by height_mult so the ceiling stays chest-height on
-# every frame. With default stick_length = 1.30 m and the blade on the ice
-# (blade_y ≈ -0.97 local at L2), hand_y_max = 0.30 → hand-to-blade drop
-# 1.27 → min horizontal stick reach ≈ 0.28 m.
-var hand_y_max: float = 0.30
+# cap keeps the pose anatomical (chest level, under the shoulder at 0.45).
+# Mesh-native like hand_rest_y; apply_attributes scales it by height_mult so
+# the ceiling stays chest-height on every frame. With the default 1.40 m stick
+# and the blade on the ice (blade_y ≈ -0.97 local at L2), 0.40 → hand-to-blade
+# drop 1.37 → min horizontal stick reach ≈ 0.29 m: a longer stick needs the
+# hands higher to bring the blade in as tight.
+var hand_y_max: float = 0.40
+# The least the top hand reaches off its shoulder toward a blade held round the
+# forehand, gone as the blade comes in tight (TopHandIK.Config.hand_forward):
+# the stick runs from in front of the belly, not the far hip.
+var top_hand_forward_m: float = 0.22
+var top_hand_forward_none_m: float = 0.3
+var top_hand_forward_full_m: float = 0.9
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
 # The rim is a half-ellipse (TopHandIK.rim_reach): longest straight ahead,
@@ -366,7 +361,7 @@ var nudge_velocity_retain: float = 0.85
 # rotation limit — ensuring the hand stays connected during any normal swing.
 # Never influences blade placement. See domain/rules/bottom_hand_ik.gd.
 # Fraction along the shaft (0 = top hand, 1 = blade heel) that the bottom hand
-# grips. ~0.25 on a 1.30 m shaft ≈ a typical hockey grip width.
+# grips. ~0.25 on a 1.40 m shaft ≈ a typical hockey grip width.
 var bottom_hand_grip_fraction: float = 0.25
 # Fine-tune Y offset added to the bottom hand's shaft-derived grip height
 # (SkaterIKCoordinator.update_bottom_hand lerps top-hand Y toward blade Y at
@@ -418,7 +413,8 @@ var upper_body_follow_damping: float = 18.0     # damping (near-critical — a c
 # far the skater visibly lunges. engage_power > 1 keeps the torso quiet mid-ROM
 # and commits the lean near full extension.
 # The forward cap sits on top of the skating posture's own fold
-# (velocity_lean_forward_max_deg), so the two together stay a reach, not a dive.
+# (velocity_lean_forward_max_deg, or a carrier's carry_fold_deg), so the two
+# together stay a reach, not a dive.
 # Scaled by the stick's purpose (SkaterIKCoordinator.reach_purpose): with nothing
 # to reach for the trunk keeps its posture.
 var upper_body_lean_max_deg: float = 15.0
@@ -443,6 +439,19 @@ var reach_purpose_far_m: float = 1.8
 var velocity_lean_forward_max_deg: float = 20.0
 var velocity_lean_back_max_deg: float = 6.0
 var velocity_lean_speed: float = 6.0
+# How far a carrier's chest folds over a stick held in front of him (CarryPostureRules),
+# standing or skating — its shoulders, and with them his hands, out in front of
+# his hips where both can hold it.
+var carry_fold_deg: float = 22.0
+# The least a carried puck comes off the centre of his body (m; CarryPostureRules
+# .held_out): pulled in closer, the shaft stands up beside him, the top hand rises
+# into his armpit and the bottom arm reaches it only through his belly.
+var carry_reach_min_m: float = 0.8
+# And this much further out with his chest folded over his skating by
+# velocity_lean_forward_max_deg: the fold brings his shoulder down to the
+# hands, and held as close as standing, the top hand rises level with it, the
+# elbow hangs below the fist and the shaft leaves it past the little finger.
+var carry_reach_fold_m: float = 0.15
 var lower_body_pitch_follow: float = 0.35
 
 # ── Lower Body Lag Tuning ─────────────────────────────────────────────────────
@@ -500,7 +509,7 @@ var vee_push_speed: float = 2.5           # m/s the leg drives a skate out: with
 var vee_toe_max_deg: float = 50.0         # the V's toe-out at a standstill
 var stride_rock_m: float = 0.04           # both skates shift under the body toward the support leg
 var stride_toe_out_deg: float = 25.0      # push skate turned out at full extension
-var stride_sit_max_deg: float = 45.0      # deepest hip flex the stride sits to for its push's reach
+var stride_sit_max_deg: float = 35.0      # deepest hip flex the stride sits to for its push's reach
 var stride_bob_m: float = 0.02            # vertical body bob per half-stride (weight transfer)
 var stride_sway_deg: float = 2.1          # torso weight-shift roll oscillating with the stride
 # Trunk inertia at the texture seam: the trunk texture sums many reads and
@@ -520,7 +529,7 @@ var stride_push_ceiling: float = 1.5      # max amplitude scale when driving har
 # soon as they're moving with intent; SkaterSkatingCoordinator derives the
 # matching knee flex and body drop from the leg geometry so one export drives
 # an anatomically consistent crouch that keeps the skates planted on the ice.
-var stance_hip_deg: float = 22.0            # static hip flex at full stance
+var stance_hip_deg: float = 17.5            # static hip flex at full stance
 var stance_full_speed_fraction: float = 0.45  # fraction of full gait pace at which the crouch fully engages
 var stance_push_gain: float = 0.35          # effort deepens (push) / shallows (glide) the stance
 # Faceoff ready stance — during the FACEOFF_PREP countdown the speed-driven
@@ -665,6 +674,7 @@ var stance_sit_gain: float = 0.35        # extra stroke crouch in the stance
 var stance_crouch: float = 1.7           # crouch floor in the stance (× stance_hip_deg)
 var stance_width_m: float = 0.125        # each skate set out from under its hip
 var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
+var carry_crouch: float = 1.7            # crouch floor under the full chest fold over the stick (× stance_hip_deg), the loaded stance's
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
 # glide (speed is power per stride, not faster turnover). cruise_gear (fast AND
@@ -733,11 +743,11 @@ var head_track_speed: float = 12.0
 var head_track_max_deg: float = 60.0
 # A carrier glances down at the puck (degrees of nod) as the hands work it
 # (the puck's speed off the body over the band, m/s) and as it comes in tight
-# (its distance over the band, m), less as the skater picks up speed: eyes up
-# on open ice.
+# (its distance over the band, m; carry_reach_min_m is as close as it comes),
+# less as the skater picks up speed: eyes up on open ice.
 var head_puck_nod_deg: float = 28.0
 var head_puck_hands_band: Vector2 = Vector2(1.0, 3.5)
-var head_puck_close_band: Vector2 = Vector2(0.9, 0.45)
+var head_puck_close_band: Vector2 = Vector2(1.05, 0.85)
 var head_puck_skate_band: Vector2 = Vector2(3.0, 7.0)
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
@@ -1003,23 +1013,13 @@ var net_blade_half_thickness: float = 0.012
 # rather than ride along with a stick the post is holding back.
 var post_catch_release_speed: float = 1.5
 
-# ── Goalie Body Block ─────────────────────────────────────────────────────────
-# XZ cylinder radius used to push the blade (and carried puck) away from a
-# goalie's body center. Tunable in the editor — matches roughly the goalie's
-# padded chest width. The hand moves with the blade to keep stick length intact.
-var goalie_block_radius: float = 0.50
-var goalie_strip_power: float = 1.5
-# Half-extents of the butterfly leg-pad strip box in goalie local XZ space.
-var butterfly_pad_half_x: float = 0.84
-var butterfly_pad_half_z: float = 0.25
-
 # ── References ────────────────────────────────────────────────────────────────
 var skater: Skater = null
 var puck: Puck = null
 # Injected at setup. Expected methods:
 #   is_host() -> bool                              — changes only per session; cached in _is_host
 #   is_movement_locked() -> bool                   — polled per frame
-#   get_goalie_data() -> Array[Dictionary]         — position/rotation_y/is_butterfly per goalie
+#   get_goalie_boxes() -> PackedFloat32Array        — every goalie's save boxes, packed (the stick's wall)
 var _game_state: Node = null
 var _is_host: bool = false
 
@@ -1032,7 +1032,7 @@ var _is_host: bool = false
 var _current_aim_world: Vector3 = Vector3.ZERO
 # Reused ShotResult for the per-tick "where would this charge go if released now"
 # prediction in _update_wrister_charge — a caller-owned scratch so that hot path
-# (120 Hz while charging, re-run per replayed input on reconcile) doesn't churn
+# (every tick while charging, re-run per replayed input on reconcile) doesn't churn
 # the heap. Pure output, overwritten each solve.
 var _wrister_pred_scratch: ShotMechanics.ShotResult = ShotMechanics.ShotResult.new()
 # The wrist shot's load, re-solved every aim tick and at the release from the
@@ -1071,12 +1071,10 @@ var _prev_carry_pin: Vector3 = Vector3.ZERO
 # escapes _collide_pinned_puck_with_net.
 var _net_pin_result := PuckGeometryCollision.Result.new()
 var _has_prev_carry_pin: bool = false
-# True on frames where a special locked-phase path posed the body itself this
-# tick — faceoff-prep blade aim, the faceoff skate-in approach, and replay
-# playback. Those paths run their own gait / head / off-hand (they're brief and
-# not the 120 Hz × N hot path), so the render-rate cosmetic hook yields to them
-# to avoid a double gait pass. The main live path (_process_input) clears it and
-# delegates cosmetics to the render hook.
+# True while replay playback poses the body itself (apply_replay_state), which
+# runs its own gait / head / off-hand, so the render-rate cosmetic hook yields to
+# it rather than pose twice. Every live path (_process_input and the two
+# faceoff-prep paths) clears it and delegates cosmetics to the render hook.
 var _self_posing: bool = false
 # Body-check stagger: seconds of thrust/grip-penalty recovery remaining. Set
 # host-authoritatively when this skater absorbs a check (_on_body_check_received),
@@ -1237,7 +1235,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	_game_state = game_state
 	_is_host = game_state.is_host()
 	# Cached so the per-tick gait can ask about the faceoff phase without a
-	# has_method() call at 120 Hz (test stubs may not implement it).
+	# has_method() call every tick (test stubs may not implement it).
 	_game_state_has_faceoff_prep = game_state.has_method("is_faceoff_prep")
 	_game_state_has_period_break = game_state.has_method("is_period_break")
 	process_physics_priority = -1  # Run before Skater's integration step
@@ -1340,6 +1338,8 @@ var loft_tan_mid: float = GameRules.DEFAULT_LOFT_TAN_MID
 var loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH
 var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
+var _base_carry_reach_min_m:            float = 0.0
+var _base_carry_reach_fold_m:           float = 0.0
 
 
 # Snapshot this body's attribute-scaled capabilities as the bot AI models them —
@@ -1493,10 +1493,10 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	skater.upper_arm_length   = _base_skater_upper_arm_length   * m_height
 	skater.forearm_length     = _base_skater_forearm_length     * m_height
 	skater.shoulder_reach_m   = _base_skater_shoulder_reach_m   * m_height
-	# Shoulder anchors track the visual shoulder balls, which the appearance
-	# pass repositions from the same multipliers (y rides height, x rides
-	# girth) — the drawn arm and the IK stay rooted at the same point on
-	# every build. Must run BEFORE the hand/ROM derivation below reads
+	# Shoulder anchors track the skin's shoulder, which the appearance pass
+	# carries with the torso's scale and place by the same multipliers (y rides
+	# height, x rides girth) — the drawn arm and the IK stay rooted at the same
+	# point on every build. Must run BEFORE the hand/ROM derivation below reads
 	# shoulder_height.
 	skater.set_shoulder_anchor(
 			_base_skater_shoulder_offset * attrs.girth_mult(),
@@ -1510,6 +1510,8 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# almost exactly 1:1, so blade rim reach barely moves.
 	hand_rest_y = _base_hand_rest_y * m_height
 	hand_y_max  = _base_hand_y_max  * m_height
+	carry_reach_min_m = _base_carry_reach_min_m * m_height
+	carry_reach_fold_m = _base_carry_reach_fold_m * m_height
 	# The gait's crouch drop rides the same leg scale the appearance pass
 	# applies to the leg pivot chain, so flexed knees sink a tall build
 	# proportionally deeper.
@@ -1592,6 +1594,8 @@ func _capture_attribute_bases() -> void:
 	_base_stick_length                 = stick_length
 	_base_hand_rest_y                  = hand_rest_y
 	_base_hand_y_max                   = hand_y_max
+	_base_carry_reach_min_m            = carry_reach_min_m
+	_base_carry_reach_fold_m           = carry_reach_fold_m
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
 	_base_skater_shoulder_reach_m      = skater.shoulder_reach_m
@@ -1709,17 +1713,11 @@ func _sync_knockdown_meta(prev_timer: float) -> void:
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
-# Whether this skater is committing to a deliberate deflect this tick. Base
-# behaviour (human players, local and remote-on-host): holding the DEFLECT button
-# (stick_lift / Q) without the puck. The loft level (scroll) then shapes it —
-# FLAT grounded redirect, LOW grounded tip up, HIGH knock an airborne puck down
-# (reach follows blade_can_interact; direction from Puck.apply_blade_deflect).
-# AIController
-# overrides this to always-false — bots don't deliberate-deflect; their
-# one-timers hold the SLAP button off-puck (the real slapper charge + pickup
-# zone — the only one-timer path on_puck_picked_up_network supports: a held
-# wrister's state is force-reset to SKATING_WITH_PUCK on pickup, so a wrister
-# release edge can never fire on a caught feed).
+# Whether this skater is committing to a deliberate deflect this tick: holding
+# the DEFLECT button (stick_lift / Q) without the puck, a human's or a bot's (the
+# finisher's tip, AIRoleFinisher). The loft level sets the redirect's lift — FLAT
+# down, LOW, MID and HIGH up (PuckCollisionRules.deflect_loft_speed) — and the
+# side the blade is held on its turn (PuckCollisionRules.tip_turn).
 func _wants_deflect(input: InputState) -> bool:
 	return input.stick_lift_held and not has_puck
 
@@ -1861,7 +1859,7 @@ func _process_input(input: InputState, delta: float) -> void:
 		skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
 	# Head tracking, off-hand IK, and the leg gait moved to render rate
 	# (Skater.render_pose_update / _render_pose_update) — they feed only meshes,
-	# not the blade world frame, so they don't belong in the 120 Hz + reconcile-
+	# not the blade world frame, so they don't belong in the per-tick + reconcile-
 	# replay path. Stick/arm mesh rebuild already lives in Skater._process too.
 	if not is_replaying:
 		_pose.update_angular_velocities(delta)
@@ -1891,7 +1889,7 @@ func _process_input(input: InputState, delta: float) -> void:
 
 # Render-rate cosmetic pose pass, registered on the skater and invoked once per
 # rendered frame from Skater._process (visibility-gated). Runs the purely-cosmetic
-# passes that used to sit in the 120 Hz physics tick: the leg gait, head tracking
+# passes that used to sit in the physics tick: the leg gait, head tracking
 # (off the last-seen aim), and the off-hand grip IK. None feed the blade world
 # frame, so running them at render rate can't affect pickup or reconcile. Local
 # and AI controllers use this base; RemoteController overrides it to drop head
@@ -1904,7 +1902,7 @@ func _render_pose_update(delta: float) -> void:
 	# The head and the off hand are mesh (Skater.on_camera).
 	if not skater.on_camera():
 		return
-	_pose.apply_head_tracking_aim(_current_aim_world, delta)
+	_pose.apply_head_tracking(delta)
 	_ik.update_bottom_hand(delta)
 
 
@@ -1972,7 +1970,12 @@ func _apply_fall_tilt(kd_t: float) -> bool:
 			Vector2(dir_world.x, dir_world.z), obstacle)
 	var d: Vector3 = skater.global_transform.basis.inverse() \
 			* Vector3(safe_dir.x, 0.0, safe_dir.y)
-	var carry: Vector3 = -d * DiveRules.com_carry_m(tilt) if _diving() else Vector3.ZERO
+	var carry: Vector3
+	if _diving():
+		carry = -d * DiveRules.com_carry_m(tilt)
+	else:
+		var roll: Vector2 = KnockdownFallRules.bulk_roll(tilt, _fall_config())
+		carry = d * roll.x + Vector3.UP * roll.y
 	skater.set_knockdown_fall(Vector3.UP.cross(d), tilt, carry)
 	return true
 
@@ -2194,18 +2197,17 @@ func apply_blade_aim_only(input: InputState, delta: float) -> void:
 	var blade_world_pre: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var hand_world_pre: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
 	_pose.apply_upper_body(delta)
-	_pose.apply_head_tracking(input, delta)
 	skater.set_top_hand_position(skater.upper_body_to_local(hand_world_pre))
 	skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
-	# This locked-phase path poses its own gait ready-stance + off-hand (a brief
-	# countdown, not the hot path); the render hook yields to it (see _self_posing).
-	_self_posing = true
-	_skating.apply(delta)
+	# The gait's ready stance, the head and the off hand are the render hook's,
+	# as in live play: on the tick they read the previous frame's animation LOD
+	# and the post-tick markers, so the legs of everyone but the local skater
+	# went stale and the bottom glove slid along the shaft.
+	_self_posing = false
 	# apply_facing doesn't run here, so this is the only publisher of the lower
 	# body's yaw for the whole countdown — the skate-in's hip-to-travel
 	# alignment unwinds under the set skater instead of freezing at arrival.
 	_pose.apply_lower_body_yaw(delta)
-	_ik.update_bottom_hand(delta)
 
 
 # ── Network State ─────────────────────────────────────────────────────────────
@@ -2235,6 +2237,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.pin_role = skater.pin_role
 	state.pin_strength = skater.pin_strength
 	state.diving = skater.is_diving
+	state.slapshot_pinned = skater.is_slapshot_pinning()
 	# Host-only shaft segment for stick-lift claim resolution (paired with
 	# blade_contact_world). World-space grip point — the wire top_hand_position
 	# is upper-body-local and can't be used for host-side world geometry.
@@ -2287,6 +2290,11 @@ func get_shot_state() -> int:
 # Whether the stick has the puck to reach for this tick (ReachPurposeRules).
 func reach_purpose() -> float:
 	return _ik.reach_purpose
+
+
+# How far the chest folds over the stick (SkaterIKCoordinator.chest_fold).
+func chest_fold() -> float:
+	return _ik.chest_fold()
 
 
 # The gait's (stop weight as the scrape hears it, skid weight, turn load) this
@@ -2490,9 +2498,22 @@ func _collide_pinned_puck_with_net() -> void:
 	if PuckGeometryCollision.resolve_net_panels(
 			prev, raw, skater.velocity, GameRules.PUCK_COLLISION_RADIUS, _net_pin_result):
 		resolved = _net_pin_result.position
+	resolved += _pinned_puck_off_goalies(prev, resolved)
 	skater.carry_pin_correction = resolved - raw
 	_prev_carry_pin = resolved
 	_has_prev_carry_pin = true
+
+
+# THE GOALIE — his gear is solid to a carried puck and, like the twine, does not
+# strip: pressed into him it is held at his gear, swept from where it was
+# (GoalieGearCollision, the stick's own wall, with the puck's radius).
+func _pinned_puck_off_goalies(prev: Vector3, at: Vector3) -> Vector3:
+	if not _game_state.has_method("get_goalie_boxes"):
+		return Vector3.ZERO
+	var boxes: PackedFloat32Array = _game_state.get_goalie_boxes()
+	if boxes.is_empty():
+		return Vector3.ZERO
+	return GoalieGearCollision.resolve(prev, at, at, GameRules.PUCK_COLLISION_RADIUS, boxes)
 
 
 # Nudge: the carrier taps the puck off the blade as a soft self-pass. The
@@ -2537,7 +2558,6 @@ func on_puck_picked_up_network(settle_until_ms: int = 0, feed: Vector2 = Vector2
 		# than the leniency redirect. Arm the window if the wind-up didn't already,
 		# so the graded centre bonus applies to a catch made during the hold
 		# exactly as to one made during the charge.
-		skater.set_slapper_zone(false)
 		skater.enter_slapshot_pinning(slapper_strike_local())
 		if _aiming.one_timer_window_timer <= 0.0:
 			_aiming.one_timer_window_timer = one_timer_window_duration
@@ -2548,7 +2568,6 @@ func on_puck_picked_up_network(settle_until_ms: int = 0, feed: Vector2 = Vector2
 		# snaps to the overhead wind-up blade) and switch into the with-puck
 		# charge. The centre rather than where this machine's puck happens to be,
 		# so host and client pin the same point.
-		skater.set_slapper_zone(false)
 		skater.enter_slapshot_pinning(slapper_strike_local())
 		if _aiming.slapper_stance_line == Vector2.ZERO:
 			_aiming.slapper_stance_line = _sm.locked_slapper_dir
@@ -2763,19 +2782,16 @@ func _render_approach_pose(facing: Vector2, delta: float) -> void:
 	var blade_world_pre: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var hand_world_pre: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
 	_pose.apply_upper_body(delta)
-	_pose.apply_head_tracking(_approach_input, delta)
 	skater.set_top_hand_position(skater.upper_body_to_local(hand_world_pre))
 	skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
-	# This intro-skate path poses its own gait + off-hand (a brief locked phase,
-	# not the hot path); the render hook yields to it (see _self_posing).
-	_self_posing = true
-	_skating.apply(delta)
+	# The stride, the head and the off hand are the render hook's (see
+	# apply_blade_aim_only).
+	_self_posing = false
 	# Publish the gait's lower-body yaw (hip-to-travel alignment) — normally
 	# written inside _pose.apply_facing, which this path replaces. Going through
 	# the coordinator also decays the facing turn lag the pre-whistle play left
 	# behind, which a bare set_lower_body_lag froze for the length of the walk-in.
 	_pose.apply_lower_body_yaw(delta)
-	_ik.update_bottom_hand(delta)
 
 
 # Drops any non-skating shot state — a wrister/slapper wind-up, a one-timer
@@ -2845,10 +2861,10 @@ func _transition_to_skating() -> void:
 	# carry it to the new targets: zeroing it here snaps the shoulders square and
 	# the trunk upright in one tick (a lost puck threw the head ~0.2 m). Out of
 	# the follow-through the blade smoother is also seeded from the finish, which
-	# choreographed the blade directly.
-	if prev_state == State.FOLLOW_THROUGH and not is_replaying:
+	# choreographed the blade directly. Replayed too: the next tick's blade reads
+	# the seed.
+	if prev_state == State.FOLLOW_THROUGH:
 		_ik.seed_blade_smoothing(skater.upper_body_to_global(skater.get_blade_position()))
-	skater.set_slapper_zone(false)
 	skater.exit_slapshot_pinning()
 	_hide_slapshot_hud()
 
@@ -2928,9 +2944,9 @@ func _enter_slapper_charge(input: InputState) -> void:
 		_slapper_setup_still_s = 0.0
 		_sm.set_state(State.SLAPPER_CHARGE_WITH_PUCK)
 	else:
-		# Activate the ice-level slapper zone so the puck can be detected at
+		# Centre the ice-level slapper zone on the strike so the puck can be detected at
 		# ground level even though the blade is lifted during wind-up.
-		skater.set_slapper_zone(true, slapper_zone_radius, strike)
+		skater.set_slapper_zone(strike)
 		_sm.set_state(State.SLAPPER_CHARGE_WITHOUT_PUCK)
 		if show_one_timer_indicator:
 			skater.set_slapper_indicator(true, strike, slapper_zone_radius)
@@ -3071,8 +3087,8 @@ var _slapper_setup_still_s: float = 0.0
 
 
 func _wrister_aim_dir(input: InputState) -> Vector3:
-	return ShotMechanics.wrister_aim_dir(
-			input.bot_wrister_aim_dir, input.mouse_world_pos, _aiming.wrister_origin_world)
+	return ShotMechanics.wrister_aim_dir(input.bot_wrister_aim_dir, input.mouse_world_pos,
+			_aiming.wrister_origin_at(skater.global_position))
 
 # Blade update for the WRISTER_AIM state: HOLD the blade at the shot origin — the
 # puck sits still where the shot fires from while the torso coils toward the
@@ -3425,9 +3441,8 @@ var _live_puck_view := PuckView.new()
 
 # Live puck: for a local player and for a bot, the sim and the puck view share
 # one clock, so "what the shooter saw" is simply the puck. RemoteController
-# overrides this — on the host a remote shooter's sim runs one input lead behind
-# the puck they aimed at, and judging the swing against the host's live puck
-# would slide their timing window by that lead.
+# reads the same instant out of the host's buffer, since a remote's input can be
+# applied a frame or more after its stamp.
 func sample_shooter_puck_view(_input: InputState, out: PuckView) -> void:
 	_sample_live_puck_view(out)
 
@@ -3974,7 +3989,7 @@ func _diving() -> bool:
 # is down (same rationale as _cached_fall_cfg above).
 var _sprawl_scratch: KnockdownFallRules.SprawlPose = null
 
-# Cached — _update_wrister_charge reads it every aim tick (120 Hz, replayed
+# Cached — _update_wrister_charge reads it every aim tick (replayed
 # again per input through reconcile), so a per-call .new() is hot-path churn.
 # Rebuilt lazily after apply_attributes nulls it (same pattern as the
 # movement configs above).
@@ -4054,7 +4069,7 @@ func _wrister_sweep_speed(input: InputState) -> float:
 	return _aiming.cursor_speed_ema * shot_power_sensitivity()
 
 # Cached like the wrister config: _update_slapper_charge now re-solves the release
-# every windup tick (120 Hz × actors, replayed on reconcile) to publish
+# every windup tick (× actors, replayed on reconcile) to publish
 # predicted_shot_velocity, so a fresh SlapperConfig per call would be per-tick heap
 # churn. Rebuilt lazily; invalidated in apply_attributes when the source exports change.
 var _cached_slapper_cfg: ShotMechanics.SlapperConfig = null

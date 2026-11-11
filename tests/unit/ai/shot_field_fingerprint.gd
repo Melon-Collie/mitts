@@ -17,6 +17,7 @@ const SOURCES: Array[String] = [
 	"res://Scripts/domain/rules/shot_mechanics.gd",
 	"res://Scripts/domain/rules/swept_disc_obb.gd",
 	"res://tests/unit/ai/real_goalie_shot_harness.gd",
+	"res://tests/unit/ai/open_set_edges.gd",
 	"res://tests/unit/ai/shot_odds_stager.gd",
 	"res://tests/instruments/ai/test_generate_shot_field.gd",
 ]

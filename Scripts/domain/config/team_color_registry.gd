@@ -22,9 +22,9 @@ class_name TeamColorRegistry
 #     the jersey/* keys (those mirror the 3D uniform mesh and look muddy in
 #     flat UI panels).
 #   - A nested "uniform" sub-dict carrying the full v2 detail
-#     (shoulders, jersey-with-yoke-and-stripes, arms.upper/lower,
-#     pants-with-stripes, socks-with-stripes). The skater painter
-#     consumes this; UI accent code doesn't need to touch it.
+#     (shoulders, jersey-with-yoke-and-stripes, the sleeve,
+#     pants-with-stripes, socks-with-stripes). The skaters' and the goalie's
+#     painters consume this; UI accent code doesn't need to touch it.
 #
 # Color identity is an integer slot: the team's index in the loaded array.
 # Out-of-range slots return a fallback and log a warning; they never crash.
@@ -90,10 +90,10 @@ static func get_colors(slot: int, team_id: int) -> Dictionary:
 		"jersey_stripe":  _accent_color(jersey_block, shoulders.color),
 		"gloves":         kit.gloves,
 		# A glove design's SECOND color is whichever team color the glove body
-		# is not. Five of the eight presets dress their gloves in the secondary,
-		# so a design that reached for the secondary again would paint those
-		# teams a monochrome glove — this is the only derived color that has to
-		# look at what it is contrasting against.
+		# is not. Most presets dress their gloves in the secondary, so a design
+		# that reached for the secondary again would paint those teams a
+		# monochrome glove — this is the only derived color that has to look at
+		# what it is contrasting against.
 		"glove_accent":   preset.primary if kit.gloves.is_equal_approx(preset.secondary) \
 				else preset.secondary,
 		"pants":          pants_block.base,
@@ -174,6 +174,56 @@ static func get_score_stripe_pair(home_slot: int, away_slot: int) -> Dictionary:
 	}
 
 
+# A team colour used as INK — text, lines, dots and bars drawn straight onto a
+# surface — must read on it; as a FILL (a stripe or swatch beside white
+# lettering) it stays the true primary, which is what get_score_stripe_pair is.
+# WCAG AA for small text: the analytics labels and card rosters are 11–16 px.
+const INK_MIN_CONTRAST: float = 4.5
+# Below this HSV saturation the lifted ink is a grey, which reads as the UI's own
+# neutral text rather than as a team (Blackberry's near-black primary).
+const _INK_MIN_SATURATION: float = 0.2
+
+
+# Each team's ink on `surface`. Returns { home, away } as Colors.
+static func get_score_ink_pair(home_slot: int, away_slot: int, surface: Color) -> Dictionary:
+	return {
+		"home": _ink_for(get_preset(home_slot), surface),
+		"away": _ink_for(get_preset(away_slot), surface),
+	}
+
+
+# The primary lifted to read on `surface`, unless that lift is a hueless grey and
+# the secondary's is not.
+static func _ink_for(preset: Dictionary, surface: Color) -> Color:
+	var primary: Color = readable_on(preset.primary, surface)
+	if primary.s >= _INK_MIN_SATURATION:
+		return primary
+	var secondary: Color = readable_on(preset.secondary, surface)
+	return secondary if secondary.s > primary.s else primary
+
+
+# `ink` unchanged if it already reaches `min_contrast` on `surface`; otherwise
+# the nearest OKHSL lightness, hue and saturation held, that does. Lightens on a
+# dark surface, darkens on a light one; the far end (white or black) is returned
+# when even it falls short.
+static func readable_on(ink: Color, surface: Color,
+		min_contrast: float = INK_MIN_CONTRAST) -> Color:
+	if contrast_ratio(ink, surface) >= min_contrast:
+		return ink
+	var h: float = ink.ok_hsl_h
+	var s: float = ink.ok_hsl_s
+	var fails: float = ink.ok_hsl_l
+	var passes: float = 1.0 \
+			if contrast_ratio(Color.WHITE, surface) >= contrast_ratio(Color.BLACK, surface) else 0.0
+	for _i: int in 16:
+		var mid: float = (fails + passes) * 0.5
+		if contrast_ratio(Color.from_ok_hsl(h, s, mid, ink.a), surface) >= min_contrast:
+			passes = mid
+		else:
+			fails = mid
+	return Color.from_ok_hsl(h, s, passes, ink.a)
+
+
 static func get_all_slots() -> Array[int]:
 	ensure_loaded()
 	var result: Array[int] = []
@@ -245,29 +295,44 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 	var pants_raw:     Dictionary = raw.get("pants",     {})
 	var socks_raw:     Dictionary = raw.get("socks",     {})
 	var text_raw:      Dictionary = raw.get("text",      {})
+	var arms := {
+		"upper": {
+			"base":    _parse_color(arms_upper.get("base",    "#FFFFFF")),
+			"stripes": _parse_stripes(arms_upper.get("stripes", [])),
+		},
+		"lower": {
+			"base":    _parse_color(arms_lower.get("base",    "#FFFFFF")),
+			"stripes": _parse_stripes(arms_lower.get("stripes", [])),
+		},
+	}
+	var shoulder_color: Color = _parse_color(shoulders_raw.get("color", "#FFFFFF"))
+	# The sleeve is the kit's arm (SleevePaint); a kit still in the two-segment
+	# form is read into one.
+	var sleeve: Dictionary
+	if raw.has("sleeve"):
+		var sleeve_raw: Dictionary = raw.sleeve
+		sleeve = {
+			"base":    _parse_color(sleeve_raw.get("base", "#FFFFFF")),
+			"stripes": _parse_stripes(sleeve_raw.get("stripes", []), true),
+		}
+		shoulder_color = SleevePaint.color_at(sleeve,
+				SleevePaint.pos_of(SleevePaint.NUMBER_CENTER_M))
+	else:
+		sleeve = SleevePaint.from_legacy(arms, shoulder_color)
 	return {
 		"helmet":      _parse_color(raw.get("helmet", "#FFFFFF")),
 		"shoulders": {
-			"color":   _parse_color(shoulders_raw.get("color",   "#FFFFFF")),
+			"color":   shoulder_color,
 			"text":    _parse_color(shoulders_raw.get("text",    "#FFFFFF")),
+			"stroke":  _parse_stroke(shoulders_raw.get("stroke", null)),
 		},
 		"jersey": {
 			"base":    _parse_color(jersey_raw.get("base",    "#FFFFFF")),
 			"yoke":    _parse_optional_color(jersey_raw.get("yoke", null)),
 			"collar":  _parse_optional_color(jersey_raw.get("collar", null)),
-			"stripes": _parse_stripes(jersey_raw.get("stripes", [])),
+			"stripes": _parse_stripes(jersey_raw.get("stripes", []), true),
 		},
-		"arms": {
-			"elbow": _parse_optional_color(arms_raw.get("elbow", null)),
-			"upper": {
-				"base":    _parse_color(arms_upper.get("base",    "#FFFFFF")),
-				"stripes": _parse_stripes(arms_upper.get("stripes", [])),
-			},
-			"lower": {
-				"base":    _parse_color(arms_lower.get("base",    "#FFFFFF")),
-				"stripes": _parse_stripes(arms_lower.get("stripes", [])),
-			},
-		},
+		"sleeve":      sleeve,
 		"gloves":      _parse_color(raw.get("gloves", "#FFFFFF")),
 		"pants": {
 			"base":    _parse_color(pants_raw.get("base",    "#FFFFFF")),
@@ -281,13 +346,16 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 		"text": {
 			"color":   _parse_color(text_raw.get("color",   "#FFFFFF")),
 			"outline": _parse_color(text_raw.get("outline", "#000000")),
+			"stroke":  _parse_stroke(text_raw.get("stroke", null)),
 		},
 	}
 
 
 # Parses an array of {pos, width, color} stripes into Dictionaries with
 # real Color values. Bad entries are skipped with a warning.
-static func _parse_stripes(raw: Variant) -> Array[Dictionary]:
+# `shaped` reads each stripe's optional `peak` and `fill_below` too
+# (StripeOutline); the sleeve and the jersey paint them.
+static func _parse_stripes(raw: Variant, shaped: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if not raw is Array:
 		return out
@@ -295,11 +363,23 @@ static func _parse_stripes(raw: Variant) -> Array[Dictionary]:
 		if not s is Dictionary:
 			continue
 		var sd: Dictionary = s
-		out.append({
+		var stripe := {
 			"pos":   float(sd.get("pos",   0.5)),
 			"width": float(sd.get("width", 0.0)),
 			"color": _parse_color(sd.get("color", "#FFFFFF")),
-		})
+		}
+		var peak: Variant = sd.get("peak")
+		if shaped and sd.has("fill_below"):
+			stripe.fill_below = _parse_color(sd.fill_below)
+		if shaped and peak is Dictionary:
+			stripe.peak = {
+				"depth": float(peak.get("depth", 0.0)),
+				"count": maxi(int(peak.get("count", 1)), 1),
+				"u":     float(peak.get("u", 0.5)),
+			}
+			if peak.get("shape") == "sine":
+				stripe.peak.shape = "sine"
+		out.append(stripe)
 	return out
 
 
@@ -309,12 +389,19 @@ static func _parse_color(hex: Variant) -> Color:
 	return Color.WHITE
 
 
-# yoke, collar, arms.elbow and ui_ink are optional — null falls back: the collar
-# to the yoke, the yoke to the jersey body, the elbow to the sleeve under it,
-# the ink to the side's usual lettering.
+# yoke, collar and ui_ink are optional — null falls back: the collar to the
+# yoke, the yoke to the jersey body, the ink to the side's usual lettering.
 static func _parse_optional_color(hex: Variant) -> Variant:
 	if hex == null:
 		return null
+	return _parse_color(hex)
+
+
+# A lettering stroke (text.stroke, shoulders.stroke) is optional too, but
+# absent means unbordered, which a transparent Color says to every painter.
+static func _parse_stroke(hex: Variant) -> Color:
+	if hex == null:
+		return Color.TRANSPARENT
 	return _parse_color(hex)
 
 
@@ -345,7 +432,7 @@ static func _hardcoded_pomegranate() -> Dictionary:
 		}),
 		"away":      _parse_kit({
 			"helmet":      "#F5E6D3",
-			"shoulders":   {"color": "#971829", "text": "#F5E6D3"},
+			"shoulders":   {"color": "#F5E6D3", "text": "#971829"},
 			"jersey":      {"base": "#F5E6D3", "stripes": []},
 			"arms":        {"upper": {"base": "#971829", "stripes": []},
 							"lower": {"base": "#971829", "stripes": []}},
@@ -361,31 +448,31 @@ static func _hardcoded_pomegranate() -> Dictionary:
 static func _hardcoded_blueberry() -> Dictionary:
 	return {
 		"name":      "Blueberry",
-		"primary":   _parse_color("#4A7AD6"),
+		"primary":   _parse_color("#3B67C4"),
 		"secondary": _parse_color("#6B1E4A"),
 		"light":     _parse_color("#FFFFFF"),  # mirrors away jersey base
 		"home":      _parse_kit({
 			"helmet":      "#6B1E4A",
-			"shoulders":   {"color": "#4A7AD6", "text": "#FFFFFF"},
-			"jersey":      {"base": "#4A7AD6", "stripes": []},
-			"arms":        {"upper": {"base": "#4A7AD6", "stripes": []},
-							"lower": {"base": "#4A7AD6", "stripes": []}},
+			"shoulders":   {"color": "#3B67C4", "text": "#FFFFFF"},
+			"jersey":      {"base": "#3B67C4", "stripes": []},
+			"arms":        {"upper": {"base": "#3B67C4", "stripes": []},
+							"lower": {"base": "#3B67C4", "stripes": []}},
 			"gloves":      "#6B1E4A",
 			"pants":       {"base": "#6B1E4A", "stripes": []},
-			"socks":       {"base": "#4A7AD6", "stripes": []},
+			"socks":       {"base": "#3B67C4", "stripes": []},
 			"goalie_pads": "#FFFFFF",
 			"text":        {"color": "#FFFFFF", "outline": "#6B1E4A"},
 		}),
 		"away":      _parse_kit({
 			"helmet":      "#FFFFFF",
-			"shoulders":   {"color": "#C8D8F0", "text": "#6B1E4A"},
+			"shoulders":   {"color": "#3B67C4", "text": "#FFFFFF"},
 			"jersey":      {"base": "#FFFFFF", "stripes": []},
 			"arms":        {"upper": {"base": "#C8D8F0", "stripes": []},
 							"lower": {"base": "#C8D8F0", "stripes": []}},
-			"gloves":      "#4A7AD6",
-			"pants":       {"base": "#4A7AD6", "stripes": []},
+			"gloves":      "#3B67C4",
+			"pants":       {"base": "#3B67C4", "stripes": []},
 			"socks":       {"base": "#FFFFFF", "stripes": []},
 			"goalie_pads": "#FFFFFF",
-			"text":        {"color": "#4A7AD6", "outline": "#6B1E4A"},
+			"text":        {"color": "#3B67C4", "outline": "#6B1E4A"},
 		}),
 	}

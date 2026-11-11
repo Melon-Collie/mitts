@@ -6,7 +6,7 @@ extends GutTest
 # it ends. That is what lets the carrier price a move on where it leaves him.
 # Then the properties any honest rollout has.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # The rollout runs the controller's own functions on the same numbers, so the
 # two agree to float noise; a few millimetres is room for evaluation order.
 const POS_TOL_M: float = 0.005

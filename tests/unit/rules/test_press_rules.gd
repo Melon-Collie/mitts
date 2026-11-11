@@ -3,7 +3,7 @@ extends GutTest
 # PressRules' properties: what any honest version of the press does, whatever
 # its calibration (tests/CLAUDE.md, Calibration and characterisation tests).
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const Posture = SkaterMovementRules.Posture
 const AHEAD := Vector2(0.0, -1.0)
 const SIDE := Vector2(1.0, 0.0)

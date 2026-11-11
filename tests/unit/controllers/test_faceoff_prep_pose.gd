@@ -13,7 +13,7 @@ extends GutTest
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const State = SkaterStateMachine.State
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # Comfortably past every ease in the prep pose (the slowest is the crouch's
 # stride_intensity_speed at 6/s) so the assertions are about the settled value.
 const SETTLE_TICKS: int = 120
@@ -352,8 +352,8 @@ func _runner_height(c: SkaterController, left: bool) -> float:
 			+ (SkaterMeshBuilder.LegBone.FOOT_L if left else SkaterMeshBuilder.LegBone.FOOT_R)
 	var xf: Transform3D = c.skater.global_transform * c.skater.mesh_root.transform \
 			* rig.transform * rig.get_bone_global_pose(bone)
-	var runner := SkaterMeshBuilder.shared_boot_assembly().surface_get_arrays(
-			SkaterMeshBuilder.BOOT_SURF_RUNNER)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	var runner := SkaterMeshBuilder.shared_skate_blade().surface_get_arrays(
+			SkaterMeshBuilder.BLADE_PART_RUNNER)[Mesh.ARRAY_VERTEX] as PackedVector3Array
 	var lowest: float = INF
 	for v: Vector3 in runner:
 		lowest = minf(lowest, (xf * v).y)
@@ -435,3 +435,32 @@ func test_nobody_holds_a_draw_stance_once_the_puck_is_live() -> void:
 	_state.faceoff_prep = false
 	assert_false(centre.is_faceoff_ready(),
 			"the stance is gated on the phase, so the drop releases it")
+
+
+# ── The clock the pose is drawn on ───────────────────────────────────────────
+
+# The locked-phase paths leave the legs to the render pass, as live play does.
+# Posed on the tick, they read the previous frame's animation-LOD verdict, and
+# every skater but the local one was drawn on stale legs — jitter through the
+# whole skate-in and settle.
+func test_the_prep_poses_the_legs_at_render_rate_only() -> void:
+	var c: SkaterController = _controller(true)
+	var target := Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+	c.begin_approach(Vector3(-1.5, GameRules.FACEOFF_SPAWN_HEIGHT, 4.0), target,
+			Vector2(0.0, -1.0), 1.0)
+	var input := InputState.new()
+	input.delta = DT
+	input.mouse_world_pos = Vector3(0.0, 0.0, -1.0)
+	var on_tick: int = 0
+	var on_frame: int = 0
+	for _i: int in 200:
+		var before: int = c.skater.leg_pose_version()
+		if not c.tick_faceoff_approach(DT):
+			c.skater.velocity = Vector3.ZERO
+			c.apply_blade_aim_only(input, DT)
+		var ticked: int = c.skater.leg_pose_version()
+		on_tick += ticked - before
+		c.skater._process(DT)
+		on_frame += c.skater.leg_pose_version() - ticked
+	assert_eq(on_tick, 0, "nothing on the tick writes the legs")
+	assert_gt(on_frame, 0, "the render pass does")

@@ -6,10 +6,10 @@ extends GutTest
 # glides on and stops on, no further, in the glide's own time; and one that
 # turns back on him is followed every tick unbroken, his gear out of the ice.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
-const MAX_BONE_STEP_M: float = 0.1
+const MAX_BONE_STEP_M: float = 12.0 * DT  # nothing on him moves 12 m/s
 
 var _motor: KeeperMotor = null
 var _pose := KeeperPose.new()
@@ -73,7 +73,8 @@ func test_a_moving_spot_is_caught_and_skated_with() -> void:
 				stopped += 1
 			if _motor.glide._drive > 0.5:
 				stroking_matched += 1
-	assert_lt(off, 0.02, "caught and held on it")
+	# Within a tick of its travel, and 5 mm.
+	assert_lt(off, v.length() * DT + 0.005, "caught and held on it")
 	assert_eq(stopped, 0, "never stopped for it")
 	assert_eq(stroking_matched, 0, "gliding, matched, not stroking")
 	_checked("a moving spot")

@@ -105,37 +105,47 @@ func test_3v3_high_forward_keeps_a_wall_clear_in_easy() -> void:
 
 
 # ── The pinch and the rotation behind it (5v5) ───────────────────────────────
-# Their winger holds the puck on the +x half-wall a few metres inside their
-# line, going nowhere — the bottled carrier a strong-side D pinches on. The
-# whole exchange should happen: the RD steps down the wall onto him, a forward
-# rotates up to the RD's point, and the LD slides to the middle of the line.
-# The pinch waits on its cover (a forward able to take the point in time), and
-# F2_WEAK starts on the weak-side breakout lane, so the exchange runs ~4 s: the
-# point is covered at ~4.0 s.
+# A keep-in, not a forecheck: we have the puck low on the +x wall and lose it,
+# and it caroms loose up the boards toward our strong point while their winger
+# comes down to collect it at the half-wall, a few metres inside their line,
+# and holds it there (a scripted skater: handed the puck as it comes within his
+# reach, since the harness's scripts collect nothing). The whole exchange
+# should happen: the RD steps down the
+# wall onto the pickup, a forward rotates up to the RD's point, and the LD
+# slides to the middle of the line.
 func test_5v5_strong_d_pinches_and_the_rotation_covers_him() -> void:
 	var h = Harness.new()
 	h.team_size = 5
 	h.positions = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 11: 0, 12: 1, 13: 2, 14: 3, 15: 4}
-	h.add_skater(1, 0, Vector3(4.0, 0.0, -20.0))      # C, forechecking low
-	h.add_skater(2, 0, Vector3(-6.0, 0.0, -15.0))     # LW
-	h.add_skater(3, 0, Vector3(1.0, 0.0, -11.0))      # RW, middle lane
-	h.add_skater(4, 0, Vector3(-5.0, 0.0, -8.29))     # LD
-	h.add_skater(5, 0, Vector3(6.7, 0.0, -8.29))      # RD
-	var spot := Vector3(11.5, 0.0, -12.5)
-	var hold: Array[Vector3] = [spot, spot + Vector3(0.0, 0.0, -0.3)]
-	h.add_scripted_attacker(11, 1, hold, 0.3)
-	h.add_skater(12, 1, Vector3(-9.0, 0.0, -20.0))
-	h.add_skater(13, 1, Vector3(0.0, 0.0, -22.0))
-	h.add_skater(14, 1, Vector3(-3.0, 0.0, -25.0))
-	h.add_skater(15, 1, Vector3(4.0, 0.0, -25.5))
-	h.start(11)
+	h.add_skater(1, 0, Vector3(0.0, 0.0, -13.0))      # C, high slot
+	h.add_skater(2, 0, Vector3(-7.0, 0.0, -17.0))     # LW, weak side low
+	h.add_skater(3, 0, Vector3(9.0, 0.0, -23.0))      # RW, about to lose it
+	h.add_skater(4, 0, Vector3(-4.5, 0.0, -9.6))      # LD, weak point
+	h.add_skater(5, 0, Vector3(6.8, 0.0, -9.6))       # RD, strong point
+	var hold: Array[Vector3] = [Vector3(10.5, 0.0, -12.5), Vector3(11.5, 0.0, -13.0)]
+	h.add_scripted_attacker(13, 1, hold, 2.0)
+	h.add_skater(11, 1, Vector3(1.0, 0.0, -24.0))
+	h.add_skater(12, 1, Vector3(-6.0, 0.0, -22.0))
+	h.add_skater(14, 1, Vector3(-2.0, 0.0, -26.0))
+	h.add_skater(15, 1, Vector3(5.0, 0.0, -25.0))
+	h.start(3)
+	h.step()
+	# It caroms off him and up the wall.
+	h.carrier_id = -1
+	h.puck_pos = Vector3(12.0, 0.0, -20.0)
+	h.puck_vel = Vector3(0.0, 0.0, 7.0)
 	var rd_deepest: float = 0.0
 	var point_covered: bool = false
 	var ld_middle: bool = false
 	var strong_point := Vector3(AIRoleDefenseman.DP_STRONG_LANE_X_M, 0.0,
 			-(GameRules.BLUE_LINE_Z + AIRoleDefenseman.DP_LINE_INSET_M))
+	var collected: bool = false
 	for _i: int in int(4.5 / Harness.DT):
 		h.step()
+		if not collected and h.carrier() == -1 \
+				and h.skater_pos(13).distance_to(h.puck_pos) < AIBotMechanics.BLADE_REACH_M:
+			h.carrier_id = 13
+			collected = true
 		var rd_depth: float = -h.skater_pos(5).z - GameRules.BLUE_LINE_Z
 		rd_deepest = maxf(rd_deepest, rd_depth)
 		if rd_depth > 3.0:
@@ -145,8 +155,9 @@ func test_5v5_strong_d_pinches_and_the_rotation_covers_him() -> void:
 			if absf(h.skater_pos(4).x) < 2.0 \
 					and h.skater_pos(4).z > -(GameRules.BLUE_LINE_Z + 3.0):
 				ld_middle = true
-	gut.p("  RD deepest %.1f m inside | point covered %s | LD middle %s"
-			% [rd_deepest, point_covered, ld_middle])
+	gut.p("  carrier %d | RD deepest %.1f m inside | point covered %s | LD middle %s"
+			% [h.carrier(), rd_deepest, point_covered, ld_middle])
+	assert_eq(h.carrier(), 13, "their winger collected it and holds it")
 	assert_gt(rd_deepest, 3.0, "the strong-side D pinches down the wall")
 	assert_true(point_covered, "a forward rotates up to his point")
 	assert_true(ld_middle, "the weak D slides to the middle of the line")

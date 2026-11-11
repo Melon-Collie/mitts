@@ -111,8 +111,8 @@ func present(home_records: Array[PlayerRecord], away_records: Array[PlayerRecord
 		home_stripe: Color, away_stripe: Color) -> void:
 	_home_stripe_style.bg_color = home_stripe
 	_away_stripe_style.bg_color = away_stripe
-	_fill_rows(_home_rows, home_records, 0)
-	_fill_rows(_away_rows, away_records, 1)
+	_fill_rows(_home_rows, home_records)
+	_fill_rows(_away_rows, away_records)
 	visible = true
 	if _present_tween != null and _present_tween.is_running():
 		_present_tween.kill()
@@ -143,8 +143,7 @@ func hide_overlay() -> void:
 # precedes defense (LD/RD) — thin "FORWARDS" / "DEFENSE" dividers label both
 # groups so the matchup reads at a glance instead of five undifferentiated
 # names (3v3 is position-free rovers, so it gets no dividers at all).
-func _fill_rows(rows: VBoxContainer, records: Array[PlayerRecord],
-		team_id: int) -> void:
+func _fill_rows(rows: VBoxContainer, records: Array[PlayerRecord]) -> void:
 	for child: Node in rows.get_children():
 		child.queue_free()
 	var is_5v5: bool = records.size() >= 5
@@ -162,7 +161,7 @@ func _fill_rows(rows: VBoxContainer, records: Array[PlayerRecord],
 		# the group headers above them; the jersey numbers keep the right
 		# alignment that lines up 7 with 71.
 		var pos := _lbl(
-				tr(PositionLabels.badge_key(team_id, record.team_slot, is_5v5)), 14, _DIM)
+				tr(PositionLabels.badge_key(record.team_slot, is_5v5)), 14, _DIM)
 		pos.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		pos.custom_minimum_size = Vector2(28, 0)
 		pos.size_flags_vertical = Control.SIZE_SHRINK_CENTER

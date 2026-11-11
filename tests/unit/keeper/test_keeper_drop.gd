@@ -6,12 +6,12 @@ extends GutTest
 # drop mid-rise goes from where he is; and at every tick his gear stays out of
 # the ice, his arms reach the stick and nothing on him jumps.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
 # A bone's travel in a tick, past which it has jumped: the knees land at about
 # 4 m/s.
-const MAX_BONE_STEP_M: float = 0.1
+const MAX_BONE_STEP_M: float = 12.0 * DT  # nothing on him moves 12 m/s
 const B := KeeperSkeleton.Bone
 
 var _drop: KeeperDrop = null
@@ -215,7 +215,7 @@ func test_the_recovery_push_skate_holds_its_place() -> void:
 				planted = skate
 			assert_almost_eq(skate, planted, Vector3.ONE * 0.001, "%+.0f: the push skate holds" % toward)
 			held += 1
-		assert_gt(held, 20, "%+.0f: it drives him up off one place" % toward)
+		assert_gt(held, roundi(0.167 / DT), "%+.0f: it drives him up off one place" % toward)
 
 
 func test_every_tick_of_the_recovery_is_out_of_the_ice_on_the_stick_and_smooth() -> void:

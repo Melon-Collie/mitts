@@ -12,7 +12,7 @@ const DROP: float = 0.2
 const STOP_S: float = 0.12
 const REPUSH: float = 1.2
 const SMOOTHING: float = 0.04
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 var _state: CarryStrokeState
 

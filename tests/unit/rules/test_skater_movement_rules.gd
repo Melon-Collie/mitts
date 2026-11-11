@@ -2,7 +2,7 @@ extends GutTest
 
 # SkaterMovementRules — stride, glide, skid, turn, stop, postures, and the speed caps.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 func _default_cfg() -> SkaterMovementRules.MovementConfig:

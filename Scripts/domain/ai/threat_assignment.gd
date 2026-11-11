@@ -24,7 +24,7 @@ class_name AIThreatAssignment
 #
 # Brute-forced over permutations: typically four defenders at most (5v5's
 # non-pressuring zone roles), so the matching is tiny. Runs at the 6 Hz brain
-# tick, never the 120 Hz path.
+# tick, never the per-tick path.
 
 # How far goal-side of the man the cover anchor sits (m). Roughly a stick into
 # the man→net lane: close enough to deny the one-timer, not on top of the body.

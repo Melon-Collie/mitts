@@ -19,11 +19,13 @@ extends GutTest
 const TRUTH_PATH: String = "res://tests/unit/ai/data/shot_odds_truth.txt"
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const FEED_SPEED_M_S: float = 16.0
+# The truth row's column of FLAT's goal intervals; LOW and HIGH follow.
+const INTERVAL_COLUMN: int = 25
 
 # The ratchets. Tighten when a change wins by more than BANK_MARGIN.
-const MAX_MEAN_ABS_ERR: float = 0.099
-const MIN_CONCORDANCE: float = 0.920
-const MIN_PICK_SHARE: float = 0.801
+const MAX_MEAN_ABS_ERR: float = 0.085
+const MIN_CONCORDANCE: float = 0.961
+const MIN_PICK_SHARE: float = 0.806
 const BANK_MARGIN: float = 0.02
 
 
@@ -31,7 +33,7 @@ class Cell:
 	var release: Vector3
 	var spot: Vector3
 	var scenario: String
-	var patterns := PackedStringArray()
+	var intervals: Array[PackedFloat32Array] = []
 	var keeper: GoalieNetworkState = GoalieNetworkState.new()
 	var pre_keeper: GoalieNetworkState = GoalieNetworkState.new()
 
@@ -51,7 +53,8 @@ func _cells() -> Array[Cell]:
 		c.release = Vector3(float(t[0]), 0.0, GOAL_Z + float(t[1]))
 		c.scenario = t[2]
 		c.spot = Vector3(float(t[3]), 0.0, GOAL_Z + float(t[4]))
-		c.patterns = PackedStringArray([t[5], t[6], t[7]])
+		for k: int in range(INTERVAL_COLUMN, INTERVAL_COLUMN + 3):
+			c.intervals.append(AIShotOdds.decode_intervals(t[k]))
 		_fill_read(c.keeper, t, 11)
 		_fill_read(c.pre_keeper, t, 18)
 		out.append(c)
@@ -78,16 +81,12 @@ func _sigma_m(c: Cell) -> float:
 
 
 func _truth(c: Cell) -> float:
-	return AIShotOdds.best_odds(c.patterns, _sigma_m(c))
+	return AIShotOdds.best_odds(c.intervals, _sigma_m(c))
 
 
 # The measured odds of firing at `aim_x` (the net's frame) on `loft`.
 func _truth_at(c: Cell, aim_x: float, loft: int) -> float:
-	var n: int = AIShotFieldData.AIM_POINTS
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
-	var i: int = clampi(roundi((aim_x + reach) / (2.0 * reach) * float(n - 1)), 0, n - 1)
-	return AIShotOdds.aim_odds(c.patterns[AIShotOdds.LOFTS.find(loft)], i, _sigma_m(c))
+	return AIShotOdds.interval_odds(c.intervals[AIShotOdds.LOFTS.find(loft)], aim_x, _sigma_m(c))
 
 
 # The cells a bot fires from its own carry: settled, deked, and caught off a feed.

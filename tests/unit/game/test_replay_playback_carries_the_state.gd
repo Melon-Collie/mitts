@@ -15,6 +15,7 @@ const _NOT_PLAYED_BACK: Dictionary = {
 	"blade_contact_world": "host-only, not serialized",
 	"top_hand_world": "host-only, not serialized",
 	"settle_left_s": "host-only, not serialized",
+	"slapshot_pin_offset": "places the carried puck, which the engine poses itself",
 }
 
 

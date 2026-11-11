@@ -16,11 +16,14 @@ const OFFSET_EMA_ALPHA: float = 0.3  # after is_ready; ~3 pings to reach 66% of 
 #   out). Derived from Constants.INPUT_RATE, never hardcoded — a send-rate change
 #   must not silently strand the lead at the old rate's value.
 # BUFFER_TICKS: jitter cushion — the host queue depth left once the trip is paid.
+#   1.5 ticks is 16.7 ms at the 90 Hz tick, sized from NetTimingHarness's
+#   lateness under 10–30 ms jitter. Jitter is a time and this is counted in
+#   ticks, so a tick-rate change must re-derive it to keep the cushion.
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 const BATCH_INTERVAL: float = 1.0 / _PhysicsConstants.INPUT_RATE
-const BUFFER_TICKS: float = 2.0
+const BUFFER_TICKS: float = 1.5
 const TICK_DURATION: float = 1.0 / _PhysicsConstants.PHYSICS_TICK
-const INPUT_LEAD_SEC: float = BATCH_INTERVAL + BUFFER_TICKS * TICK_DURATION  # the margin: ~25 ms
+const INPUT_LEAD_SEC: float = BATCH_INTERVAL + BUFFER_TICKS * TICK_DURATION  # the margin: ~28 ms
 # One-way trips past this are not covered: inputs from such a link land overdue
 # and the host's backlog drain absorbs them. Also the bound a claim-carried lead
 # is clamped to, so a modified client cannot buy a deeper rewind.

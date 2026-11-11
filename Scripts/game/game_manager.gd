@@ -73,10 +73,14 @@ signal replay_stopped
 signal goal_replay_frame_changed(game_state: Dictionary, carrier_team: int)
 # The same frame feed from every other airing of a stored goal — the
 # intermission and post-game reels and a goal re-aired for its GIF — and the
-# end of each. Separate from the goal cinematic's pair because only the board
-# follows these; the reels play no crowd.
+# end of each. Separate from the goal cinematic's pair because the crowd's
+# sound does not follow these (the reels play silent); the board and the
+# stands do.
 signal highlight_frame_changed(game_state: Dictionary, carrier_team: int)
 signal highlight_stopped
+# A body check re-fired by a goal replay (the cinematic, or a stored goal
+# re-aired for its GIF): body_check_broadcast's counterpart for the stands.
+signal replay_body_check(force: float)
 # Goal-clip GIF export (GoalClipExporter). state is a GoalClipExporter.State —
 # the HUD reads it to swap its prompt between "save", "saving", and gone.
 # finished carries the written path, or "" when the export failed.
@@ -268,12 +272,16 @@ var _penalty_goalie: Goalie = null
 var _penalty_goalie_controller: GoalieController = null
 var puck_controller: PuckController = null
 
-# Cached snapshot of goalie pose for skater IK clamping. Refreshed once per
-# physics tick from `goalies` / `goalie_controllers`. Without the cache,
-# `get_goalie_data()` allocates a fresh `Array[Dictionary]` of two dict
-# literals on every call — `SkaterIKCoordinator.clamp_blade_from_goalies`
-# calls it on every skater per tick (~12 calls every physics tick).
-var _cached_goalie_data: Array[Dictionary] = []
+# Every goalie's save boxes, in GoalieContactDetector's packed layout, for the
+# stick's collision with him (GoalieGearCollision), and the same less his
+# stick for the skater's body, which skates over a stick on the ice; refreshed
+# once a physics tick, the gather's scratch kept so a tick allocates nothing.
+var _cached_goalie_boxes := PackedFloat32Array()
+var _cached_goalie_body_boxes := PackedFloat32Array()
+var _box_goalies: Array = []
+var _box_parts: Array = []
+var _box_part_goalies: Array = []
+var _box_velocities := PackedVector3Array()
 
 # Tutorial mode gates offsides detection on this flag. Defaults to false so
 # every step except STEP_OFFSIDES has it off; TutorialManager flips it true
@@ -321,7 +329,7 @@ var shape_tally := AIPossessionShapeTally.new()
 # Live breakout-outcome tally (F6 overlay) — the in-game counterpart of the
 # breakout harness, so its staged verdicts can be checked against real play.
 var breakout_episodes := AIBreakoutEpisodeTracker.new()
-# Both tallies sample at the 120 Hz host tick, so they stay OFF until asked for:
+# Both tallies sample at the host tick, so they stay OFF until asked for:
 # the overlay only exists in a debug build, and the first F6 press latches this.
 # It never un-latches — closing the panel would otherwise punch a hole in the
 # denominator and quietly corrupt every share it reports.
@@ -486,6 +494,7 @@ func _ready() -> void:
 	print("[native] hot-path kernels: %s" % NativeKernels.summary())
 	NativeCarryRolloutFactory.install()
 	NativeShotOddsFactory.install()
+	NativeCarrySpaceFactory.install()
 	AIShotOdds.prepare()
 	# Make Manrope the engine-wide fallback font so every Control that
 	# doesn't set its own font picks it up automatically — saves us from
@@ -518,12 +527,14 @@ func _ready() -> void:
 
 func _wire_network_signals() -> void:
 	NetworkManager.set_world_state_provider(get_world_state)
+	NetworkManager.set_keeper_wire_provider(_append_keeper_wire)
 	NetworkManager.host_ready.connect(on_host_started)
 	NetworkManager.client_connected.connect(on_connected_to_server)
 	NetworkManager.disconnected_from_server.connect(on_scene_exit)
 	NetworkManager.peer_joined.connect(on_player_connected)
 	NetworkManager.peer_disconnected.connect(on_player_disconnected)
 	NetworkManager.world_state_received.connect(_on_world_state_received)
+	NetworkManager.keeper_wire_received.connect(_on_keeper_wire_received)
 	NetworkManager.slot_assigned.connect(on_slot_assigned)
 	NetworkManager.remote_skater_spawn_requested.connect(spawn_remote_skater)
 	NetworkManager.existing_players_synced.connect(sync_existing_players)
@@ -563,6 +574,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.input_batch_received.connect(_on_input_batch_received)
 	NetworkManager.spectator_demoted_received.connect(_on_spectator_demoted_received)
 	NetworkManager.skip_replay_request_received.connect(_on_remote_skip_replay_request)
+	NetworkManager.rematch_vote_requested.connect(_on_rematch_vote_requested)
 	NetworkManager.skip_replay_vote_updated.connect(_on_remote_skip_replay_vote)
 	NetworkManager.replay_event_received.connect(_on_replay_event_received)
 	NetworkManager.replay_mode_changed.connect(_on_remote_replay_mode_changed)
@@ -615,10 +627,9 @@ func _physics_process(delta: float) -> void:
 		var local: PlayerRecord = _registry.get_local()
 		if local != null and _state_machine.current_phase == GamePhase.Phase.PLAYING:
 			local.stats.toi_seconds += delta
-	# Refresh goalie pose cache once per tick — read by skater IK on every
-	# blade-from-mouse call. Runs on host AND clients before the host gate
-	# below since IK clamping happens everywhere.
-	_refresh_goalie_data_cache()
+	# His gear once a tick, for every skater's stick and body: on host AND
+	# clients, before the host gate below, since both clamp everywhere.
+	_refresh_goalie_boxes()
 	if _stick_tie_claim != null:
 		_stick_tie_claim.maybe_send_claim()
 	if not NetworkManager.is_host or puck == null or _state_machine == null:
@@ -690,8 +701,9 @@ func _physics_process(delta: float) -> void:
 					_registry.ai_controllers(), team_brains, current_snapshot, delta)
 			HostCostProbe.record(HostCostProbe.Section.DISPATCH,
 					Time.get_ticks_usec() - t_section)
-	HostCostProbe.record(HostCostProbe.Section.WORKER, _ai_coordinator.last_worker_us)
-	HostCostProbe.record(HostCostProbe.Section.BRAINS, _ai_coordinator.last_brain_us)
+	if _ai_coordinator.harvested_this_tick():
+		HostCostProbe.record(HostCostProbe.Section.WORKER, _ai_coordinator.last_worker_us)
+		HostCostProbe.record(HostCostProbe.Section.BRAINS, _ai_coordinator.last_brain_us)
 	t_section = Time.get_ticks_usec()
 	_update_host_puck_tracking()
 	_check_goal_crossing()
@@ -1087,9 +1099,10 @@ func _apply_ghost_state(delta: float) -> void:
 			# A skater who ghosts (icing, etc.) while carrying must lose the puck —
 			# set_ghost only severs collision/interaction layers, so without this a
 			# ghosted carrier would keep the puck pinned to their blade and skate it
-			# around untouchable. Drop it loose so play continues.
+			# around untouchable. Drop it loose so play continues, and tell a human
+			# carrier: CARRIER_CHANGED(-1) alone leaves his own client's local pin.
 			if new_ghost and puck.carrier == r.skater:
-				puck.drop()
+				_drop_puck_if_carried()
 			if new_ghost != _last_ghost_state.get(peer_id, false):
 				_last_ghost_state[peer_id] = new_ghost
 				NetworkManager.send_ghost_state_to_all(peer_id, new_ghost)
@@ -1405,6 +1418,12 @@ func sync_existing_players(player_data: Array) -> void:
 				colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 				colors.secondary, colors.text, colors.text_outline,
 				is_left, p_name, false, p_number, attrs)
+	# A puck already carried when we joined: install the carrier view the events
+	# before our world existed could not, unless an event since has.
+	var roster_carrier: int = roster_carrier_peer_id(player_data)
+	if roster_carrier != -1 and puck_controller != null \
+			and puck_controller.get_client_carrier_peer_id() == -1:
+		_on_remote_carrier_changed(roster_carrier)
 	# Client / spectator: registry is now populated with all players the host
 	# knew about at the moment we joined. Open the replay file so subsequent
 	# world-state broadcasts get recorded. Idempotent — short-circuits if a
@@ -1488,6 +1507,8 @@ func _spawn_world() -> void:
 						_state_machine.team_size, _registry.position_by_peer,
 						_registry.bot_peers),
 		]
+		for brain: TeamBrain in team_brains:
+			brain.rule_set = _state_machine.rule_set
 		_connect_goal_signals()
 
 
@@ -1594,6 +1615,10 @@ func _wire_subsystems() -> void:
 		# NHL and ARCADE whistle a defensive-zone faceoff; OFF lets the
 		# controller's own hold-and-release play it out.
 		gc.puck_covered.connect(_on_goalie_covered_puck)
+		# A client draws each goalie predicted on the render clock, against its
+		# own world (#903, Scripts/networking/CLAUDE.md).
+		if not NetworkManager.is_host and puck_controller != null and gc is KeeperController:
+			(gc as KeeperController).predict_in(GameKeeperWorld.new(puck_controller, _registry))
 	_roster_announcer = RosterAnnouncer.new(_registry.player_added, _registry.player_removed, is_spectator_peer)
 	_roster_announcer.announced.connect(roster_announced.emit)
 	_registry.player_added.connect(_on_registry_player_added)
@@ -1623,6 +1648,7 @@ func _wire_subsystems() -> void:
 	_goal_replay_store = GoalReplayStore.new()
 	_goal_replay_driver.replay_started.connect(_on_goal_replay_started_capture)
 	_goal_replay_driver.replay_frame_changed.connect(goal_replay_frame_changed.emit)
+	_goal_replay_driver.body_check_replayed.connect(replay_body_check.emit)
 	_post_game_replay_driver = PostGameReplayDriver.new()
 	add_child(_post_game_replay_driver)
 	_post_game_replay_driver.replay_frame_changed.connect(highlight_frame_changed.emit)
@@ -1656,6 +1682,7 @@ func _wire_subsystems() -> void:
 		_goal_clip_exporter.stored_replay_finished.connect(goal_gif_saving_changed.emit)
 		_goal_clip_exporter.stored_replay_frame_changed.connect(highlight_frame_changed.emit)
 		_goal_clip_exporter.stored_replay_stopped.connect(highlight_stopped.emit)
+		_goal_clip_exporter.stored_replay_body_check.connect(replay_body_check.emit)
 		_goal_clip_exporter.state_changed.connect(
 				func(_state: GoalClipExporter.State) -> void: goal_gif_saving_changed.emit())
 		_goal_clip_exporter.set_goal_label_provider(
@@ -2619,6 +2646,12 @@ func _on_remote_skip_replay_request(peer_id: int) -> void:
 	_register_skip_vote(peer_id)
 
 
+func _on_rematch_vote_requested(peer_id: int, vote: int) -> void:
+	if RematchVoteRules.accepts_remote_vote(vote,
+			_live_phase() == GamePhase.Phase.GAME_OVER, is_spectator_peer(peer_id)):
+		NetworkManager.relay_rematch_vote(peer_id, vote)
+
+
 # Host-only: add the vote to the window tally, broadcast it, and end the
 # window at unanimity. Late votes (window closed before the RPC landed) are
 # dropped silently — broadcasting (0, total) would reset client HUDs that are
@@ -2931,10 +2964,10 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 	# reaches into an autoload itself.
 	record.skater.is_host_machine = NetworkManager.is_host
 	record.skater.is_local_skater = record.is_local
-	# The analytic skater-vs-goalie body block reads the same host-refreshed goalie
-	# pose cache the blade clamp uses. get_goalie_data returns
-	# empty until goalies exist (tutorial dummy / test), so the block no-ops there.
-	record.skater.set_goalie_data_provider(get_goalie_data)
+	# The analytic skater-vs-goalie body block reads his gear as the stick does,
+	# less his stick; empty until goalies exist (tutorial dummy / test), so the
+	# block no-ops there.
+	record.skater.set_goalie_boxes_provider(get_goalie_body_boxes)
 	record.controller.net_peer_id = record.peer_id
 	if record.is_local:
 		var local_ctrl: LocalController = record.controller as LocalController
@@ -3234,14 +3267,14 @@ func _on_pickup_claim_rejected() -> void:
 
 
 func _on_pickup_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float,
-		input_lead_ms: float, blade_curr: Vector3, blade_prev: Vector3, top_hand: Vector3) -> void:
+		input_lead_ms: float, blade_curr: Vector3, blade_prev: Vector3) -> void:
 	if not NetworkManager.is_host:
 		return
 	_deferred_claims.submit(
 			LagCompRewind.self_view_time(host_timestamp, input_lead_ms),
 			_state_buffer_manager.newest_host_timestamp(),
 			_pickup_claim.receive_claim,
-			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, blade_curr, blade_prev, top_hand])
+			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, blade_curr, blade_prev])
 
 
 func _on_poke_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float,
@@ -3558,11 +3591,8 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 		if puck_controller != null:
 			puck_controller.notify_local_release(direction, power, skater)
 		return
-	# Host's own one-timer: shooter is local, so its sim and its puck view share
-	# a clock and there is nothing to rewind. interp_delay_ms = 0 short-circuits
-	# the goalie rewind branch entirely.
 	NetworkManager.send_shot_to_all(puck.get_puck_position(), true, power)
-	_host_release_one_timer(direction, power, skater, 0.0, 0.0)
+	_host_release_one_timer(direction, power, skater)
 
 
 # Host-authoritative remote ONE-TIMER, the possession-less sibling of
@@ -3592,9 +3622,8 @@ func _on_remote_derived_one_timer(direction: Vector3, power: float,
 			skater.is_ghost, puck.is_on_cooldown(skater)):
 		return
 	# The instant the SHOOTER perceived this release at: they applied the input
-	# one lead before the host replays it. Everything lag-comp'd off this swing
-	# (the staleness check, the goalie's reaction back-date and position rewind)
-	# is anchored there rather than at the host's own tick.
+	# one lead before the host replays it. The staleness check is anchored there
+	# rather than at the host's own tick.
 	var shooter_view_ts: float = record.controller.last_processed_host_timestamp \
 			- NetworkManager.peer_input_lead_s(shooter_peer_id)
 	# Somebody else played the puck after this shooter committed, so the loose
@@ -3618,13 +3647,7 @@ func _on_remote_derived_one_timer(direction: Vector3, power: float,
 			{"is_slapper": true, "team": skater.get_team_id()})
 	# Fan the cue out to the other clients (the shooter already played it locally).
 	NetworkManager.send_shot_to_all(shot_pos, true, power, shooter_peer_id)
-	# Same interp-delay approximation _on_remote_derived_release uses — the
-	# shooter's render delay reconstructed from the ping the host already
-	# measures, so nothing extra rides the wire.
-	var rtt_ms: float = float(NetworkManager.get_peer_ping_ms(shooter_peer_id))
-	var interp_delay_ms: float = clampf(
-			rtt_ms * 0.5 + 1000.0 / float(Constants.STATE_RATE), 16.0, 200.0)
-	_host_release_one_timer(direction, power, skater, shooter_view_ts, interp_delay_ms)
+	_host_release_one_timer(direction, power, skater)
 
 
 # The host's world-state buffer, sampled as a loose-puck view. Leaves `out`
@@ -3641,14 +3664,12 @@ func _sample_puck_at(host_time: float, out: SkaterController.PuckView) -> void:
 	out.velocity = snap.puck_state.velocity
 
 
-# `host_timestamp` is the instant the SHOOTER perceived the release at (0.0 for
-# the host's own player / a bot — no rewind), `interp_delay_ms` their render
-# delay; both drive the goalie lag comp only. The fire point is always the host's
-# own blade: puck.release() snaps to the carrier's blade contact, and the host
-# reaches this on the same sim tick the shooter did, so its blade already IS the
-# release pose.
-func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
-		host_timestamp: float, interp_delay_ms: float) -> void:
+# The fire point is always the host's own blade: puck.release() snaps to the
+# carrier's blade contact, and the host reaches this on the same sim tick the
+# shooter did, so its blade already IS the release pose. Nothing rewinds the
+# goalie: the one on this tick is the one the shooter drew
+# (Scripts/networking/CLAUDE.md, shot lag compensation).
+func _host_release_one_timer(direction: Vector3, power: float, skater: Skater) -> void:
 	# A one-timer is a possession-less engagement — if it fires during FACEOFF it
 	# makes the puck live, so end the faceoff or the resulting goal is voided (P2-2).
 	_phase_coord.on_puck_touched_live()
@@ -3660,54 +3681,21 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
 	_shot_tracker.on_deflection(pid)
 	_shot_tracker.on_shot_started(pid, true)  # one-timer tag → One-Timer achievement
 	_loose_puck_released_by = pid
-	# Lag-comp the goalie reaction trigger (see _fire_remote_shot). clamp_back_date
-	# also zeroes the host's own path (host_timestamp = 0 → stale → 0); without it
-	# `now - 0` back-dates the goalie by the whole session.
-	var release_back_date: float = ShotReleaseRules.clamp_back_date(
-			NetworkManager.estimated_host_time(), host_timestamp)
-	for gc: GoalieController in goalie_controllers:
-		gc.set_pending_reaction_back_date(release_back_date)
-	var saved_goalie_positions: Array[Vector3] = []
-	var saved_goalie_rotations: Array[float] = []
-	if _state_buffer_manager != null and _state_buffer_manager.is_ready() and interp_delay_ms > 0.0 \
-			and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
-		# Goalie was REMOTE-view from the shooter — clients render the goalie
-		# from buffered host snapshots at host_time - interp_delay, so the
-		# shooter saw the goalie at that earlier moment. Rewound to that snapshot
-		# for the release, so the shot's xG is read against the goalie the
-		# shooter saw. See LagCompRewind.
-		# Anti-cheat: delay bounded against the shooter's measured link first.
-		interp_delay_ms = LagCompRewind.plausible_interp_delay_ms(
-				interp_delay_ms, float(NetworkManager.get_peer_ping_ms(pid)))
-		var rewind_time: float = LagCompRewind.remote_view_time(host_timestamp, interp_delay_ms)
-		var snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
-		for gc: GoalieController in goalie_controllers:
-			saved_goalie_positions.append(gc.goalie.global_position)
-			saved_goalie_rotations.append(gc.goalie.get_goalie_rotation_y())
-			var gs: GoalieNetworkState = snap.goalie_states.get(gc.team_id)
-			if gs != null:
-				gc.goalie.set_goalie_position(gs.position_x, gs.position_z)
-				gc.goalie.set_goalie_rotation_y(gs.rotation_y)
 	puck.set_carrier(skater)
 	puck.release(direction, power)
 	_note_shot_trajectory()
-	if not saved_goalie_positions.is_empty():
-		for i: int in goalie_controllers.size():
-			goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
-			goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
 
 
 # Fires a remote human's authoritative shot on the host. Called only from
 # _on_remote_derived_release (the input-stream release) — there is no shot RPC.
-# Every parameter is host-derived; rtt/interp_delay drive the goalie lag-comp
-# rewind. The carrier guard and the sanitize/clamp calls stay as defense-in-depth
-# even though nothing here is client-supplied.
+# Every parameter is host-derived. The carrier guard and the sanitize/clamp
+# calls stay as defense-in-depth even though nothing here is client-supplied.
 #
 # The fire POINT is not a parameter: puck.release() seats the puck itself, and it
 # is the only code that knows a slapper's puck sits on its ice pin rather than at
 # the blade lifted over the shoulder. Never reposition the puck after release() —
 # see the note there.
-func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int, host_timestamp: float, rtt_ms: float, interp_delay_ms: float) -> void:
+func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int) -> void:
 	# Sender must be the current carrier on the host.
 	# A `puck.carrier == null` here means a different code path already released the
 	# puck; ignore the duplicate. The shot sound stays below the validation.
@@ -3718,11 +3706,10 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 			return
 		if _registry.resolve_peer_id(puck.carrier) != shooter_peer_id:
 			return
-	# Clamp every client-supplied parameter before it touches the sim
-	# (ShotReleaseRules): direction normalized + elevation-capped, power capped
-	# to the shooter's attribute-scaled maximum, rtt capped against the host's
-	# own ping measurement (an unclamped rtt forward-teleports the puck tens of
-	# meters via the release advance below).
+	# Defense in depth — nothing here is client-supplied, but every parameter is
+	# bounded before it touches the sim (ShotReleaseRules): direction normalized
+	# and elevation-capped, power capped to the shooter's attribute-scaled
+	# maximum.
 	if NetworkManager.is_host:
 		direction = ShotReleaseRules.sanitize_direction(direction)
 		if direction == Vector3.ZERO:
@@ -3737,8 +3724,6 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 				max_power = ShotReleaseRules.release_power_bound(max_power,
 						shooter.skater.velocity)
 			power = ShotReleaseRules.clamp_power(power, max_power)
-		rtt_ms = ShotReleaseRules.clamp_rtt_ms(
-				rtt_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
 	var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
 	var shot_pos: Vector3 = puck.get_puck_position() if puck != null else Vector3.ZERO
 	SoundManager.play_world(sound, shot_pos, SoundManagerScript.shot_volume_db(power), 0.04)
@@ -3750,50 +3735,17 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 		NetworkManager.send_shot_to_all(shot_pos, is_slapper, power, shooter_peer_id)
 	if NetworkManager.is_host:
 		_start_pending_shot_from_carrier()
-		# Lag-comp the goalie reaction trigger: back-date the reaction timers to
-		# the instant the shooter perceived the release (now - host_timestamp) so
-		# the goalie gets the same effective reaction window they did. Off the
-		# input stream that gap is one input lead. Clamped so a stale stamp (or
-		# the pre-warmup zero stamp) earns no back-date.
-		var release_back_date: float = ShotReleaseRules.clamp_back_date(
-				NetworkManager.estimated_host_time(), host_timestamp)
-		for gc: GoalieController in goalie_controllers:
-			gc.set_pending_reaction_back_date(release_back_date)
-		var saved_goalie_positions: Array[Vector3] = []
-		var saved_goalie_rotations: Array[float] = []
-		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and NetworkManager.is_real_peer(shooter_peer_id) and rtt_ms > 0.0 \
-				and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
-			# Goalie is REMOTE-view from the shooter — the shooter saw the goalie at
-			# host_time - interp_delay (the buffered render path); rewound to that
-			# snapshot for the release, so the shot's xG is read against him.
-			# Anti-cheat: delay bounded against the shooter's measured link first.
-			interp_delay_ms = LagCompRewind.plausible_interp_delay_ms(
-					interp_delay_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
-			var rewind_time: float = LagCompRewind.remote_view_time(host_timestamp, interp_delay_ms)
-			var snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
-			for gc: GoalieController in goalie_controllers:
-				saved_goalie_positions.append(gc.goalie.global_position)
-				saved_goalie_rotations.append(gc.goalie.get_goalie_rotation_y())
-				var gs: GoalieNetworkState = snap.goalie_states.get(gc.team_id)
-				if gs != null:
-					gc.goalie.set_goalie_position(gs.position_x, gs.position_z)
-					gc.goalie.set_goalie_rotation_y(gs.rotation_y)
 		puck.release(direction, power)
 		_note_shot_trajectory()
-		if not saved_goalie_positions.is_empty():
-			for i: int in goalie_controllers.size():
-				goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
-				goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
 		return
 	puck.release(direction, power)
 
 
 # Host-authoritative remote shot. The host's RemoteController reached the shooter's
 # release input and computed its OWN dir/power via _release_wrister, emitting
-# puck_release_requested. Fire the authoritative puck from that — host-derived
-# params, the release input's host_timestamp, and an rtt-derived interp_delay for
-# the goalie rewind. This is the only path that fires a remote human's shot (no
-# shot RPC).
+# puck_release_requested. Fire the authoritative puck from that, on the tick the
+# host replays the release input — host-derived params only. This is the only
+# path that fires a remote human's shot (no shot RPC).
 func _on_remote_derived_release(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int) -> void:
 	if not NetworkManager.is_host:
 		return
@@ -3804,25 +3756,7 @@ func _on_remote_derived_release(direction: Vector3, power: float, is_slapper: bo
 		return
 	if _registry.resolve_peer_id(puck.carrier) != shooter_peer_id:
 		return
-	# Timestamp: the instant the SHOOTER perceived the release at, which is one
-	# input lead before the tick the host replays it on — the client applies an
-	# input immediately and stamps it a lead ahead, and the host holds it until
-	# that stamp comes round. Never anchor at the host's own tick: the goalie's
-	# back-date then comes out ~0 and its rewind stops a lead short of what the
-	# shooter rendered. Same anchor as the one-timer path.
-	var release_ts: float = record.controller.last_processed_host_timestamp \
-			- NetworkManager.peer_input_lead_s(shooter_peer_id)
-	var rtt_ms: float = float(NetworkManager.get_peer_ping_ms(shooter_peer_id))
-	# Approximate the shooter's interpolation delay from the rtt the host already
-	# measures plus one broadcast interval — the two dominant terms of the client's
-	# get_target_interpolation_delay. The dropped term is the client's adaptive jitter
-	# cushion (small except on jittery links); for beatable goalies it's close enough,
-	# and it keeps the host-derived release purely input-driven (nothing extra on the
-	# wire). Bounds mirror _compute_target_interpolation_delay's clamp.
-	var interp_delay_ms: float = clampf(
-			rtt_ms * 0.5 + 1000.0 / float(Constants.STATE_RATE), 16.0, 200.0)
-	_fire_remote_shot(
-			direction, power, is_slapper, shooter_peer_id, release_ts, rtt_ms, interp_delay_ms)
+	_fire_remote_shot(direction, power, is_slapper, shooter_peer_id)
 
 
 func _start_pending_shot_from_carrier() -> void:
@@ -3919,7 +3853,7 @@ func _note_shot_trajectory() -> void:
 		var xg: float = AIActionScoring.expected_goals(
 				pos, Vector3(0.0, 0.0, directed_line_z),
 				_defending_goalie_pos(directed_line_z), _shot_release_spread(),
-				AIShotOdds.Stance.UPRIGHT, _xg_query)
+				AIShotOdds.Stance.UPRIGHT, _xg_query, _shot_tracker.release_history())
 		_shot_tracker.note_xg(xg)
 
 
@@ -4091,6 +4025,14 @@ func _on_input_batch_received(peer_id: int, inputs: Array[InputState]) -> void:
 
 
 # ── World state & stats RPC forwarding ───────────────────────────────────────
+func _append_keeper_wire(body: PackedByteArray) -> void:
+	KeeperWireTail.append(body, goalie_controllers)
+
+
+func _on_keeper_wire_received(tail: PackedByteArray, host_ts: float, seq: int) -> void:
+	KeeperWireTail.dispatch(tail, goalie_controllers, host_ts, seq)
+
+
 func _on_world_state_received(data: PackedByteArray) -> void:
 	if _codec != null:
 		_codec.decode_world_state(data)  # updates _state_machine.current_phase
@@ -4140,7 +4082,7 @@ func _on_clock_updated_externally(t: float) -> void:
 
 
 func _observe_telemetry() -> void:
-	var skater_buf: int = 0
+	var skater_buf: int = -1
 	var extrapolating: bool = false
 	if _registry != null:
 		for peer_id: int in _registry.all():
@@ -4152,12 +4094,12 @@ func _observe_telemetry() -> void:
 				continue
 			var rc := r.controller as RemoteController
 			if rc != null:
-				skater_buf = rc.get_buffer_depth()
+				skater_buf = NetworkTelemetry.shallowest_depth(skater_buf, rc.get_buffer_depth())
 				extrapolating = extrapolating or rc.is_extrapolating
 	var puck_buf: int = puck_controller.get_buffer_depth() if puck_controller != null else 0
-	var goalie_buf: int = 0
+	var goalie_buf: int = -1
 	for gc: GoalieController in goalie_controllers:
-		goalie_buf = gc.get_buffer_depth()
+		goalie_buf = NetworkTelemetry.shallowest_depth(goalie_buf, gc.get_buffer_depth())
 		extrapolating = extrapolating or gc.is_extrapolating
 	if puck_controller != null:
 		extrapolating = extrapolating or puck_controller.is_extrapolating
@@ -5328,7 +5270,7 @@ func get_state_delayed(delay_seconds: float, out: WorldSnapshot = null) -> World
 # body-check re-resolution source (Slice C) — it re-derives contact against where
 # the host actually had the others.
 #
-# HOT PATH: called once per replayed input during a reconcile (120 Hz × unacked
+# HOT PATH: called once per replayed input during a reconcile (per tick × unacked
 # window, worst exactly when the network is bad — the case CLAUDE.md forbids
 # allocating in). So it fills a persistent scratch Array from a pooled set of
 # reused Dictionaries and iterates the roster by key (avoiding the fresh array
@@ -5413,6 +5355,7 @@ func _apply_bot_carrier_reaction_delay(snap: WorldSnapshot, delta: float) -> voi
 
 func _collect_existing_player_data() -> Array[Array]:
 	var existing: Array[Array] = []
+	var carrier: Skater = puck.get_carrier() if puck != null else null
 	for peer_id: int in _registry.all():
 		var r: PlayerRecord = _registry.get_record(peer_id)
 		var attrs: PlayerAttributes = r.attributes if r.attributes != null else PlayerAttributes.neutral()
@@ -5421,8 +5364,21 @@ func _collect_existing_player_data() -> Array[Array]:
 				r.is_left_handed, r.player_name, r.jersey_number,
 				attrs.height, attrs.weight, attrs.profile,
 				attrs.curve, attrs.flex, attrs.length,
-				r.tape_code, r.skin_tone, r.gear_style_code])
+				r.tape_code, r.skin_tone, r.gear_style_code,
+				carrier != null and r.skater == carrier])
 	return existing
+
+
+# The roster entry's carrier flag: a joiner's only word of who holds the puck,
+# since carrier events outlive the snapshot block by a second at most and the
+# carrier view is never read off world state. -1 when nobody carries.
+const ROSTER_CARRIES_PUCK: int = 18
+
+static func roster_carrier_peer_id(player_data: Array) -> int:
+	for entry: Array in player_data:
+		if entry.size() > ROSTER_CARRIES_PUCK and bool(entry[ROSTER_CARRIES_PUCK]):
+			return int(entry[0])
+	return -1
 
 
 # ── Getters passed as Callables to collaborators ─────────────────────────────
@@ -5453,8 +5409,8 @@ func get_world_state() -> PackedByteArray:
 
 # Tee a broadcast world-state frame into the .mreplay file. The viewer
 # interpolates between snapshots, so the steady PLAYING stream is decimated from
-# STATE_RATE (120 Hz) to ~30 Hz — a ~4x file-size cut at no perceptible playback
-# cost. The throttle and the phase rules are the recorder's.
+# STATE_RATE to REPLAY_FILE_RATE at no perceptible playback cost. The throttle
+# and the phase rules are the recorder's.
 func _record_world_state_to_file(host_ts: float, data: PackedByteArray) -> void:
 	_replay_file.record_frame(host_ts, data, _live_phase())
 
@@ -5709,44 +5665,40 @@ func reset_penalty_goalie() -> void:
 		_penalty_goalie_controller.reset_to_crease()
 
 
-func get_goalie_data() -> Array[Dictionary]:
-	return _cached_goalie_data
+func get_goalie_boxes() -> PackedFloat32Array:
+	return _cached_goalie_boxes
 
 
-# Rebuilds `_cached_goalie_data` from the live goalies array. Reuses each
-# Dictionary in place so the steady-state per-tick cost is three key
-# writes per goalie rather than a full Array+Dictionary allocation. The single-
-# net drill goalies (tutorial / penalty), kept out of the `goalies` array, are
-# appended when present so the analytic blade AND body clamps hold the skater
-# clear of them too — nothing else would stop a skater walking through the drill
-# goalie into the net.
-func _refresh_goalie_data_cache() -> void:
-	var n: int = goalies.size()
-	var extra: int = 0
+func get_goalie_body_boxes() -> PackedFloat32Array:
+	return _cached_goalie_body_boxes
+
+
+# Every goalie's save boxes, packed. The single-net drill goalies (tutorial /
+# penalty), kept out of the `goalies` array, are added when present so the
+# stick's wall and the body block hold the skater clear of them too: nothing
+# else would stop a skater walking through the drill goalie into the net.
+func _refresh_goalie_boxes() -> void:
+	_box_goalies.clear()
+	_box_goalies.append_array(goalies)
 	if _tutorial_goalie != null:
-		extra += 1
+		_box_goalies.append(_tutorial_goalie)
 	if _penalty_goalie != null:
-		extra += 1
-	var total: int = n + extra
-	while _cached_goalie_data.size() < total:
-		_cached_goalie_data.append({})
-	while _cached_goalie_data.size() > total:
-		_cached_goalie_data.pop_back()
-	for i: int in range(n):
-		_write_goalie_data_entry(_cached_goalie_data[i], goalies[i], goalie_controllers[i])
-	var idx: int = n
-	if _tutorial_goalie != null:
-		_write_goalie_data_entry(_cached_goalie_data[idx], _tutorial_goalie, _tutorial_goalie_controller)
-		idx += 1
-	if _penalty_goalie != null:
-		_write_goalie_data_entry(_cached_goalie_data[idx], _penalty_goalie, _penalty_goalie_controller)
-		idx += 1
-
-
-func _write_goalie_data_entry(entry: Dictionary, g: Goalie, gc: GoalieController) -> void:
-	entry["position"] = g.global_position
-	entry["rotation_y"] = g.get_goalie_rotation_y()
-	entry["is_butterfly"] = gc.is_butterfly() if gc != null else false
+		_box_goalies.append(_penalty_goalie)
+	var boxes: int = GoalieContactDetector.gather_boxes(_box_goalies, _cached_goalie_boxes, _box_parts,
+			_box_part_goalies, _box_velocities, false)
+	var per: int = GoalieGearCollision.FLOATS_PER_BOX
+	_cached_goalie_boxes.resize(boxes * per)
+	var body: int = 0
+	for b: int in boxes:
+		var part := _box_parts[b] as CollisionObject3D
+		if part != null and part.collision_layer == Constants.LAYER_GOALIE_STICK:
+			continue
+		if _cached_goalie_body_boxes.size() < (body + 1) * per:
+			_cached_goalie_body_boxes.resize((body + 1) * per)
+		for f: int in per:
+			_cached_goalie_body_boxes[body * per + f] = _cached_goalie_boxes[b * per + f]
+		body += 1
+	_cached_goalie_body_boxes.resize(body * per)
 
 
 func get_slot_roster() -> Array[Dictionary]:

@@ -184,7 +184,7 @@ static func distance_to_rink_inner(world_xz: Vector2) -> float:
 # so a reach limited by this result stops exactly where that clamp would have
 # caught it.
 #
-# Exact rather than iterative, which the 120 Hz blade IK needs. The straight
+# Exact rather than iterative, which the per-tick blade IK needs. The straight
 # walls give an axis-aligned box exit; the true boundary in a corner quadrant is
 # the arc, which is always nearer than the box corner, so an exit landing there
 # is re-solved against that corner's circle. The ray is inside the disc wherever
@@ -232,7 +232,7 @@ static func is_over_net_footprint(world_xz: Vector2) -> bool:
 # Projects a skater's XZ clear of the goal net — the body disc of `radius` held
 # off the cage footprint, mirroring what clamp_to_rink_inner does for the boards.
 # Returns world_xz unchanged when the disc is already clear. Handles both net ends
-# (|z|). Pure value-type math — no allocation, hot-path safe at 120 Hz × actors.
+# (|z|). Pure value-type math — no allocation, hot-path safe at the tick rate × actors.
 #
 # The footprint is |x| <= NET_BACK_HALF_WIDTH (the wider trapezoid end) by
 # |z| in [GOAL_LINE_Z, GOAL_LINE_Z + NET_DEPTH], and EVERY face holds the body
@@ -303,71 +303,6 @@ static func net_proximity(pos_xz: Vector2, probe: float) -> Vector2:
 	var away: Vector2 = d / dist
 	away.y *= signf(pos_xz.y)
 	return away * ((probe - dist) / probe)
-
-# ── Goalie body containment (analytic skater block) ─────────────────────────
-# Base goalie footprint for the analytic skater body-block, like the boards/net.
-# Two footprints by stance: a cylinder while standing/RVH, a wide-
-# but-shallow oriented box in the butterfly (the leg pads spread laterally).
-# These mirror the blade clamp's goalie_block_radius / butterfly_pad_half_* on
-# SkaterController — the goalie is beatable-realism furniture here, not a precise
-# collision hull. The skater's own collision radius is added on top at the call
-# site (Skater.clamp_body_to_goalies) so the body EDGE stops at the goalie
-# surface; kept here (not on the actor) so the live tick and the reconcile replay
-# read one shared value.
-const GOALIE_BLOCK_RADIUS: float = 0.50
-const GOALIE_BUTTERFLY_HALF_X: float = 0.84
-const GOALIE_BUTTERFLY_HALF_Z: float = 0.25
-
-# Projects a skater's XZ clear of a goalie's body footprint so the skater can't
-# walk through the goalie now that skater-vs-goalie is analytic. Mirrors
-# push_out_of_net: standing/RVH uses a cylinder of `radius` around the goalie
-# center; the butterfly uses an oriented box (half_x × half_z rotated by the
-# goalie's yaw) covering the spread leg pads. `radius` / half-extents should
-# already include the skater's own collision radius so the body EDGE stops at the
-# goalie surface. Returns world_xz unchanged when the center is already clear.
-# Pure value-type math — no allocation, hot-path safe at 120 Hz × actors.
-static func push_out_of_goalie(world_xz: Vector2, gpos: Vector2, rot_y: float,
-		is_butterfly: bool, radius: float, half_x: float, half_z: float) -> Vector2:
-	if is_butterfly:
-		return _push_out_of_goalie_box(world_xz, gpos, rot_y, half_x, half_z)
-	# Standing / RVH — cylinder push-out around the goalie center.
-	var to_body: Vector2 = world_xz - gpos
-	var dist: float = to_body.length()
-	if dist >= radius:
-		return world_xz
-	var dir: Vector2
-	if dist > 0.001:
-		dir = to_body / dist
-	else:
-		# Coincident centers — eject toward center ice (away from the goal line).
-		dir = Vector2(0.0, -signf(gpos.y)) if gpos.y != 0.0 else Vector2(0.0, 1.0)
-	return gpos + dir * radius
-
-# Oriented-box push-out for the butterfly stance: transform world_xz into the
-# goalie's local frame (yaw rot_y), eject along the least-penetrated local axis,
-# then rotate the escape back to world. Mirrors the blade clamp's
-# _clamp_blade_butterfly_box so the body and blade agree on the pad box.
-static func _push_out_of_goalie_box(world_xz: Vector2, gpos: Vector2, rot_y: float,
-		half_x: float, half_z: float) -> Vector2:
-	var d: Vector2 = world_xz - gpos
-	var c: float = cos(rot_y)
-	var s: float = sin(rot_y)
-	var local_x: float = d.x * c + d.y * s
-	var local_z: float = -d.x * s + d.y * c
-	if absf(local_x) >= half_x or absf(local_z) >= half_z:
-		return world_xz
-	# Inside the box — eject along the least-penetrated axis (goalie-local).
-	var ox: float = half_x - absf(local_x)
-	var oz: float = half_z - absf(local_z)
-	var ex: float = local_x
-	var ez: float = local_z
-	if ox < oz:
-		ex = half_x * signf(local_x) if local_x != 0.0 else half_x
-	else:
-		ez = half_z * signf(local_z) if local_z != 0.0 else half_z
-	var world_dx: float = ex * c - ez * s
-	var world_dz: float = ex * s + ez * c
-	return Vector2(gpos.x + world_dx, gpos.y + world_dz)
 
 # ── Puck ──────────────────────────────────────────────────────────────────────
 # Rest height = the disc's half-height, so its bottom face sits on the ice plane
@@ -538,7 +473,7 @@ const DEFAULT_SKATER_STOP_DECEL_M_S2: float = 9.0
 const DEFAULT_SKATER_REVERSE_SKID_FRACTION: float = 0.75
 const DEFAULT_SKATER_TURN_ACCEL_M_S2: float = 9.0
 const DEFAULT_SKATER_MAX_TURN_RATE_RAD_S: float = 6.0
-const DEFAULT_STICK_LENGTH_M: float = 1.30
+const DEFAULT_STICK_LENGTH_M: float = 1.40
 const DEFAULT_BLADE_LENGTH_M: float = 0.30
 
 # Swept-segment hit radius for poke checks (puck-segment vs blade-segment).
@@ -566,7 +501,7 @@ const STICK_LIFT_RADIUS_M: float = 0.45
 #   wrister 33 m/s ≈ 74 mph  (~36.4 ≈ 81 mph strongest, ~29.0 ≈ 65 mph weakest)
 #   slapper 40 m/s ≈ 89 mph  (~48.2 ≈ 108 mph / ~32.1 ≈ 72 mph)
 # Reception already gates hard shots (above deflect_min_speed ~22 m/s
-# receiver-relative needs a squared blade), so most of the wrister band is
+# receiver-relative needs the blade on the puck's line), so most of the wrister band is
 # catch-with-care territory.
 # The slapper min is a hurried, barely-wound release — still a heavy shot
 # (~45 mph); one-timers always fire at max regardless of charge.

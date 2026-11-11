@@ -17,12 +17,12 @@ extends GutTest
 #   the last man commits a hit at the blue line                  7
 #   no hit without support behind; RUSH_D1's route past the line 2
 #
-# WHAT THE HARNESS DOES NOT MODEL: body collisions. The carrier skates through
-# the defender, so a body in his lane only stops him by stripping the puck.
+# WHAT THE HARNESS DOES NOT MODEL: board pins. A carrier stalled on the wall is
+# stopped only by a strip or a check, never pinned there.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SECS: float = 5.0
 const START_Z: float = 8.0
 # A hard bot's perception delay plus one brain period before its role changes.

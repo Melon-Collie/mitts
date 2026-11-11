@@ -3,7 +3,7 @@ extends Control
 
 # Top-down rink minimap. A cosmetic HUD widget (like OffScreenPlayerIndicators):
 # it reads live world state through GameManager and redraws every frame at render
-# rate — never on the physics tick — so it costs nothing in the 120 Hz budget.
+# rate — never on the physics tick — so it costs nothing in the tick budget.
 #
 # Orientation MATCHES the game camera. The camera renders the rink with world +X
 # to screen-right and world +Z toward screen-bottom, and flips 180° (yaw) only
@@ -289,7 +289,7 @@ func _paint_dynamic(ci: Control) -> void:
 	var puck: Puck = GameManager.puck
 	var carrier: Skater = null
 	if puck != null and is_instance_valid(puck):
-		carrier = puck.get_carrier()
+		carrier = puck.drawn_carrier()
 
 	# The local skater draws last among the skaters so a pile-up never hides it.
 	var local_record: PlayerRecord = null

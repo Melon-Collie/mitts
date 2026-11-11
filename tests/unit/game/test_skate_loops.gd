@@ -8,7 +8,7 @@ const SoundManagerScript := preload("res://Scripts/game/sound_manager.gd")
 # The glide hisses with speed and gives way to the stop. The carve sounds while
 # an edge holds a curve and not on a straight line.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 class StubGameState extends Node:

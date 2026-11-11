@@ -3,18 +3,22 @@
 C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeSkaterMovement`,
 `NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`, `NativeSkaterGait`,
-`NativeLegChain`, `NativeCarryRollout`, `NativeShotOdds`, `NativeHemFlaps`). The
+`NativeLegChain`, `NativeCarryRollout`, `NativeShotOdds`, `NativeHemFlaps`,
+`NativeBladePass`, `NativeCarrySpace`). The
 GDScript originals (in `Scripts/domain/rules/`, `Scripts/domain/ai/`,
 `Scripts/controllers/` and `Scripts/actors/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
 (`tests/unit/rules/test_native_ik_parity.gd` and its siblings). **Change a
 solver in both places or not at all** — the parity tests are the gate.
 
-This directory exists because interpreter overhead on the 120 Hz tick (and its
+This directory exists because interpreter overhead on the 90 Hz tick (and its
 reconcile-replay amplification) is the game's scripting bottleneck. The rule
 for what belongs here: settled, evaluation-grade math with a coarse call
 boundary — primitives and vectors in, results out, no callbacks into GDScript
-mid-solve. Feel-tunable orchestration stays in GDScript.
+mid-solve. "Settled" is the bar for something new: a mechanic still being found
+stays in GDScript until it stops changing. Mature orchestration, feel tunables
+and all, may be ported when the measured cost earns it; the GDScript stays the
+reference and the parity test is the gate, as for any kernel.
 
 ## The one non-kernel: `NativeGifEncoder`
 
@@ -126,6 +130,20 @@ without a built binary, loses performance, never correctness — CI builds it):
   stateful speed-cap / arrive-law smoother, `NativeBladeDangle.advance`);
   reset/seed forward from `reset_blade_smoothing` / `seed_blade_smoothing`,
   config syncs via `_sync_dangle_config` under `invalidate_configs()`.
+- **Blade pass** — the whole of `SkaterIKCoordinator.apply_blade_toward`
+  (every skater's tick, and every replayed input): the reach target, the board
+  and net reach limits, the carry's two hands and backhand stop, the rest reach,
+  the hand solve, the commit pose, the transit hop, the board, goalie and net
+  clamps and the rigid rebuild. It drives the two kernels above through `bind`,
+  so the dangle's state and the top hand's config are one between the paths.
+  The coordinator gathers the pass's inputs once
+  (`_native_blade_toward`); the rink and net arrive by `set_rink` / `set_net`,
+  and the tunables by `configure` under `invalidate_configs()`. A puck released
+  mid-pass is the one place the GDScript calls out: `run` returns with the
+  release pending, the coordinator fires it and `resume`s with the live
+  `has_puck`, because what the goalie loop does next depends on whether the
+  release took the puck. `test_native_blade_pass_parity.gd` skates the two side
+  by side; the GDScript stays the reference.
 - **Puck step** — host drive (`Puck._drive_analytic`, per sub-step so the
   goalie interleave keeps its exact order) and client prediction
   (`PuckController._run_prediction`, whole-tick `step_tick` batching), both
@@ -156,13 +174,14 @@ without a built binary, loses performance, never correctness — CI builds it):
 
 - **Arm rig** — `SkaterArmRig._update_arm` (render rate, every drawn skater,
   both arms): `pose` runs the whole arm and **writes the bones itself** — the
-  five arm parts and that side's deltoid cap, on the `Skeleton3D` handed to
-  `bind`. That is the one exception to "results out": the math is cheaper
-  than the crossings, so a port that hands six transforms back for GDScript to
-  write measured 9.2 µs against the GDScript's 10.6; one crossing is ~4. The
-  rig keeps its own view of the caps (`_basis`, `_girdle`) for the reposes it
-  makes itself (trunk texture, sizing) and reads the native's back on demand
-  (`_sync_cap`); a degenerate span returns false and takes the GDScript path.
+  five arm parts, on the `Skeleton3D` handed to `bind`. That is the one
+  exception to "results out": the math is cheaper than the crossings, so a port
+  that hands the transforms back for GDScript to write measured 9.2 µs against
+  the GDScript's 10.6; one crossing is ~4. A degenerate span returns false and
+  takes the GDScript path. It also steers the elbow round the torso, holds
+  the glove's sword grip and rolls the top fist, and owns the two eased angles
+  (the turn and the roll) per arm, reporting through `pose`'s result whether
+  they are still settling, for the rig's rebuild gate.
   `tests/unit/rules/test_native_arm_rig_parity.gd`.
 
 - **Carry rollout** — `AICarryRollout.roll_all` (the bot carrier's near moves,
@@ -184,6 +203,18 @@ without a built binary, loses performance, never correctness — CI builds it):
   through float as the GDScript's packed arrays do, so the two agree to the bit.
   38 → 5 µs a read; the carrier's carry search 26–28% faster in the zone.
   `tests/unit/ai/test_native_shot_odds_parity.gd`.
+
+- **Carry space** — `AIEvadeRead.evade_safety` (the keep odds every
+  `AIPossessionValue` read pays) and `AICarrySpace.carry_safety` /
+  `carry_strip_point` (a carry's keep odds and where it is stripped: the
+  possession read's drives and entries, the carrier's carry search, the wheel),
+  on the AI worker. One call each, with `reach_clearance` (its escape gate and
+  the defender who stops), the crossing band and the safety maps inside;
+  `AICarrySpace.native` holds the one instance `NativeCarrySpaceFactory.install`
+  builds from `GameManager._ready`, and `AICarrySpace.pack_caps` hands the caps
+  over as five floats a man. A point or direction the GDScript holds in a
+  Vector3 / Vector2 is rounded to float where it is, so the two agree to the
+  bit. `tests/unit/ai/test_native_carry_space_parity.gd`.
 
 - **Jersey tails** — `HemFlaps.step` (render rate, every skater and keeper,
   every frame): the cloth below the belt or the chest protector — the

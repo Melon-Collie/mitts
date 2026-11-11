@@ -11,7 +11,7 @@ const NetworkManagerScript := preload("res://Scripts/networking/network_manager.
 # instant, and RemoteController's dedupe (strictly-greater) silently drops the
 # second input. These pin the property that makes that impossible.
 
-const TICK: float = 1.0 / 120.0
+const TICK: float = Constants.TICK_DURATION
 const SLEW: float = 0.0001
 
 

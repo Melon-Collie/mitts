@@ -1,7 +1,8 @@
 extends GutTest
 
-# GoalieSaveRules — the puck's rebound off a goalie surface, and the one save
-# outcome that is not a rebound.
+# GoalieSaveRules — the puck's rebound off a goalie surface, the one save
+# outcome that is not a rebound, and his own gear never carrying a puck toward
+# his goal line.
 
 const FACING := Vector3(0.0, 0.0, 1.0)      # he faces +Z
 const SQUARE_N := Vector3(0.0, 0.0, 1.0)    # a face pointing back at the shooter
@@ -329,3 +330,39 @@ func test_the_two_acts_ignore_the_surfaces_motion() -> void:
 	assert_almost_eq(res.velocity.length(),
 			GoalieSaveRules.CHEST_TRAP_DROP_M_S, 0.0001,
 			"and still places it down at a walking pace")
+
+
+# ── His own gear never carries a puck toward his goal line ───────────────────
+
+# A puck at rest that his pad walks into, the pad moving toward his goal line:
+# whatever face it meets, the puck gains nothing that way; sideways, the push
+# stands. Off still gear, the contact is untouched: a shot that would go in
+# off a pad still does.
+func test_his_moving_gear_never_pushes_a_puck_toward_his_goal() -> void:
+	var to_goal := Vector3(0.0, 0.0, 1.0)
+	for normal: Vector3 in [Vector3(0.0, 0.0, 1.0), Vector3(1.0, 0.0, 1.0).normalized(),
+			Vector3(-1.0, 0.0, 0.3).normalized(), Vector3(0.0, 0.0, -1.0)]:
+		for gear: Vector3 in [Vector3(0.0, 0.0, 2.0), Vector3(1.5, 0.0, 1.5), Vector3(-2.0, 0.0, 0.0)]:
+			var still: Vector3 = GoalieSaveRules.rebound_velocity(Vector3.ZERO, GoalieSaveRules.SavePart.PAD, normal)
+			var moving: Vector3 = GoalieSaveRules.rebound_velocity(Vector3.ZERO, GoalieSaveRules.SavePart.PAD,
+					normal, gear)
+			var kept: Vector3 = GoalieSaveRules.keep_out_of_own_net(still, moving, to_goal)
+			var what: String = "face %s, gear %s" % [normal, gear]
+			assert_lte(kept.dot(to_goal), still.dot(to_goal) + 1e-6, "%s: nothing gained toward his goal" % what)
+			var sideways: Vector3 = moving - to_goal * moving.dot(to_goal)
+			assert_almost_eq(kept - to_goal * kept.dot(to_goal), sideways, Vector3.ONE * 1e-6,
+					"%s: the sideways push stands" % what)
+	var shot := Vector3(0.0, 0.0, 20.0)
+	var off_still: Vector3 = GoalieSaveRules.rebound_velocity(shot, GoalieSaveRules.SavePart.PAD,
+			Vector3(1.0, 0.0, -0.2).normalized())
+	assert_eq(GoalieSaveRules.keep_out_of_own_net(off_still, off_still, to_goal), off_still,
+			"a shot off still gear goes where it goes")
+
+
+# Gear pushed into a puck it overlaps frees it every way but toward his goal.
+func test_his_gear_overlapping_a_puck_never_walks_it_toward_his_goal() -> void:
+	var to_goal := Vector3(0.0, 0.0, -1.0)
+	assert_eq(GoalieSaveRules.eject_out_of_own_net(Vector3(0.03, 0.0, -0.02), to_goal), Vector3(0.03, 0.0, 0.0),
+			"the goalward part goes")
+	assert_eq(GoalieSaveRules.eject_out_of_own_net(Vector3(0.0, 0.0, 0.02), to_goal), Vector3(0.0, 0.0, 0.02),
+			"out of the net stands")

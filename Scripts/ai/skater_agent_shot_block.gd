@@ -2,8 +2,9 @@ class_name SkaterAgentShotBlock
 extends RefCounted
 
 # One bot's shot block (AIShotBlockRead), every physics tick after dispatch:
-# - as a 2-on-1's last defender, dive across the pass the carrier has to make,
-#   when the lane is past what he reaches on his feet before the pass does;
+# - as the lone defender back against two or more, dive across the pass the
+#   carrier has to make, when the lane is past what he reaches on his feet before
+#   the pass does;
 # - otherwise, drop into the block while a low shot's lane runs through him, and
 #   stay down while the released shot is still coming through.
 # Owns only whether it is blocking; everything else is read off the snapshot.
@@ -51,8 +52,8 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 		input.stance_held = false
 
 
-# An opponent winding up in our end with us in his lane, low enough to block,
-# and us not in our goalie's eyes.
+# An opponent winding up in our end with the puck coming off his stick, us in
+# his lane, low enough to block, and us not in our goalie's eyes.
 func _shot_coming(snapshot: WorldSnapshot, me: SkaterNetworkState, goal: Vector3,
 		own_goal_dir: float) -> bool:
 	var goalie: GoalieNetworkState = snapshot.goalie_states.get(_team_id)
@@ -66,8 +67,13 @@ func _shot_coming(snapshot: WorldSnapshot, me: SkaterNetworkState, goal: Vector3
 		var shooter: SkaterNetworkState = snapshot.skater_states[pid]
 		if not _winding_up(shooter.shot_state):
 			continue
-		# A one-timer's release is his blade, where the feed meets it.
-		var release: Vector3 = puck.position if puck.carrier_peer_id == pid else shooter.position
+		var release: Vector3 = puck.position
+		if puck.carrier_peer_id != pid:
+			# Without the puck he shoots only what reaches him: a one-timer
+			# released from his blade, where the feed meets it.
+			if not _feed_reaches(puck, shooter.blade_contact_world):
+				continue
+			release = shooter.blade_contact_world
 		if own_goal_dir * release.z < GameRules.BLUE_LINE_Z:
 			continue
 		var caps: AISkaterCaps = _caps_by_peer.get(pid)
@@ -79,24 +85,37 @@ func _shot_coming(snapshot: WorldSnapshot, me: SkaterNetworkState, goal: Vector3
 	return false
 
 
+# A loose puck whose path reaches the blade: a feed already on its way, or one
+# lying there. A pass he is only waiting on is not a shot yet, and the block goes
+# down as fast as the pass can be seen leaving.
+static func _feed_reaches(puck: PuckNetworkState, blade: Vector3) -> bool:
+	return puck.carrier_peer_id == -1 and AIStickTieRead.path_passes_within(puck.position,
+			puck.velocity, blade, PuckController.PICKUP_RADIUS + AIStickTieRead.RECEIVER_STEP_M)
+
+
 static func _winding_up(shot_state: int) -> bool:
 	return shot_state == SkaterStateMachine.State.WRISTER_AIM \
 			or shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK \
 			or shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITHOUT_PUCK
 
 
-# A man down on the rush, the carrier inside shooting range: the first pass lane
-# to one of his men that we can only take away by diving, and that no teammate is
-# nearer to. INF when there is none.
+# The lone defender back, goal-side, against two or more with the carrier inside
+# shooting range in front of our goal line, where our goalie can take the
+# shooter: the first pass lane to one of his men that we can only take away by
+# diving, and that no teammate is nearer to. INF when there is none. A beaten
+# body, or one with a second man home, plays the pass on his feet.
 func _dive_point(snapshot: WorldSnapshot, me: SkaterNetworkState, own_goal_dir: float,
 		rush: AIRushRead, stick_reach: float, accel: float) -> Vector3:
-	if rush == null or not rush.is_live or rush.numbers != AIRushRead.Numbers.DOWN_ONE:
+	if rush == null or not rush.is_lone_defender(_peer_id):
 		return Vector3.INF
 	var carrier_pid: int = snapshot.puck_state.carrier_peer_id
 	if carrier_pid == -1 or carrier_pid != rush.carrier_peer:
 		return Vector3.INF
 	var carrier: SkaterNetworkState = snapshot.skater_states.get(carrier_pid)
-	if carrier == null or own_goal_dir * carrier.position.z < AIShotBlockRead.SHOOTING_RANGE_Z:
+	if carrier == null:
+		return Vector3.INF
+	var carrier_depth: float = own_goal_dir * carrier.position.z
+	if carrier_depth < AIShotBlockRead.SHOOTING_RANGE_Z or carrier_depth >= GameRules.GOAL_LINE_Z:
 		return Vector3.INF
 	for pid: int in rush.attackers:
 		if pid == carrier_pid or not snapshot.skater_states.has(pid):

@@ -17,15 +17,9 @@ extends RefCounted
 # (Skater.set_leg_swing) writes their rotations — different properties, no
 # clash; same contract as scale-vs-rotation on the leaf meshes.
 #
-# Upper-body PART POSITIONS scale too — scale alone stretches each mesh about its
-# own origin, so a tall build's torso grows upward while its shoulder balls and
-# helmet stay at baseline height (sunken shoulders, low head):
-# shoulder balls and helmet ride m_height on Y, and the shoulder balls ride
-# girth on X so a thick torso doesn't swallow them. The logical arm anchors
-# mirror the same ball positions gameplay-side —
-# SkaterController.apply_attributes calls Skater.set_shoulder_anchor with
-# the identical multipliers, keeping the drawn arm and the IK rooted at the
-# same point (keep the two in sync).
+# Upper-body PART POSITIONS scale too — scale alone stretches each part about
+# its own origin, so a tall build's torso would grow upward while its helmet
+# stayed at baseline height (a low head): the helmet rides m_height on Y.
 #
 # Idempotent: captures baseline scales / positions / mesh radii on the first
 # apply() call; every subsequent call recomputes from those baselines so
@@ -46,9 +40,6 @@ extends RefCounted
 # statures, and the constancy is what sells a tall build as big rather than
 # zoomed.
 # The upper-body parts are bones of the upper rig, not nodes.
-const _SHOULDER_BONES: Array[int] = [
-	SkaterMeshBuilder.UpperBone.SHOULDER_L, SkaterMeshBuilder.UpperBone.SHOULDER_R,
-]
 const _ARM_BONES: Array[int] = [
 	SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM, SkaterMeshBuilder.UpperBone.BOTTOM_UPPER_ARM,
 	SkaterMeshBuilder.UpperBone.TOP_FOREARM, SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,
@@ -98,8 +89,6 @@ func apply(attrs: PlayerAttributes) -> void:
 	var m_girth:  float = attrs.girth_mult()
 	var m_head:   float = attrs.head_bulk_mult()
 	_apply_upper_scale(SkaterMeshBuilder.UpperBone.TORSO, m_girth, m_height, m_girth)
-	for bone: int in _SHOULDER_BONES:
-		_apply_upper_scale(bone, m_girth, m_height, m_girth)
 	_apply_upper_scale(SkaterMeshBuilder.UpperBone.HELMET, m_head, m_head, m_head)
 	_apply_upper_scale(SkaterMeshBuilder.UpperBone.PELVIS, m_girth, m_height, m_girth)
 	for bone: int in _THIGH_BONES:
@@ -107,13 +96,9 @@ func apply(attrs: PlayerAttributes) -> void:
 	for bone: int in _CALF_BONES:
 		_apply_leg_scale(bone, m_girth, m_height, m_girth)
 	# Positions: keep the upper-body parts assembled across builds. Y rides
-	# height for everything (the torso cylinder's center rises with its
-	# stretch, the shoulder balls sit at its top, the helmet above them).
-	# Shoulder-ball X rides girth — the deltoid sits on the torso surface, so
-	# the torso's width pushes it out.
+	# height for both (the torso's center rises with its stretch, the helmet
+	# sits on top of it).
 	_apply_upper_position(SkaterMeshBuilder.UpperBone.TORSO, 1.0, m_height)
-	for bone: int in _SHOULDER_BONES:
-		_apply_upper_position(bone, m_girth, m_height)
 	_apply_upper_position(SkaterMeshBuilder.UpperBone.HELMET, 1.0, m_height)
 	# Skeleton height: raise the body roots and scale every leg-chain Y offset
 	# so the whole rig scales about the ice plane (see the class doc block).

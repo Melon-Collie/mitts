@@ -8,7 +8,11 @@ extends GutTest
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
+# The drawn mid-blade's slack off the marker's standoff: a carry's shaft is
+# steeper than the stick's lie, so the drawn blade rides its heel and its
+# middle swings ~1.2 cm off the face; a release opens half carry_free_gap.
+const HEEL_RIDE_SLACK_M: float = 0.015
 
 
 class GameStateStub:
@@ -140,7 +144,7 @@ func test_a_slow_carry_keeps_the_blade_on_the_puck() -> void:
 	var sk: Skater = c.skater
 	for s: Sample in _dangle(c, 0.25, 0.4, 2.5):
 		assert_false(s.release_hop, "a slow sweep never releases")
-		assert_lt(s.mesh_standoff, sk.carry_blade_offset + 0.01,
+		assert_lt(s.mesh_standoff, sk.carry_blade_offset + HEEL_RIDE_SLACK_M,
 				"a slow sweep keeps the blade on the puck")
 
 

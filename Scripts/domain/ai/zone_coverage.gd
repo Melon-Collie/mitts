@@ -98,6 +98,36 @@ static func pressure_owner(strong_x: float, own_goal_z: float,
 	return AIRoleSlots.Slot.ZONE_W_WEAK
 
 
+# Whether `pos` is ice zone coverage picks a man up on: our zone, out to a cover
+# envelope past our blue line (AIRushRead.cover_envelope_m). Escorting a man
+# still up the ice walks the coverage away from the puck.
+static func in_coverage_ice(own_goal_z: float, pos: Vector3) -> bool:
+	return signf(own_goal_z) * pos.z >= GameRules.BLUE_LINE_Z - AIRushRead.cover_envelope_m()
+
+
+# The zone role on the puck: the brain's carrier owner while a carrier comes at
+# our net at pace (TeamStrategyView.pressure_slot_override), else the area that
+# holds the puck (pressure_owner). `view` may be null (no brain).
+static func pressure_slot(view: TeamStrategyView, strong_x: float, own_goal_z: float,
+		puck_pos: Vector3) -> int:
+	var owner: int = view.pressure_slot_override() if view != null \
+			else AIRoleSlots.Slot.NONE
+	if owner != AIRoleSlots.Slot.NONE:
+		return owner
+	return pressure_owner(strong_x, own_goal_z, puck_pos)
+
+
+# Whether the puck is loose and a teammate of `team_id` other than `peer_id` is
+# elected to race it (WorldSnapshot.closest_to_puck_by_team): then he is on the
+# puck, and the area that holds it has a man to cover rather than a puck.
+static func chased_by_another(snapshot: WorldSnapshot, team_id: int, peer_id: int) -> bool:
+	if snapshot == null or snapshot.puck_state == null \
+			or snapshot.puck_state.carrier_peer_id != -1:
+		return false
+	var chaser: int = snapshot.closest_to_puck_by_team.get(team_id, -1)
+	return chaser != -1 and chaser != peer_id
+
+
 # Whether `pos` is inside `slot`'s responsibility area, expanded by `margin`
 # metres (pass AREA_RELEASE_MARGIN_M for the incumbent-man hysteresis).
 # Areas deliberately overlap a little at the seams — a man on a boundary is

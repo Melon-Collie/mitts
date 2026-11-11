@@ -40,31 +40,18 @@ signal slot_selected(team_id: int, slot: int)
 signal bot_toggled(team_id: int, slot: int, is_bot: bool)
 signal kick_requested(peer_id: int, player_name: String)
 
-# Column display order: Left Wing (slot 1), Center (slot 0), Right Wing
-# (slot 2) — the familiar 3-across forward row in both modes. 5v5 adds a
-# second, centered row of two D cards (slots 3/4) BEHIND each team's
-# forwards — above the away row, below the home row, so the whole grid
-# reads like a faceoff lineup with each pair backing its own end (3v3
-# hides the D rows — see set_active_team_size). Both team rows share the
-# physical column layout, but since the away team attacks the opposite
-# direction its L/R slots are its own R/L, the mirror image of home's in
-# the same columns. PositionLabels holds that mirror for the badges and the
-# column headers; the slot→column layout itself does not change.
-const _DISPLAY_ORDER  := [1, 0, 2]
-const _D_DISPLAY_ORDER := [3, 4]
+const _FORWARD_SLOTS: Array[int] = [0, 1, 2]
+const _D_SLOTS: Array[int] = [3, 4]
 
 const _CARD_HEIGHT: int = 96
 const _STRIPE_WIDTH: int = 6
 const _ICON_SIZE: int = 20
 
-# Name label font sizing. The name auto-shrinks to fit the card so long names
-# (e.g. "SCHROEDER") display in full instead of hard-clipping at the default
-# size. _NAME_FONT_SIZE is the preferred size on filled cards, _OPEN the
-# (smaller, centered) "OPEN SLOT" placeholder size, and _MIN the floor below
-# which we stop shrinking and let clip_text take over as a last resort.
+# Name label font sizing: the preferred size on filled cards, and the smaller
+# centred "OPEN SLOT" placeholder's. A long name shrinks from it to fit
+# (MenuStyle.fit_label_to_width).
 const _NAME_FONT_SIZE: int = 24
 const _NAME_FONT_SIZE_OPEN: int = 18
-const _NAME_FONT_MIN: int = 14
 
 # Ping color bands (ms).
 const _PING_GREEN: int  = 60
@@ -148,20 +135,19 @@ func _apply_mode_visibility() -> void:
 # The card's position badge for the current mode. The grid seats two D cards
 # per team, so the roster size is what tells 3v3 from 5v5 here; the wording of
 # each badge is PositionLabels' business.
-func _position_badge(team_id: int, slot: int) -> String:
+func _position_badge(slot: int) -> String:
 	var is_5v5: bool = _active_team_size > PlayerRules.FIRST_DEFENSE_SLOT
-	return tr(PositionLabels.badge_key(team_id, slot, is_5v5))
+	return tr(PositionLabels.badge_key(slot, is_5v5))
 
 
 # Writes the position badge with the occupant's handedness as a chevron on
-# the matching side ("< L" lefty, "L >" righty). A hand fact about the
-# player, so the away-row L/R mirroring never touches it. State -1 (empty
-# card, identity-less bot) keeps the bare badge.
+# the matching side ("< L" lefty, "L >" righty). State -1 (empty card,
+# identity-less bot) keeps the bare badge.
 func _stamp_position(team_id: int, slot: int) -> void:
 	var lbl: Label = _pos_labels[team_id][slot]
 	if lbl == null:
 		return
-	var badge: String = _position_badge(team_id, slot)
+	var badge: String = _position_badge(slot)
 	match int(_hand_state[team_id][slot]):
 		0:
 			lbl.text = "< %s" % badge
@@ -191,9 +177,6 @@ func _build_grid() -> void:
 	# Away on top (team 1), Home on bottom (team 0) — matches rink perspective,
 	# and each team's D pair sits BEHIND its forwards (above for away, below
 	# for home), so 5v5 reads like a faceoff lineup backing toward each net.
-	# Each team gets its own column header (LW/C/RW vs. the away-mirrored
-	# RW/C/LW) since the two teams' true wing labels are swapped in the same
-	# physical columns — see the _DISPLAY_ORDER comment above.
 	for team_id: int in [1, 0]:
 		_cards[team_id].resize(PlayerRules.MAX_PER_TEAM)
 		_stylebox[team_id].resize(PlayerRules.MAX_PER_TEAM)
@@ -226,8 +209,20 @@ func _build_grid() -> void:
 			add_child(_d_rows[team_id])
 
 
-# The familiar 3-across forward row (LW / C / RW), with the AWAY/HOME team
-# label on its left edge.
+# `slots` left to right as the grid draws them: by the side of the ice each
+# plays, seen from the home end with away at the top (PlayerRules.home_side_x,
+# −X on the left). The away team faces the other way, so its row is home's
+# rotated a half turn — RW / C / LW over LW / C / RW, RD / LD over LD / RD —
+# and every card keeps its slot's own position.
+static func row_order(team_id: int, slots: Array[int]) -> Array[int]:
+	var own_goal_z: float = PlayerRules.own_goal_dir(team_id)
+	var ordered: Array[int] = slots.duplicate()
+	ordered.sort_custom(func(a: int, b: int) -> bool:
+		return PlayerRules.home_side_x(a, own_goal_z) < PlayerRules.home_side_x(b, own_goal_z))
+	return ordered
+
+
+# The 3-across forward row, with the AWAY/HOME team label on its left edge.
 func _build_forward_row(team_id: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
@@ -241,8 +236,7 @@ func _build_forward_row(team_id: int) -> HBoxContainer:
 	team_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(team_label)
 
-	for col: int in _DISPLAY_ORDER.size():
-		var s: int = _DISPLAY_ORDER[col]
+	for s: int in row_order(team_id, _FORWARD_SLOTS):
 		row.add_child(_build_card(team_id, s))
 	return row
 
@@ -250,8 +244,8 @@ func _build_forward_row(team_id: int) -> HBoxContainer:
 # The 5v5 D pair: two cards centered under (home) / over (away) the forward
 # row, sized to match the forward cards. Half-weight stretch spacers on each
 # side make every card exactly one column wide (0.5 + 1 + 1 + 0.5 = the same
-# 3 flex units the forward row spans), so LD sits under the LW–C seam and RD
-# under the C–RW seam — the lineup "behind them" read.
+# 3 flex units the forward row spans), so each D sits behind the seam between
+# the centre and the wing on his side — the lineup "behind them" read.
 func _build_d_row(team_id: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
@@ -265,7 +259,7 @@ func _build_d_row(team_id: int) -> HBoxContainer:
 	lead.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lead.size_flags_stretch_ratio = 0.5
 	row.add_child(lead)
-	for s: int in _D_DISPLAY_ORDER:
+	for s: int in row_order(team_id, _D_SLOTS):
 		row.add_child(_build_card(team_id, s))
 	var tail := Control.new()
 	tail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -274,8 +268,8 @@ func _build_d_row(team_id: int) -> HBoxContainer:
 	return row
 
 
-# Column header row for one team: AWAY/HOME spacer + LW / C / RW labels (or
-# the away-mirrored RW / C / LW), matching that row's card badges.
+# Column header row for one team: AWAY/HOME spacer + one label per forward
+# column, in that team's row order.
 func _build_header(team_id: int) -> void:
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 12)
@@ -287,12 +281,12 @@ func _build_header(team_id: int) -> void:
 	spacer.custom_minimum_size = Vector2(56, 0)
 	header.add_child(spacer)
 
-	for col: int in _DISPLAY_ORDER.size():
+	for s: int in row_order(team_id, _FORWARD_SLOTS):
 		var lbl := Label.new()
 		# Uppercased at the seam: the header rail shouts, but the catalogue
 		# carries one Title Case row per position (POSITION_LW / _C / _RW),
 		# shared with the build screen's position picker.
-		lbl.text = tr(PositionLabels.column_header_key(team_id, col)).to_upper()
+		lbl.text = tr(PositionLabels.column_header_key(s)).to_upper()
 		lbl.add_theme_font_size_override("font_size", 11)
 		lbl.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
 		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -384,7 +378,7 @@ func _build_card(team_id: int, slot: int) -> PanelContainer:
 	# auto-shrinks to fit (see _fit_name): "fit_base" is the preferred size,
 	# re-fit on every layout change via the resized signal so it tracks
 	# window resizing. clip_text stays on purely as a last-resort guard for
-	# pathologically long names that hit _NAME_FONT_MIN.
+	# pathologically long names that hit MenuStyle.NAME_FIT_MIN_PX.
 	var name_lbl := Label.new()
 	name_lbl.add_theme_font_override("font", MenuStyle.NAME_FONT)
 	name_lbl.add_theme_font_size_override("font_size", _NAME_FONT_SIZE)
@@ -415,7 +409,7 @@ func _build_card(team_id: int, slot: int) -> PanelContainer:
 	_right_cols[team_id][slot] = right_col
 
 	var pos_lbl := Label.new()
-	pos_lbl.text = _position_badge(team_id, slot)
+	pos_lbl.text = _position_badge(slot)
 	pos_lbl.add_theme_font_size_override("font_size", 13)
 	pos_lbl.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
 	pos_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -713,29 +707,11 @@ func _update_card(team_id: int, slot: int, entry) -> void:
 		action.visible = false
 
 
-# Shrink the name's font size so the whole name fits the label's current
-# width, mirroring the in-game jersey renderer (which measures the string and
-# fits it) rather than hard-clipping. Measures at the label's preferred
-# "fit_base" size and scales down proportionally if the text overflows,
-# flooring at _NAME_FONT_MIN; clip_text catches anything still too long. Wired
-# to the label's resized signal so it re-fits on window/layout changes, and
-# called explicitly after each text update. Idempotent — always measures from
-# fit_base, so repeated calls converge without drift.
+# Fits the name to the label's width from its "fit_base" size. Wired to the
+# label's resized signal so it re-fits on layout changes, and called after each
+# text update.
 func _fit_name(lbl: Label) -> void:
-	var base: int = lbl.get_meta("fit_base", _NAME_FONT_SIZE)
-	var avail: float = lbl.size.x
-	if avail <= 0.0 or lbl.text.is_empty():
-		# Layout not resolved yet (or nothing to show) — keep the preferred
-		# size; the resized signal will re-fit once a real width is known.
-		lbl.add_theme_font_size_override("font_size", base)
-		return
-	var font: Font = lbl.get_theme_font("font")
-	var text_w: float = font.get_string_size(
-			lbl.text, lbl.horizontal_alignment, -1, base).x
-	var size_px: int = base
-	if text_w > avail:
-		size_px = maxi(_NAME_FONT_MIN, int(floor(base * avail / text_w)))
-	lbl.add_theme_font_size_override("font_size", size_px)
+	MenuStyle.fit_label_to_width(lbl, lbl.get_meta("fit_base", _NAME_FONT_SIZE))
 
 
 # Small outline-only square in the top-left corner of a card. `accent` is

@@ -7,20 +7,25 @@ execute; they never reach up.
 ## The goalie
 
 Every match plays the keeper; how he plays is `Scripts/domain/keeper/CLAUDE.md`.
-Four files here hold him in the game:
+These files hold him in the game:
 
 | File | Owns |
 |---|---|
-| `goalie_controller.gd` | his seat, which every caller, the puck, the wire and the replays address: his node, puck and net, the puck's signals routed to whoever plays him, the host's snapshots and a client's interpolation of them, the reads the shot log takes of him |
-| `keeper_controller.gd` | the keeper in that seat: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a shot read and saved (KeeperShotRead, KeeperSave), a glove catch held and covered, a loose puck he can reach covered (KeeperCover); played on the host, posed from the wire on a client and in a replay |
+| `goalie_controller.gd` | his seat, which every caller, the puck, the wire and the replays address: his node, puck and net, the puck's signals routed to whoever plays him, the host's snapshots and a client's interpolation of them (the fallback), a client's newest blob of his sim state (`receive_wire_state`), the reads the shot log takes of him |
+| `keeper_controller.gd` | the keeper in that seat: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a shot read and saved (KeeperShotRead, KeeperSave), a glove catch held and covered, a loose puck he can reach covered (KeeperCover), a puck a carrier of theirs drives at him with jabbed off it (KeeperPoke), one at his feet an opponent beats his cover to swept to the corner (KeeperClear), a screened shot read late and a screen looked round (KeeperScreen); played on the host (`step_sim`, his tick), drawn on a client from its predictor and in a replay from the wire; his whole sim state written to an online snapshot, snapping him to it (`wire`, `append_wire_state`), and rebuilt from one (`apply_wire_state`) |
+| `keeper_predictor.gd` | a client's own keeper for one goalie (`KeeperPredictor`): re-seeded from a snapshot's blob, stepped by `step_sim` to the render instant against a shadow world, its own blob and drawn state kept per broadcast tick and re-stepped only when a snapshot disagrees beyond a centimetre, the drawn state blended between its two stepped ticks; its rules are `Scripts/networking/CLAUDE.md`'s goalie invariant |
+| `keeper_world_source.gd`, `game_keeper_world.gd` | the shadow world the predictor steps against: the interface, and the game's (this client's predicted skaters and puck, read-only) |
+| `keeper_shadow_puck.gd`, `keeper_shadow_skater.gd` | the shadow world's puck and skaters: the actor classes with their ready-time rig, group and effects skipped, so the keeper reads them as the real ones and nothing else finds them |
 | `goalie_state_machine.gd` | the stance enum the wire carries (`state_enum`) and the bots and the pad sounds read, and its families |
 | `goalie_world_view.gd` | one scan of the skaters a tick, shared by every read of them |
 
 The goalie's rules in `Scripts/domain/rules/goalie_*.gd` are pure and shared:
 the rebound doctrine (`GoalieSaveRules`), the push kinematics his footwork runs
 on (`GoaliePushRules`), where a pass in flight is shot from (`GoaliePassRead`),
-and how a body hides a shot from him (`GoalieScreenRules`, which the bots read
-to clear or not make a screen in front of their own goalie).
+and how a body hides a shot from him (`GoalieScreenRules`, by which he reads a
+screened shot late, loses his look at a hidden puck and looks round a screen,
+and which the bots read to clear or not make a screen in front of their own
+goalie).
 
 ### Delete the copy, don't correct the number
 
@@ -124,7 +129,7 @@ while engaged), `shot_hip_yaw` (shot coil and uncoil), and `pivot_hold`
 (authority, which fades the generic facing-lag pump out of the sum). Two writers
 tracking one rotation on different clocks is a wobble, not a pose — hence one
 summing site rather than five writers. The trunk texture in particular goes onto
-the cosmetic torso, helmet and shoulder BONES, never onto the `UpperBody` node,
+the cosmetic torso and helmet BONES, never onto the `UpperBody` node,
 whose rotation carries the blade markers and is therefore gameplay geometry.
 
 ### The legs skate a state, and the state is the physics' decision
@@ -335,6 +340,25 @@ state (`GaitPose.leg_l`, `_gripping`) and `_locomotion`'s fields stay stale on
 the native path, as does every alignment and pivot field but the published
 ones (`travel_align_yaw`, `pivot_hold`).
 
+### The blade pass is native
+
+Where the extension is built, `NativeBladePass` runs the whole of
+`SkaterIKCoordinator.apply_blade_toward`: everything from the cursor to the two
+markers, the clamps included. The GDScript is the reference and the fallback.
+Change `apply_blade_toward` or anything it calls (`_solve_top_hand` and its
+reach limits, `_board_reach_limit`, `_blade_target_for`,
+`_carry_backhand_stop`, `_commit_hand_pose`, `resolve_blade_against_goalies` (and
+`GoalieGearCollision` under it),
+`resolve_blade_against_net`, `Skater.clamp_blade_to_walls`, and the
+`TopHandIK`, `NetGeometry`, `NetBladeCollision`, `ReachPurposeRules` and
+rink functions under them) and the port changes with it, or
+`test_native_blade_pass_parity.gd` fails. A tunable the pass newly reads goes
+into `_sync_pass_config` too. What the pass reads live from the controller
+and the skater mid-tick comes in as a scalar the GDScript computes
+(`chest_fold`, `carry_reach_floor`, `_hand_forward`), so the two paths share
+one definition; the one the GDScript re-reads after a release — the chest's
+fold, on `has_puck` — the port drops when it resumes without the puck.
+
 ### Pose the hand, not the blade
 
 The tracked path is blade-first: the cursor names a blade position and
@@ -343,8 +367,10 @@ blade in tight cannot be authored that way, and the check commit is the worked
 example.
 
 `TopHandIK` has two regimes. Inside the stick's resting horizontal reach it goes
-CLOSE, which pins the hand's XZ **at the shoulder marker** and varies only its
-height — the blade's authored distance stops mattering entirely, and past the
+CLOSE, which pins the hand's XZ **at the shoulder marker** (or, round the
+forehand, its floor out from it along the aim, `Config.hand_forward`) and
+varies only its height —
+the blade's authored distance stops mattering entirely, and past the
 `hand_y_max` ceiling the blade overshoots along the aim line instead of landing
 where it was put. Meanwhile the rendered arm roots at the shoulder the trunk
 texture has MOVED (`SkaterArmRig._textured_shoulder`), which a lean and a
@@ -362,7 +388,7 @@ only shortens an over-long span; an under-long pair draws a visibly short stick.
 
 The tracked path's ROM (`TopHandIK`) is a disc about the shoulder with the hand
 a fixed drop below it, and `SkaterIKCoordinator._solve_top_hand` solves it
-where the drawn arm actually is. Three things decide "where", each found as a
+where the drawn arm actually is. Five things decide "where", each found as a
 hand the drawn arm could not reach or barely extended toward:
 
 - **The shoulder is the trunk's** (`arm_shoulder`). The skeleton folds the
@@ -385,6 +411,36 @@ hand the drawn arm could not reach or barely extended toward:
   upright blade height while the solve ran at the leaned one, the target sat
   inside the rim and the hand was drawn back to it: 0.24 m of a 0.39 m rim in
   every direction.
+- **A carrier's chest folds over the stick** (`chest_fold`,
+  `CarryPostureRules`), carrying both shoulders forward of the hips, and the
+  top and bottom ones are solved from there (`arm_shoulder`, `_two_hand_reach`).
+  An upright carrier's top hand hangs at his hip, the shaft runs from there,
+  and the bottom hand reaches it only across his belly, so the two-hand reach
+  holds the blade in close with the bottom elbow in the chest. The fold is the chest's, in its own frame after the twist, as
+  the faceoff address's is: never the frame the blade hangs from (pitched, the
+  carry's contact and strokes all move with it) and never through the spine's
+  fold-then-twist (the bottom shoulder then swings with the twist, and the
+  reach limit with it, tick to tick in a dangle). It is a pure function of the
+  blade marker and the posture's own fold, which it tops up rather than adds
+  to, so it needs no wire field: full while the puck is ahead and out, none
+  round beside or behind him, none pulled in tight. A shot or the block,
+  posing their own stick, take none. The gait draws exactly that fold on the
+  trunk texture, with a crouch under it standing (`GaitCarryLayer`).
+  `test_carry_posture_rules.gd`.
+- **Round the forehand the hand comes across the body**
+  (`top_hand_forward_m`, `TopHandIK.Config.hand_forward`). Held at its own
+  shoulder, on the backhand side, the top hand of a stick swept round the
+  forehand sits at the far hip once the two-hand stop draws the blade into
+  CLOSE, and the bottom arm reaches the shaft only across the whole chest, at
+  any skating fold. So CLOSE keeps the hand a floor out along the bearing to
+  the blade: none from straight ahead round the backhand, where a top hand
+  holds its stick at its side, all of it from ~55° round the forehand, and
+  gone as the blade comes in tight, where the hand comes back to the hip. It
+  follows the blade's bearing alone, so it is the same with the puck or
+  without and a pickup or a lost puck moves nothing; it sits under the regime
+  blend, so the FAR regime, the rim and the claim clamp are untouched. A shot,
+  the block and the centre's address keep the floorless solve.
+  `test_top_hand_ik.gd` holds it.
 
 The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
@@ -401,6 +457,26 @@ and is what the limit is measured to keep on the shaft. They are laid on the
 cursor's TARGET, not on the blade the speed cap draws, so a pickup at the rim
 brings the stick in at the dangle's pace instead of in one tick.
 `test_top_hand_reaches_its_rim.gd` holds all of it.
+
+**A carried puck comes no closer than a floor** (`carry_reach_min_m`,
+`CarryPostureRules.held_out`). Pulled in to his skates, the shaft stands up
+beside him, the top hand rises into his armpit and the bottom arm reaches it
+only through his belly — no arm can be drawn there — so that range is gone: the
+cursor is held out to the floor along its bearing from the body's centre,
+across the ice in the facing's frame (the chest's pitches with a skating lean,
+and reads a cursor at his skates as one well out). Never lay the floor from the
+shoulder, where `TopHandIK`'s own inner bound (`hand_y_max`) measures: the
+bearing from a shoulder to a cursor near the body swings with every turn of it,
+and the puck swings round with it. Skating, the floor moves out with the
+chest's fold over the stride (`carry_reach_fold_m`, `carry_reach_floor`): the
+fold brings the shoulder down to the hands, and held as close as standing the
+top hand rises level with it, the elbow hangs below the fist and the shaft
+leaves it past the little finger — a dagger, not a sword. Never answer that
+with a lower hand ceiling on the carrier's target: a ceiling lands the target
+past the cursor along the shoulder's aim, the shoulder twists toward the blade,
+and the puck creeps on its own for seconds. An empty stick keeps the tight range;
+reaching for a loose puck at its skates it goes one-handed and nothing crosses
+the body. `test_carry_blade_rests_on_puck.gd` and `test_carry_posture_rules.gd`.
 
 "Hold the shaft" means a glove's width below the top hand
 (`SkaterIKCoordinator._glove_spacing`, the drawn fist's width), never on it.
@@ -533,6 +609,16 @@ replace `apply_facing` wholesale, and one that skips this leaves the hips frozen
 at the last yaw anyone wrote — which is how skaters spent whole countdowns still
 turned down the line they skated in on.
 
+**The gait stays on the render clock through the prep.** The locked-phase paths
+pose the blade, the upper body and the hips' yaw on the tick and leave the legs,
+the head and the off hand to the render hook (`_render_pose_update`), as live
+play does. Run on the tick, the gait read the previous frame's animation-LOD
+verdict (`Skater.on_camera`), so every skater but the local one stepped on
+stale legs, and the bottom hand was placed on the post-tick shaft the stick is
+not drawn at. The faceoff's frame drop is then written at render rate, as the
+block's is in live play; the tick's reads of it (`_address_hand_ceiling`) take
+the last frame's.
+
 ## Build once, fill scratch
 
 A per-tick collaborator that produces a compound result should own ONE
@@ -550,6 +636,6 @@ the one thing a caller can get wrong.
 
 ## Hot path
 
-Everything here runs at 120 Hz × actor count, and reconcile replay re-runs the
+Everything here runs at the tick rate × actor count, and reconcile replay re-runs the
 per-tick body once per replayed input. Cosmetic-only work belongs in `_process`,
 not `_physics_process`. See CLAUDE.md → *Hot-path discipline*.

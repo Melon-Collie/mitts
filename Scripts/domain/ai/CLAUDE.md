@@ -27,7 +27,11 @@ line is evaluation vs. feel, not "numbers are bad".
 ## One currency across the carrier's compete
 
 SHOOT, PASS and CARRY are compared numerically, so all three price the shot
-through the value seam (`AIShotValue` / `score_shoot_value`). Leaving one leg on
+through the value seam (`AIShotValue` / `score_shoot_value`). Shots and passes
+both release from a listed spot (`AIShotHolds`), each paying its pull's time
+before the release and the odds the puck is still on the blade then; a pass
+the puck already carries where it sits is priced from there, unpulled, since
+that is where the press (`_load_ready`) fires it. Leaving one leg on
 a different model makes that leg win or lose on scale alone, and a hold priced in
 the wrong model is a permanent veto on the other two. The committed shot is the
 seam's own pick (aim and loft), so what is priced is what is fired.
@@ -37,7 +41,13 @@ The carrier's gains are odds of scoring wherever he stands, so
 `AICarrierField.turnover_cost` prices a loss as the opponent's possession of the
 spot (`AIPossessionValue`), and passes `in_xg` to `counter_rush_cost`. What a spot
 with no shot right now is worth — a turnover there, the carrier's search
-horizon — is that one read, for either side. The defence reads
+horizon — is that one read, for either side. It is the better of the live
+reads and the continuation (`AIPossessionValue.base_at`,
+`docs/possession-floor-plan.md`): keeping the puck at a spot is worth a floor
+by position plus a slot bonus, at the odds he can keep it at all, so it reads
+below zero in our own end and a turnover deep in theirs costs nothing. A live
+read's premium over the continuation where it ends goes stale with its time;
+the continuation does not. The defence reads
 a man on it too: `threat_of_carrier` (his shot, or his possession of the spot)
 and `threat_of_feed` (his one-timer, or the lane × his possession), a candidate's
 body pushed onto the read's defence for the one call. The outlet and breakout
@@ -45,7 +55,19 @@ roles stand where the lane to them × our possession of the spot is best, so
 there is no second scale left to mix in.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
-to that seam — odds of scoring on today's goalie with a first shot.
+to that seam — odds of scoring on today's goalie with a first shot. A pass's bar
+is weighed against keeping the puck: when both reads of keeping it (the carry
+and the drive-in) lose it where he stands, that loss comes off the bar, up to
+the whole bar, leaving only settle doubt's raise. A pressured carrier with an
+open man ahead is choosing between the pass and a turnover, and a 0.015 outlet
+is not a giveaway next to that.
+
+A pass's receiver is priced at the best of his shot off the feed, his straight
+drive in, and the zone entries our possession of his spot is priced by, from
+when the puck reaches him (`AICarrierField.entry_value`) — the read the defence
+prices a feed to him by. He does not search, and a straight drive alone misses
+every lane but the one at the net: a man taking a feed in stride at the blue
+line with a defender in the middle is worth the lanes either side of him.
 
 ## Difficulty rides three independent axes
 
@@ -68,10 +90,9 @@ anticipation concede **space** (positioning); check aggression concedes
 
 Two things deliberately outside the table. **Aim slew is not a tier knob** — a
 bot slews its cursor at its build's lever-derived blade speed (`AISkaterCaps.blade_speed`),
-so execution difficulty rides the bot's attribute build. And
-**`dispatch_period_ticks` is the one knob that is not tick-independent**: every
-other one is denominated in seconds, so it is the one to rescale if the sim rate
-ever moves off 120 Hz.
+so execution difficulty rides the bot's attribute build. Every knob is
+denominated in seconds; the dispatch period is rounded to whole ticks at the
+current rate.
 
 Shot scatter (`shot_aim_error_rad`) acts on execution only: the compete prices a
 spot through the value seam, which is a property of the chance rather than the
@@ -144,6 +165,11 @@ Three consequences:
   the route may COMMAND is a different thing — the stand stays where it is and
   the frame still closes on him — and that is where the retreat floor and the
   advance cap live (below).
+- **The incumbent rides too.** The argmax's switch-hysteresis incumbent is the
+  last stand carried on at its velocity since (`RoleContext.prev_role_target`).
+  Left where it was picked, it falls a metre behind a carrier every tenth of a
+  second, and with the switch margin on it the defender keeps re-picking a
+  spot the carrier has skated away from, his route pulling him back to it.
 - **A ride velocity is a commitment with no terminating condition.** A stand only
   gets one when the role really produced a stand. A degenerate "hold where you
   are" fallback that also rides a man matches his velocity forever — out through
@@ -185,6 +211,142 @@ The gate is asymmetric on purpose. Becoming UNSET is instant, while leaving
 coverage takes a sustained stretch, because a body straddling the blue line to
 pressure the point is not a broken structure.
 
+## Forecheck or set up
+
+Their puck in their zone is a forecheck only while we can pressure it: our
+soonest forechecker's blade on the puck before its carrier can make his first
+play. A man with time to look up makes the stretch pass past an aggressive
+forecheck, so `AIForecheckRead` prices exactly that time — the pickup and its
+settle for a loose puck, his read (`CARRIER_READ_S`, a choice reaction set by feel, less
+what he has already had of it free; the brain counts that) and the release window —
+and the brain runs FORECHECK while we beat it, TRANS_DEFENSE (the set
+neutral-zone shape) once we cannot. So a dump, a strip or a turnover we are on
+when they collect it is forechecked, and a D who has had the puck settled
+behind his net is not: the 1-1-3 waits for him. In 5v5 a D counts only as far
+down the wall as the strong D's pinch goes; F1 is a forward. A loose puck is
+raced on its path, from where it is first played, a tie counted as ours (a 50/50
+in their end is gone after). The hysteresis sits on the margin
+(`ENTER_MARGIN_S` / `HOLD_MARGIN_S`), not on the shape, for the reason the
+recovery race's does.
+
+**His read runs only while he is free.** A carrier protecting the puck from a
+stick is not reading the ice, so a man of ours on him — his blade on the carrier
+inside a release window (`carrier_pressured`) — restarts it, and once free he
+has to look up again. Counting the whole hold instead, a settled carrier was
+never forechecked again: past `CARRIER_READ_S` the margin is the release window
+alone, under `ENTER_MARGIN_S` with our stick already on him.
+
+**A forecheck we are running is held while dropping back buys nothing yet.** The
+set shape is there so their first play cannot beat our back line, and deep in
+their end it may not be able to: their soonest play to our blue line (a carry,
+or a pass to a man once his first play is away, the puck at its launch speed,
+and the man's skate there, at the line no sooner than both) against our back
+line set on it (5v5 the D pair; 3v3 our second man, the two of the 1-2). While
+our line is set first (`depth_margin_s` over `HOLD_MARGIN_S`), the forecheck
+stands. It never starts one: with nobody near the puck it would send F1 the
+length of their zone after a man he cannot reach.
+
+Never price it as catching him before he skates the puck out: a retriever deep
+in his corner is a long skate from his line, so that race reads a forechecker
+from our own end as on him, and every stretch pass beats it.
+
+**A dump-in opens the forecheck at the release.** The point of dumping it is the
+forecheck it starts, so our release from a carry outside their zone, untouched
+since, is raced the same way while it flies (`TeamBrain._read_dump_in`): FORECHECK
+when we win it or are on whoever plays it before he can move it, TRANS_DEFENSE
+when he has the time, and the possession table's shape when it is played before their line
+(a feed taken in the neutral zone). The same release inside their zone — a pass,
+a shot gone wide — keeps the attack's shape. Who released it and from where is
+all the read uses; whom it was meant for is never published.
+
+**The forecheck is the 1-2-2** (3v3: the 1-1-1). F1 pressures the puck (PRESSURE);
+F2 reacts in front of their net (`F2_NET`: the breakout-feed argmax centred in the
+slot, where the reverse, the D-to-D behind the net and the net-front outlet run);
+F3 supports on the near wall (5v5 `F3_WALL`, the same argmax at half-wall height,
+who also fills the strong point while its D pinches; 3v3 `F3_HIGH`, high on the
+near wall at their line); the D pair holds their line, ready.
+
+**The set shape is the 1-1-3** (3v3: the 1-2), **filled from the back.** Our line's
+posts elect first, each with a deadline — the carrier's arrival there less the
+brake margin — so whoever can be set there in time holds it whatever his
+position, a body already deeper than the line always can, and a team caught
+short fills the line before it fills anything up the ice. When nobody can be
+set on a post in time, it goes to the soonest body goal-side of the carrier,
+from any group: a man behind the play is soonest to the spot only because the
+carrier is already past it, and handing him the carrier leaves nobody on him
+(`test_five_on_five_set_shape.gd` runs the whole shape against a three-man
+break). A post nobody can be on in time is a line already lost, and its holder
+rides the carrier back rather than holding it: a body already past the line
+races only his trip across to its lane, so the man riding the carrier back in
+the strong lane keeps him, and in 5v5 such a body takes no home-side bias,
+which decides the rest state. Raced up to the post, he has the most momentum to
+brake out, and the carrier went to the slower man in the middle while he
+drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
+
+- `BACK_STRONG` owns the carrier — in 5v5, unless the brain names `BACK_MID`
+  (`AIRoleSlots.owns_back_line_carrier`): while a carrier comes at our net at pace the
+  back-line D whose stick gets onto his line farthest out owns him
+  (`AIRoleSlots.carrier_owner`, the election DZONE keeps), so a carrier up the
+  middle is the D in front of him, and the strong D keeps the strong lane as
+  `BACK_WEAK` keeps the weak one (`AIRoleNeutralZone.decide_back_lane`). A
+  carrier not coming at pace is the D's whose lane his skating takes him into
+  (`AIRoleSlots.lane_owner`, off his lead): the D-to-D switch, the D on the side
+  he picks taking him and the other sliding behind; with the puck in flight the
+  D who had him keeps him. Never `BACK_STRONG`'s label: the posts mirror
+  whenever the strong side flips, and a carrier drifting through the middle
+  turned the man on him away and sent his partner across, while keeping him
+  with whoever had him lost the switch. Until the carrier picks a side, while
+  his lead runs between the pair, both D play him
+  (`AIBackLineStands.bracket_side`): the carrier's D on his line at the
+  ladder's gap, his partner a stick off it on his own side, each skated
+  straight to rather than through `depth_first`. Once the ladder steps up on a
+  stalled carrier, one D steps up and the partner goes back to his own job: two
+  stepping up together leave the men still at speed behind them. The depth the
+  pair holds is still sized from the carrier alone, so a stalled carrier with
+  a winger at speed on the stepping D's outside beats the step-up (#930). That is the coached 3-on-2 —
+  make him pick a side, no seam between the D — and it replaces the one-man
+  cross to the middle, which gave up the crossing D's depth on the wingers and
+  his lane to the pass (`test_five_on_five_set_shape.gd`). Crossing
+  to a middle carrier from the strong post leaves the strong lane to the pass,
+  and holding the lane instead leaves the seam between the D to the carrier
+  (`test_five_on_five_set_shape.gd`). The carrier's D **stands him up at our line**: while even a
+  man standing on the line would make his retreat in time (the stand priced with
+  a standing start's ramp cushion is still up-ice of it), he waits on it, inside
+  the dots, and the carrier comes to him. Then the gap ladder and its route as
+  below. A back man deeper in the zone steps up to the line only if he can be
+  set on it before the carrier eats that slack: arriving with up-ice momentum is
+  how he gets walked into his net (`test_defensive_routing.gd`). A man already
+  riding the retreat, or caught out in front of the carrier, rides the ladder
+  back instead — holding the line from there brakes him flat-footed in front of
+  a carrier at speed (`test_speed_rush_defence.gd`); a stalled carrier is still
+  stepped up on.
+- `BACK_MID` holds the middle of our line behind him and the feed across is HIS:
+  `BACK_STRONG` plays the pass (the odd-man lane fan) only while nobody holds the
+  middle. Two bodies reading one pass leaves the carrier walking in.
+- `BACK_WEAK` (5v5) the weak lane.
+- The back line moves with the carrier only as far as the gap and the ramp
+  require (`AIRoleNeutralZone.back_line_depth_m`), never past the house gate, and
+  each back man picks up a man only once he is in his ice (his post plus a cover
+  envelope): covering a man still up the ice walks the line out to escort him.
+- `NZ_F1` steers from in front while the carrier is in their half — the angled
+  stand, no deeper into their zone than their circle tops (the forecheck we did
+  not take) and not past the red line — then runs him down from behind.
+  `NZ_MID` (5v5) holds mid-ice a layer up from our line, then comes back through
+  the middle.
+
+## The rush fills the lanes the carrier leaves
+
+On a 5v5 rush (TRANS_OFFENSE) the two lane slots fill the two of the three
+lanes the carrier is not in: both wings round a carrier up the middle, the
+middle and the far wing round one on a wall. A man driving the middle pushes
+their D off the line and opens the entry; two men outside with the carrier on
+one wall double his lane and leave the middle empty. The carrier's lane is the
+brain's read (`AIRoleRushLane.carrier_lane`, hysteretic, held while the puck is
+loose), so the slot election and the role agree on it. LANE_L is always the
+left of the two, so a lane change swaps where the fillers go, never which of
+them goes. The TRAILER (any group) is the activating fourth man: a D joins
+the rush when a forward carries; DVALVE stays home.
+
 ## The defensive verbs
 
 A defensive role should read as *pick who is mine, call a verb, add my extras*.
@@ -192,21 +354,21 @@ Three verbs exist as shared code; the roles compose them.
 
 | verb | seam | callers |
 |---|---|---|
-| **cover a threat** — take the ice between him and our net, in the feed lane, riding him | `AIDefensiveVerbs.cover_threat` | MARK, the 5v5 zone soft-lock, TRACK_MID, RUSH_D2 |
-| **close the carrier** — read his approach, hold the ladder's gap, angle him off the middle | `read_carrier_approach` + `carrier_stand` | PRESSURE, RUSH_D1, and the read alone for TRACK_PUCK |
+| **cover a threat** — take the ice between him and our net, in the feed lane, riding him | `AIDefensiveVerbs.cover_threat` | MARK, the 5v5 zone soft-lock, BACK_MID, BACK_WEAK, NZ_MID |
+| **close the carrier** — read his approach, hold the ladder's gap, angle him off the middle | `read_carrier_approach` + `carrier_stand` | PRESSURE, BACK_STRONG, NZ_F1's steer, and the read alone for NZ_F1's backcheck |
 | **go get the puck** — race it, or hold the pre-contain stand when somebody else has won it | `AIDefensiveVerbs.chase_puck` | CHASE |
 
 `AICarrierApproach` is the carrier half's subject: his position and velocity, the
 line he retreats us down, the route he has left, and his pace along it, filled
 into caller-owned scratch.
 
-Two things deliberately do NOT go through the second verb. **TRACK_PUCK takes
-the hip, unangled** — a backchecker is behind the play and catching up, so he has
+Two things deliberately do NOT go through the second verb. **NZ_F1's backcheck
+takes the hip, unangled** — a backchecker is behind the play and catching up, so he has
 no inside to take; he shares the read and places his own target. And **PRESSURE
 cannot simply call a verb that fills the decision**, because its argmax sits
 between the stand and the answer: it consumes `carrier_stand` as the ring's
 centre and `inside_dir` / `inside_shade_m` as a floor on the candidates, then
-sets the target itself. Outside a forecheck its ROUTE is RUSH_D1's
+sets the target itself. Outside a forecheck its ROUTE is BACK_STRONG's
 (`depth_first`, the retreat floor, `set_advance_cap`), so the argmax picks the
 bearing and nothing about how the body skates there changes at the line; a
 forechecker (the carrier in his own zone) has no retreat to manage.
@@ -215,20 +377,32 @@ A loose puck is not a fourth subject — it is a carrier nobody is holding. Both
 of the first two verbs reach it through `resolve_defensive_play_ref`, which
 answers with the puck when no one carries. `chase_puck`'s DECLINE branch is the
 closing verb applied to the puck (`fill_approach` on the puck, then
-`carrier_stand`), so the pre-contain point is exactly the stand RUSH_D1 will want
+`carrier_stand`), so the pre-contain point is exactly the stand BACK_STRONG will want
 when possession flips.
 
 The election of WHICH body runs the race is not part of the verb and stays in
 `AILoosePuckChase` / `GameManager` — the verb answers "do I go", the election
 answers "am I the one who may".
 
-**The reach-in is the pressurer's extra, and it is a jab or a lift.** Whichever
-role owns the carrier reaches in when the puck is inside its stick; the jab aims
-the blade through the puck, and `AIStickLiftRead` turns it into a stick lift
-exactly when the carrier's body stands on the line to the puck (the jab has no
-path) and the shaft's liftable point is still in reach. The lift is the
-`lifts_sticks` cognition gate, closed on Easy so a shielded puck genuinely
-protects it against a beginner tier.
+**The pressurer's extra is his stick on the puck's path, or a lift.** A poke is
+any blade of ours within the poke radius of the carried puck, with no swing and
+no button (`PuckInteractionRules.check_poke`), so the stick costs nothing to
+have there and goes where the puck is going, not where it is
+(`AIStickPathRead`): the first point of the puck's dead-reckoned path his
+blade, slewing across his own skating, gets to no later than the puck; with
+none in time, the carrier's line to our net where it comes into his reach, the
+ice he has to skate the puck through. Never a discrete jab on a timer: a blade
+that comes back off the puck between stabs is a gap the carry skates through.
+The target is held inside the reach edges of the line his hips are on
+(`FacingRules.reach_edge`), so the stick never pivots him; while a turn to skate
+is still to come, the route's cursor makes that pivot and the stick waits. In
+our house the lane point is held out of the shooting lane as any parked blade
+is (`_deflect_safe_aim_dir`). `AIStickLiftRead` turns the reach-in into a stick
+lift exactly when the carrier's body stands on the line to the puck and the
+shaft's liftable point is still in reach. Reading the path is the
+`reads_puck_path` cognition gate and the lift the `lifts_sticks` one, both
+closed on Easy: its stick reads only where the puck and its own body are now, so
+a carrier skating past outruns it, and a shielded puck is safe.
 
 **A defensive-zone coverer's extra is the stick tie** (`AIStickTieRead`), and its
 price is its own stick. The man is tied only while the puck is coming to him — a loose
@@ -245,7 +419,7 @@ pulls his stick straight away; one it isn't coming to holds on, keeping that
 defender's stick out of the play. Both halves are the `ties_sticks` cognition
 gate, closed on Easy. The tie reads the covered man from
 `RoleDecision.locked_man_pid`, which MARK and the 5v5 zone roles set and
-`cover_threat` deliberately does not: TRACK_MID and RUSH_D2 cover a man in
+`cover_threat` deliberately does not: BACK_MID, BACK_WEAK and NZ_MID cover a man in
 transition, where the stick belongs in the passing lane, so they publish no lock
 and never tie.
 
@@ -281,12 +455,18 @@ skates into a set defender meet a check rather than a bump. It rides
 opponent in our end winds up and we stand on the line from the release to our
 net, the shot is still under the block's seal when it reaches us (his replicated
 loft rung under gravity), and we are not inside the room our goalie needs to see
-around a screen. He stays down while the released puck is still coming through
-us. The last defender on a man-down rush dives across a pass lane past his
-standing reach: his stick, plus what he skates toward the lane while the pass
-travels to it from rest across it. The dive must still reach the lane, and no
-teammate may be nearer it. Both are the `blocks_shots` cognition gate, closed on
-Easy.
+around a screen. A man winding up without the puck is a shot only once a loose
+puck's path reaches his blade — the feed released, or one lying there — and his
+release is that blade: a one-timer waiting on a pass that has not been made is
+not blocked, and the block goes down as fast as the pass can be seen leaving.
+He stays down while the released puck is still coming through us. The dive is rarer: only the lone defender back, goal-side (INSIDE, with
+`AIRushRead.back_count` 1), against two or more, the carrier inside shooting
+range in front of our goal line where our goalie can take him, dives across a
+pass lane past his standing reach: his stick, plus what he skates toward the lane
+while the pass travels to it from rest across it. The dive must still reach the
+lane, and no teammate may be nearer it. A beaten defender, or one with a second
+man back, stays on his feet and in the play. Both are the `blocks_shots`
+cognition gate, closed on Easy.
 
 **The coverer's other extra is the press** (`AIPressRead`, applied by
 `SkaterAgentPress` after every other body and stick pass). Within
@@ -340,15 +520,21 @@ The back layer leaves the line in two ways. A **keep-in**
 (`AIRoleDefenseman.wall_rim_keepin`) costs it nothing — the stand is still the
 line, just out in the wall lane where the puck's predicted path crosses it — so
 every line station runs it: the points, the forecheck pair, 3v3's F3. A **pinch**
-goes down the wall, so it is gated on WINNING it (he is not already on his way
-out; I reach him before his skating gets the puck to the line) and on COVERING it
-(nobody behind my stand, my partner on the line, a forward able to take my point
-inside `LATE_MAN_WINDOW_S`). Only the strong-side D makes it; never both.
+goes down the wall to keep the puck in, onto their man as he plays it between
+the line and the half-wall. It is the O-zone strong point's play on a puck we
+are losing up his wall as much as the forecheck pair's on a carrier bottled
+there, and it is gated on WINNING it and on COVERING it (nobody behind my stand,
+my partner on the line, a forward able to take my point inside
+`LATE_MAN_WINDOW_S`). Winning a carrier is reaching him before his skating gets
+the puck to the line; winning a loose puck is my blade on its collector before
+his first play is away (`AIForecheckRead.read_loose`, the forecheck's own
+pressure read), and a loose puck we collect first is the chase election's, not
+a pinch. Only the strong-side D makes it; never both.
 
 The cover is not the pinching D's to arrange. It is keyed on the one fact every
 teammate can see — the strong D is deeper than any stand his slot takes — and each
 role reads it for itself: the weak D holds the middle of the line, HIGH_SLOT /
-F2_WEAK takes the vacated point. So it fires however he got deep (pinch, chase,
+F3_WALL takes the vacated point. So it fires however he got deep (pinch, chase,
 battle), and releases when he is back. The D slots race the lateral trip
 (`SlotSpec.lateral_race`) precisely so a pinching D keeps his job while it runs.
 
@@ -357,12 +543,17 @@ battle), and releases when he is back. The D slots race the lateral trip
 `AIDefensiveVerbs.cover_threat` is the whole of it: take the ice between him and
 our net, from inside the lane the puck would be fed to him through, riding him.
 Every off-puck defensive role calls it and differs *only* in which man it names —
-MARK and the five 5v5 zone roles from the threat partition, TRACK_MID from
-whoever entered its lane, RUSH_D2 from whoever is driving the middle. **Man
+MARK and the five 5v5 zone roles from the threat partition, BACK_WEAK and NZ_MID
+from whoever entered their lane, BACK_MID from whoever is driving the middle. **Man
 defense and zone defense are the same behavior under different assigners**, so a
 new coverage scheme is a new answer to "who is mine", never new positioning code.
 Position and velocity come from one snapshot entry, so a stand cannot ride a body
 its geometry isn't built on.
+
+Zone coverage picks a man up on its own ice (`AIZoneCoverage.in_coverage_ice`:
+our zone, out to a cover envelope past the line), in the partition and in
+MARK's no-man fallback alike. A man still up the ice is the rush's trailer, and
+escorting him walks the coverage out of its zone while the carrier is in it.
 
 `TeamBrain` matches every man-covering body at once, and a zone role's AREA
 enters as ELIGIBILITY — which men it may be handed — rather than as a private
@@ -371,7 +562,11 @@ overlap on purpose, and independent argmaxes double-cover (most D-zone ticks)
 while leaving the best man open. The areas tile the zone, so a man can stand in
 nobody's coverable area only when his area's owner is on the puck: the pressure
 owner's area is therefore every zone defender's while he is (a strong D in the
-corner leaves his net-front man to whoever the matching sends).
+corner leaves his net-front man to whoever the matching sends). A loose puck
+with a teammate elected to race it (`closest_to_puck_by_team`) is HIS, not the
+area's: the chaser leaves the matching and the area's owner covers a man
+(`AIZoneCoverage.chased_by_another`), or one body stands off both the puck and
+every man while the race is on (`test_zone_coverage_shape.gd`'s low cycle).
 
 ## The gap ladder is one ladder, and both puck-owners read it
 
@@ -381,12 +576,45 @@ lengths at their blue line, 2 at the red line, 1 stick at ours, and inside our o
 zone "1 stick / contact: you are on him" (`docs/transition-defense-plan.md` §6).
 So the TRANS_DEFENSE → DZONE re-election is not a geometry discontinuity: *the D
 who gapped a carrier through the neutral zone keeps him into the zone; there is
-no handoff at the line.* The same holds for the route (above) and for the hit:
+no handoff at the line.* The election keeps him too: while a carrier comes at
+our net at pace, the puck is owned by the body goal-side of him whose stick gets
+onto his line farthest from our net (`AIRoleSlots.carrier_owner`, the cut-off
+race solved inside its walk's step, last tick's owner or BACK_STRONG's holder
+taking the hysteresis, a dead heat to the man nearest his line) — 3v3's
+PRESSURE, and in 5v5 the zone role that body holds, published as
+`TeamStrategyView.pressure_slot_override` over the area rule
+(`AIZoneCoverage.pressure_slot`), the same election that names the carrier's D
+on the back line before it. Raced to where the puck is, the backchecker
+he has just passed wins it and never catches him, and the D who rode him back
+pays a reversal his line never asks of him: a lone carrier at speed walked to
+the net front past five defenders (`test_lone_carrier_entry.gd`). The same holds for the route (above) and for the hit:
 the pressurer commits a body check only with support behind
 (`AILastManDiscipline.has_support_behind`) or a cover its caller has already
 priced (the pinch's rotation), because a committed hit loads him on
 a shoulder at half a stride, and the last man back who throws one at a carrier
 with speed is skated around (`test_speed_rush_defence.gd`).
+
+**The angle has a finish.** The stand is shaded inside, so a carrier who keeps
+driving at the net — one who ignores the defender rather than respecting the
+angle — comes past the defender's outside shoulder, and a stick's gap off his
+body leaves a puck carried on the far side out of reach. Once a carrier coming
+at our net at pace draws within a stick of level in our zone
+(`AIRolePressure.is_level`), the ladder has nothing left to hold and the
+inside is lost or about to be: the last man may check, and otherwise steps into
+his path at contact while still in front with the carrier's line to our net
+inside his stick; wider of that line, or behind him, he takes the first ice
+on it his stick gets to before the carrier does (`AIDefensiveVerbs.cut_off`,
+both on the arrival clock; the crease's top when he wins none short of it),
+facing the man while in front and skated to behind, so the body or the
+reach-in meets him on his way to the slot. Never step out onto a man whose
+line he is wide of: level inside a carrier on the wall, that walks him out
+while the carrier cuts in across his front.
+Letting him go wide is fine; letting him into the slot is not. Never chase the
+hip: a carrier any faster than the defender is never caught there, and cuts in
+across the slot in front of him. A carrier who is not coming gets the
+goal-side stand instead. `test_one_on_one_to_the_crease.gd` drives a scripted
+carrier who ignores the defence at the net, alone and two back, and a bot
+carrier who goes wide and cuts in.
 
 Three things have to be true together, and each is load-bearing:
 
@@ -394,12 +622,16 @@ Three things have to be true together, and each is load-bearing:
   a feed-forward, so leading as well double-counts his motion and inflates the
   frame-relative gap by `pace × lookahead` — a defender walked to his own goal
   line by a player who simply skates at him.
-- **The ladder is a FLOOR on the gap, not just where the ring is centred.** The
-  score is "how much does my body deflate his options", which improves
-  monotonically as you close, so an unconstrained argmax collapses onto the man.
-  Clamp candidates out onto the gap ring rather than filtering them, or the set
-  empties exactly when it has closed and the bot falls through to standing still.
-- **No last-man approach bound for a live carrier**, for PRESSURE or RUSH_D1. It
+- **The ladder sets the gap, not just where the ring is centred.** The score is
+  "how much does my body deflate his options". Closer than the gap it improves as
+  you close, so an unconstrained argmax collapses onto the man; wider, a body on
+  his inside takes as much off his possession at three sticks as at one (he can
+  always step out of one man's reach), so an argmax left free there never closes
+  and keeps whatever offset its incumbent was picked at. So PRESSURE clamps every
+  candidate onto the gap ring, out or in, rather than filtering them (the set
+  would empty exactly when it has closed): the distance is the ladder's, the
+  argmax picks the bearing.
+- **No last-man approach bound for a live carrier**, for PRESSURE or BACK_STRONG. It
   names a stand at wherever the body already is, so a pressurer being walked
   backwards is forbidden from closing on the man walking him. A loose puck keeps
   it.
@@ -412,8 +644,24 @@ inside it only walks him into his own net; draped on the carrier, all the way to
 the crease (`RETREAT_FINISH_M`), riding him. "Draped" is within a stick, or close
 enough that building to the carrier's pace from where he stands ends with him
 there (the ramp cushion, below), so he is at speed when they meet rather than
-reached flat-footed. It caps only the route's speed toward our net (lateral ride
+reached flat-footed. The gate holds him by stopping him, so once its brake has
+him the drape is read from a standstill there (`standing_cushion_m`): a man who
+would be draped once stopped is draped now and rides on, rather than braking to
+a stop that drapes him and rebuilding his retreat from rest. It caps only the route's speed toward our net (lateral ride
 untouched), and level or beaten it lifts and he chases.
+
+**A carrier gaining on him buys no step-up.** While a carrier coming at pace
+(`GAP_UP_CLOSING_M_S`) beats the defender's pace down his line and the defender
+still holds a gap outside the house gate, the advance cap below turns into a floor on the
+retreat: the route commands at least that pace toward our net (or his retreat's
+top speed), under the floor's own allowance. The closing term spends spare
+depth by slowing the retreat, sized as if it could be won back at the brake's
+rate, but the stride is power-limited at speed: a backpedal from 5 m/s builds
+at ~3 m/s², so the defender rode a carrier at 9 m/s at 5–6 m/s and was caught
+flat. The stand is untouched; only the command is bounded. A gap-up
+and the line hold are exempt, and so is a defender inside the gate with a gap:
+the floor holds him where he stands, re-read each decision, so a least retreat
+would ratchet him into his net.
 
 The same route is capped the other way (`AIRoleRushD.set_advance_cap`): no more
 speed up-ice than he can still turn into the carrier's pace before the carrier
@@ -421,12 +669,14 @@ eats the depth he holds past his gap — `approach_speed_cap`, the step-up bound
 with its pivot, the carrier's pace being his whole speed turned at our net. A
 gap-up keeps its stand a stick off the carrier; what the cap stops is the
 moving-frame closing term walking him up-ice at a carrier who is crossing rather
-than coming, which the turn down then beats. A carrier with no speed has no
-turn to beat him with, so the cap is wide open and he is attacked.
+than coming, which the turn down then beats. A carrier with no speed still has
+his burst, which he starts the moment the defender commits: the cap prices what
+he builds along his stride ramp while the defender brakes, so a stalled carrier
+is closed on at a pace the defender can turn out of, never charged.
 
 ### Facing the play, or turned to skate with him
 
-A skater backward has 80% of his stride and 80% of his top speed
+A skater backward has 90% of his stride and 90% of his top speed
 (`SkaterMovementRules`), so a carrier at speed outruns any backpedal. The
 defender in front of him skates one of two retreats (`AIRoleRushD.retreat_gains`):
 backpedalling facing the play, or turned to skate down the ice — each priced as
@@ -470,7 +720,7 @@ stepped up into the turn that took him wide.
 The race finishes where a ridden retreat ends (`RETREAT_FINISH_M`, the paint
 plus the crease buffer): the horizon is his trip there, the head start is capped
 at the ice he has left to it, and the cushion never pushes a stand past it
-(`_with_cushion`). RUSH_D1's stand is still held out to the gate
+(`_with_cushion`). BACK_STRONG's stand is still held out to the gate
 (`_clamp_to_house`); inside the zone, the pressurer's is not, and the floor above
 is what keeps a stand that deep from becoming a walk into the crease.
 
@@ -479,8 +729,12 @@ coming at pace AND cannot build it past us (cushion under a stick) — the regro
 clause too, so a man crossing at speed is not regrouping; pace alone
 steps a standing defender up on a fresh receiver who then bursts past him. And
 when the retreat cannot hold a gap — the cushion eats all but a stick of the ice
-he owns — a defender IN the carrier's lane steps up to meet him rather than be
-reached while turning; off the lane he keeps retreating.
+he owns — or the carrier is steered to the wall with no room outside, a defender
+IN the carrier's lane steps up to meet him rather than be reached while turning;
+off the lane he keeps retreating. A wall carrier with the defender inside him,
+off his line, still has the whole wall to skate down past a step-up, and walked
+onto the crease untouched while the defender stepped across to him
+(`test_one_on_one_to_the_crease.gd`).
 
 Depth comes before width (`depth_first`). A defender short of his stand's depth
 has one speed budget: the pace down the line that keeps up with the carrier and
@@ -501,6 +755,19 @@ the depth needs.
 `tests/slow/ai/test_nz_turnover_recovery.gd` scores this against the best a body
 could do: a straight-line retreat on the same ramp.
 
+**But never the middle.** Depth before width is for a defender already between
+the carrier's line to our net and the middle of the ice. One the middle is open
+on (`AIDefensiveVerbs.middle_open`: outside that band by more than a stick —
+wide of a carrier down the middle, or across the middle from a wide one) holds
+depth in a lane the carrier is not in, and the slot is his: from the dots, a
+standing D against a carrier down the middle at 9 m/s kept his depth to our line
+and was 6 m wide of him the whole way. He takes the first ice on the carrier's
+line his stick gets to before the carrier does (`AIDefensiveVerbs.cut_off`, the
+same cut-off the level pressurer skates), facing travel, and the ladder takes
+over once he is on it. On the 5v5 back line the pair's bracket replaces it
+while the carrier's lead runs between the two D (`BACK_STRONG` above).
+`test_five_on_five_set_shape.gd` runs it against a three-man break.
+
 ### The ladder has a domain: the carrier has to be coming at us
 
 It measures ice remaining before he reaches our blue line, which is a RETREAT
@@ -511,9 +778,9 @@ floor by the gap clamp, so the forechecker cannot close even in principle (his
 poke reaches ~1.9 m).
 
 The domain read is the shared `AIRoleRushD.should_gap_up`, not a zone test. Its
-"not advancing on our net" clause (`AIRushRead.REGROUP_CLOSING_M_S`, with no head
-start to build) is satisfied by construction by a D retrieving behind his own
-goal line, so the two
+"not coming at pace" clause (`AIRoleRushD.is_stalled`: closing under
+`GAP_UP_CLOSING_M_S` with no head start to build) is satisfied by construction by
+a D retrieving behind his own goal line, so the two
 carrier-owning roles agree at the TRANS_DEFENSE → DZONE handoff exactly as they
 do on the ladder itself.
 
@@ -586,7 +853,13 @@ takes the whole class down and every static call on it from every file at once.
     carry-cursor ring, the wrister charge and its lookahead);
   - `goalie_model.gd` (`AIGoalieModel`) — the keeper the bots plan against: his
     body's cover numbers, the difficulty-synced reads, planned depth, lateral
-    push, post seal and predicted position.
+    push, post seal and predicted position;
+  - `icing_read.gd` (`AIIcingRead`) — NHL hybrid icing read off a walked
+    release: the crossing, the touch, the dot race (held to
+    `InfractionRules.judge_icing_race`) and the faceoff it hands over;
+  - `possession_floor.gd` (`AIPossessionFloor`) — the continuation: what
+    keeping the puck at a spot is worth by position alone, a floor up the ice
+    plus the slot bonus (`docs/possession-floor-plan.md`).
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
@@ -594,7 +867,8 @@ takes the whole class down and every static call on it from every file at once.
 
 Both evaluators read the leaves and never each other. `possession_value.gd`
 (`AIPossessionValue`, what possession of a spot is worth) reads both from above,
-so neither may read it. `test_scoring_split_stays_acyclic.gd` holds that. A
+so neither may read it; so does `evade_read.gd` (`AIEvadeRead`, the
+evadability it keeps the puck at). `test_scoring_split_stays_acyclic.gd` holds that. A
 primitive both need goes in a leaf; an extraction is cut where nothing in the cut
 reaches back into what remains.
 
@@ -623,12 +897,17 @@ reaches back into what remains.
     four spots around the release, each spot counting by how much matching
     evidence it holds, so a spot whose only cell is unlike the query yields to
     a neighbour with a close one. Squareness is what tells a keeper set on the
-    shot from one a feed dragged off it at the same offset. Out-of-position
-    keepers are measured, not extrapolated: DECOY cells set him on a carrier
-    elsewhere, then shoot from the spot, and WRAP cells seal him in the RVH on
-    a carrier behind the net, then shoot from a spot in close: the field's
-    only keeper on the post, since in front of the goal line he stands on its
-    overlap and reads as upright. A keeper on the post is read by whether the
+    shot from one a feed dragged off it at the same offset, so the keeper a
+    carry arrives at is read facing the shot, which he has tracked: unread,
+    his facing averages in those decoy and feed keepers, who in tight read far
+    more open than the keeper the carry meets. Out-of-position keepers are
+    measured, not extrapolated: DECOY cells set him on a carrier
+    elsewhere, then shoot from the spot; WRAP cells seal him in the RVH on
+    a carrier behind the net, who carries it round the post to a spot in
+    close; and PASSOUT cells seal him the same way on a passer beside the net,
+    who feeds a man in front of the dots: the field's only keepers on the post,
+    since in front of the goal line he stands on its overlap and reads as
+    upright. A keeper on the post is read by whether the
     release is inside his seal zone (`AIGoalieModel.in_post_seal_zone`):
     inside it he is set there, outside it the puck has been pulled off the
     line and he is leaving, and blending the two priced a shot into a set seal
@@ -641,12 +920,42 @@ reaches back into what remains.
   - **Odds are at one placement scatter** (`REFERENCE_SPREAD_RAD`): a property
     of the chance, not the shooter (a wobblier tier misses more of the same
     shots). First contact is the outcome: rebounds and screens are not in it
-    (#785), so a clean shot from range against a set keeper is worth ~0.
+    (#785), so a clean shot from range against a set keeper is worth ~0. The
+    carrier's compete credits a shot that reaches the net with its rebound
+    (`score_shoot_value`'s `rebound`: `AIActionScoring.with_rebound`), so a
+    point shot is weighed against keeping the puck at more than nothing.
+  - **The open set is goal intervals, not aim samples.** The generator sweeps
+    24 aims per loft and bisects every edge of a goal run to ~5 mm
+    (`tests/unit/ai/open_set_edges.gd`); a run reaching a post ends at the post.
+    A crossing is priced by the interval it lands in, so a gap a millimetre wide
+    is worth a millimetre. Never price an aim sample as standing for its whole
+    band: a gap narrower than the aim step then reads as either nothing or the
+    full step, and the field flickers between neighbouring spots
+    (`docs/shot-field-resolution-plan.md`). The 24 aims are only the candidates
+    the pick chooses among.
+  - **The grid reaches the boards and the blue line.** Spots run to ±12 m
+    across and 19.5 m out; a spot whose carrier would stand in the boards has no
+    cells, and its bilinear share goes to its neighbours. A release past the
+    grid reads the edge spot's value unchanged, so only releases off the ice or
+    out of the zone ever do.
   - Held against measured cells it was not generated at by
     `test_shot_odds_vs_truth.gd`, whose error, concordance and pick-share
     bounds are ratchets.
   - The committed shot fires the field's own pick (`AIShotOdds.pick_shot_now`:
-    the aim and loft with the best odds), so the price and the shot are one.
+    the aim and loft with the best odds of the matched cells' blended open
+    sets), and a shot now is priced at that same blend's best, so the price and
+    the shot are one. Never price it at the mean of each cell's own best aim:
+    cells with their holes in different places then promise a shot no aim
+    makes.
+  - **A shot now is read against the play the shooter saw** (`AIShotOdds.History`:
+    carried in, fed, round the net), weighing only cells of that history. Keepers
+    who look alike in position and stance concede differently by how the play
+    got there; the history is the bot's perception of it, never a gate, so a
+    history no matching cell shares reads every cell
+    (`docs/shot-field-live-read-plan.md`). Every reader names the play it
+    knows, the xG stat too (`ShotOnGoalTracker.release_history`): read
+    history-blind, a deep keeper matches the in-tight decoy cells and a set
+    keeper's shot reads as a near-certain goal.
 
 - **Carry safety** (`reach_clearance` / `best_evade_point`) — a reachable-set
   pursuit-evasion model. Each skater is a bounded-accel body: over a short
@@ -658,6 +967,30 @@ reaches back into what remains.
   to him, so stopping commits him to no spot, and a defender backing off in
   front of a carrier is a wall he skates into, not a gap that holds
   (`AICarrySpace._stopped_clearance`; a chaser behind only loses ground by it).
+  The carrier's projected defence reads him the same way: backing off in front
+  of the carrier, he gives up no more ice, in any direction, than his stop
+  takes (`AICarrierField.project_opponents`). Carried on, his retreat shows
+  every delay of the entry an emptier blue line and his drift across (which
+  mirrors the carrier) the far lane opening, so the carrier pulls up to wait or
+  flips lanes each time the drift reverses. Which lane the carry is FOR is held
+  the same way: the incumbent destination competes at the plan last found toward
+  it, not at its straight-carry estimate, through which every lane past a
+  defender reads alike.
+  - A defender the carry path **meets** between samples is priced by the
+    crossing band (`carry_crossing_keep`) on his full reach
+    (`AISkaterCaps.max_blade_reach`) plus the poke's contact, the reach a
+    poke-check is thrown at, less the little the shield buys at that range —
+    measured by `tests/instruments/ai/test_crossing_band.gd` against a poker who
+    leads the carry. The dwell and transit maps keep their own calibration on
+    the stick's span: priced at full reach everywhere, a carrier in his own end
+    read every forechecker's disk as closed and escaped fewer forechecks.
+  - The **shot on a carry's arrival** reads a man behind the carry, skating its
+    way, as on it for the whole carry (`AICarrySpace._chases`, through
+    `AIShotHolds.solve_arrival`): a puck in the shooting pocket is not shielded
+    as a carried one is, so the carry's own samples keep the short lunge while
+    the wind-up at the crease does not. Never read that man as coasting to a
+    last lunge there: a backchecker out-skating a carrier who slows into the
+    crease then sails past it on paper, and the drive in out-prices the shot.
   - The **max-clearance seam** (`best_evade_point`, "can I keep the puck at
     all") prices the carrier's current safety. Where the body goes to beat a
     man is not a seam read: it is the carry's rolled moves, each priced at its
@@ -669,7 +1002,8 @@ reaches back into what remains.
   - **Body steering** with the puck is threat-gated and route-around
     (`AISteering._carrier_threat_repel`): each defender repels from the closest
     point of his momentum-swept reach (a beaten man exerts nothing; a charger
-    sweeping through produces a sidestep), and the summed force loses any
+    sweeping through produces a sidestep, to the anchor's side or else the side
+    with the ice, never into the boards), and the summed force loses any
     component opposing the anchor direction — pressure bends the carry line but
     never reverses it. Retreat is the carry *deliberation's* call, never a
     reflex.
@@ -695,20 +1029,38 @@ reaches back into what remains.
 
 - **Pass lanes** (`lane_clear`) — reach-vs-flight-time reachability: a defender
   blocks iff they can get a stick onto the puck's path before it passes; faster
-  pucks thread better for free. The carrier's own read also takes each
+  pucks thread better for free. The pass a carrier fires is read on the
+  momentum-honest arrival clock (`AILaneReach`): at each point of the lane, can
+  the defender's body get within a blade of it before the puck, skated from
+  where his momentum has him when he reads the pass — a man backing in has to
+  stop his retreat first. He reads it on the release (`lane_read_delay`): no bot
+  moves to a pass's windup, and a man reading it is slower than it lasts. Only a
+  man whose stick already reaches the puck reads the windup, his hands on it
+  throughout. It is the reach the loose-puck chase plays a pass with
+  (`AILoosePuckChase.reach_meet_time`, stick out), so a lane the passer reads
+  open is one the defender cannot take. Graded by the clock's calibrated error,
+  not a shaped curve; it ends a blade short of the receiver, whose own stick
+  takes the puck there (a defender on his back is the reception's
+  `catch_safety`). The lane is the one at the release: the carrier braked through
+  his windup (`AICarrierField.pass_origin`), the receiver led from where he has
+  skated to (`AIPassLead.lead`'s `release_s`), the defenders where their momentum
+  has them (`opponents_release`). The cheap read the shot and off-puck searches
+  use keeps the closest approach at a constant closing speed. The carrier's own read also takes each
   defender's **stick where he holds it** (`opponent_blades_release`): a
   forechecker reaching for the puck has his blade a metre nearer the lane than
-  his body, and his hands start on the windup, so the first metres of a pass out
-  past him are his. Only a pick his body can hold the stick at counts
+  his body, and a stick on the puck plays it through the windup, so the first
+  metres of a pass out past him are his. Only a pick his body can hold the stick at counts
   (`AISkaterCaps.max_blade_reach`). The **saucer** (`lane_clear_saucer`) is the same
-  model under the LOW loft's flight: during the over window a defender's reach
+  model under the flight a charged LOW release really gets (the shot ladder's
+  set angle, so the lift and the carry grow with pace): during the over window a defender's reach
   collapses to their body radius (sticks fly under it), a stick stuffs it on the
   release, and from the touch-down on the rest of the lane is the accurate flat
   read, so the man it flew over still plays it sliding off behind him. A flip
-  only clears a stick when it lands out of his reach. The flip must land with runway before the tape
-  (`saucer_max_launch_speed`), so the carrier scores each receiver flat and
+  only clears a stick when it lands out of his reach. The flip must land with
+  runway before the receiver's stick takes it (`saucer_max_launch_speed` to his
+  reception gate, `receiver_gate_m`), so the carrier scores each receiver flat and
   saucered and lets EV decide (`carrier_pass_search.gd:_pass_variant_ev`, the saucer paying
-  `SAUCER_EXTRA_MISS_PROB`); below ~6.5 m no legal saucer exists. **Receiver
+  `SAUCER_EXTRA_MISS_PROB`); below ~4 m no legal saucer exists. **Receiver
   commitment** enters the completion model as an execution-miss term: a receiver
   mid-cut curves off the straight-line lead by his heading arc's tangent
   deviation (`receiver_heading_uncertainty_m` = R·(1−cos ω·t), from
@@ -734,6 +1086,8 @@ reaches back into what remains.
   puck with its last carrier's team outside our zone, and the rush read takes
   the same answer (`AIRushRead.fill`'s `possession_team`): read as a loose puck,
   our feed to the point is a puck advancing on our net, and the points bailed.
+  A dump-in is the one release of ours the brain reads as a race instead
+  ("Forecheck or set up").
 
 - **Loose-puck retrieval is two reads, not one** (`AILoosePuckChase`).
   - The **election** names exactly one chaser per team: momentum-aware
@@ -747,7 +1101,11 @@ reaches back into what remains.
     election too, raced at the puck's own time to his band (`reach_meet_time`,
     never the passer's own blade as a feed leaves it): a 15 m/s feed steps clean
     over a receiver between two samples of the body race, and the far point was
-    elected to chase our own pass while it reached its man.
+    elected to chase our own pass while it reached its man. The election times
+    his body only to within a blade of the meet (`stick_out`), so a receiver
+    skating into a feed a couple of metres off his body is still its man; the
+    band itself times the body to the crossing, since it breaks a bot off his
+    job and a feed is never in reach of the blade it is leaving.
   - The **incidental reach band** (`puck_comes_to_reach`) answers "is this puck
     coming to *me*", which is not the election's business. Losing a race by
     0.3 s is no reason to hold your station while the puck slides past your
@@ -787,29 +1145,86 @@ reaches back into what remains.
   ("did *anybody* go?") over perturbation families, since every individual
   decision in that failure is defensible. The attacking-zone mirror is #604.
 
-- **There is no dump-in and no defensive-zone clear.** A carrier with nothing
-  worth keeping the puck for still keeps it — protects, takes the hit, or moves
-  it with a qualified pass, the rim included — and the next re-eval looks again
-  (`AIRoleCarrier._pick_commit_phase`'s `retention_hopeless` branch). A delivery
-  to open ice that comes back must not be a scored entry in the value compete
-  priced against the carry's next second: it out-scores an open carrier on an
-  empty rink. A released puck's race is priced where it STOPS, not at an aim
-  point it passes through at speed.
+- **A dump-in is a race for where it is played** (`AICarrierDumpSearch`). From
+  the neutral zone the carrier may release the puck into their zone with nobody's
+  tape to aim at: aim points in their zone (the corners, a rim round the end
+  boards, a chip off either wall at the circle tops) × a soft and a hard pace,
+  each walked on the puck's path at the chase election's resolution and raced by
+  the soonest body of each side by the election's own rule — settled on it, or
+  the path coming to his stick — and their keeper too, for path in front of his
+  goal line he can push and reach to. Every dump goes in chipped: the charged
+  LOW release, over every stick while it is above the blade plane (only a body in
+  its way stops it), raced from where it lands as the election races a puck in
+  the air. A man standing in a flat dump's way plays it there; priced side by
+  side, the flat one never measured better. The side that meets it first plays it
+  there: `p · ours(meet) − (1 − p) · theirs(meet)`, p the arrival race in
+  `arrival_race`'s contest band, widened by the clock's error over the trip
+  unless their keeper decides it (he is no skate mis-timed seconds out), theirs
+  the turnover there plus the 5v5 counter exposure. A race lost to their man is
+  read when his first play is away, by the forecheck's own clock
+  (`AIForecheckRead`: the pickup's settle, his read, the release): a dump starts
+  the forecheck, so our soonest forechecker's stick on him before then (that
+  race in the contest band, widened by the clock's error) wins a battle for it,
+  a 50/50, and the puck back where he played it with him still on it; the rest
+  is their possession with the dumper where his skate has him by then, never
+  against the ice he left. Ours is our possession of
+  the spot on arrival or the feed it opens to our support dead-reckoned to the
+  race's horizon (each man's shot there × the lane against the defence then ×
+  the race for its reception, as the pass search races a catch: their first
+  body from the release against the feed arriving with our man there, the man
+  who raced us for the puck setting off from where we won it):
+  the continuation prices a won corner at the zone's floor, and the support
+  is the live, defence-aware half on top of it. The defence there goes back
+  for the puck at its momentum; it is not held on its line as a carry holds
+  it. Never leave that reception
+  unraced: the dump's seconds of flight are when a lone D gets back to his
+  house, and a feed priced to a man alone at the post dumps away every 2-on-1.
+  **With the numbers there is no dump-in at all** (`RoleContext.numbers_up`):
+  a tactical rule, as the one-way valve is, read off their own rush read of our
+  attack (`TeamBrain.their_rush_read`, `AIRushRead` filled from their side, so
+  a backchecker on our hip counts as a man back exactly as he does for our D).
+  It stands in for what the possession read cannot price yet: a man taking a
+  feed at their line is valued as one man carrying in, blind to the defender
+  having to choose, so an odd-man rush reads as cheap as an even one (#892).
+  Once that read prices the pass option, the rule should never bind. So a dump is a 50/50 or better
+  exactly when our side gets there first, and it is worth what the spot is worth
+  with the men arriving. Under NHL rules a release from our half that crosses
+  their goal line untouched, without our side first to the dots by the clear
+  margin, is an icing: a faceoff at our dot, priced as a coin flip for their
+  possession there. It is held to the pass's giveaway bar. Never value a dump at
+  an aim point it passes through at speed, never price a chip we would play
+  short of their line as one (that is the carry's), and never leave their keeper
+  out of the race: a rim that dies in his crease otherwise reads as our man's
+  puck at the net, and out-scores an open carrier on an empty rink. He plays
+  no puck out, though: one slowing at his feet he covers, one going by he
+  saves and it stays live, so where a cover is whistled (`RoleContext.covers_whistled`, NHL and Arcade) it is the
+  faceoff in his zone, priced as an icing's: the coin flip for their
+  possession of the dot, nothing for ours (`_cover_value`), never their
+  skater's puck where he stopped it. There is
+  still no defensive-zone clear — a carrier in our own end with nothing worth
+  keeping the puck for keeps it, protects, takes the hit, or moves it with a
+  qualified pass, the rim included, and the next re-eval looks
+  again (`AIRoleCarrier._pick_commit_phase`'s `retention_hopeless` branch).
 
 - **Rims are passes whose lane is the boards** (`AIRimPass`; each receiver's
-  best launch is ranked by `AICarrierPassSearch._rim_launch_for`, and only the single
+  best launch is ranked by `AICarrierRimSearch.launch_for`, and only the single
   best is priced through `carrier_pass_search.gd:_pass_ev`) — a third pass variant beside the flat feed
   and the saucer, in the same currency. It is searched as a RELEASE,
   not aimed at a receiver: bearings banked glancing off the boards near the
   passer, each walked at a pace ladder up to the passer's own wrister max. Of the
   launches that reach a receiver nearly as surely as the best
-  (`AICarrierPassSearch.RIM_SOFT_SHARE`), the SOFTEST is fired: easier to stop, and
+  (`AICarrierRimSearch.RIM_SOFT_SHARE`), the SOFTEST is fired: easier to stop, and
   one that gets by him dies sooner. The walk is the chase election's own, so the
   receiver a rim is priced to reach is the one the election will send to it. The
   LANE is a race along that path in `arrival_race`'s contest band — the
   receiver against the soonest opponent, and against their keeper behind his own
   net by the live goalie's trip gates. Arrivals over the receiver's catch
-  threshold are dropped. Zone rules mirror the straight feed's. A winner is
+  threshold are dropped. Zone rules mirror the straight feed's. Under NHL rules
+  a rim that gets by our receiver, or that their man reaches first, goes on down
+  its path: from our half and across their goal line before their soonest man
+  meets it, with their side first to the dots, it is an icing, and both loss
+  modes are priced as the faceoff at our dot (`AIIcingRead`, as the dump's is)
+  rather than as their puck where it dies. A winner is
   released as a FLAT charged dump along its bearing at its pace. In the O-zone
   the currency prices a rim to a man low in the corner near zero; the breakout
   rim up the wall past a forechecker is where it wins.
@@ -842,10 +1257,10 @@ reaches back into what remains.
   something concrete, and only values a spot where the search stops. One unit
   on both sides of the line: the odds of scoring.
   - *In the zone* (the spot or the carrier) every candidate is priced through
-    the value seam. There is no possession floor: the seam is smooth, so a spot
-    with no shot right now still scores by its distance and angle. Behind the
-    goal line every shot is 0, so a candidate there is worth only the pass
-    OPTION it opens.
+    the value seam, or worth keeping the puck there when that is more
+    (`AICarrierField.continuation_at`, against the defence carried on to his
+    arrival). Behind the goal line every shot is 0, so a candidate there is
+    worth the continuation and the pass OPTION it opens.
   - *Outside it* the carry searches two steps (a rolled move, then each move
     again from where it ends, for the `CARRY_PLY2_WIDTH` best: shoot, pass or
     carry on), pricing the defence it meets on each. Where a line stops outside
@@ -854,13 +1269,26 @@ reaches back into what remains.
     (the better of the shot and one straight drive in from it, kept as far as
     the carry-safety read allows) × the skate there × the race to it
     (`arrival_race`, its band widened by the arrival clock's own error over the
-    trip). In the zone the same read is the better of the shot and the drive.
+    trip), or the continuation of the spot when no entry beats it. In the zone
+    the same read is the best of those, the shot and the drive.
+    The leaf is read on arrival: its man reaches the spot when the line does,
+    at the pace he arrives with, and races the defence for the entries from
+    then (`horizon_value`'s `arrive_s` / `arrive_vel`). The carry's moves and
+    destinations read it so, and so does a straight drive in, a receiver's
+    starting when the feed reaches him: a leg read from rest against the
+    defence as it stands now out-prices the others, so a cut back ending short
+    of the line read as an entry still to win, and a feed back to a man 15 m
+    out read as his drive in. A receiver's own spot is still read at the
+    release: the race prices any defender reaching an entry first as the entry
+    lost, and over a breakout's 25 m a rim's flight hands every such race to
+    the forecheck.
     No shape terms and no guess at where the defence will be: the leaf ranks by
     how far the zone is and whether a defender gets to the entry first. The
     race is what keeps the leaf honest against the searched lines — without it
     a line that stays outside reads better than one that crosses into the
-    defence, and the carrier stalls at the line. Standing still outside pays the
-    step's decay like every move. A straight carry on to a destination across
+    defence, and the carrier stalls at the line. Standing still pays the
+    horizon's decay like every move, and in the zone it is read as the
+    continuation against the defence at the horizon's end. A straight carry on to a destination across
     the attacking line is not credited from outside: the race prices getting
     in.
   - Candidates also price the **pass option** they open
@@ -903,4 +1331,8 @@ reaches back into what remains.
   priced is what is skated. Never price a near move by a straight line and a
   closed-form clock — that is what let a carrier plan spots it could not reach.
   A destination across a cage is skated at the arrival clock's waypoint round it
-  (`AIArrival.cage_waypoint`).
+  (`AIArrival.cage_waypoint`). A move whose path reaches a crease, or the goal
+  line from in front, ends at its last sample short of it and is priced there
+  (`AICarryRollout.reach_short_of_net`): the carrier re-plans many times a
+  horizon, so a drive at the net is a release on the way in. Never prune it
+  whole — at pace in tight that leaves only the brake and the cut back.

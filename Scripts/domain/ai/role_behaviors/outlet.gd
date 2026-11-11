@@ -94,7 +94,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 				AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
 		var held: float = possession.at(c, carrier_pos.distance_to(c) / pass_speed,
 				ctx.self_velocity)
-		var score: float = maxf(lane, AIRoleBreakout.BLOCKED_LANE_FLOOR) * held \
+		var score: float = AIRoleBreakout.lane_held(lane, held) \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score

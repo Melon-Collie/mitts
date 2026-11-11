@@ -15,9 +15,11 @@ extends RefCounted
 # with his read of the play as the margin to set out (he sees the opponent
 # late). Once he has gone he goes on while he still wins it.
 
-# Where he stands to cover a puck: this far short of it, the glove landing on
-# it out ahead of his knees (KeeperCover's reach from the butterfly).
-const COVER_AHEAD_M: float = 0.6
+# Where he stands to cover a puck: this far short of it, past the front of his
+# blade held out in the low ready with a puck's width to spare (~0.63 m), so
+# he never skates his stick onto it, and inside the glove's reach on the ice
+# ahead of his knees from the butterfly (KeeperCover's, to ~0.8 m).
+const COVER_AHEAD_M: float = 0.7
 # Behind the goal line, a puck this near the cage across is behind it.
 const CAGE_CLEAR_M: float = GameRules.NET_HALF_WIDTH + GameRules.PUCK_COLLISION_RADIUS + 0.1
 
@@ -43,11 +45,18 @@ func plan(puck: Vector2, velocity: Vector2, motor: KeeperMotor, opponents: Packe
 	facing = KeeperPositioning.facing(spot, rest)
 	var mine: float = KeeperFootwork.push_time(at.distance_to(spot), motor.footwork.t_push_speed, motor.footwork.accel) \
 			+ motor.save_move.drop_s
+	return mine + (0.0 if going else read_s) < their_time(rest, opponents)
+
+
+# How soon the first of `opponents` gets a stick on a puck at `at`: at full
+# sprint from the first instant, straight at it, his stick's length short of
+# it; INF with none.
+static func their_time(at: Vector2, opponents: PackedVector2Array) -> float:
 	var theirs: float = INF
 	for o: Vector2 in opponents:
-		theirs = minf(theirs, maxf(o.distance_to(rest) - GameRules.DEFAULT_STICK_LENGTH_M, 0.0)
+		theirs = minf(theirs, maxf(o.distance_to(at) - GameRules.DEFAULT_STICK_LENGTH_M, 0.0)
 				/ GameRules.DEFAULT_SKATER_MAX_SPEED_M_S)
-	return mine + (0.0 if going else read_s) < theirs
+	return theirs
 
 
 # Where a puck at `at` sliding at `v` comes to rest.

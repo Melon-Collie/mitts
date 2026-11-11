@@ -56,6 +56,7 @@ func _make_ctx(self_pos: Vector3, skaters: Array = [],
 	else:
 		puck.position = Vector3.ZERO
 	snap.puck_state = puck
+	snap.goalie_states[TEAM_ID] = _keeper_on(Vector3(0.0, 0.0, OUR_NET_Z), puck.position)
 
 	var team_map: Dictionary = {1: TEAM_ID}
 	if not skaters.is_empty():
@@ -73,6 +74,21 @@ func _make_ctx(self_pos: Vector3, skaters: Array = [],
 	ctx.own_goal_dir = 1.0
 	ctx.team_id_by_peer = team_map
 	return ctx
+
+
+# A keeper where the live one stands for a puck at `puck`: his depth
+# (AIGoalieModel.keeper_depth) along the puck's line, facing it. A puck on or
+# behind the goal line leaves him at the back of the paint, centred.
+func _keeper_on(goal: Vector3, puck: Vector3) -> GoalieNetworkState:
+	var g := GoalieNetworkState.new()
+	var forward: float = (puck.z - goal.z) * -signf(goal.z)
+	var depth: float = AIGoalieModel.keeper_depth(goal, puck)
+	var at: Vector3 = goal + (puck - goal) * (depth / forward) if is_finite(depth) \
+			else AIGoalieModel.at_depth(goal, goal, KeeperPositioning.DEPTH_FLOOR_M)
+	g.position_x = at.x
+	g.position_z = at.z
+	g.rotation_y = atan2(-(puck.x - at.x), -(puck.z - at.z))
+	return g
 
 
 # ── Primary: man-on-threat coverage ────────────────────────────────────────

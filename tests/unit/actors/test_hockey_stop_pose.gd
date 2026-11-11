@@ -8,7 +8,7 @@ extends GutTest
 # 29° off across, the back skate at −24° (on the edge that catches) and a 0.70
 # rad plant correction.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const LegBone = SkaterMeshBuilder.LegBone
 const WARMUP_TICKS: int = 300
 # Measured over the settled stop: a quarter second in until the speed runs down.

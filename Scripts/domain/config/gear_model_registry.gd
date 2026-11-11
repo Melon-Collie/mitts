@@ -228,6 +228,30 @@ static func is_valid_tuck(option: int) -> bool:
 	return option >= 0 and option < TUCK_NAME_KEYS.size()
 
 
+# ── Skate tongue ─────────────────────────────────────────────────────────────
+# How the skate's tongue is worn: tucked up under the shin pad (the stock look),
+# out, flopped forward over the laces, or under the sock, out of sight. Same wire rules as the face options.
+# Cosmetic only.
+
+const TONGUE_TUCKED: int = 0
+const TONGUE_OUT: int = 1
+const TONGUE_UNDER: int = 2
+
+const TONGUE_NAME_KEYS: Array[StringName] = [
+	&"GEAR_TONGUE_TUCKED",
+	&"GEAR_TONGUE_OUT",
+	&"GEAR_TONGUE_UNDER",
+]
+
+
+static func tongue_count() -> int:
+	return TONGUE_NAME_KEYS.size()
+
+
+static func is_valid_tongue(option: int) -> bool:
+	return option >= 0 and option < TONGUE_NAME_KEYS.size()
+
+
 static func skate_count() -> int:
 	return _SKATE_MODELS.size()
 

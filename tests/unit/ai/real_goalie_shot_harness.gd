@@ -22,7 +22,7 @@ extends RefCounted
 # the puck's goalward z is a save-out; a deaden/catch is a save). Read the SAVE
 # RATE per (range × loft) as the measurement.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const RADIUS: float = GameRules.PUCK_COLLISION_RADIUS
 const MAX_STEPS: int = 300          # ~2.5 s flight ceiling — a shot resolves long before
 

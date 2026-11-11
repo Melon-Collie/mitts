@@ -11,11 +11,11 @@ class_name AIRimPass
 # The boards and the corner arcs bleed pace on every contact, so each bearing is
 # walked on a pace ladder up to the passer's own wrister max, and only arrivals
 # the receiver can catch count (catchable). The carrier fires the softest launch
-# that still reaches him (AICarrierPassSearch._rim_launch_for).
+# that still reaches him (AICarrierRimSearch.launch_for).
 #
 # This file is the path half: which launches are rims, where each one goes, and
 # who reaches it first. What a rim is WORTH stays in the carrier's pass compete
-# (AICarrierPassSearch ranks it in _rim_launch_for and prices the best in _pass_ev), in one currency with the
+# (AICarrierRimSearch ranks it in launch_for and AICarrierPassSearch prices the best in _pass_ev), in one currency with the
 # flat feed and the saucer.
 #
 # A launch is a rim when its first board contact is near the passer and
@@ -140,9 +140,10 @@ static func meet_point(k: int, t: float) -> Vector3:
 	return AILoosePuckChase.path_intercept_point(paths[k], STEP_DT, origin, t)
 
 
-# Can a receiver moving at `recv_vel` catch launch `k` at time `t`: the puck's
-# speed in his frame under the deflect threshold (Puck.deflect_min_speed's
-# domain mirror)? The heading is the walked segment the meet falls in.
+# Can a receiver moving at `recv_vel` catch and hold launch `k` at time `t`: the
+# puck's speed in his frame under the pace a blade on its line, where a wall
+# kill puts it, holds (AIFeedReception.RECEIVE_HOLD_CEILING_M_S)? The heading is
+# the walked segment the meet falls in.
 static func catchable(k: int, t: float, recv_vel: Vector3) -> bool:
 	var path: Array[Vector3] = paths[k]
 	var spd: Array[float] = speeds[k]
@@ -153,7 +154,7 @@ static func catchable(k: int, t: float, recv_vel: Vector3) -> bool:
 		return true
 	var v: Vector3 = seg.normalized() * spd[i]
 	var rel := Vector2(v.x - recv_vel.x, v.z - recv_vel.z)
-	return rel.length() < AIActionScoring.TIP_DEFLECT_MIN_SPEED_M_S
+	return rel.length() < AIFeedReception.RECEIVE_HOLD_CEILING_M_S
 
 
 # Path length up to time `t` — the distance the passer's aim error is spread over.

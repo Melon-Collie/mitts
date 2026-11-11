@@ -1,5 +1,7 @@
 class_name AIPossessionState
 
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+
 # Pure-function team possession state, from puck zone × possession. Roles are
 # driven by this state rather than by closest-to-puck.
 #
@@ -39,9 +41,9 @@ enum State { DZONE, OZONE, TRANS_OFFENSE, TRANS_DEFENSE, NEUTRAL, BREAKOUT, FORE
 # ── Coverage readiness (docs/transition-defense-plan.md §9) ──────────────────
 # Scripts/domain/ai/CLAUDE.md → "DZONE is a shape, not a location". A SET
 # structure leaves coverage once the readiness read has been false for this many
-# consecutive brain ticks; entering needs only one ready tick. There must be NO
-# time-floor fallback beside it.
-const COVERAGE_HOLD_TICKS: int = 6
+# consecutive brain ticks (~50 ms; the brain ticks with physics); entering needs
+# only one ready tick. There must be NO time-floor fallback beside it.
+const COVERAGE_HOLD_TICKS: int = (_PhysicsConstants.PHYSICS_TICK + 10) / 20
 
 
 # True when the team should be running D-zone COVERAGE rather than the rush /
@@ -125,3 +127,10 @@ static func compute(
 			state = State.TRANS_DEFENSE
 
 	return Result.make(state, carrier_team)
+
+
+# Whether the puck is in the zone this team attacks.
+static func in_their_zone(snapshot: WorldSnapshot, own_goal_z: float) -> bool:
+	if snapshot == null or snapshot.puck_state == null:
+		return false
+	return -signf(own_goal_z) * snapshot.puck_state.position.z > GameRules.BLUE_LINE_Z

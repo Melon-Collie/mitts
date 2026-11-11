@@ -15,7 +15,7 @@ extends GutTest
 # extension isn't built.
 
 const State = SkaterStateMachine.State
-const DELTA: float = 1.0 / 120.0
+const DELTA: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const TOLERANCE: float = 0.001
 const SEED: int = 0x44414E47  # "DANG"
 
@@ -247,6 +247,18 @@ func test_reset_and_seed_match() -> void:
 	_nat._ik.seed_blade_smoothing(seed_pos)
 	for i: int in 90:
 		if not _step(_cursor(i + 67, center), DELTA, "post-seed"):
+			return
+	# Reconcile-entry seed: the host's blade, moving as the client's was at the ack.
+	var vel_err: float = (_ref._ik.blade_dangle_velocity() - _nat._ik.blade_dangle_velocity()).length()
+	if vel_err > TOLERANCE:
+		fail_test("dangle velocity diverged: gd=%s native=%s" % [
+				_ref._ik.blade_dangle_velocity(), _nat._ik.blade_dangle_velocity()])
+		return
+	var moving := Vector3(2.4, 0.0, -1.3)
+	_ref._ik.seed_blade_smoothing(seed_pos, moving)
+	_nat._ik.seed_blade_smoothing(seed_pos, moving)
+	for i: int in 90:
+		if not _step(_cursor(i + 101, center), DELTA, "post-moving-seed"):
 			return
 	pass_test("reset/seed handoffs in lockstep within %f" % TOLERANCE)
 

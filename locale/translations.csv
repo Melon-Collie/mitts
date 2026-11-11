@@ -107,6 +107,10 @@ GEAR_TUCK_NONE,Untucked,Por fuera
 GEAR_TUCK_LEFT,Left corner,Esquina izquierda
 GEAR_TUCK_RIGHT,Right corner,Esquina derecha
 GEAR_TUCK_FULL,Full tuck,Por dentro
+GEAR_TONGUE_LABEL,Tongue,Lengüeta
+GEAR_TONGUE_TUCKED,Tucked,Metida
+GEAR_TONGUE_OUT,Out,Por fuera
+GEAR_TONGUE_UNDER,Under sock,Bajo la media
 PLAYER_HAIR_LABEL,Hair,Pelo
 PLAYER_BEARD_LABEL,Beard,Barba
 PLAYER_HAIR_COLOR_LABEL,Hair color,Color de pelo
@@ -117,6 +121,7 @@ HAIR_STYLE_BALD,Bald,Calvo
 HAIR_STYLE_MULLET,Mullet,Mullet
 HAIR_STYLE_BUZZ,Buzz cut,Rapado
 HAIR_STYLE_SHAGGY,Shaggy,Desgreñado
+HAIR_STYLE_FLOW,Flow,Melena
 FACIAL_HAIR_NONE,None,Ninguna
 FACIAL_HAIR_STUBBLE,Stubble,Barba de días
 FACIAL_HAIR_MUSTACHE,Mustache,Bigote
@@ -349,6 +354,12 @@ OPTIONS_TEAM_COLORS_FILE,Team colors,Colores de equipo
 OPTIONS_TEAM_COLORS_FILE_NOTE,Makes a copy of the team colors you can edit in any text editor. Changes apply after a restart and only on your computer — other players see their own colors.,Crea una copia de los colores de equipo que puedes editar con cualquier editor de texto. Los cambios se aplican al reiniciar y solo en tu equipo — los demás jugadores ven sus propios colores.
 OPTIONS_BOTS_FILE,Bot roster,Plantilla de bots
 OPTIONS_BOTS_FILE_NOTE,"Edit AI bot names, numbers and attributes. As host, your roster is used for the whole lobby. Builds over the point-buy budget reset to medium. Changes apply after a restart.","Edita los nombres, números y atributos de los bots. Como anfitrión, tu plantilla se usa en toda la sala. Las configuraciones que superan el presupuesto de puntos vuelven a nivel medio. Los cambios se aplican al reiniciar."
+OPTIONS_CARRIER_RING,Carrier Ring,Anillo del portador
+OPTIONS_CARRIER_RING_NOTE,Thickens the ring of whoever has the puck.,Engrosa el anillo de quien lleva el disco.
+OPTIONS_POSSESSION_PULSE,Possession Pulse,Pulso de posesión
+OPTIONS_POSSESSION_PULSE_NOTE,"Sends a pulse across the ice when the puck changes hands, bigger on a turnover.","Lanza un pulso por el hielo cuando el disco cambia de manos, más grande en una pérdida."
+OPTIONS_LOOSE_PUCK_HALO,Loose Puck Halo,Halo del disco suelto
+OPTIONS_LOOSE_PUCK_HALO_NOTE,Circles the puck while nobody has it.,Rodea el disco mientras nadie lo tiene.
 OPTIONS_IMPACT_NONE,None,Ninguno
 OPTIONS_IMPACT_LOW,Low,Bajo
 OPTIONS_IMPACT_MEDIUM,Medium,Medio

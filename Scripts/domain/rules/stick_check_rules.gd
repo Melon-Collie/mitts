@@ -1,6 +1,8 @@
 class_name StickCheckRules
 extends RefCounted
 
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+
 # The stick lift on its own button: a press raises the blade, the hold keeps the
 # hook open, and letting go drops the blade straight back down. Every transition
 # is a function of the skater's own inputs, so the host and the predicting client
@@ -84,9 +86,9 @@ static func _point_to_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
 
 
 # Wire packing: phase in bits 0-2, time elapsed in bits 3-7 as whole ticks. Every
-# timed phase ends inside 31 (REARM_S, the longest, is 30 at 120 Hz); the tie has
-# no timed edge, so its count saturates harmlessly.
-const _WIRE_TICK_HZ: float = 120.0
+# timed phase ends inside 31 (REARM_S, the longest, is under 23 at 90 Hz); the tie
+# has no timed edge, so its count saturates harmlessly.
+const _WIRE_TICK_HZ: float = _PhysicsConstants.PHYSICS_TICK
 const _WIRE_MAX_UNITS: int = 31
 
 

@@ -6,7 +6,7 @@ extends GutTest
 # start; and a stop with W held stops, while one with a key across the travel
 # slows into the shuffle.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const FACING_UP: float = 0.0   # facing −Z
 const RIGHT := Vector2(1.0, 0.0)
 const AHEAD := Vector2(0.0, -1.0)

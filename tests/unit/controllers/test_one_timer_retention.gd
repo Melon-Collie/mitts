@@ -12,7 +12,7 @@ extends GutTest
 # deliberately not asserted — only the ordering it creates.
 
 const RETENTION_S: float = 0.11
-const TICK: float = 1.0 / 120.0
+const TICK: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 var _sm: SkaterStateMachine
 var _aiming: SkaterAimingBehavior

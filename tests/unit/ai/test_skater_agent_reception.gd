@@ -2,7 +2,8 @@ extends GutTest
 
 # SkaterAgentReception's reads against fabricated WorldSnapshots: which fast
 # loose puck is a pass to this bot, where its blade parks for one, the wall
-# kill, and when it gives with the feed. The stance itself (read_pass driving the steering) is held through the
+# kill, when it gives with the feed, and the stance a receiver skating into the
+# feed takes. The steering it drives is held through the
 # state machine in test_skater_agent_state_machine.gd.
 
 # peer 1 = self (team 0), peer 2 = teammate (team 0), peers 11/12 = team 1.
@@ -129,6 +130,17 @@ func test_blade_gate_parks_on_the_line_at_the_entry_point() -> void:
 	assert_lt(gate.x, 10.0, "gate sits ahead of the perpendicular foot (early contact)")
 	assert_almost_eq(self_pos.distance_to(gate), SkaterAgentReception.gate_reach(BLADE_REACH), 0.001,
 			"gate sits at the blade's comfortable extension")
+
+
+func test_a_saucer_is_priced_to_the_gate_the_receiver_plays_it_at() -> void:
+	# The carrier's saucer runway ends where the receiver's stick takes the feed;
+	# a gate priced nearer his body lets the flip land past his blade.
+	for span: float in [1.5, AISkaterCaps.new().blade_span, 1.9]:
+		var caps := AISkaterCaps.new()
+		caps.blade_span = span
+		assert_almost_eq(AICarrierPassSearch.receiver_gate_m(caps),
+				SkaterAgentReception.gate_reach(span + AIBotMechanics.BLADE_REACH_BUFFER_M),
+				0.0001, "blade span %.2f: the pass search's gate is the reception's" % span)
 
 
 func test_blade_gate_head_on_parks_in_front() -> void:
@@ -258,9 +270,73 @@ func test_board_normal_points_into_the_rink() -> void:
 # ── Give with the puck ───────────────────────────────────────────────────────
 
 func test_a_receiver_gives_when_his_own_skating_would_bobble_the_feed() -> void:
-	assert_true(SkaterAgentReception.gives_with(Vector3(16, 0, 0), Vector3(-3, 0, 0)),
-			"16 m/s met at 19: stopping brings it back under the bobble line")
-	assert_false(SkaterAgentReception.gives_with(Vector3(16, 0, 0), Vector3.ZERO),
+	assert_true(SkaterAgentReception.gives_with(Vector3(22, 0, 0), Vector3(-4, 0, 0)),
+			"22 m/s met at 26: stopping brings it back under the bobble line")
+	assert_false(SkaterAgentReception.gives_with(Vector3(22, 0, 0), Vector3.ZERO),
 			"standing, it arrives under the line")
-	assert_false(SkaterAgentReception.gives_with(Vector3(20, 0, 0), Vector3(0, 0, -6)),
+	assert_false(SkaterAgentReception.gives_with(Vector3(26, 0, 0), Vector3(0, 0, -6)),
 			"a feed past the line on its own bobbles however he skates: in stride")
+
+
+# ── Reception in stride ──────────────────────────────────────────────────────
+# A receiver driving up the ice, the feed coming across his path, its line in
+# HIS frame passing a blade off him: his own skating carries him to the meet.
+
+func _driving_receiver_snap(self_vel: Vector3) -> WorldSnapshot:
+	var s := _pass_snap(Vector3(-6, 0, -4.45), Vector3(12, 0, 0), -1)
+	_add_skater(s, SELF_ID, Vector3.ZERO)
+	s.skater_states[SELF_ID].velocity = self_vel
+	return s
+
+
+func test_a_receiver_driving_into_the_feed_stands_where_his_skating_takes_him() -> void:
+	var body_offset: float = BLADE_REACH - AIBotMechanics.BLADE_REACH_BUFFER_M \
+			- SkaterAgentReception.RECEIVE_BODY_INSET_M
+	var self_vel := Vector3(0, 0, -6)
+	assert_true(rec.read_pass(_driving_receiver_snap(self_vel), Vector3.ZERO,
+			BLADE_REACH, body_offset, 8.0), "the feed is his")
+	assert_false(rec.pass_overruns, "taken in stride, no brake")
+	var drift: Vector3 = self_vel * AITrajectory.gate_time_s
+	var anchor: Vector3 = rec.pass_body_anchor
+	assert_lt(anchor.distance_to(drift), 0.25,
+			"the stance is where he is skating, not out on the puck's own line")
+	# Square across the shaft: a stance off the puck's path in HIS frame.
+	var meet: Vector3 = AITrajectory.gate_point
+	var rel: Vector3 = (AITrajectory.gate_velocity - self_vel).normalized()
+	var off: Vector3 = anchor - meet
+	assert_almost_eq((off - rel * off.dot(rel)).length(), body_offset, 0.01,
+			"a stance off the relative line through the meet")
+
+
+
+func test_a_feed_reaching_where_he_skates_is_his_however_far_off_it_he_is_now() -> void:
+	# 5.5 m off the feed's line now, past the trigger, but driving onto it: by
+	# the time the puck reaches his level he is a stride off it.
+	var s := _pass_snap(Vector3(-8, 0, -5.5), Vector3(12, 0, 0), -1)
+	_add_skater(s, SELF_ID, Vector3.ZERO)
+	s.skater_states[SELF_ID].velocity = Vector3(0, 0, -6)
+	assert_true(rec.incoming_pass(s, Vector3.ZERO), "the feed is coming to him")
+	var body_offset: float = BLADE_REACH - AIBotMechanics.BLADE_REACH_BUFFER_M \
+			- SkaterAgentReception.RECEIVE_BODY_INSET_M
+	assert_true(rec.read_pass(s, Vector3.ZERO, BLADE_REACH, body_offset, 8.0),
+			"and he sets for it in stride")
+	# Inside the trigger now, but skating away: by then he is well off it.
+	var away := _pass_snap(Vector3(-8, 0, -4.5), Vector3(12, 0, 0), -1)
+	_add_skater(away, SELF_ID, Vector3.ZERO)
+	away.skater_states[SELF_ID].velocity = Vector3(0, 0, 3)
+	assert_false(rec.incoming_pass(away, Vector3.ZERO), "skating away from it, it is not his")
+
+func _slot_feed_snap(self_vel: Vector3) -> WorldSnapshot:
+	var s := _pass_snap(Vector3(-9, 0, -20), Vector3(15, 0, 0), -1)
+	_add_skater(s, SELF_ID, Vector3(1.5, 0, -19))
+	s.skater_states[SELF_ID].velocity = self_vel
+	return s
+
+
+func test_the_net_forward_catch_is_only_for_a_body_that_gets_behind_it() -> void:
+	var goal := Vector3(0, 0, -GameRules.GOAL_LINE_Z)
+	var self_pos := Vector3(1.5, 0, -19)
+	assert_true(rec.read_shot(_slot_feed_snap(Vector3.ZERO), self_pos, BLADE_REACH, goal),
+			"standing in the slot, he steps back behind the catch")
+	assert_false(rec.read_shot(_slot_feed_snap(Vector3(0, 0, -6)), self_pos, BLADE_REACH, goal),
+			"driving at the net, he takes it in stride instead of skating back up the ice")

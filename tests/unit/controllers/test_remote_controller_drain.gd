@@ -8,7 +8,7 @@ extends GutTest
 # into the next applied input. These tests drive the method directly with a
 # synthetic queue — it touches only the queue, the ack, and telemetry.
 
-const TICK: float = 1.0 / 120.0
+const TICK: float = 1.0 / 120.0  # a fixed step: the script below is timed in it
 
 
 func _controller() -> RemoteController:
@@ -169,3 +169,38 @@ func test_stale_presses_are_not_carried_across_a_phase_pause() -> void:
 	rc._drain_backlog(now)
 	assert_eq(rc._input_queue.size(), 1)
 	assert_false(fresh.shoot_pressed, "a 2-second-old press does not fire on resume")
+
+
+# A drain under a movement lock still acks the stale span, but a locked
+# phase's cadence measures the phase, not the link: like the pop, it records no
+# lead and no drain.
+func _ratchet(rc: RemoteController, now: float) -> void:
+	var stamps: Array = []
+	for i: int in range(12):
+		stamps.append(now - TICK * float(12 - i))
+	_seed(rc, stamps)
+
+
+func test_a_locked_drain_records_nothing() -> void:
+	var saved: NetworkTelemetry = NetworkTelemetry.instance
+	var t := NetworkTelemetry.new()
+	NetworkTelemetry.instance = t
+	var rc := _controller()
+	_ratchet(rc, 10.0)
+	rc._drain_backlog(10.0, false)
+	NetworkTelemetry.instance = saved
+	assert_eq(rc._input_queue.size(), 2, "the span is still drained")
+	assert_eq(t._input_drain_count, 0)
+	assert_eq(t._input_lead_n, 0)
+
+
+func test_a_live_drain_is_recorded() -> void:
+	var saved: NetworkTelemetry = NetworkTelemetry.instance
+	var t := NetworkTelemetry.new()
+	NetworkTelemetry.instance = t
+	var rc := _controller()
+	_ratchet(rc, 10.0)
+	rc._drain_backlog(10.0)
+	NetworkTelemetry.instance = saved
+	assert_gt(t._input_drain_count, 0)
+	assert_gt(t._input_lead_n, 0)

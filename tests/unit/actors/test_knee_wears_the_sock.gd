@@ -1,9 +1,9 @@
 extends GutTest
 
-# The knee ball sits below the pant hem, over the shin guard's cap, so both
-# painters — the rink's SkaterUniformCoordinator and the display figures'
-# FigureKit — dress it in the sock's base, solid. Solid works only because every
-# kit's sock top is that base; a stripe running off the top would seam there.
+# The skin's knee sits below the pant hem, over the shin guard's cap, so its
+# paint zone wears the sock's base, solid, on the rink's skater and the display
+# figures alike (SkaterKitPaint). Solid works only because every kit's sock top
+# is that base; a stripe running off the top would seam there.
 
 const _SCENE: String = "res://Scenes/Skater.tscn"
 # Pomegranate away: burgundy pants over cream socks, so the two can't be confused.
@@ -41,10 +41,9 @@ func test_the_figure_paints_the_knee_as_sock() -> void:
 	kit.build(rig, rig)
 	kit.dress(_kit(), GearStyleConfig.new(), StickTapeConfig.new(),
 			SkinToneRegistry.DEFAULT_INDEX, "", 0)
-	for i: int in 2:
-		var mat: StandardMaterial3D = kit.knees[i].get_surface_override_material(0) \
-				as StandardMaterial3D
-		assert_eq(mat.albedo_color, _kit().uniform.socks.base, "knee %d" % i)
+	var paint: BodyZonePaint = kit.get("_paint") as BodyZonePaint
+	for knee: int in [SkaterMeshBuilder.LegSurface.KNEE_L, SkaterMeshBuilder.LegSurface.KNEE_R]:
+		assert_eq(paint.zone(knee).albedo_color, _kit().uniform.socks.base, "knee %d" % knee)
 
 
 func test_every_sock_top_is_its_base() -> void:

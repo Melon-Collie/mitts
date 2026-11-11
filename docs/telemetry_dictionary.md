@@ -34,12 +34,14 @@ Each per-second metric `<key>` appears as:
 - `<key>_max` — worst single 1 s window. One GC hiccup can own this number;
   read it with `_avg` for context.
 - `<key>_min` — only for metrics where **lower is worse** (`sim_rate_hz`,
-  `reconcile_match_pct`, `client_fps`, `buffer_depth_*`).
+  `reconcile_match_pct`, `client_fps`, `buffer_depth_*`, `keeper_confirm_pct`).
 - `<key>_total` — only for **rare-event / event counters** (`puck_hard_snaps`,
   `blade_jumps`, the host-side lag-comp claim counters `pickup_claims` /
   `pickup_claim_misses` / `pickup_claim_deflects` / `poke_claims` /
-  `poke_claim_misses` / `stick_lift_claims` / `stick_lift_claim_misses`, the
-  client-side `provisional_*`, and the host-side `host_stalls`): the session sum.
+  `poke_claim_misses` / `stick_lift_claims` / `stick_lift_claim_misses` /
+  `stick_tie_claims` / `stick_tie_claim_misses`, the
+  client-side `provisional_*` and `keeper_predict_fallbacks`, and the host-side
+  `host_stalls`): the session sum.
   These are events-per-game, not rates — 3 hard snaps in a 10-minute game matters
   and would average to ~0/s.
 
@@ -127,7 +129,9 @@ grab-then-lose bug. A miss fraction that stays high after v28 points at the
 | `poke_claim_misses_total` | Of those, how many failed the swept `check_poke` against the rewound carried puck. Read as `poke_claim_misses / poke_claims`. |
 | `stick_lift_claims_total` | Client stick-lift claims that reached the rewound geometry test (blade hooked under an opposing carrier's shaft). The denominator for lifts. |
 | `stick_lift_claim_misses_total` | Of those, how many failed `check_blade_under_stick` against the rewound shaft. Read as `stick_lift_claim_misses / stick_lift_claims`. |
-| `claim_stamp_rejects_total` | Claims (any of the four types) dropped at the RPC boundary by the stamp-plausibility gate (`LagCompRewind.is_claim_stamp_plausible`) — before any resolver ran, so they appear in no other claim counter above. Expect 0. Sustained non-zero = legit claims silently eaten because an RTT spike outran the host's ping EMA (felt as "reached the puck, nothing happened"), or a client shopping timestamps. |
+| `stick_tie_claims_total` | Client stick-tie claims that reached the rewound geometry test (claimant in TIE, untied; target an untied, non-carrying opponent). The denominator for ties. Only in the row's `metrics`; the views do not extract it yet. |
+| `stick_tie_claim_misses_total` | Of those, how many found the claimant's stick farther than `TIE_CONTACT_M` from the rewound target stick. Read as `stick_tie_claim_misses / stick_tie_claims`. |
+| `claim_stamp_rejects_total` | Claims (any type) dropped at the RPC boundary by the stamp-plausibility gate (`LagCompRewind.is_claim_stamp_plausible`) — before any resolver ran, so they appear in no other claim counter above. Expect 0. Sustained non-zero = legit claims silently eaten because an RTT spike outran the host's ping EMA (felt as "reached the puck, nothing happened"), or a client shopping timestamps. |
 
 ### Why a claim missed — read these before trusting a miss rate
 
@@ -151,6 +155,22 @@ across the carried input lead, so its error grows with lead depth — and the le
 grows with RTT (`input_lead_extra_ms` ≈ rtt/2). A high-ping session reconstructs
 across a longer span and will inflate divergence, clamps, and therefore misses.
 Compare miss rates across sessions at similar `input_lead_extra_ms`.
+
+## Predicted goalie (client rows only)
+
+A client draws each goalie as a keeper of its own predicts him at the render
+instant (`KeeperPredictor`, `Scripts/networking/CLAUDE.md` → the goalie
+invariant): re-seeded from a snapshot's state, stepped to the render instant,
+and re-stepped from a snapshot whose state differs from the one it predicted
+for that snapshot's tick. Host rows fold 0 (and 100% confirmed).
+
+| Key | Unit | Healthy | Meaning |
+|---|---|---|---|
+| `keeper_confirm_pct` | % of snapshots | high is cheap, not a verdict | Snapshots (both goalies) whose keeper state the predictor had already reached bit for bit, so it stepped on without re-stepping. Equality is to the bit, so anything he read that the client has differently — a release or contact it had not heard of, a skater or the puck a centimetre off — re-steps; measured on a world fed at the snapshot's grid it is ~0%. `_min` is the worst window. F3 *Goalie predict*. |
+| `keeper_resteps_per_sec` | /s | ≤ 2 × 45 | Snapshots that re-seeded a goalie and re-stepped the span to the render instant. At most one a goalie a snapshot. |
+| `keeper_restep_gap_m` / `keeper_restep_gap_peak_m` | m | small, spikes at shots | At a re-step's snapshot, how far the predicted keeper's gear sat from the host's (the farthest corner of any of his 22 save boxes), mean and peak. The size of the correction the drawn goalie takes: ~0 where only a millimetre of the world differed, tens of centimetres where a hidden release or a save moved him. |
+| `keeper_predict_us` / `keeper_predict_p95_us` | µs per physics frame | release build and Deck numbers are the ones to read | Main-thread time both predictors took a physics frame (stepping, re-seeding, re-stepping), mean and p95; the p95 is the re-step frames. F3 *Goalie predict cost* (amber 4 ms, red 8 ms at p95). |
+| `keeper_predict_fallbacks_total` | frames | ~0 after warm-up | Frames a goalie with a predictor was drawn interpolated at `H − d` instead: no snapshot yet, the clock not ready, the newest snapshot past `PUCK_PREDICT_MAX_S`. Non-zero sessions correlate with `packet_loss_pct`. |
 
 ## Optimistic-pickup outcomes (client rows only)
 
@@ -177,20 +197,20 @@ diagnosable: a queue is only "too deep" relative to the lead that filled it.
 
 | Key | Unit | Healthy | Meaning |
 |---|---|---|---|
-| `input_queue_depth` | frames | ≈ the margin in ticks: `INPUT_LEAD_SEC × PHYSICS_TICK` — ~3 at any RTT, because the lead pays the one-way trip on top | The host's measurement of **this** client's pending-input queue, put in the client's own skater block on the wire and folded here as a median. `NetworkManager.on_queue_depth_received` early-returns on the host, so **host rows fold 0** — the host's view of the same quantity is `host_input_queue_depth` below. 0 = starving. A link past `MAX_ONE_WAY_S` (rtt 200 ms) is no longer covered and runs it toward 0. |
+| `input_queue_depth` | frames | ≈ the margin in ticks: `INPUT_LEAD_SEC × PHYSICS_TICK` — ~2.5 at any RTT, because the lead pays the one-way trip on top | The host's measurement of **this** client's pending-input queue, put in the client's own skater block on the wire and folded here as a median. `NetworkManager.on_queue_depth_received` early-returns on the host, so **host rows fold 0** — the host's view of the same quantity is `host_input_queue_depth` below. 0 = starving. A link past `MAX_ONE_WAY_S` (rtt 200 ms) is no longer covered and runs it toward 0. |
 | `input_lead_extra_ms` (max/avg) | ms | ≈ rtt/2 | The stamp lead above the fixed `INPUT_LEAD_SEC` margin — the one-way share, `rtt/2` bounded by `ClockSync.MAX_ONE_WAY_S` (100 ms). It is open-loop, so it tracks `rtt_ms` and nothing else; a gap between the two is the slew still catching up a changed RTT. |
 
 ## Host frame / input health (host rows only; clients omit or fold 0)
 
 | Key | Unit | Healthy | Meaning |
 |---|---|---|---|
-| `sim_rate_hz` | Hz | ≥97% of 120 | Effective physics tick rate. Below target = host overloaded, the sim dilates and **every client's** update rate sags with it. `_min` is the worst window. Omitted (not 0) on client rows. |
+| `sim_rate_hz` | Hz | ≥97% of 90 | Effective physics tick rate. Below target = host overloaded, the sim dilates and **every client's** update rate sags with it. `_min` is the worst window. Omitted (not 0) on client rows. |
 | `worst_stall_ms` | ms | <33 fine, >66 a hitch everyone felt | Longest gap between physics ticks in a window (the single worst hitch). |
 | `host_stalls_total` | count | 0 | Session sum of physics ticks whose gap exceeded 33 ms — how MANY noticeable hitches, vs `worst_stall_ms`'s single worst. Read with the `auto_markers` (below), whose `phase` / `actor_count` / `last_event` attribute them. Host only; TOTAL_KEY. |
-| `broadcast_interval_p95_ms` | ms | ≈ `1000 / STATE_RATE` = 16.7 ms; >1.4× target = sagging | p95 gap between world-state broadcasts. The target is the **broadcast** cadence (`Constants.STATE_RATE`, 60 Hz), not the 120 Hz physics tick the row above measures — the cadence is counted in ticks but fires every second one. Sustained high = host stalling or send path backed up. Omitted on client rows. |
+| `broadcast_interval_p95_ms` | ms | ≈ `1000 / STATE_RATE` = 22.2 ms; >1.4× target = sagging | p95 gap between world-state broadcasts. The target is the **broadcast** cadence (`Constants.STATE_RATE`, 45 Hz), not the 90 Hz physics tick the row above measures — the cadence is counted in ticks but fires every second one. Sustained high = host stalling or send path backed up. Omitted on client rows. |
 | `host_input_queue_depth` (max/avg) | frames | ≈ the margin in ticks (same band as `input_queue_depth` above) | Deepest pending remote-input queue the host saw in the window, maxed across **networked** peers only — bots are non-local too and their structural 0 would scale the number by the human share of the roster. **Read it WITH `input_drains_per_sec` — the discriminator for drain-driven reconcile churn:** drains firing while depth is **deep** (well past the stamp lead) means the drain is eating the cushion the margin deliberately builds (raise the drain trigger); drains while depth is **shallow** (0–1) means inputs genuinely arrive late and the lead/clock is the problem. |
-| `input_lead_ms` | ms | ~0–10 | How late client inputs were when the host popped them (`estimated_host_time() − stamp`), measured at pop time on the host. |
-| `input_starvations_per_sec` | /s | <0.5 | Host ticks that had no fresh client input and reused the last one. Two causes: genuine **client→host** loss (the client's own `packet_loss_pct` can't see this outbound direction), and — more often — the **catch-up drain after a host stall** (a hitch, then a burst of physics ticks consumes the tiny input queue). A starvation spike sharing a window with a `host_stall`/`worst_stall_ms` spike is the latter; correlate before blaming the uplink. |
+| `input_lead_ms` | ms | ~0–10 | How late client inputs were when the host popped them (`sim_time() − stamp`), measured at pop time on the host. |
+| `input_starvations_per_sec` | /s | <0.5 | Host ticks that had no fresh client input and reused the last one — the queue empty, or its front not yet due (a gap with later inputs already queued). Live ticks only. Two causes: genuine **client→host** loss (the client's own `packet_loss_pct` can't see this outbound direction), and — more often — the **catch-up drain after a host stall** (a hitch, then a burst of physics ticks consumes the tiny input queue). A starvation spike sharing a window with a `host_stall`/`worst_stall_ms` spike is the latter; correlate before blaming the uplink. |
 
 ## Markers: `felt_lag_markers` and `auto_markers`
 

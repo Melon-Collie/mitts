@@ -164,3 +164,22 @@ func test_lock_releases_at_the_boundary_and_reverts_to_shape() -> void:
 			AIRoleSlots.Slot.ZONE_C, 1.0, NET_Z, _pt(9.0, 3.0))
 	assert_lt(d.target_position.distance_to(anchor), 3.0,
 			"revert to the breathing anchor")
+
+
+func test_a_loose_puck_another_of_ours_is_racing_leaves_the_area_owner_a_man() -> void:
+	# The puck loose in the strong corner, ZONE_D_STRONG's ice: with a teammate
+	# (2) elected to race it, the area's owner covers the man he is handed
+	# rather than standing off the puck; with nobody elected he plays it.
+	var man_pos: Vector3 = _pt(-1.5, 2.5)
+	var ctx: RoleContext = _make_ctx(_pt(2.0, 3.0), [
+			[2, 0, _pt(6.0, 2.0)],
+			[11, 1, man_pos],
+	], -1)
+	ctx.snapshot.puck_state.position = _pt(9.0, 1.0)
+	ctx.assigned_threat_peer = 11
+	ctx.snapshot.closest_to_puck_by_team[TEAM_ID] = 2
+	var d: RoleDecision = AIRoleZoneDefense.decide(ctx, AIRoleSlots.Slot.ZONE_D_STRONG)
+	assert_eq(d.locked_man_pid, 11, "he takes the man while his teammate races it")
+	ctx.snapshot.closest_to_puck_by_team[TEAM_ID] = 1
+	d = AIRoleZoneDefense.decide(ctx, AIRoleSlots.Slot.ZONE_D_STRONG)
+	assert_eq(d.locked_man_pid, -1, "elected himself, he is on the puck, not a man")

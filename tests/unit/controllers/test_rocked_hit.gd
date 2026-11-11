@@ -5,7 +5,7 @@ extends GutTest
 # stagger timer comes back down to the full stagger (BodyCheckRules' rocked
 # band).
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 class StubGameState extends Node:

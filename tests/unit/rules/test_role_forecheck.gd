@@ -64,7 +64,7 @@ func test_f3_holds_at_opp_blue_line() -> void:
 			[1, TEAM_ID, self_pos],
 			[200, 1, Vector3(0, 0, -22)],
 	], 1.0)
-	var d: RoleDecision = AIRoleForecheck.decide(ctx, true)
+	var d: RoleDecision = AIRoleForecheck.decide_high(ctx)
 	# Team 0 attacks -Z, opp blue line at z = -BLUE_LINE_Z.
 	assert_almost_eq(d.target_position.z, -GameRules.BLUE_LINE_Z, 0.001,
 			"F3 holds at the opp blue line")
@@ -83,7 +83,7 @@ func test_f3_sags_off_the_line_for_a_stretch_threat() -> void:
 			[210, 1, Vector3(2, 0, 0)],             # stretch man at center
 	], 1.0)
 	ctx.snapshot.skater_states[210].velocity = Vector3(0, 0, 6)   # burning toward our net
-	var d: RoleDecision = AIRoleForecheck.decide(ctx, true)
+	var d: RoleDecision = AIRoleForecheck.decide_high(ctx)
 	assert_gt(d.target_position.z, -GameRules.BLUE_LINE_Z + 2.0,
 			"a stretch threat sags F3 well off the opp blue line; got z=%f"
 			% d.target_position.z)
@@ -98,14 +98,14 @@ func test_f3_sag_deepens_with_the_threat() -> void:
 			[200, 1, Vector3(0, 0, -22)],
 			[210, 1, Vector3(2, 0, -5)],            # high but still zone-side
 	], 1.0)
-	var mild_z: float = AIRoleForecheck.decide(mild, true).target_position.z
+	var mild_z: float = AIRoleForecheck.decide_high(mild).target_position.z
 	var hot := _make_ctx(self_pos, 200, [
 			[1, TEAM_ID, self_pos],
 			[200, 1, Vector3(0, 0, -22)],
 			[210, 1, Vector3(2, 0, 4)],             # past center
 	], 1.0)
 	hot.snapshot.skater_states[210].velocity = Vector3(0, 0, 7)
-	var hot_z: float = AIRoleForecheck.decide(hot, true).target_position.z
+	var hot_z: float = AIRoleForecheck.decide_high(hot).target_position.z
 	assert_gt(hot_z, mild_z,
 			"a hotter recovery threat holds a deeper line; mild=%f hot=%f" % [mild_z, hot_z])
 
@@ -116,11 +116,11 @@ func test_f3_follows_strong_x_flip() -> void:
 			[1, TEAM_ID, self_pos],
 			[200, 1, Vector3(0, 0, -22)],
 	], -1.0)
-	var d: RoleDecision = AIRoleForecheck.decide(ctx, true)
+	var d: RoleDecision = AIRoleForecheck.decide_high(ctx)
 	assert_lt(d.target_position.x, 0.0, "F3 holds on the -X side when strong side flips")
 
 
-# ── F2: mid-lane read ────────────────────────────────────────────────────────
+# ── F2: the read in front of their net ─────────────────────────────────────────────────────
 
 func test_f2_reads_off_loose_puck_instead_of_freezing() -> void:
 	# Loose puck deep in the opp zone — a prime forecheck moment. F2 must
@@ -133,7 +133,7 @@ func test_f2_reads_off_loose_puck_instead_of_freezing() -> void:
 	]
 	var ctx := _make_ctx(self_pos, -1, skaters, 1.0)
 	ctx.snapshot.puck_state.position = Vector3(3, 0, -22)  # loose, deep in opp zone
-	var d: RoleDecision = AIRoleForecheck.decide(ctx, false)
+	var d: RoleDecision = AIRoleForecheck.decide_net(ctx)
 	assert_ne(d.target_position, self_pos, "F2 reads off the loose puck, doesn't freeze")
 
 
@@ -149,6 +149,39 @@ func test_f2_stays_in_the_zone() -> void:
 			[210, 1, Vector3(-3, 0, -16)],  # outlet receiver
 	]
 	var ctx := _make_ctx(self_pos, 200, skaters, 1.0)
-	var d: RoleDecision = AIRoleForecheck.decide(ctx, false)
+	var d: RoleDecision = AIRoleForecheck.decide_net(ctx)
 	assert_lte(d.target_position.z, -GameRules.BLUE_LINE_Z + 0.001,
 			"F2 holds in the attacking zone rather than sagging out across the blue line")
+
+
+func test_f2_reads_in_front_of_their_net() -> void:
+	# The 1-2-2's F2 reacts in front of the net: with the carrier behind it, his
+	# read sits in the slot, not up at the circle tops.
+	var self_pos := Vector3(0, 0, -12)
+	var skaters: Array = [
+			[1, TEAM_ID, self_pos],
+			[200, 1, Vector3(1, 0, -27.5)],   # carrier behind the net
+			[210, 1, Vector3(-9, 0, -16)],    # wall outlet
+	]
+	var ctx := _make_ctx(self_pos, 200, skaters, 1.0)
+	var d: RoleDecision = AIRoleForecheck.decide_net(ctx)
+	var depth: float = GameRules.GOAL_LINE_Z + d.target_position.z
+	assert_lt(depth, AIZoneCoverage.HOUSE_TOP_DEPTH_M,
+			"F2 reads below the circle tops, in front of the net; got %s" % d.target_position)
+	assert_lt(absf(d.target_position.x), AIZoneCoverage.SLOT_HALF_WIDTH_M + 3.0,
+			"...and in the middle of the ice; got %s" % d.target_position)
+
+
+func test_f3_wall_supports_on_the_near_wall() -> void:
+	var self_pos := Vector3(6, 0, -12)
+	var skaters: Array = [
+			[1, TEAM_ID, self_pos],
+			[200, 1, Vector3(9, 0, -24)],     # carrier in the strong corner
+			[210, 1, Vector3(11, 0, -14)],    # half-wall outlet
+	]
+	var ctx := _make_ctx(self_pos, 200, skaters, 1.0)
+	var d: RoleDecision = AIRoleForecheck.decide_wall(ctx)
+	assert_gt(d.target_position.x, GameRules.END_ZONE_FACEOFF_DOT_X,
+			"F3 stands out on the strong wall; got %s" % d.target_position)
+	assert_lte(d.target_position.z, -GameRules.BLUE_LINE_Z + 0.001,
+			"...inside their zone; got %s" % d.target_position)

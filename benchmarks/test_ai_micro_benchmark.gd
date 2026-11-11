@@ -28,6 +28,7 @@ func _uninstall_native_ai() -> void:
 	AIShotOdds.native_factory = Callable()
 	AIShotOdds.attach_native()
 	AICarryRollout.native_factory = Callable()
+	AICarrySpace.native = null
 
 
 func _make_ctx(self_pos: Vector3, carrier_pid: int = 100) -> RoleContext:
@@ -112,14 +113,16 @@ func test_evaluator_costs() -> void:
 	memo_brain.tick(1.0, memo_ctx.snapshot)
 	memo_ctx.threat_shoot_base_by_opp = memo_brain.threat_shoot_base_by_opp
 	_bench("MARK (fallback, brain memo)", func() -> void: AIRoleMark.decide(memo_ctx))
-	_bench("RUSH_D1", func() -> void:
-			AIRoleRushD.decide(d_ctx, AIRoleSlots.Slot.RUSH_D1))
-	_bench("RUSH_D2", func() -> void:
-			AIRoleRushD.decide(d_ctx, AIRoleSlots.Slot.RUSH_D2))
-	_bench("TRACK_PUCK", func() -> void:
-			AIRoleTrack.decide(d_ctx, AIRoleSlots.Slot.TRACK_PUCK))
-	_bench("TRACK_MID", func() -> void:
-			AIRoleTrack.decide(d_ctx, AIRoleSlots.Slot.TRACK_MID))
+	_bench("BACK_STRONG", func() -> void:
+			AIRoleRushD.decide(d_ctx, AIRoleSlots.Slot.BACK_STRONG))
+	_bench("BACK_MID", func() -> void:
+			AIRoleRushD.decide(d_ctx, AIRoleSlots.Slot.BACK_MID))
+	_bench("NZ_F1", func() -> void:
+			AIRoleNeutralZone.decide(d_ctx, AIRoleSlots.Slot.NZ_F1))
+	_bench("NZ_MID", func() -> void:
+			AIRoleNeutralZone.decide(d_ctx, AIRoleSlots.Slot.NZ_MID))
+	_bench("BACK_WEAK", func() -> void:
+			AIRoleNeutralZone.decide(d_ctx, AIRoleSlots.Slot.BACK_WEAK))
 
 	# Off-puck offensive reads (our carrier deep in THEIR end).
 	var o_ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -17.0), 2)
@@ -137,13 +140,13 @@ func test_evaluator_costs() -> void:
 		AIRoleDefenseman.decide(o_ctx, AIRoleSlots.Slot.DP_STRONG))
 	_bench("DVALVE", func() -> void:
 		AIRoleDefenseman.decide(o_ctx, AIRoleSlots.Slot.DVALVE))
-	_bench("F2 strong lane", func() -> void: AIRoleForecheck.decide_f2(o_ctx, true))
-	_bench("F2 weak lane", func() -> void: AIRoleForecheck.decide_f2(o_ctx, false))
-	_bench("F3 high safety", func() -> void: AIRoleForecheck.decide(o_ctx, true))
+	_bench("F2 net read", func() -> void: AIRoleForecheck.decide_net(o_ctx))
+	_bench("F3 wall", func() -> void: AIRoleForecheck.decide_wall(o_ctx))
+	_bench("F3 high safety", func() -> void: AIRoleForecheck.decide_high(o_ctx))
 	_bench("OUTLET", func() -> void: AIRoleOutlet.decide(o_ctx))
 	_bench("BREAKOUT strong", func() -> void: AIRoleBreakout.decide(o_ctx, true))
 	_bench("BREAKOUT_C", func() -> void: AIRoleBreakoutCenter.decide(o_ctx))
-	_bench("WIDE lane", func() -> void: AIRoleWideLane.decide(o_ctx, -1.0))
+	_bench("WIDE lane", func() -> void: AIRoleRushLane.decide(o_ctx, -1.0))
 
 	# The carrier compete — the single biggest per-call evaluator.
 	var c_ctx: RoleContext = _make_ctx(Vector3(8.0, 0.0, -22.0), 1)
@@ -167,9 +170,10 @@ func test_evaluator_costs() -> void:
 				open_carrier._field.teammate_ids))
 	_bench("open ice: best carry (candidates)", func() -> void:
 		open_carrier._carry.search(open_ctx, 0.1))
-	# The shipped game's path: the field read and the rollout both native.
+	# The shipped game's path: the field read, the rollout and the evade read native.
 	NativeShotOddsFactory.install()
 	NativeCarryRolloutFactory.install()
+	NativeCarrySpaceFactory.install()
 	var native_open := AIRoleCarrier.new()
 	native_open._field.fill(open_ctx)
 	_bench("open ice: best carry (candidates, native kernels)", func() -> void:
@@ -362,6 +366,20 @@ func test_evaluator_costs() -> void:
 		poss.threat_of_feed(from, Vector3(-4, 0, -19), Vector3.ZERO, goalie))
 	_bench("threat_of_carrier (5 def)", func() -> void:
 		poss.threat_of_carrier(from, Vector3(0, 0, -6), goalie))
+	# The keep read every possession read pays (AIPossessionValue.base_at).
+	_bench("evade_safety (5 def)", func() -> void:
+		AIEvadeRead.evade_safety_reference(from, Vector3(0, 0, -6), opps, opp_vels,
+				AIBotMechanics.EVADE_CARRY_HANDLE_M, opp_caps))
+	var native_evade: RefCounted = NativeCarrySpaceFactory.make()
+	if native_evade != null:
+		_bench("evade_safety (5 def, native)", func() -> void:
+			native_evade.evade_safety(from, Vector3(0, 0, -6), opps, opp_vels,
+					AIBotMechanics.EVADE_CARRY_HANDLE_M, AICarrySpace.pack_caps(opp_caps, 5)))
+	NativeShotOddsFactory.install()
+	NativeCarrySpaceFactory.install()
+	_bench("threat_of_carrier (5 def, native kernels)", func() -> void:
+		poss.threat_of_carrier(from, Vector3(0, 0, -6), goalie))
+	_uninstall_native_ai()
 	# PRESSURE's per-candidate unit: the carrier's whole best-option argmax,
 	# re-run with us standing at the candidate. This is the inner loop of the
 	# outer 18-candidate argmax.

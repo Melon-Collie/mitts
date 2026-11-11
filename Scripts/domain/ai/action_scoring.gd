@@ -86,34 +86,36 @@ static func xg_release_spread(is_backhand: bool, skater_speed_m_s: float) -> flo
 	return spread
 
 
-# `keeper_stance` is an AIShotOdds.Stance.
+# `keeper_stance` is an AIShotOdds.Stance; `history` the play the keeper saw
+# before the shot (AIShotOdds.History).
 static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 		goalie_pos: Vector3, release_spread_rad: float = XG_BASE_SPREAD_RAD,
 		keeper_stance: int = AIShotOdds.Stance.UPRIGHT,
-		query: AIShotOdds.Query = null) -> float:
+		query: AIShotOdds.Query = null,
+		history: int = AIShotOdds.History.ANY) -> float:
 	var beaten: float = AIShotValue.now_at_spread(shooter, attacking_goal, goalie_pos,
-			0.0, keeper_stance, release_spread_rad, NAN, query)
+			0.0, keeper_stance, release_spread_rad, NAN, query, history)
 	return minf(XG_MAX, beaten + (1.0 - beaten) * XG_COVERED_LEAK)
 
 
-# ── Shoot-for-tip EV ──────────────────────────────────────────────────────────
-# The value of ripping a shot AT THE NET through a net-front teammate's blade.
-# Above the deflect threshold the puck redirects off his angled blade at
-# near-full pace (PuckCollisionRules.deflect_velocity; the finisher's reactive
-# TIP mode steps onto the shot path), so the outcome is a NEW release from the
-# tip point. Three independent events compose:
+# ── Tip EV ────────────────────────────────────────────────────────────────────
+# The value of a shot ripped AT THE NET through a net-front teammate's blade, as
+# the finisher's station search prices a spot to tip from.
+# The finisher's reactive TIP mode steps onto the shot path holding the
+# deliberate deflect, so the puck redirects off his blade at near-full pace
+# whatever its pace (PuckCollisionRules.deflect_velocity), and the outcome is a
+# NEW release from the tip point. Three independent events compose:
 #   P(rip reaches the tipper)   — lane_clear over release→tip vs the DEFENDERS
 # × P(blade contacts the puck)  — the same reach/reaction race a lane defender
 #                                 runs (_lane_block_at)
 # × the redirect (AIShotValue.deflection): a one-timer off the rip whose line
 #                                 is not picked, the keeper as he reads now.
-# max() against the direct read at the call site, never additive — the two are
-# different aims of the same rip.
+# The redirect is read off one-timer feed cells, which no staged tip backs (#736).
 
-# Puck.deflect_min_speed (test_bot_mirrors.gd), the receiver-relative pace above
-# which a blade deflects instead of catching: a rip below it lands on the
-# tape as a pass — no tip outcome exists.
-const TIP_DEFLECT_MIN_SPEED_M_S: float = 22.0
+# The pace from which the finisher reads a loose puck heading at the net as a
+# shot and goes to tip it (AIRoleFinisher.INCOMING_SHOT_SPEED_M_S): a rip below
+# it draws no tip.
+const TIP_MIN_SPEED_M_S: float = 12.0
 # A tip point closer to the release than this is still on the shooter's own
 # handle, not a mid-flight contact.
 const TIP_MIN_ALONG_M: float = 0.6
@@ -128,7 +130,7 @@ static func tip_ev(
 		shot_speed_m_s: float,
 		opponent_caps: Array = [],
 		tip_caps: AISkaterCaps = null) -> float:
-	if shot_speed_m_s < TIP_DEFLECT_MIN_SPEED_M_S:
+	if shot_speed_m_s < TIP_MIN_SPEED_M_S:
 		return 0.0
 	# Shot line: release → net centre (the reactive tip steps ONTO this line,
 	# so planning against it is self-consistent with the execution).
@@ -139,7 +141,7 @@ static func tip_ev(
 		return 0.0
 	var hx: float = dx / line_len
 	var hz: float = dz / line_len
-	# Tip point: the tipper's foot on the line — where blade meets puck. Must
+	# Tip point: where the tipper's blade meets the puck on the line. Must
 	# be a real mid-flight contact: past the shooter's own handle, short of
 	# the goal mouth.
 	var relx: float = tip_man.x - release.x
@@ -175,6 +177,19 @@ static func tip_ev(
 			opponent_caps)
 
 
+# ── The rebound ──────────────────────────────────────────────────────────────
+# A shot that reaches the net and is saved or missed still leaves a puck in their
+# zone, and our side gets this share of those back, credited at the zone's floor
+# rather than as a second shot (docs/possession-floor-plan.md §2.3). A feel
+# tunable until it is measured.
+const REBOUND_RECOVER_SHARE: float = 0.3
+
+
+# A shot reaching the net with first-contact odds `p`, worth its rebound too.
+static func with_rebound(p: float) -> float:
+	return p + (1.0 - p) * REBOUND_RECOVER_SHARE * AIPossessionFloor.FLOOR_THEIR_GOAL_LINE
+
+
 # ── The shot, priced on the field ────────────────────────────────────────────
 # AIShotValue supplies the shot's odds against today's goalie; the lane and the
 # release contest are facts about DEFENDERS, not the goalie, so they are priced
@@ -184,7 +199,10 @@ static func tip_ev(
 # AIShotOdds.Stance, facing `keeper_yaw` (AIShotValue.now); `keeper_pos` INF
 # means square and set on the release (AIShotValue.set_keeper).
 # `precomputed_quality` (>= 0) hands in the shot_quality a caller already has
-# for these arguments.
+# for these arguments. `rebound`: the odds of reaching the net carry their
+# rebound (with_rebound) — the carrier's compete, weighing the shot against
+# keeping the puck. `history`: the play the shooter saw (AIShotOdds.History),
+# for a keeper read where he stands.
 static func score_shoot_value(
 		shooter: Vector3,
 		attacking_goal: Vector3,
@@ -195,7 +213,9 @@ static func score_shoot_value(
 		shot_speed_m_s: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 		opponent_caps: Array = [],
 		precomputed_quality: float = -1.0,
-		keeper_yaw: float = NAN) -> float:
+		keeper_yaw: float = NAN,
+		rebound: bool = false,
+		history: int = AIShotOdds.History.ANY) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
 	var quality: float = precomputed_quality
@@ -204,13 +224,15 @@ static func score_shoot_value(
 		shooter = AIGoalieModel.release_ahead_of_goalie(shooter, attacking_goal, keeper)
 		if quality < 0.0:
 			quality = AIShotValue.now(shooter, attacking_goal, keeper, keeper_vel_x, stance,
-					keeper_yaw)
+					keeper_yaw, history)
 	else:
 		if quality < 0.0:
 			quality = AIShotValue.set_keeper(shooter, attacking_goal)
 		keeper = AIGoalieModel.goalie_squared_pos(
 				attacking_goal - Vector3(0.0, 0.0, signf(attacking_goal.z)
 						* AIGoalieModel.GOALIE_RESTING_DEPTH_M), attacking_goal, shooter)
+	if rebound:
+		quality = with_rebound(maxf(quality, 0.0))
 	if quality <= 0.0:
 		return 0.0
 	return quality * _shot_defender_terms(shooter, attacking_goal, keeper, opponents,
@@ -219,13 +241,14 @@ static func score_shoot_value(
 
 # score_shoot_value's goalie half: the odds the shot beats the keeper, before
 # any defender. Reads no defender, so one spot's is good against any defence
-# (test_shot_quality_is_the_seams_goalie_half).
+# (test_shot_quality_is_the_seams_goalie_half). `history` as score_shoot_value's.
 static func shot_quality(shooter: Vector3, attacking_goal: Vector3, keeper_pos: Vector3,
-		keeper_vel_x: float = 0.0, stance: int = AIShotOdds.Stance.UPRIGHT) -> float:
+		keeper_vel_x: float = 0.0, stance: int = AIShotOdds.Stance.UPRIGHT,
+		history: int = AIShotOdds.History.ANY) -> float:
 	if keeper_pos.is_finite():
 		return AIShotValue.now(
 				AIGoalieModel.release_ahead_of_goalie(shooter, attacking_goal, keeper_pos),
-				attacking_goal, keeper_pos, keeper_vel_x, stance)
+				attacking_goal, keeper_pos, keeper_vel_x, stance, NAN, history)
 	return AIShotValue.set_keeper(shooter, attacking_goal)
 
 
@@ -327,7 +350,13 @@ static func arrival_race(target: Vector3, our_t: float, opp_chasers: Array[Vecto
 		opp_vels: Array[Vector3] = EMPTY_VEC3, clock_error: bool = false) -> float:
 	if opp_chasers.is_empty():
 		return 1.0
-	var opp_t: float = first_arrival(target, opp_chasers, opp_vels)
+	return race_against(first_arrival(target, opp_chasers, opp_vels), our_t, clock_error)
+
+
+# arrival_race against a first opposing arrival already read: their first body
+# there at `opp_t`. A caller racing many of our times to one spot against one
+# defence reads first_arrival once.
+static func race_against(opp_t: float, our_t: float, clock_error: bool = false) -> float:
 	var band: float = CHASE_CONTEST_MARGIN_S
 	if clock_error:
 		band += AIArrival.ERROR_FRAC * minf(maxf(our_t, opp_t), 1e6)
@@ -384,6 +413,23 @@ static var _scratch_counter_cover: Array[Vector3] = []
 static func counter_point_for(our_net: Vector3) -> Vector3:
 	var own_dir: float = signf(our_net.z)
 	return Vector3(0.0, 0.0, our_net.z - own_dir * GameRules.SLOT_DIST_M)
+
+
+# A body covers a counter when he beats it home WITH TIME TO SET — the same
+# brake-to-arrive margin AIRoleSlots5.assign charges our line's post deadlines
+# (stride-for-stride beside the rush is chasing, not covering). League-paced,
+# like the mate ETAs it pads.
+const COUNTER_SET_MARGIN_S: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S \
+		/ AISteering.ARRIVAL_BRAKE_DECEL_M_S2
+
+
+# Whether a teammate (fill_counter_cover_etas' `mate_etas`) already covers a
+# counter reaching the counter point at `t_counter`.
+static func counter_covered(t_counter: float, mate_etas: Array[float]) -> bool:
+	for eta: float in mate_etas:
+		if eta + COUNTER_SET_MARGIN_S <= t_counter:
+			return true
+	return false
 
 
 static func fill_counter_cover_etas(our_net: Vector3,
@@ -502,13 +548,7 @@ static func counter_rush_cost_at(
 	if t_counter == INF or loss_prob <= 0.0:
 		return 0.0
 	var counter_point: Vector3 = counter_point_for(our_net)
-
-	# Covering set: bodies that beat the counter home WITH TIME TO SET — the
-	# same brake-to-arrive margin AIRoleSlots5.assign charges the RUSH_D1
-	# deadline (stride-for-stride beside the rush is chasing, not covering). League-paced, like the mate
-	# ETAs it pads.
-	var setup_margin: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S \
-			/ AISteering.ARRIVAL_BRAKE_DECEL_M_S2
+	var setup_margin: float = COUNTER_SET_MARGIN_S
 	var cover_anchor: Vector3 = AIThreatAssignment.cover_anchor(
 			counter_point, our_net)
 	_scratch_counter_cover.clear()
@@ -539,6 +579,7 @@ static func counter_rush_cost_at(
 	#
 	# `in_xg` is the carrier's unit: the shot against a keeper set and square,
 	# as AIPossessionValue prices every shot. A memo must only ever hold one.
+	# Otherwise our keeper as he stands, who has watched the counter carried in.
 	var cover_count: int = _scratch_counter_cover.size()
 	var threat: float = -1.0
 	if cover_count < threat_by_cover.size():
@@ -549,7 +590,9 @@ static func counter_rush_cost_at(
 					counter_point, our_net, Vector3.INF, _scratch_counter_cover)
 		else:
 			threat = score_shoot_value(
-					counter_point, our_net, our_goalie_pos, _scratch_counter_cover)
+					counter_point, our_net, our_goalie_pos, _scratch_counter_cover, 0.0,
+					AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [],
+					-1.0, NAN, false, AIShotOdds.History.CARRIED)
 		if cover_count < threat_by_cover.size():
 			threat_by_cover[cover_count] = threat
 	return loss_prob * threat * delay_discount(t_counter)

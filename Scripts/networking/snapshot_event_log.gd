@@ -37,7 +37,7 @@ const MAX_EVENTS: int = 16
 # Re-broadcast window. Must comfortably exceed the reliable-retransmit time so
 # a client that missed every snapshot copy of an event still can't see a NEWER
 # event via the log before the older reliable copy arrives — 1 s of total
-# snapshot loss means ~120 consecutive drops, at which point the session is
+# snapshot loss means ~45 consecutive drops, at which point the session is
 # already in extrapolation freeze and event ordering is the least of it.
 const RETENTION_S: float = 1.0
 

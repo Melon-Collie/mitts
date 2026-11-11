@@ -23,7 +23,9 @@ var retreat_floor_center: Vector3 = Vector3.ZERO
 var retreat_floor_radius_m: float = 0.0
 
 # The other side of the same route: most speed, m/s, a stand riding a man may
-# command AWAY from `retreat_floor_center` (INF = no cap). Read only with a floor.
+# command AWAY from `retreat_floor_center` (INF = no cap); negative, the least
+# it must command TOWARD it, never past what the floor allows. Read only with a
+# floor.
 var advance_cap_m_s: float = INF
 
 # Skate the route facing where it goes rather than facing the play: a defender
@@ -36,10 +38,12 @@ var face_travel: bool = false
 var aim_world_pos: Vector3 = Vector3.ZERO
 var has_aim_override: bool = false
 
-# Raise the blade off the ice (stick_lift_held) this tick, so it can reach an
-# airborne puck. Off-puck only — the controller ignores voluntary lifts while
-# carrying — and consumed by the state machine's OFF_PUCK handler.
-var lift_blade: bool = false
+# Hold the deliberate deflect (stick_lift_held) this tick, so the blade redirects
+# the puck it meets instead of catching it, tipped up or down (`deflect_up`).
+# Off-puck only — carrying, the button is the nudge — and consumed by the state
+# machine's OFF_PUCK handler.
+var deflect: bool = false
+var deflect_up: bool = false
 
 # Off-puck one-timer readiness — camped at the staging spot, pre-aimed at the
 # open net. The state machine forwards it to TeamBrain so the carrier can reward

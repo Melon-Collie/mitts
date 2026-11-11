@@ -13,16 +13,133 @@ delegates to.
 | holder | class | what it owns |
 |---|---|---|
 | `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, where that puts the blades against the ice (the contact seat), and the ice VFX's two reads (skate mark position, edge load) |
-| `_arms` | `SkaterArmRig` | the upper bones: torso, the jersey's tail and its flaps (`SkaterHemFlaps`), pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the gear meshes (the tuck's upper mesh; face gear, hair and brows on one bone attachment) |
+| `_arms` | `SkaterArmRig` | the upper bones: torso, the jersey's tail and its flaps (`SkaterHemFlaps`), pelvis, helmet, both arms by IK (their poses in `SkaterArmPoses`), the trunk texture, the head pieces (face gear, hair and brows on one bone attachment) |
 | `_spine` | `SkaterSpineRig` | the four bones that join them (hips, waist, spine, neck) and the balance lean |
 | `_stick` | `SkaterStickRig` | the shaft pose, the knob, and the cosmetic flex/whip |
 | `_draw` | `SkaterDrawTracker` | the faceoff swipe crest, host-only |
 | `_uniform` | `SkaterUniformCoordinator` | the paint |
 | `_hud` | `SkaterHUDCoordinator` | the world HUD (ring, plate, chevrons, beacon) |
 | `_appearance` | `SkaterAppearanceCoordinator` | per-attribute visual scaling |
-| `_shadow` | `SkaterShadowProxy` | the figure's shadow: one shadow-only surface on the body skeleton, cast in place of the two rig meshes |
+| `_shadow` | `SkaterShadows` | the Player Shadows setting: whether the body's meshes and the stick cast, and a ghost never does |
 | `_paint` | `BodyZonePaint` | the body's one material: a zone per leg and upper surface, painted from `StandardMaterial3D` records through `Skater`'s surface seams |
 | `_anim_lod` | `SkaterAnimationLod` | how often the mesh is re-posed, by camera distance and the Animation Detail setting |
+| `_connected` | `SkaterConnectedRig` | the body's one mesh (`SkaterBodyMesh`: the skin and the rigid parts) and the skin's deform bones (below) |
+
+## The body's skin
+
+`SkaterConnectedMesh` builds the torso, sleeves, pants and socks as ONE
+connected skin with blended weights; the head, gloves and skate blades are rigid
+parts on their bones (`SkaterRigidParts`). Each skate's upper is one closed
+shell (`SkateUpperMesh`, `test_skate_upper.gd`) whose cuff rides the SKATE bone
+and whose foot rides the FOOT bone, blended across the ankle through a bind of
+its own on the foot, so the ankle's give-back flexes the boot rather than
+parting it. Every part is a zone of the body's
+one paint (`BodyZonePaint`), dressed by `SkaterKitPaint`, which the display
+figures share, and the whole body is ONE surface (`SkaterBodyMesh`): a draw a
+pass, which matters because eight shadowed spots each redraw every skater in
+them every frame. `.claude/hooks/render-body.sh` draws it.
+
+- **Its density is spent where it bends.** The jersey has twice the torso
+  stations' sides (`SkaterMeshBuilder.TORSO_SIDES`) all the way down, and `SkaterHemFlaps` drapes its tail in as many
+  columns (`TAIL_COLUMNS`), on column bones of its own past the deform bones
+  (`SkaterBodySkeleton.column_bone`); sleeves and legs have twelve
+  sides, with extra rings through the shoulder, elbow, hips and knee.
+  Triangles are nearly free here (the figure is ~3.3k against ~1.2 M a frame);
+  bones and tail columns are what cost per frame (the cloth is linear in its
+  columns: ~20 µs a skater natively at 20). The pants and legs are
+  `SkaterConnectedPants`.
+- **A quad is one facet.** The body is lit flat, and a quad is lit by ONE
+  normal across both its triangles (`ConnectedSkinBuilder.quad`, read by
+  `body_zones.gdshaderinc`), so its split never shows however the weights pull
+  it out of plane. Lit a triangle at a time, every quad that is not planar
+  (the armhole, the yoke, the tail over the pants, any band across a bent
+  joint) shows its diagonal, and the skin reads as triangles there and as
+  facets on the limbs. A bent quad is split along the diagonal that stands
+  proud, so the two sleeves are each other's mirror
+  (`test_skin_quads_are_facets.gd`). The helmet's shell takes the same
+  (`ConnectedSkinBuilder.facet_pairs`); the other rigid parts are lit a
+  triangle at a time.
+- **It is authored in a bind pose**, the body skeleton with HIPS/WAIST/SPINE at
+  identity, the legs straight and the arms hung out and forward, about 35° off
+  straight down (`bind_arm`). Each bind's inverse rest is its bone's global pose there
+  (`bind_rests`), so it rides the rigs' bones untouched; the torso's rings are
+  built round `SkaterMeshBuilder`'s rest stations (`torso_ring`), and its tail
+  hangs from the belt on `SkaterHemFlaps`' column bones. Its pants stand their
+  rim up under a tuck: a padded band eased up
+  as far as each column is tucked (no spike at a half tuck's corner), with the
+  jersey bloused wider above it and kidney pads behind. Beside a half tuck's
+  corner its tail is drawn in taut (`tail_ring`): the belt ring toward the
+  tucked girth and the hem lifted all but up to it, and the flaps hold those
+  columns to that drape as far, so the hem runs up into the waistband rather
+  than flaring out beside it.
+- **The arms get deform bones of their own** (`SkaterConnectedRig`, after the
+  TAIL bone on the skeleton): the arm bones roll from world up, and a blended
+  elbow needs both halves turning about one hinge. Per side the upper arm, the
+  elbow's middle and the forearm share the ELBOW bone's hinge.
+- **The armhole is a jersey's seam**, near upright from the shoulders' flat
+  top down to under the arm, so the torso carries the shoulder's top out level
+  from the neck and the sleeve leaves it at the side. One ring lies between
+  the seam and the upper arm's first ring. Under the arm it is on the line
+  between them and only spreads the turn over two bands. Over the arm it is
+  the shoulder's cap: stood out level from the seam's top to the arm's outside
+  and riding the girdle, so the top stays square over an arm that hangs, as
+  over a pad, rather than sloping from the seam straight down the arm
+  (`test_connected_body.gd`). The cap is laid off the seam, in the chest's
+  terms. Laid round the arm instead (a ring square to it at the joint) it
+  leans forward with the arm and is narrower fore and aft than the seam, and
+  the band between them folds in when the arm swings forward.
+- **The shoulder splits the arm's turn off the chest into swing and twist.** The
+  girdle (the armhole's top and the shoulder's cap) takes a share of the swing
+  that rises as the arm lifts, as the collarbone and shoulder blade do (the
+  scapulohumeral rhythm), the shoulder's middle two thirds, the upper arm all
+  of it and half the twist, the elbow the rest. Blending the chest straight
+  into the arm collapses the pad into a fin past ~90°; putting the whole twist
+  on one ring pinches the sleeve shut.
+- **The sleeve is cloth hung between the armhole and the elbow, not a tube on
+  the arm** (`SleeveHang`, which hangs the keeper's sleeves too). Round from
+  over the arm to under it, each column of it is laid toward the straight line
+  from the seam to the elbow and hung from the chest: wholly at the seam, less
+  by the way down to the elbow. A raised arm then draws the underside out
+  straight from the flank, and the armhole's bottom stays on the chest
+  (`test_raised_sleeve_hangs_straight.gd`, and `test_keeper_jersey.gd` for
+  his). Three things that came out of getting there:
+  - Riding the shoulder's bones, the armhole's bottom and the sleeve's first
+    rings swing up with the arm as a ball and the arm steps out of it, since
+    all of the turn left over falls between the last ring on the shoulder and
+    the first on the arm.
+  - The underside is laid straight because the tube's own underside is buried
+    in the chest at the bind: anything hung from the chest starts out folded
+    there, and unfolds inside out.
+  - The armhole's top turns with the girdle and its bottom does not, so the
+    loop shears. That hand-off is spread the whole way round it; taken between
+    two neighbouring columns it twists the faces between them inside out. The
+    chest under the armhole rides the chest alone for the same reason.
+- **Each sleeve is painted whole** (`SleeveDecal`): the kit's `sleeve`
+  (`SleevePaint`, one base and stripes from the shoulder to the cuff, each
+  straight round the arm or peaked, with an optional fill below it,
+  `StripeOutline`; the jersey's stripes take the same, in `JerseyDecal`) drawn
+  down a texture with the number on the outside near its top, U round the arm
+  and V down its whole length, one paint zone per arm (`sleeve_surface`). The
+  goalie's jersey is a skin of the same build (`KeeperJerseyMesh`, its own
+  CLAUDE.md), painted by the same two decals.
+- **The knees** blend through a middle bone at half the shin's turn
+  (`Deform.KNEE_*`), so the back of the knee does not collapse.
+- **The gloves are a right and a left.** The back of the hand is padded and
+  the fingers are four chunky rolls with grooves between them, each bent over
+  round the shaft toward the palm as a closed fist's are, so the flat palm side
+  reads as one; the thumb wraps round the shaft on the palm's side
+  (`SkaterMeshBuilder.shared_glove_fist`), and which side that
+  is in the glove's frame depends on the hand, so the body mesh is one per tuck,
+  per pair and per skate tongue (`SkaterBodyMesh.shared_mesh`): a left shot's
+  top hand is his right. `SkaterConnectedRig.pose` changes the pair when the top arm changes
+  side, so a figure's shot picks its gloves with no call of its own.
+  `test_glove_thumb_wraps_the_palm.gd`.
+- **The display figures wear the same body.** `FigureKit` (the player screen's
+  case, the lobby's bench) builds the body skeleton, the skin, the rigid parts,
+  the kit paint and the jersey's cloth; `LockerMannequin` poses the skeleton's
+  bones itself (the arms through `SkaterArmPoses`) and hands the skin its deform
+  bones (`SkaterConnectedRig.pose`). Its cloth hangs under gravity alone — there
+  is no skater to accelerate — and is carried round with the case's turn.
 
 ## The puck's tilt and spin are drawn, never simulated
 
@@ -30,7 +147,9 @@ The analytic puck is a flat disc. `PuckSpinRig` gives the drawn one its spin,
 its wobble after a hit and its tumble in the air, reading only the position
 the puck is drawn at and who this peer draws carrying it
 (`PuckController.drawn_carrier`, through `Puck.set_carrier_view`). It writes
-the mesh's local transform on the tick and nothing else, so it needs no wire
+the mesh's local transform and the smear on the face print (`PuckPrint`, the
+Mitts skater over a bar, blurred across the angle the disc turns in a 60 fps
+frame) on the tick and nothing else, so it needs no wire
 bytes and no reconcile, and the `Puck` node itself never rotates (`PuckShadow`
 relies on that). `test_puck_spin_rig.gd` holds the model, and holds that
 nothing but `Puck` names the rig; `.claude/hooks/render-puck.sh` shows it.
@@ -54,8 +173,8 @@ Two more, held by the same test
 
 - **Rigs never name each other.** They are siblings; a const read across a
   GDScript `class_name` cycle fails at *parse* time and takes every file in the
-  cycle down. The single allowed edge is `SkaterStickRig` reading
-  `SkaterArmRig.up_for_look_at`, whose composition the stick knob copies.
+  cycle down. What two rigs share lives outside both: the look-at helper the
+  stick knob and the arm parts compose alike is `SkaterArmPoses.up_for_look_at`.
 - **Build order in `_ready` is load-bearing.** The rigs stand first: the uniform
   pass installs the shaft's flex ShaderMaterial and the appearance pass sizes
   bones through the rigs' seams, so both need a rig that exists.
@@ -84,13 +203,14 @@ HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
          the full balance lean; both legs root here
   WAIST  half the trunk's twist — the pelvis (shorts) rides it
     SPINE  the fold about the hips, then the rest of the twist, then the
-           reach lean, less the lean the trunk hands back; torso and caps
+           reach lean, less the lean the trunk hands back; the torso
       NECK   takes back part of the trunk's lean; the helmet
     TAIL   the torso's placement hung from the waist: the share of the
            jersey's tail the hips carry
-tail     roots, one pair per torso facet: the jersey's tail below the belt,
-         draped by SkaterHemFlaps (with the jersey's carry above, the one
-         blended-weight surface in the rig — SkaterJerseyHem)
+deform   the skin's sleeves (roots) and knees (on the LEG bones), posed off
+         the bones above (SkaterConnectedRig)
+tail     roots, one pair per tail column: the jersey's tail below the belt,
+         draped by SkaterHemFlaps (with the jersey's carry above, SkaterJerseyHem)
 arms     roots, solved from the spine's shoulders to the gameplay hands
 ```
 
@@ -141,27 +261,31 @@ tells a steering correction from a turn, and gives the lean its weight: a held
 arc arrives in ~1 s, side-to-side steering shows as a few degrees.
 `test_lean_pivots_at_the_skates.gd`, `test_balance_rules.gd`.
 
-The shorts are a rigid shell, so the twist between them and the chest shows
-somewhere. Half of it goes on the waist and half on the spine, and the
-pants' waistband is narrow enough to stay inside the loose jersey at the
-resulting angle. The jersey's tail takes the rest as cloth would: it hangs
+The pants ride the waist, so the twist between them and the chest shows
+somewhere. Half of it goes on the waist and half on the spine. The jersey's
+tail takes the rest as cloth would: it hangs
 over the pants and blends from the chest onto the hips — wholly at the front,
 where the thighs push it, and only `CARRY_BACK` of it at the back, which rides
 up with the chest over the seat — so a fold or a twist bends the sweater
 rather than driving its hem through the pants. A tuck (the gear style's
-`jersey_tuck`) is which shared upper mesh the skater wears: the tucked tail is
-pulled inside the waistband, and the flaps hold it there.
+`jersey_tuck`) is which shared skin the skater wears
+(`SkaterConnectedMesh.shared_mesh`): the tucked tail is pulled inside the
+waistband, and the flaps hold it there. The waistband holds the jersey just
+above it too (`SkaterJerseyHem.tucked_hang`): the fold pivots at the hip
+joints, well under the rim, so chest-borne cloth there swings through the rim
+at a deep fold (the centre's address), where the loose back meets the rim's
+drawn-in top instead. `test_tuck_holds_through_the_address.gd` holds both.
 `tests/unit/actors/test_body_chain.gd` holds the chain,
-`test_pelvis_fills_the_seat.gd` the seat and `test_jersey_tuck.gd` the tail
-against the pants.
+`test_pelvis_fills_the_seat.gd` the seat and `test_jersey_tuck.gd` the tucks.
 
 **The tail below the belt is cloth** (`SkaterHemFlaps`): a ring of
-two-segment flaps, one per torso facet, hung from the belt ring where the
+two-segment flaps, one per tail column, hung from the belt ring where the
 weights above put it, swung by gravity less the skater's own acceleration,
 held to its drape and its neighbours, and pushed out of the thighs and pants
-(`SkaterHemColliders`, from the leg bones' live poses and the pants' lathe). A
-rigid tail cannot do this: a thigh lifted in a stride or a crouch pokes
-straight through one. It steps every frame and writes its 20 bones when drawn;
+(`SkaterHemColliders`, from the leg bones' live poses and the pants' collider
+stations, `SkaterConnectedPants`). A rigid tail cannot do this: a thigh lifted
+in a stride or a crouch pokes straight through one. It steps every frame and
+writes its 40 bones when drawn;
 it runs in C++ where the extension is built (`NativeHemFlaps`), and
 `test_native_hem_flaps_parity.gd` holds the two together. The solver itself is
 `HemFlaps`, shared with the keeper's jersey tail (`KeeperJerseyTail`); each
@@ -238,7 +362,7 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Nine rules the rigs sit inside, all easy to break from in here:
+Ten rules the rigs sit inside, all easy to break from in here:
 
 - **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
   marker: the marker plus a render-only offset (the stride's pump), so the arm,
@@ -289,10 +413,33 @@ Nine rules the rigs sit inside, all easy to break from in here:
   gameplay frame: whether the host can see a blocker must not move his hands.
   `test_off_camera_culling.gd` holds that, and `ClipFrameCapture` turns culling
   off while its own camera records.
-- **The arms are posed in C++ when the extension is built** (`NativeArmRig`,
-  which writes the arm and cap bones itself). Change `_update_arm`, the part
-  posing or the cap's orient-and-repose and the port changes with it, or
-  `test_native_arm_rig_parity.gd` fails; see `native/README.md`.
+- **The elbow steers round the torso.** Each elbow turns off its pole about
+  the shoulder→hand line just far enough to keep the arm out of the jersey
+  (`SkaterArmPoses.steer_turn`, measured by `SkaterMeshBuilder.torso_clearance`),
+  and that turn is eased per arm (`SkaterArmRig.steer_omega`) so the elbow's
+  speed stays continuous where it engages and where it reaches its stop. The
+  ease is state, so the rebuild gate keeps redrawing while it settles
+  (`SkaterArmRig.take_steering`). `test_elbow_steers_round_the_torso.gd` holds
+  the steer, `test_body_stays_smooth.gd` the jerk.
+- **The top fist rolls round the shaft.** A glove holds the stick like a sword
+  (`SkaterArmPoses.glove_basis`), the wrist deviating in the plane of the
+  forearm and the shaft; for the top hand, a shaft running down and away from a
+  forearm across the body leaves the thumb turned half round from where a
+  forearm can put it (`neutral_thumb`, away from the elbow's point) and the
+  palm facing forward. The wrist's flexion rolls the top fist round the shaft
+  (`grip_roll`, up to `Skater.wrist_flex_max_deg`) until the forearm's twist is
+  back inside `forearm_twist_max_deg`, always the way that turns its knuckles
+  forward (`knuckles_forward`): chosen per pose, the way that untwists sooner
+  changes sides half round, and the fist turned over the shaft mid-sweep. The
+  roll is eased like the elbow's turn, and the back of the glove shows to the
+  front. The bottom hand does not roll: the plane grip already holds the shaft
+  from underneath, palm up, as a bottom hand does, which that twist measure
+  reads as out of range. `test_glove_grips_the_shaft.gd`.
+- **The arms have a C++ port** (`NativeArmRig`, which writes the arm bones
+  itself and eases its own elbow turn and fist roll), held to `_update_arm` and
+  the part poses (`SkaterArmPoses`) by `test_native_arm_rig_parity.gd`, landed
+  and eased frame by frame; see `native/README.md`. The torso's section reaches
+  it from `SkaterMeshBuilder` (`TORSO_PROFILE`), never as a copy.
 - **Through a slapshot the stick is one rigid piece** (`Skater._swing_rigid`):
   the dressed blade is solved from the shaft's bearing, which whips round as
   the blade crosses over the hands, so through the swing the blade and the
@@ -303,6 +450,5 @@ Nine rules the rigs sit inside, all easy to break from in here:
 - **The pelvis must not take the fold.** It hangs from the waist, not the
   spine: folding with the torso is what opens the seat in the first place, and
   hanging it off a leg pivot would swing the whole seat with that leg.
-  `tests/unit/actors/test_pelvis_fills_the_seat.gd` holds it: it stays under the
-  jersey at any twist the waist leaves it, it meets the hip balls it sits
-  between, and it does not take the fold.
+  `tests/unit/actors/test_pelvis_fills_the_seat.gd` holds that it does not take
+  the fold.

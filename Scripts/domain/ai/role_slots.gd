@@ -4,7 +4,7 @@ class_name AIRoleSlots
 # to the peer that would ARRIVE at its reference point soonest
 # (momentum-aware time_to_arrive at its real Speed cap, matching
 # AILoosePuckChase and the threat partition), with arrival-time hysteresis.
-# Never rank by raw DISTANCE — that hands PRESSURE/RUSH_D1 to a nearer bot
+# Never rank by raw DISTANCE — that hands PRESSURE/BACK_STRONG to a nearer bot
 # coasting away over a teammate already skating at the carrier.
 #
 # This file assigns slots and nothing else: every role owns its positional
@@ -30,10 +30,10 @@ enum Slot {
 	# carrier breaking the puck out:
 	BREAKOUT_STRONG,  # strong-side-wall outlet, free to advance up-ice.
 	BREAKOUT_WEAK,    # weak-side reverse valve, stays goal-side of carrier.
-	# FORECHECK (opp possesses in THEIR DZ). Conservative 1-1-1 press:
+	# FORECHECK (their puck in THEIR DZ, and we can get on it): 3v3's 1-1-1.
 	F1_PRESSURE,  # deep puck-pressurer (runs PRESSURE's behavior).
-	F2_MID,       # mid-lane breakout-pass read, high in the zone.
-	F3_HIGH,      # high safety at the opp blue line; first man back.
+	F2_NET,       # reads in front of their net: the reverse, the net-front outlet.
+	F3_HIGH,      # 3v3: high on the near wall at their line; first man back.
 	# NEUTRAL — loose puck, no clear possession. Race + hold shape.
 	CHASE,      # soonest peer races to the puck for retrieval.
 	FLANK_L,    # left flank, defensive support behind puck.
@@ -44,9 +44,8 @@ enum Slot {
 	HIGH_SLOT,      # F: F3 — the soft ice between the dots, above the puck.
 	POINT_STRONG,   # D: strong-side point, sinks down his wall with the cycle.
 	POINT_WEAK,     # D: weak-side point, holds the line shaded central.
-	# FORECHECK: the 1-2-2 (F1 reuses F1_PRESSURE).
-	F2_STRONG,      # F: strong-side wall lane — kills the half-wall outlet.
-	F2_WEAK,        # F: middle lane, circle-tops-to-blue-line height.
+	# FORECHECK: the 1-2-2 (F1_PRESSURE and F2_NET shared with 3v3).
+	F3_WALL,        # F: support on the near wall — kills the half-wall outlet.
 	DP_STRONG,      # D: offensive blue line, strong side, inside the dots.
 	DP_WEAK,        # D: offensive blue line, weak side.
 	# DZONE: hybrid zone with soft-lock (see zone_coverage.gd).
@@ -60,22 +59,20 @@ enum Slot {
 	BREAKOUT_C,       # F: center's low swing — the second outlet.
 	BREAKOUT_STRETCH, # F: weak-side winger — mid-ice cross / stretch option.
 	# TRANS_OFFENSE rush shape (CARRIER fixed).
-	WIDE_L,         # F: left wide lane, paced to the carrier.
-	WIDE_R,         # F: right wide lane.
+	LANE_L,         # F: the left of the two rush lanes the carrier leaves free.
+	LANE_R,         # F: the right of them.
 	TRAILER,        # ANY: high-slot trailer (the activating fourth man).
 	DVALVE,         # D: safety valve trailing the rush.
 	# NEUTRAL back shape (CHASE/FLANK reused).
 	DBACK_L,        # D: left goal-side hold inside the dots.
 	DBACK_R,        # D: right goal-side hold.
-	# TRANS_DEFENSE layered rush defense (docs/transition-defense-plan.md §5).
-	# 3v3 uses RUSH_D1 / TRACK_PUCK / TRACK_MID; 5v5 adds RUSH_D2 and splits the
-	# mid trackers strong/weak.
-	RUSH_D1,          # D: strong-side D. Owns the carrier — gap ladder + angling.
-	RUSH_D2,          # D: weak-side D. Holds mid-ice, takes the mid-lane drive.
-	TRACK_PUCK,       # F: F1 back. Runs the carrier down through mid-ice.
-	TRACK_MID_STRONG, # F: F2. Back through mid-ice, stops at the circle tops.
-	TRACK_MID_WEAK,   # F: F3. Same, weak side.
-	TRACK_MID,        # The single mid tracker (3v3) — centre lane, no side split.
+	# TRANS_DEFENSE: the set neutral-zone shape, filled from the back — 5v5's
+	# 1-1-3, 3v3's 1-2 (NZ_F1 + BACK_STRONG + BACK_MID).
+	NZ_F1,        # the high "1": steers the carrier wide, then backchecks his hip.
+	NZ_MID,       # F (5v5): the middle "1" — mid-ice up the neutral zone, then back.
+	BACK_STRONG,  # our line's strong side: stands the carrier up at it.
+	BACK_MID,     # our line's middle: the mid-lane drive and the pass across.
+	BACK_WEAK,    # F (5v5): our line's weak lane.
 }
 
 # The fixed facts the agent reads per slot, as [debug label, REACTIVE, PRESSURER]:
@@ -94,7 +91,7 @@ const _SLOT_INFO: Dictionary = {
 	Slot.BREAKOUT_STRONG: ["BreakStrong", false, false],
 	Slot.BREAKOUT_WEAK: ["BreakWeak", false, false],
 	Slot.F1_PRESSURE: ["F1", true, true],
-	Slot.F2_MID: ["F2", false, false],
+	Slot.F2_NET: ["F2Net", false, false],
 	Slot.F3_HIGH: ["F3", false, false],
 	Slot.CHASE: ["Chase", true, false],
 	Slot.FLANK_L: ["FlankL", false, false],
@@ -103,8 +100,7 @@ const _SLOT_INFO: Dictionary = {
 	Slot.HIGH_SLOT: ["HighSlot", false, false],
 	Slot.POINT_STRONG: ["PointS", false, false],
 	Slot.POINT_WEAK: ["PointW", false, false],
-	Slot.F2_STRONG: ["F2S", false, false],
-	Slot.F2_WEAK: ["F2W", false, false],
+	Slot.F3_WALL: ["F3Wall", false, false],
 	Slot.DP_STRONG: ["DPointS", false, false],
 	Slot.DP_WEAK: ["DPointW", false, false],
 	Slot.ZONE_D_STRONG: ["ZDS", false, false],
@@ -115,18 +111,17 @@ const _SLOT_INFO: Dictionary = {
 	Slot.BREAKOUT_D2: ["BreakD2", false, false],
 	Slot.BREAKOUT_C: ["BreakC", false, false],
 	Slot.BREAKOUT_STRETCH: ["Stretch", false, false],
-	Slot.WIDE_L: ["WideL", false, false],
-	Slot.WIDE_R: ["WideR", false, false],
+	Slot.LANE_L: ["LaneL", false, false],
+	Slot.LANE_R: ["LaneR", false, false],
 	Slot.TRAILER: ["Trailer", false, false],
 	Slot.DVALVE: ["DValve", false, false],
 	Slot.DBACK_L: ["DBackL", false, false],
 	Slot.DBACK_R: ["DBackR", false, false],
-	Slot.RUSH_D1: ["RushD1", true, true],
-	Slot.RUSH_D2: ["RushD2", true, false],
-	Slot.TRACK_PUCK: ["TrackPuck", true, true],
-	Slot.TRACK_MID_STRONG: ["TrackMid", true, false],
-	Slot.TRACK_MID_WEAK: ["TrackMid", true, false],
-	Slot.TRACK_MID: ["TrackMid", true, false],
+	Slot.NZ_F1: ["NzF1", true, true],
+	Slot.NZ_MID: ["NzMid", true, false],
+	Slot.BACK_STRONG: ["BackS", true, true],
+	Slot.BACK_MID: ["BackM", true, false],
+	Slot.BACK_WEAK: ["BackW", true, false],
 }
 
 
@@ -164,6 +159,20 @@ const HYSTERESIS_PENALTY_S: float = 0.2
 # it drifts this far past it.
 const HYSTERESIS_PENALTY_M: float = 1.0
 
+# Where our line's posts are raced to: the strong and weak lanes, inside the
+# dots (a D's home lane, AIZoneCoverage.D_HOME_U_M).
+const BACK_LANE_X_M: float = AIZoneCoverage.D_HOME_U_M
+
+
+# The back line's post at world-x `x`, as an election target: on our blue line
+# while the puck is outside it, at the puck's depth once it is in, but never
+# deeper than the house gate (the roles own where each really stands).
+static func back_post(own_goal_z: float, puck_pos: Vector3, x: float) -> Vector3:
+	var own_dir: float = signf(own_goal_z)
+	var depth: float = clampf(GameRules.GOAL_LINE_Z - own_dir * puck_pos.z,
+			AIZoneCoverage.HOUSE_TOP_DEPTH_M, GameRules.GOAL_LINE_Z - GameRules.BLUE_LINE_Z)
+	return Vector3(x, 0.0, own_dir * (GameRules.GOAL_LINE_Z - depth))
+
 
 # Assigns each teammate to a slot. Returns Dictionary[peer_id, Slot].
 #
@@ -173,10 +182,10 @@ const HYSTERESIS_PENALTY_M: float = 1.0
 #   TRANS_OFFENSE  CARRIER fixed;  OUTLET = soonest to opp net;  SUPPORT = the rest
 #   BREAKOUT       CARRIER fixed;  BREAKOUT_STRONG = soonest to the strong-side
 #                  wall at our blue line;  BREAKOUT_WEAK = the rest
-#   TRANS_DEFENSE  RUSH_D1 = soonest to OUR net;  TRACK_PUCK = soonest to the
-#                  puck of the rest;  TRACK_MID = the rest
+#   TRANS_DEFENSE  BACK_STRONG = soonest to the strong post of our line;
+#                  BACK_MID = soonest to its middle of the rest;  NZ_F1 = the rest
 #   FORECHECK      F3_HIGH = soonest to their blue line;  F1_PRESSURE = soonest
-#                  to the puck of the rest;  F2_MID = the rest
+#                  to the puck of the rest;  F2_NET = the rest
 #   NEUTRAL        CHASE = soonest to puck;  FLANK_L / FLANK_R = X-axis split
 #
 # `prev_assignments` is last tick's Dictionary[peer_id, Slot]; pass {} on the
@@ -214,7 +223,6 @@ static func assign(
 			fixed_peers[carrier_pid] = true
 
 	var puck_pos: Vector3 = snapshot.puck_state.position if snapshot.puck_state else Vector3.ZERO
-	var our_net := Vector3(0.0, 0.0, own_goal_z)
 	var opp_net := Vector3(0.0, 0.0, -own_goal_z)
 
 	match state:
@@ -222,25 +230,33 @@ static func assign(
 			# Which marker ends up net-front vs. weak-side is decided by
 			# TeamBrain's threat partition (which man each is assigned), not a
 			# fixed slot split.
-			_assign_one_then_remainder(
-					snapshot, teammates, fixed_peers, prev_assignments, result,
-					Slot.PRESSURE, puck_pos,
-					Slot.MARK, caps_by_peer)
+			var owner: int = carrier_owner(snapshot, team_id, own_goal_z,
+					team_id_by_peer, teammates, caps_by_peer,
+					prev_holder(prev_assignments, Slot.PRESSURE))
+			if owner != -1:
+				result[owner] = Slot.PRESSURE
+				fixed_peers[owner] = true
+				for pid: int in teammates:
+					if not fixed_peers.has(pid):
+						result[pid] = Slot.MARK
+			else:
+				_assign_one_then_remainder(
+						snapshot, teammates, fixed_peers, prev_assignments, result,
+						Slot.PRESSURE, puck_pos,
+						Slot.MARK, caps_by_peer)
 
 		AIPossessionState.State.TRANS_DEFENSE:
-			# The layered rush defense compressed to three bodies
-			# (docs/transition-defense-plan.md §5.2): with no D pair, RUSH_D2's
-			# mid-ice layer folds into the single mid tracker. RUSH_D1 elects
-			# first — the last man back, in FRONT of the carrier holding a gap —
-			# and TRACK_PUCK runs him down from BEHIND, so exactly one peer stands
-			# in front of him. Two bodies on the puck is affordable because
-			# transition is bounded: a settled three-man threat is in our zone,
-			# where DZONE's coverage takes over.
+			# The 1-2, filled from the back: the two posts of our line first, so
+			# whoever can get there holds it, and the last body is the high one.
+			var strong_post: Vector3 = back_post(own_goal_z, puck_pos,
+					_strong_x * BACK_LANE_X_M)
+			var mid_post: Vector3 = back_post(own_goal_z, puck_pos, 0.0)
 			_assign_pair_then_remainder(
 					snapshot, teammates, fixed_peers, prev_assignments, result,
-					Slot.RUSH_D1, our_net,
-					Slot.TRACK_PUCK, puck_pos,
-					Slot.TRACK_MID, caps_by_peer)
+					Slot.BACK_STRONG, strong_post, Slot.BACK_MID, mid_post,
+					Slot.NZ_F1, caps_by_peer, signf(own_goal_z),
+					_post_deadline(snapshot, team_id_by_peer, team_id, strong_post, caps_by_peer),
+					_post_deadline(snapshot, team_id_by_peer, team_id, mid_post, caps_by_peer))
 
 		AIPossessionState.State.OZONE:
 			_assign_one_then_remainder(
@@ -275,7 +291,7 @@ static func assign(
 					snapshot, teammates, fixed_peers, prev_assignments, result,
 					Slot.F3_HIGH, opp_blue,
 					Slot.F1_PRESSURE, puck_pos,
-					Slot.F2_MID, caps_by_peer)
+					Slot.F2_NET, caps_by_peer)
 
 		AIPossessionState.State.NEUTRAL:
 			_assign_chase_and_flanks(
@@ -287,9 +303,118 @@ static func assign(
 
 # ── Assignment helpers ──────────────────────────────────────────────────────
 
+# The body that owns an opposing carrier coming at our net at pace (closing at
+# AIRoleRushD.GAP_UP_CLOSING_M_S or more): of `peers` goal-side of him down his
+# line to our net, the one whose stick gets onto that line farthest from our net
+# (AIDefensiveVerbs.cut_off_m, exact), `prev_owner` taking HYSTERESIS_PENALTY_M. A
+# body behind such a carrier is soonest to where the puck is only because the
+# carrier is past him, and never catches him; and raced to where the puck is,
+# the D riding him back pays a reversal his line never asks of him. -1 when no
+# carrier comes at pace or none of `peers` is goal-side: the plain race stands.
+static func carrier_owner(snapshot: WorldSnapshot, team_id: int, own_goal_z: float,
+		team_id_by_peer: Dictionary, peers: Array, caps_by_peer: Dictionary,
+		prev_owner: int) -> int:
+	if snapshot == null or snapshot.puck_state == null:
+		return -1
+	var carrier: int = snapshot.puck_state.carrier_peer_id
+	if carrier == -1 or team_id_by_peer.get(carrier, team_id) == team_id \
+			or not snapshot.skater_states.has(carrier):
+		return -1
+	var cs: SkaterNetworkState = snapshot.skater_states[carrier]
+	var to_net := Vector3(-cs.position.x, 0.0, own_goal_z - cs.position.z)
+	var dist: float = to_net.length()
+	if dist < 0.001:
+		return -1
+	var dir: Vector3 = to_net / dist
+	if cs.velocity.x * dir.x + cs.velocity.z * dir.z < AIRoleRushD.GAP_UP_CLOSING_M_S:
+		return -1
+	var finish: float = maxf(dist - AIRoleRushD.RETREAT_FINISH_M, 0.0)
+	var his_caps: AISkaterCaps = caps_by_peer.get(carrier)
+	var best_pid: int = -1
+	var best: float = INF
+	var best_off_line: float = INF
+	for pid: int in peers:
+		var s: SkaterNetworkState = snapshot.skater_states.get(pid)
+		var rel: Vector3 = s.position - cs.position if s != null else Vector3.ZERO
+		if s == null or rel.x * dir.x + rel.z * dir.z <= 0.0:
+			continue
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
+		var m: float = AIDefensiveVerbs.cut_off_m(s.position, s.velocity,
+				caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S,
+				caps.max_accel if caps != null else AIArrival.SHED_ACCEL_DEFAULT_M_S2,
+				caps.max_blade_reach if caps != null else AIBotMechanics.BLADE_REACH_M,
+				cs.position, cs.velocity, dir, finish, his_caps, true)
+		if pid != prev_owner:
+			m += HYSTERESIS_PENALTY_M
+		# A tie (two men on him at once, or none short of the crease) goes to the
+		# man in his lane.
+		var off_line: float = absf(rel.x * dir.z - rel.z * dir.x)
+		if m < best or (m == best and (off_line < best_off_line
+				or (off_line == best_off_line and pid < best_pid))):
+			best = m
+			best_off_line = off_line
+			best_pid = pid
+	return best_pid
+
+
+static func is_back_line_d(slot: int) -> bool:
+	return slot == Slot.BACK_STRONG or slot == Slot.BACK_MID
+
+
+# Whether `slot` is the back-line D who owns the carrier: carrier_owner's pick
+# while one comes at our net at pace (TeamStrategyView.pressure_slot_override),
+# BACK_STRONG otherwise. `view` may be null (no brain).
+static func owns_back_line_carrier(view: TeamStrategyView, slot: int) -> bool:
+	if not is_back_line_d(slot):
+		return false
+	var owner: int = view.pressure_slot_override() if view != null else Slot.NONE
+	if not is_back_line_d(owner):
+		owner = Slot.BACK_STRONG
+	return slot == owner
+
+
+# Of `peers` goal-side of a carrier at `carrier_pos`, the one whose lane his
+# skating takes him into: nearest across the ice to `lead` (where he is going,
+# AIRushRead's lead), `prev_owner` taking HYSTERESIS_PENALTY_M. The D-to-D switch
+# for a carrier who is not coming at our net: he is the D's on the side he
+# picks, and the other slides behind. -1 when none of `peers` is goal-side.
+static func lane_owner(snapshot: WorldSnapshot, own_goal_z: float, peers: Array,
+		carrier_pos: Vector3, lead: Vector3, prev_owner: int) -> int:
+	var own_dir: float = signf(own_goal_z)
+	var best_pid: int = -1
+	var best: float = INF
+	for pid: int in peers:
+		var s: SkaterNetworkState = snapshot.skater_states.get(pid)
+		if s == null or own_dir * s.position.z <= own_dir * carrier_pos.z:
+			continue
+		var m: float = absf(s.position.x - lead.x)
+		if pid != prev_owner:
+			m += HYSTERESIS_PENALTY_M
+		if m < best or (m == best and pid < best_pid):
+			best = m
+			best_pid = pid
+	return best_pid
+
+
+# Last tick's holder of `slot`'s continuity class (_hysteresis_class), or -1.
+static func prev_holder(prev_assignments: Dictionary, slot: int) -> int:
+	var cls: int = _hysteresis_class(slot)
+	for pid: int in prev_assignments:
+		if _hysteresis_class(prev_assignments[pid]) == cls:
+			return pid
+	return -1
+
+
 # The peer that would ARRIVE at `target_pos` soonest, excluding already-fixed
 # peers, with hysteresis; ties break on the lower peer id. -1 if no eligible
-# peer.
+# peer. `line_dir`, our goal's z-sign for a post on our line, whose `deadline_s`
+# is the carrier's arrival there less the brake margin (_post_deadline): while
+# somebody can be there by then the line is held, and whoever gets there
+# soonest holds it. Once nobody can, the line is lost and the post's holder is
+# riding the rush back, so a body already deeper than it races only his trip
+# across to its lane: raced up to the post, the man riding the carrier back
+# hardest has the most to brake out, and loses the carrier to a slower
+# teammate.
 static func _pick_soonest_with_hysteresis(
 		snapshot: WorldSnapshot,
 		teammates: Array,
@@ -297,7 +422,12 @@ static func _pick_soonest_with_hysteresis(
 		prev_assignments: Dictionary,
 		target_pos: Vector3,
 		slot: Slot,
-		caps_by_peer: Dictionary) -> int:
+		caps_by_peer: Dictionary,
+		line_dir: float = 0.0,
+		deadline_s: float = INF) -> int:
+	var line_lost: bool = line_dir != 0.0 and deadline_s < INF \
+			and not _anyone_in_time(snapshot, teammates, fixed_peers, target_pos,
+					caps_by_peer, deadline_s)
 	var best_pid: int = -1
 	var best_score: float = INF
 	for pid: int in teammates:
@@ -307,8 +437,10 @@ static func _pick_soonest_with_hysteresis(
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var speed: float = caps.max_speed if caps != null \
 				else AIArrival.SKATER_REF_SPEED_M_S
-		var t: float = AIArrival.time_to_arrive(
-				s.position, target_pos, s.velocity, speed)
+		var t: float = AIArrival.time_to_arrive(s.position, target_pos, s.velocity, speed)
+		if line_lost and line_dir * s.position.z > line_dir * target_pos.z:
+			t = AIArrival.time_to_arrive(Vector3(s.position.x, 0.0, 0.0),
+					Vector3(target_pos.x, 0.0, 0.0), Vector3(s.velocity.x, 0.0, 0.0), speed)
 		if _hysteresis_class(prev_assignments.get(pid, Slot.NONE)) != _hysteresis_class(slot):
 			t += HYSTERESIS_PENALTY_S
 		if t < best_score or (t == best_score and (best_pid == -1 or pid < best_pid)):
@@ -317,8 +449,42 @@ static func _pick_soonest_with_hysteresis(
 	return best_pid
 
 
+# Whether any peer not yet fixed arrives at `target_pos` by `deadline_s`.
+static func _anyone_in_time(snapshot: WorldSnapshot, teammates: Array,
+		fixed_peers: Dictionary, target_pos: Vector3, caps_by_peer: Dictionary,
+		deadline_s: float) -> bool:
+	for pid: int in teammates:
+		if fixed_peers.has(pid):
+			continue
+		var s: SkaterNetworkState = snapshot.skater_states[pid]
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
+		var speed: float = caps.max_speed if caps != null \
+				else AIArrival.SKATER_REF_SPEED_M_S
+		if AIArrival.time_to_arrive(s.position, target_pos, s.velocity, speed) <= deadline_s:
+			return true
+	return false
+
+
+# A post on our line's deadline: the opposing carrier's arrival there less the
+# brake margin (the seconds a skater at league top speed needs to shed it), as
+# AIRoleSlots5's back line reads it. INF with no opposing carrier.
+static func _post_deadline(snapshot: WorldSnapshot, team_id_by_peer: Dictionary,
+		team_id: int, post: Vector3, caps_by_peer: Dictionary) -> float:
+	if snapshot.puck_state == null:
+		return INF
+	var carrier: int = snapshot.puck_state.carrier_peer_id
+	if carrier == -1 or team_id_by_peer.get(carrier, team_id) == team_id \
+			or not snapshot.skater_states.has(carrier):
+		return INF
+	var cs: SkaterNetworkState = snapshot.skater_states[carrier]
+	var caps: AISkaterCaps = caps_by_peer.get(carrier)
+	var speed: float = caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
+	return maxf(AIArrival.time_to_arrive(cs.position, post, cs.velocity, speed)
+			- GameRules.DEFAULT_SKATER_MAX_SPEED_M_S / AISteering.ARRIVAL_BRAKE_DECEL_M_S2, 0.0)
+
+
 # Cross-state hysteresis continuity. A possession-state flip renames the slots
-# (BREAKOUT_STRONG → OUTLET, RUSH_D1 → PRESSURE, ...), and an exact-enum match
+# (BREAKOUT_STRONG → OUTLET, BACK_STRONG → PRESSURE, ...), and an exact-enum match
 # would see no continuity across it, so near-tied peers would swap jobs at the
 # handoff and cross paths. Each slot maps to its continuity CLASS; every slot
 # not listed maps to itself.
@@ -328,17 +494,20 @@ static func _hysteresis_class(slot: int) -> int:
 			return Slot.OUTLET       # up-ice attacking option
 		Slot.BREAKOUT_WEAK, Slot.SUPPORT:
 			return Slot.SUPPORT      # trailing support / reverse valve
-		Slot.RUSH_D1, Slot.PRESSURE:
+		Slot.BACK_STRONG, Slot.PRESSURE:
 			return Slot.PRESSURE     # the body that owns the carrier
-		Slot.TRACK_MID, Slot.MARK:
+		Slot.BACK_MID, Slot.MARK:
 			return Slot.MARK         # off-puck coverage
+		Slot.NZ_F1, Slot.F1_PRESSURE:
+			return Slot.F1_PRESSURE  # the first forechecker, deep or high
 		_:
 			return slot
 
 
 # Assigns slot1 to soonest-to-target1 peer, slot2 to soonest-to-target2
-# peer, then dumps any remainder into slot_remainder. Used by TRANS_DEFENSE and
-# FORECHECK.
+# peer, then dumps any remainder into slot_remainder. Used by TRANS_DEFENSE
+# (both targets posts on our line, `line_dir` its goal's z-sign, each with its
+# deadline) and FORECHECK.
 static func _assign_pair_then_remainder(
 		snapshot: WorldSnapshot,
 		teammates: Array,
@@ -348,17 +517,20 @@ static func _assign_pair_then_remainder(
 		slot1: Slot, target1: Vector3,
 		slot2: Slot, target2: Vector3,
 		slot_remainder: Slot,
-		caps_by_peer: Dictionary) -> void:
+		caps_by_peer: Dictionary,
+		line_dir: float = 0.0,
+		deadline1_s: float = INF,
+		deadline2_s: float = INF) -> void:
 	var pid1: int = _pick_soonest_with_hysteresis(
 			snapshot, teammates, fixed_peers, prev_assignments,
-			target1, slot1, caps_by_peer)
+			target1, slot1, caps_by_peer, line_dir, deadline1_s)
 	if pid1 != -1:
 		result[pid1] = slot1
 		fixed_peers[pid1] = true
 
 	var pid2: int = _pick_soonest_with_hysteresis(
 			snapshot, teammates, fixed_peers, prev_assignments,
-			target2, slot2, caps_by_peer)
+			target2, slot2, caps_by_peer, line_dir, deadline2_s)
 	if pid2 != -1:
 		result[pid2] = slot2
 		fixed_peers[pid2] = true

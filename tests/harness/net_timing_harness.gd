@@ -53,7 +53,7 @@ enum LeadMode {
 class Config:
 	var client_fps: float = 60.0
 	var host_fps: float = 60.0
-	var physics_hz: float = 120.0
+	var physics_hz: float = float(Constants.PHYSICS_TICK)
 	var rtt_ms: float = 30.0
 	var jitter_ms: float = 0.0
 	var loss_pct: float = 0.0
@@ -144,7 +144,7 @@ class _Peer:
 	func sim_now() -> float:
 		if not sim_started:
 			return wall_now()
-		return float(sim_ticks) * (1.0 / 120.0) + sim_offset
+		return float(sim_ticks) * Constants.TICK_DURATION + sim_offset
 
 
 var _rng := RandomNumberGenerator.new()

@@ -101,6 +101,27 @@ var bot_slapper_aim_dir: Vector3 = Vector3.ZERO
 # the feed's line while wound up. Set by ONE_TIMER_PRESSED and nothing else.
 var bot_shuffle: bool = false
 
+
+# The one-tick edges. An input applied on more ticks than its own (the host's
+# fallback through a queue gap) clears them, or each press re-fires every tick.
+func clear_edges() -> void:
+	shoot_pressed = false
+	slap_pressed = false
+	stick_lift_pressed = false
+	quick_pass_pressed = false
+	stick_check_pressed = false
+
+
+# Carries `dropped`'s presses onto this input, for a frame acked without being
+# applied: the press the player committed still fires, a tick late.
+func fold_edges_from(dropped: InputState) -> void:
+	shoot_pressed = shoot_pressed or dropped.shoot_pressed
+	slap_pressed = slap_pressed or dropped.slap_pressed
+	stick_lift_pressed = stick_lift_pressed or dropped.stick_lift_pressed
+	quick_pass_pressed = quick_pass_pressed or dropped.quick_pass_pressed
+	stick_check_pressed = stick_check_pressed or dropped.stick_check_pressed
+
+
 func to_array() -> Array:
 	return [
 		host_timestamp,
@@ -137,7 +158,7 @@ func to_bytes() -> PackedByteArray:
 
 
 # to_bytes' in-place twin: writes this input's BYTES_SIZE record at `offset` in a
-# caller-owned buffer. The batch send packs up to 24 inputs per RPC at 120 Hz, so
+# caller-owned buffer. The batch send packs up to 24 inputs per RPC every tick, so
 # a per-record PackedByteArray would churn a throwaway buffer per input per batch
 # (~1.4-2.9k/s). Same bytes as to_bytes by construction — that one delegates here.
 func write_bytes(b: PackedByteArray, offset: int) -> void:

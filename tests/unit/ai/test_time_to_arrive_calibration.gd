@@ -22,7 +22,7 @@ extends GutTest
 # instead; tightening them is steering work (a better cornering policy), not
 # estimator work.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # Pass-through tolerance: within one blade's contact of the target counts as
 # arrived (ETAs feed contests and races, not parking precision).
 const ARRIVE_RADIUS_M: float = 0.5

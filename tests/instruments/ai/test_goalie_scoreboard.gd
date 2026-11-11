@@ -31,7 +31,7 @@ const OLD_GOALIE_PATH: String = "res://tests/instruments/ai/data/goalie_scoreboa
 const KEEPER_OUT_PATH: String = "res://tests/instruments/ai/data/keeper_scoreboard.txt"
 const WRITE_ENV: String = "MITTS_WRITE_SCOREBOARD"
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const MAX_AIM: float = GameRules.NET_HALF_WIDTH \
 		- GameRules.NET_POST_RADIUS - GameRules.PUCK_COLLISION_RADIUS
 const SWEEP_AIMS: int = 13

@@ -2,7 +2,7 @@ class_name ClaimantView
 extends RefCounted
 
 # The claimant's own body and blade at the instant they reached — the half of a
-# lag-compensated claim all four resolvers reconstruct identically, and the half
+# lag-compensated claim every resolver reconstructs identically, and the half
 # a new resolver silently gets wrong.
 #
 # Three steps in order, and only the last one is obvious from the geometry:

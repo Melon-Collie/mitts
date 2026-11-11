@@ -176,11 +176,10 @@ func test_standing_target_sticks_within_margin() -> void:
 	# A standing target whose re-scored value is within TARGET_SWITCH_MARGIN
 	# of the fresh argmax is kept — the anti-flicker guarantee. Solo carrier,
 	# straight shot: first decide picks a spot on the shot lane; a prev
-	# target nudged 0.15 m along the same lane blocks essentially the same
-	# shot, so decide must return the prev, not re-jump to the argmax.
-	# (0.15 m, not more: the release-contest read grades distance from the
-	# carrier's blade steeply — one stick length spans full-to-no contest —
-	# so "near-equal" on this lane is a genuinely small span.)
+	# target 0.15 m round the gap ring from it blocks essentially the same
+	# shot, so decide must return the prev, not re-jump to the argmax. Round
+	# the ring, not deeper: the ladder sets the stand's distance, so a deeper
+	# prev is set back onto the ring, which is the argmax itself.
 	var carrier_pos := Vector3(0, 0, 22)
 	var skaters: Array = [
 		[1, TEAM_ID, Vector3(8, 0, 18), Vector3.ZERO],
@@ -188,11 +187,12 @@ func test_standing_target_sticks_within_margin() -> void:
 	]
 	var ctx: RoleContext = _make_ctx(Vector3(8, 0, 18), 200, skaters)
 	var first: Vector3 = AIRolePressure.decide(ctx).target_position
-	var prev: Vector3 = first + Vector3(0, 0, 0.15)  # a hair deeper on the lane
+	var offset: Vector3 = first - carrier_pos
+	var prev: Vector3 = carrier_pos + offset.rotated(Vector3.UP, 0.15 / offset.length())
 	var ctx2: RoleContext = _make_ctx(Vector3(8, 0, 18), 200, skaters)
 	ctx2.prev_role_target = prev
 	var second: Vector3 = AIRolePressure.decide(ctx2).target_position
-	assert_eq(second, prev,
+	assert_almost_eq(second, prev, Vector3.ONE * 0.001,
 			"a near-equal standing target is kept through hysteresis")
 
 
@@ -368,11 +368,12 @@ func test_the_last_man_bound_is_retired_for_a_live_carrier() -> void:
 			"the last man reads the ladder, not a depth bound")
 
 
-func test_a_stand_held_at_his_pace_takes_the_drive_a_standing_one_concedes() -> void:
-	# A carrier at speed out-skates a man standing in his lane, so priced
-	# standing, a body 1.8 m in front of him takes nothing and only the net-front
-	# denies the drive — the argmax walks the pressurer into his crease. The
-	# stand is a moving frame, priced at the ride it is skated at.
+func test_a_body_in_his_lane_takes_the_drive_standing_or_riding() -> void:
+	# A body 1.8 m in front of a carrier at speed takes most of his drive whether
+	# he stands there (the carrier skates into his full reach) or rides it at the
+	# carrier's pace. PRESSURE still prices its stands at the ride it skates them
+	# at (a moving frame); this holds that neither reading lets the carrier
+	# through a man in his lane.
 	var our_net := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 	var keeper := our_net + Vector3(0.0, 0.0, 0.8)
 	# The routing sweep's z -20 / x -6 rush, the tick it went wrong: the stand the
@@ -394,7 +395,8 @@ func test_a_stand_held_at_his_pace_takes_the_drive_a_standing_one_concedes() -> 
 			carrier_vel, null, carrier, carrier_vel, keeper, receivers, bases)
 	gut.p("  open %.3f | standing in his lane %.3f | riding it %.3f"
 			% [bases[0], standing, riding])
-	assert_lt(riding, standing * 0.5, "a body at his pace in his lane takes the drive")
+	assert_lt(riding, bases[0] * 0.5, "a body at his pace in his lane takes the drive")
+	assert_lt(standing, bases[0] * 0.5, "a body standing in his lane takes the drive")
 
 
 func test_a_loose_puck_keeps_the_last_man_bound() -> void:
@@ -428,3 +430,66 @@ func test_pressure_calibration_snapshot() -> void:
 			lightest = 0.05 * k
 	snap.record("lightest transfer that commits a head-on check from 2 m", lightest)
 	snap.verify(self)
+
+
+# ── The angle's finish: a lone pressurer the carrier has drawn level with ────
+# The last man (no support behind) at (0, 12) in our zone, the carrier driving
+# our net at `speed` from `carrier`.
+
+func _level_ctx(carrier: Vector3, speed: float, aggression: float = 0.0) -> RoleContext:
+	var ctx: RoleContext = _rush_ctx_at(carrier, speed, false)["ctx"]
+	ctx.check_aggression = aggression
+	return ctx
+
+
+func test_level_with_a_carrier_driving_the_net_he_steps_into_his_path() -> void:
+	var carrier := Vector3(1.5, 0.0, 11.5)
+	var d: RoleDecision = AIRolePressure.decide(_level_ctx(carrier, 8.0))
+	assert_true(d.pressures_puck, "the angle's finish plays the man")
+	assert_false(d.face_travel, "still in front of him, he faces him")
+	assert_lt(d.target_position.distance_to(carrier), 1.0,
+			"at contact, in his path; got %s" % d.target_position)
+
+
+# Beaten, he skates to the first ice on the carrier's line to our net he gets
+# his stick to before the carrier does: on the line, and goal-side of him.
+# Standing, he wins none of it short of the crease, so he goes to its top;
+# skating with him, he cuts him off within a few strides.
+func test_beaten_by_a_carrier_driving_the_net_he_cuts_him_off_short_of_the_slot() -> void:
+	var carrier := Vector3(1.5, 0.0, 13.0)
+	for skating: bool in [false, true]:
+		var ctx: RoleContext = _level_ctx(carrier, 8.0)
+		if skating:
+			ctx.self_velocity = Vector3(0.0, 0.0, 8.0)
+		var d: RoleDecision = AIRolePressure.decide(ctx)
+		var what: String = "skating with him" if skating else "standing"
+		assert_true(d.face_travel, "%s: behind him, he turns and skates" % what)
+		var to_net: Vector3 = ctx.defending_goal_pos - carrier
+		to_net.y = 0.0
+		var along: float = (d.target_position - carrier).dot(to_net.normalized())
+		var off: float = (d.target_position - carrier).cross(to_net.normalized()).length()
+		assert_lt(off, 0.05, "%s: on his line to the net; got %s" % [what, d.target_position])
+		assert_gte(along, 0.0, "%s: goal-side of him" % what)
+		if skating:
+			assert_lt(along, 4.0, "%s: within a few strides of him; got %.2f" % [what, along])
+		else:
+			assert_almost_eq(along, to_net.length() - AIRoleRushD.RETREAT_FINISH_M, 0.01,
+					"%s: at the crease's top" % what)
+
+
+func test_a_carrier_still_a_gap_away_is_not_finished() -> void:
+	var d: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.5, 0.0, 8.5), 8.0))
+	assert_false(d.pressures_puck, "with ice to hold, the ladder holds it")
+
+
+func test_a_carrier_standing_level_is_not_finished() -> void:
+	# Not coming at our net: there is time to get goal-side of him instead.
+	var d: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.5, 0.0, 11.5), 0.0))
+	assert_false(d.pressures_puck)
+
+
+func test_the_last_man_checks_a_carrier_drawn_level_but_not_one_a_gap_away() -> void:
+	var level: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.0, 0.0, 11.0), 8.0, 1.0))
+	assert_true(level.commit_check, "level, the inside is lost: the check is his play")
+	var away: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.0, 0.0, 8.5), 8.0, 1.0))
+	assert_false(away.commit_check, "a gap away, the last man never throws one")

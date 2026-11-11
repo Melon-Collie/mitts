@@ -11,8 +11,11 @@ const _CARRIER: String = _DIR + "carrier.gd"
 const _FIELD: String = _DIR + "carrier_field.gd"
 const _SEARCHES: Array[String] = [
 	_DIR + "carrier_pass_search.gd",
+	_DIR + "carrier_rim_search.gd",
 	_DIR + "carrier_carry_search.gd",
+	_DIR + "carrier_dump_search.gd",
 	_DIR + "carrier_destinations.gd",
+	_DIR + "carrier_wheel.gd",
 ]
 # The field's members a search may drive: the hold solver is a tool whose
 # results are read back after each solve.
@@ -33,7 +36,7 @@ func _src(path: String) -> String:
 
 func test_the_carrier_never_writes_a_collaborator_field() -> void:
 	var src: String = _src(_CARRIER)
-	for holder: String in ["_field", "_pass", "_carry"]:
+	for holder: String in ["_field", "_pass", "_carry", "_dump"]:
 		assert_true(src.contains("var %s := " % holder), "the carrier holds %s" % holder)
 		var re := RegEx.create_from_string("%s\\.([a-z_][a-z_0-9]*)%s" % [holder, _LIST_WRITE])
 		var writes := PackedStringArray()

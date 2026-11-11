@@ -1,14 +1,15 @@
 extends GutTest
 
-# AILastManDiscipline.approach_speed_cap — the closed form behind the last man's
+# AILastManDiscipline.approach_speed_cap — the bound behind the last man's
 # step-up discipline (PRESSURE's cut-off and RUSH_D1's gap stand both ride it).
 #
 # It answers one question: how fast may a defender be closing on a rush, given
 # the depth he has to spare and the pace the rush is coming at, if he is to be
-# travelling WITH that rush by the time it reaches him? In the threat-relative
-# frame his depth drains at `v + closing`, so getting rush-matched from `v`
-# costs v²/2B + closing·v/B + closing²/2a, and the cap is where that equals the
-# spare depth.
+# travelling WITH that rush by the time it reaches him? Getting rush-matched from
+# `v` costs his brake (v²/2B), the ground the rush covers meanwhile, and the
+# pivot back up to its pace, and the cap is where that equals the spare depth.
+# A rush that can accelerate builds pace and ground through the brake; one held
+# at its pace costs closing·v/B + closing²/2a, the closed form.
 #
 # These pin the SHAPE — monotonicity and the two limits. The shape is what makes
 # it a stable control law rather than a plan: every way the situation gets more
@@ -68,3 +69,21 @@ func test_the_cap_is_continuous_across_its_floor() -> void:
 	assert_lt(above, 1.0, "just past the floor the cap is still small; got %.3f"
 			% above)
 	assert_lte(below, above, "and it climbs from there, not jumps")
+
+
+func test_a_stalled_carrier_s_burst_caps_the_approach() -> void:
+	# Standing still he is no invitation to charge: he starts the moment the
+	# defender commits, so the faster his burst the slower the step-up.
+	var still: float = _cap(4.0, 0.0)
+	var prev: float = still
+	for burst: float in [3.0, 6.0, 9.0]:
+		var v: float = AILastManDiscipline.approach_speed_cap(4.0, 0.0, V_MAX, ACCEL,
+				8.0, burst)
+		assert_lt(v, prev, "a %.0f m/s² burst lowers the cap; got %.2f" % [burst, v])
+		prev = v
+
+
+func test_a_carrier_already_at_his_top_speed_has_no_burst_left() -> void:
+	# Accelerating from his top speed builds nothing, so the cap is the closed form.
+	assert_almost_eq(AILastManDiscipline.approach_speed_cap(10.0, 7.0, V_MAX, ACCEL,
+			7.0, 6.0), _cap(10.0, 7.0), 0.001, "nothing left to build")

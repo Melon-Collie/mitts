@@ -4,7 +4,8 @@ extends RefCounted
 # The puck's attitude on screen: spin about its axis, the wobble after a hit,
 # the tumble of a lofted puck that left without spin. Cosmetic only — the
 # analytic puck is a flat disc and nothing in gameplay reads this. It writes
-# the mesh's local transform and nothing else.
+# the mesh's local transform and the smear on its face print (PuckPrint), and
+# nothing else.
 #
 # It works from the puck's rendered position alone, so every peer derives the
 # same look from what it already draws: the host from its drive, a client from
@@ -24,15 +25,18 @@ const RIM_FRICTION: float = GameRules.PUCK_BOARD_FRICTION
 # Ice friction torque on a disc spinning in place, over its inertia: the
 # contact patch is the whole face, (2/3)·μ·m·g·R against ½·m·R².
 const SPIN_DECEL_AT_REST: float = (4.0 / 3.0) * GameRules.ICE_FRICTION * GameRules.GRAVITY_M_S2 / RADIUS
+# Below this change (rad) the print's smear looks the same, and a material
+# write is a RenderingServer push.
+const _SWEEP_WRITE_EPSILON: float = 0.01
 
 # Velocity change in one tick that only a contact makes (m/s). Gravity is
-# 0.08 a tick at 120 Hz and ice friction a twentieth of that.
+# 0.11 a tick at 90 Hz and ice friction a twentieth of that.
 var impact_min_dv: float = 1.0
 # Share of the gap between the observed velocity and the impact reference
 # closed each tick, so a contact smoothed across a few ticks (a client
 # correction) still reads as one change rather than several small ones.
 var impact_ref_follow: float = 0.5
-# Further than this in one tick (m) is a restage, not motion: 90 m/s.
+# Further than this in one tick (m) is a restage, not motion: 67 m/s at 90 Hz.
 var teleport_dist: float = 0.75
 # Loose ticks after a release before its velocity is trusted — the first
 # ticks carry the jump from the blade pin to the release point.
@@ -81,6 +85,9 @@ var _spin_angle: float = 0.0
 var _precession_dir: float = 1.0
 
 var _mesh: Node3D = null
+# This puck's own copy of the face print, null on a mesh without one.
+var _print: ShaderMaterial = null
+var _print_sweep: float = 0.0
 var _prev_pos: Vector3 = Vector3.INF
 var _vel: Vector3 = Vector3.ZERO
 var _vel_ref: Vector3 = Vector3.ZERO
@@ -93,6 +100,13 @@ var _mesh_flat: bool = true
 
 func _init(mesh: Node3D) -> void:
 	_mesh = mesh
+	var mi: MeshInstance3D = mesh as MeshInstance3D
+	if mi == null or mi.mesh == null or mi.mesh.get_surface_count() <= PuckMeshBuilder.SURF_FACE:
+		return
+	var shared: ShaderMaterial = mi.mesh.surface_get_material(PuckMeshBuilder.SURF_FACE) as ShaderMaterial
+	if shared != null:
+		_print = shared.duplicate() as ShaderMaterial
+		mi.set_surface_override_material(PuckMeshBuilder.SURF_FACE, _print)
 
 
 # `carrier_pos` is the carrying skater's position, or INF when the puck is
@@ -115,6 +129,7 @@ func step(dt: float, pos: Vector3, airborne: bool, clearance: float,
 	if airborne:
 		_tumble_angle = fposmod(_tumble_angle + tumble_rate * dt, TAU)
 	_write_mesh(clearance)
+	_write_print_sweep()
 
 
 func is_flat() -> bool:
@@ -315,8 +330,10 @@ func _write_mesh(clearance: float) -> void:
 	if _mesh == null:
 		return
 	if is_flat() and spin == 0.0:
+		# Lies still where the spin left it: the face print would show a snap
+		# back to angle zero.
 		if not _mesh_flat:
-			_mesh.transform = Transform3D.IDENTITY
+			_mesh.transform = Transform3D(Basis(Vector3.UP, _spin_angle), Vector3.ZERO)
 			_mesh_flat = true
 		return
 	var att: Basis = _attitude()
@@ -329,3 +346,13 @@ func _write_mesh(clearance: float) -> void:
 	var lift: float = maxf(0.0, reach_down - HALF_HEIGHT - clearance)
 	_mesh.transform = Transform3D(att * Basis(Vector3.UP, _spin_angle), Vector3(0.0, lift, 0.0))
 	_mesh_flat = false
+
+
+func _write_print_sweep() -> void:
+	if _print == null:
+		return
+	var sweep: float = absf(spin) * PuckPrint.SHUTTER_S
+	if absf(sweep - _print_sweep) < _SWEEP_WRITE_EPSILON and (sweep == 0.0) == (_print_sweep == 0.0):
+		return
+	_print_sweep = sweep
+	_print.set_shader_parameter(PuckPrint.SWEEP_PARAM, sweep)

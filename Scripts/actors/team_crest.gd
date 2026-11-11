@@ -39,7 +39,8 @@ static func dark_color(preset: Dictionary) -> Color:
 
 
 # `fruit`'s parts, each snapped to the nearest color anywhere in the team's
-# palette or kits. A color the drawing asks for twice snaps once.
+# palette or kits, but for a green CrestFruits keeps. A color the drawing asks
+# for twice snaps once.
 static func team_colors(fruit: String, preset: Dictionary) -> Array:
 	var pool: Array[Color] = []
 	_collect_colors(preset, pool)
@@ -51,7 +52,7 @@ static func team_colors(fruit: String, preset: Dictionary) -> Array:
 		if earlier < i:
 			out.append(out[earlier])
 			continue
-		if want == CrestFruits.DRAGONFRUIT_GREEN:
+		if CrestFruits.keeps(want):
 			out.append(want)
 			continue
 		var nearest: Color = _nearest(want, pool, [])

@@ -8,7 +8,7 @@ extends RefCounted
 # discipline, "memoize at the seam").
 
 # Low-pass on the raw per-frame velocity diff. The raw diff is noisy at
-# 120 Hz (a one-tick velocity blip reads as a huge accel); the lerp
+# the tick rate (a one-tick velocity blip reads as a huge accel); the lerp
 # folds it toward the running estimate: a half-life of ln(0.5)/ln(1 − ALPHA)
 # ≈ 3 ticks, well inside a 400-600 ms pass window.
 const SMOOTH_ALPHA: float = 0.2

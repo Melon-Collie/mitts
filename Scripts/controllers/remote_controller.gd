@@ -16,24 +16,19 @@ func set_puck_history_provider(provider: Callable) -> void:
 	_puck_history_provider = provider
 
 
-# The puck this remote shooter was aiming at, one INPUT LEAD before the tick the
-# host replays their swing on.
-#
-# The client applied this input at its own estimate of host time one lead
-# before `host_timestamp`, and the host replays it at `host_timestamp` — so the
-# host's live puck is a whole lead further down the feed than the one the player
-# swung at. That offset is the ONLY lag compensation the one-timer needs now
-# that the shot fires off the input stream instead of an arrival-timed claim RPC.
-#
-# The lead never rides the per-input wire, so it is rebuilt from the host's own
-# ping to this peer. Falls back to the live puck whenever the buffer has no
-# sample (warmup, or a stamp older than the buffer).
+# The puck this remote shooter was aiming at. Its client draws the loose puck on
+# the render clock — host time plus its input lead, its input stamp — and its
+# tick reads the puck the previous tick drew, so the swing stamped `S` was judged
+# against the puck at `S` less one tick. That is the puck the host's own player
+# reads off the live puck at the same point of a tick; it comes out of the buffer
+# here because a remote's input can pop a frame or more overdue. Falls back to
+# the live puck whenever the buffer has no sample (warmup, or a stamp older than
+# the buffer).
 func sample_shooter_puck_view(input: InputState, out: SkaterController.PuckView) -> void:
 	super(input, out)
 	if not _is_host or _puck_history_provider.is_null():
 		return
-	_puck_history_provider.call(
-			input.host_timestamp - NetworkManager.peer_input_lead_s(net_peer_id), out)
+	_puck_history_provider.call(input.host_timestamp - Constants.TICK_DURATION, out)
 
 
 # The host arms this carrier's caught-one-timer window on the tick it grants the
@@ -55,7 +50,7 @@ func one_timer_window_lag_grace() -> float:
 @export var position_smooth_time: float = 0.05
 
 var _input_queue: Array[InputState] = []
-# Stamp set for the input dedupe, hoisted out of receive_input_batch (120 batches/s
+# Stamp set for the input dedupe, hoisted out of receive_input_batch (90 batches/s
 # per client). Built lazily — see there — and never escapes the call.
 var _input_dedupe_scratch: Dictionary = {}
 var _fallback_input: InputState = InputState.new()
@@ -121,7 +116,9 @@ func _physics_process(delta: float) -> void:
 	# swept-segment pickup/poke test. See Skater.capture_prev_blade_contact.
 	skater.capture_prev_blade_contact()
 	if _is_host:
+		var t0: int = Time.get_ticks_usec()
 		_drive_from_input(delta)
+		HostCostProbe.record(HostCostProbe.Section.HUMAN_STEP, Time.get_ticks_usec() - t0)
 	else:
 		# Live interpolation owns this body's cosmetics, so the render-rate gait
 		# hook must run. Clear _self_posing here: a replay driving this same skater
@@ -143,11 +140,11 @@ func _physics_process(delta: float) -> void:
 
 # Render-rate cosmetic pose for a remote body (overrides SkaterController).
 # Two sub-cases:
-#  - Host-simulating this client's real inputs (_is_host): it has a live cursor
-#    aim and apply_facing already wrote the leg-yaw, so head-track like a local.
-#  - Client-rendering an interpolated remote: no cursor aim (skip head), and
-#    apply_facing never ran, so mirror the gait's leg-yaw channels here — every
-#    frame, since the gait reads LowerBody back.
+#  - Host-simulating this client's real inputs (_is_host): apply_facing already
+#    wrote the leg-yaw.
+#  - Client-rendering an interpolated remote: apply_facing never ran, so mirror
+#    the gait's leg-yaw channels here — every frame, since the gait reads
+#    LowerBody back.
 func _render_pose_update(delta: float) -> void:
 	if skater == null or _self_posing:
 		return
@@ -159,8 +156,7 @@ func _render_pose_update(delta: float) -> void:
 	# The head and the off hand are mesh (Skater.on_camera).
 	if not skater.on_camera():
 		return
-	if _is_host:
-		_pose.apply_head_tracking_aim(_current_aim_world, delta)
+	_pose.apply_head_tracking(delta)
 	_ik.update_bottom_hand(delta)
 
 
@@ -170,7 +166,7 @@ static func _input_ts_less(a: InputState, b: InputState) -> bool:
 
 # Returns this queue's DEDUPE WATERMARK: the newest stamp already known here,
 # whether processed or still queued. The host's decoder skips records at or below
-# it, so it never pays InputState.from_bytes for the ~119-in-120 redundant frames
+# it, so it never pays InputState.from_bytes for the redundant frames
 # a batch carries for loss resilience. Reported by the caller, which owns the
 # peer id (GameManager._on_input_batch_received).
 func receive_input_batch(batch: Array[InputState]) -> float:
@@ -179,7 +175,7 @@ func receive_input_batch(batch: Array[InputState]) -> float:
 	# anything wildly outside is either a malicious peer or a desynced clock and
 	# would otherwise sit in the queue indefinitely (future) or fail the gate
 	# forever (past). The queue cap below already truncates older stragglers.
-	const FUTURE_SLACK_S: float = 0.1   # INPUT_LEAD_SEC (~25ms) + slack for jitter / clock convergence
+	const FUTURE_SLACK_S: float = 0.1   # INPUT_LEAD_SEC (~28 ms) + slack for jitter / clock convergence
 	const PAST_SLACK_S: float = 2.0     # generous: queue cap is ~0.5 s, this is 4x
 	var now: float = NetworkManager.estimated_host_time()
 	# The queue is kept sorted below, so its last entry is the newest stamp in it.
@@ -239,12 +235,10 @@ func receive_input_batch(batch: Array[InputState]) -> float:
 # the dropped span — the honest cost of inputs the network delivered too late —
 # instead of a session of staleness.
 #
-# SIZING (measured, 3-peer 5v5 host row + the host_input_queue_depth metric):
-# the queue runs 9-10 deep — that IS the stamp-lead cushion working — while the
-# front pops ~12 ms overdue in steady state. That 12 ms is not lateness: the
-# host renders ~100-110 fps against a 120 Hz tick, so physics ticks bunch two
-# to a frame and a pop lands up to a frame after its due instant. Ordinary
-# hitches add ~15-25 ms on top.
+# SIZING (measured on a 3-peer 5v5 host): the front pops ~12 ms overdue in
+# steady state on a healthy queue. That is not lateness: when the host renders
+# below the tick rate, physics ticks bunch two to a frame and a pop lands up to a
+# frame after its due instant. Ordinary hitches add ~15-25 ms on top.
 #
 # A trigger inside that band fires 4-12/s on a perfectly healthy deep queue, and
 # every fire discards real inputs the client already predicted with — one visible
@@ -256,8 +250,8 @@ func receive_input_batch(batch: Array[InputState]) -> float:
 # costs a visible correction. So the trigger sits above the quantization +
 # hitch band and only catches a genuine ratchet, and the target lands clear of
 # the quantization floor so one drain actually settles it.
-const _DRAIN_TRIGGER_S: float = 8.0 / 120.0  # ~67 ms overdue engages the drain
-const _DRAIN_TARGET_S: float = 2.0 / 120.0   # drain back to ~17 ms, clear of the ~12 ms floor
+const _DRAIN_TRIGGER_S: float = 0.067  # overdue past this engages the drain
+const _DRAIN_TARGET_S: float = 0.017  # drained back to, clear of the ~12 ms floor
 # A LONE input this stale is a phase-resume artifact (parked across a goal
 # replay / intermission), not the freshest available intent — drop-and-ack it
 # (fallback covers the tick) instead of applying seconds-old held state. Its
@@ -269,7 +263,10 @@ const _DRAIN_STALE_SOLO_S: float = 0.25
 const _DRAIN_TELEMETRY_MAX_S: float = 1.0
 
 
-func _drain_backlog(now: float) -> void:
+# `live` is false while movement is locked: the drain still runs there, but
+# like the pop below it records nothing, since a locked phase's cadence says
+# nothing about the link.
+func _drain_backlog(now: float, live: bool = true) -> void:
 	if _input_queue.is_empty():
 		return
 	# Lone-stale drop (see _DRAIN_STALE_SOLO_S).
@@ -291,7 +288,7 @@ func _drain_backlog(now: float) -> void:
 		# survivorship-biased — its max bounded by _DRAIN_TARGET_S, which reads as
 		# mutually impossible next to a session draining several times a second.
 		# Phase-resume artifacts stay out.
-		if overdue <= _DRAIN_STALE_SOLO_S:
+		if live and overdue <= _DRAIN_STALE_SOLO_S:
 			NetworkTelemetry.record_input_lead(overdue)
 		# Presses are edges the player committed — dropping the frame that carried
 		# one must not eat the action. Held/absolute state (move vector, brake,
@@ -299,13 +296,8 @@ func _drain_backlog(now: float) -> void:
 		# current truth, which is the point of the drain. Presses older than the
 		# stale-solo bound are phase artifacts and are dropped with their frame.
 		if overdue <= _DRAIN_STALE_SOLO_S:
-			var next: InputState = _input_queue.front()
-			next.shoot_pressed = next.shoot_pressed or stale.shoot_pressed
-			next.slap_pressed = next.slap_pressed or stale.slap_pressed
-			next.stick_lift_pressed = next.stick_lift_pressed or stale.stick_lift_pressed
-			next.quick_pass_pressed = next.quick_pass_pressed or stale.quick_pass_pressed
-			next.stick_check_pressed = next.stick_check_pressed or stale.stick_check_pressed
-		if overdue <= _DRAIN_TELEMETRY_MAX_S:
+			(_input_queue.front() as InputState).fold_edges_from(stale)
+		if live and overdue <= _DRAIN_TELEMETRY_MAX_S:
 			NetworkTelemetry.record_input_drain()
 
 
@@ -320,11 +312,11 @@ func _drive_from_input(delta: float) -> void:
 	#
 	# Timestamp gate: only pop an input when its scheduled host time has arrived.
 	# Without this, inputs are consumed immediately on arrival regardless of their
-	# timestamp, so the queue empties between 60Hz batches and fallback-input fires
+	# timestamp, so the queue empties between batches and fallback-input fires
 	# every gap. Fall through when clock isn't ready to preserve behaviour during
 	# NTP warmup.
 	if NetworkManager.is_clock_ready():
-		_drain_backlog(NetworkManager.sim_time())
+		_drain_backlog(NetworkManager.sim_time(), not _game_state.is_movement_locked())
 	var input_due: bool = _input_queue.size() > 0 and (
 			not NetworkManager.is_clock_ready() or
 			_input_queue.front().host_timestamp <= NetworkManager.sim_time())
@@ -353,12 +345,10 @@ func _drive_from_input(delta: float) -> void:
 			# run, so body/shot inputs stay suppressed.
 			if _game_state.allows_blade_aim_during_lock():
 				apply_blade_aim_only(input, delta)
-		# Clear just_pressed flags before saving as fallback so they don't
-		# re-fire on subsequent ticks while the queue is empty. elevation_level
-		# stays — it's an absolute mode, and holding the last known level
-		# through an input gap is exactly right.
-		input.shoot_pressed = false
-		input.slap_pressed = false
+		# The fallback replays through a queue gap: its presses must not re-fire
+		# every tick. Held and absolute state (elevation_level) stays — holding
+		# the last known level through a gap is exactly right.
+		input.clear_edges()
 		_fallback_input = input
 	else:
 		if _game_state.is_movement_locked():
@@ -369,17 +359,21 @@ func _drive_from_input(delta: float) -> void:
 					# but better than freezing mid-swing while the input queue gaps.
 					apply_blade_aim_only(_fallback_input, delta)
 			return
-		if _input_queue.is_empty():
-			NetworkTelemetry.record_input_starvation()
+		# Empty, or the front not due yet: either way no input for this tick, the
+		# fallback runs, and the client may pay a reconcile for it.
+		NetworkTelemetry.record_input_starvation()
 		_process_input(_fallback_input, delta)
 
 
 func apply_network_state(state: SkaterNetworkState, host_ts: float) -> void:
 	if _is_host:
 		return
-	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
-		NetworkTelemetry.record_ooo_drop()
-		return
+	match BufferedStateInterpolator.intake(_state_buffer, host_ts, state):
+		BufferedStateInterpolator.Intake.OUT_OF_ORDER:
+			NetworkTelemetry.record_ooo_drop()
+			return
+		BufferedStateInterpolator.Intake.REPLACED:
+			return
 	# Recycle the evicted front entry as the new back one instead of allocating a
 	# fresh wrapper per packet (see PuckController.apply_state). Safe because the
 	# interpolation bracket is re-derived from the buffer every tick before use,
@@ -453,17 +447,23 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		_sample_scratch.position = BufferedStateInterpolator.hermite(
 				f.position, f.velocity, to.position, to.velocity, bracket.t, bracket.bracket_dt)
 		_sample_scratch.velocity = f.velocity.lerp(to.velocity, bracket.t)
-		# Brace at/before host_time — a discrete flag, so take the earlier sample.
-		_sample_scratch.brake_intent = f.brake_intent
-		_sample_scratch.hit_committed = f.hit_committed
-		_sample_scratch.shot_state = f.shot_state
-		# Discrete like brake_intent — the at/before-host_time sample, so a
-		# mid-window ghost transition replays the way the host resolved it.
-		_sample_scratch.is_ghost = f.is_ghost
-		_sample_scratch.facing = f.facing
-		_sample_scratch.move_intent = f.move_intent
-		_sample_scratch.stance_active = f.stance_active
-		_sample_scratch.stagger_timer = f.stagger_timer
+		# Discrete fields from the newer endpoint and the facing on its hermite,
+		# exactly as the host's rewind (StateBufferManager._interpolate_skater)
+		# and this client's render take them: the three resolve one contact, and
+		# an older endpoint here replayed a brace, a ghost or a stance the other
+		# two had already moved past.
+		_sample_scratch.brake_intent = to.brake_intent
+		_sample_scratch.hit_committed = to.hit_committed
+		_sample_scratch.shot_state = to.shot_state
+		_sample_scratch.is_ghost = to.is_ghost
+		var fa: float = BufferedStateInterpolator.hermite_angle(
+				atan2(f.facing.x, f.facing.y), f.facing_angular_velocity,
+				atan2(to.facing.x, to.facing.y), to.facing_angular_velocity,
+				bracket.t, bracket.bracket_dt)
+		_sample_scratch.facing = Vector2(sin(fa), cos(fa))
+		_sample_scratch.move_intent = to.move_intent
+		_sample_scratch.stance_active = to.stance_active
+		_sample_scratch.stagger_timer = to.stagger_timer
 	return _sample_scratch
 
 
@@ -586,6 +586,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.is_ghost = newest.is_ghost
 		interpolated.elevation_level = newest.elevation_level
 		interpolated.copy_stick_play_from(newest)
+		interpolated.slapshot_pin_offset = newest.slapshot_pin_offset
 		interpolated.shot_state = newest.shot_state
 		interpolated.shot_charge = newest.shot_charge
 		interpolated.stagger_timer = newest.stagger_timer
@@ -624,6 +625,8 @@ func _interpolate(delta: float) -> void:
 		interpolated.is_ghost = to_state.is_ghost
 		interpolated.elevation_level = to_state.elevation_level
 		interpolated.copy_stick_play_from(to_state)
+		interpolated.slapshot_pin_offset = from_state.slapshot_pin_offset.lerp(
+				to_state.slapshot_pin_offset, t)
 		interpolated.shot_state = to_state.shot_state
 		# Charge is a scalar — lerp it so the remote's stick-flex load bow
 		# grows smoothly through the drag instead of stepping per broadcast.
@@ -745,7 +748,7 @@ func _interpolate(delta: float) -> void:
 
 # Unity-style critically damped smoothing toward a (possibly moving) target.
 # Mutates _smooth_vel; returns the new position. Pure value-type math — no alloc,
-# hot-path safe at 120 Hz × remotes.
+# hot-path safe at the tick rate × remotes.
 func _smooth_damp(current: Vector3, target: Vector3, smooth_time: float, delta: float) -> Vector3:
 	var omega: float = 2.0 / maxf(smooth_time, 0.0001)
 	var x: float = omega * delta
@@ -800,6 +803,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.stick_check_phase = state.stick_check_phase
 	skater.stick_tied = state.stick_tied
 	_adopt_pin(state)
+	_adopt_slapshot_pin(state)
 	skater.current_shot_state = state.shot_state
 	# The blade side, applied by state (the wire bit is garbage outside a wrister
 	# aim or a carry): a spectated shooter's frozen blade re-addresses the side
@@ -831,3 +835,17 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# Bottom hand is purely reactive to top_hand + blade and needs no network
 	# state of its own; it's posed once per rendered frame in _render_pose_update
 	# (Skater._process) along with the gait, not here.
+
+
+# The host's slapshot pin, so the puck this machine pins to the carrier
+# (PuckController._pin_puck_to_carrier) holds its spot on the ice instead of
+# following the raised blade. The wire says only that it is set; where comes
+# from the packet's own puck (slapshot_pin_offset), turned into this body's
+# frame as drawn. Needs the facing already applied.
+func _adopt_slapshot_pin(state: SkaterNetworkState) -> void:
+	if not state.slapshot_pinned:
+		skater.exit_slapshot_pinning()
+		return
+	var held: Vector3 = skater.to_local(skater.global_position
+			+ Vector3(state.slapshot_pin_offset.x, 0.0, state.slapshot_pin_offset.y))
+	skater.enter_slapshot_pinning(Vector2(held.x, held.z))
