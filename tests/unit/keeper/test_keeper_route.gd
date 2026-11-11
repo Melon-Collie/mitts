@@ -13,9 +13,10 @@ const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
 const MAX_BONE_STEP_M: float = 12.0 * DT  # nothing on him moves 12 m/s
 const GOAL_LINE_Z: float = 0.35
-# The planned time against the time taken: the movers' own models are tick
-# exact, and a slide's turn as it loads costs a little the model leaves out.
-const PLAN_TOLERANCE_S: float = 0.05
+# The planned time against the time taken. The route prices each move in the
+# whole ticks the motor makes it in; a footwork phase change that falls inside a
+# tick, and a slide's turn as it loads, still land a tick or so either side.
+const PLAN_TOLERANCE_S: float = 4.0 * DT
 const B := KeeperSkeleton.Bone
 const R := KeeperRoute.Rest
 const DO := KeeperRoute.Do

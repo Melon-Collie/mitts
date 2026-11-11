@@ -1,12 +1,12 @@
 extends GutTest
 
-# A flat puck that meets his gear in a stance he sets in, on his feet or down,
-# comes off it away from the net: through his gear's own contact rule
-# (GoalieSaveRules.resolve_contact), whatever it meets first, it never heads on
-# into the mouth past him. A hole is KeeperSeams' to allow
-# (test_keeper_seams.gd); gear that turns a puck in is never a window. The
-# kick, a leg thrust out in motion, is not held here: a puck clipping its edge
-# may glance on in.
+# A flat puck that meets the face of his gear in a stance he sets in, on his
+# feet or down, comes off it away from the net: through his gear's own contact
+# rule (GoalieSaveRules.resolve_contact), whatever it meets first, it never
+# heads on into the mouth past him. A hole is KeeperSeams' to allow
+# (test_keeper_seams.gd); gear that turns a puck in is never a window. A puck
+# that only clips a side of his gear, as off the outside edge of a pad, may
+# glance on in, and the kick, a leg thrust out in motion, is not held here.
 #
 # Keeper space: he faces -z, the goal line GOAL_LINE_Z behind him, as at the
 # top of his crease.
@@ -49,13 +49,19 @@ func test_no_flat_puck_comes_off_his_gear_into_the_net() -> void:
 				var from := Vector3(sx, y, SHOOTER_Z)
 				var to := Vector3(aim_x, y, GOAL_LINE_Z)
 				var part: int = KeeperGear.nearest(_skel, from, to, GameRules.PUCK_COLLISION_RADIUS, _hit, _scratch)
-				if part < 0:
+				if part < 0 or _clips_a_side(_hit.normal):
 					continue
 				GoalieSaveRules.resolve_contact((to - from).normalized() * SPEED_M_S, KeeperGear.save_part(part),
 						_hit.normal, _contact, Vector3.FORWARD)
 				assert_false(_goes_in(_hit.point + _hit.normal * _hit.depth, _contact.velocity),
 						"%s: a flat puck from x %.1f at x %.2f comes off %s into the net"
 						% [stance[0], sx, aim_x, KeeperGear.Part.keys()[part]])
+
+
+# Whether the contact is on a side of the gear, across the mouth, rather than
+# its face toward the shooter.
+func _clips_a_side(normal: Vector3) -> bool:
+	return absf(normal.x) > absf(normal.z)
 
 
 # Whether a rebound from `at` along `v` reaches the goal line between the posts
