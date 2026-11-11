@@ -318,6 +318,7 @@ func reset_to_rest() -> void:
 		_skater.set_skating_crouch_drop(0.0)
 		_skater.set_trunk_texture(0.0, 0.0)
 		_skater.set_edge_loads(0.0, 0.0)
+		_skater.set_finish_roll(0.0)
 
 
 # Arms the check-delivery drive (GaitCheckLayer.start_drive).
@@ -458,6 +459,7 @@ func apply(delta: float) -> void:
 				_override_layers[i].override(p)
 
 	_skater.set_faceoff_address(_faceoff.address)
+	_skater.set_finish_roll(_shot.wrist_roll)
 	# Off camera the legs and trunk are mesh nobody draws; the crouch is not.
 	if _skater.on_camera():
 		p.publish_legs(_skater, delta)

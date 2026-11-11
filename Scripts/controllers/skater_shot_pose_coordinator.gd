@@ -287,8 +287,11 @@ func _apply_wrister_whip(t: float, aim_world: Vector3, stick_world: Vector3) -> 
 	var pocket := Vector3(signf(_skater.shoulder.position.x) * home.x, 0.0, -home.y)
 	var hand: Vector3 = shoulder + pocket.lerp(
 			shot_dir * _controller.wrister_follow_through_reach, env)
-	hand.y = _rest_hand_y(shoulder) + env * _controller.wrister_follow_through_hand_y
-	var blade_y: float = _ik.blade_y_local() + env * _controller.wrister_follow_through_blade_lift
+	var height: float = env * lerpf(_controller.wrister_follow_through_flat_share, 1.0,
+			_sm.follow_through_loft)
+	hand.y = _rest_hand_y(shoulder) + height * _controller.wrister_follow_through_hand_y
+	var blade_y: float = _ik.blade_y_local() \
+			+ height * _controller.wrister_follow_through_blade_lift
 	var drop: float = hand.y - blade_y
 	var stick: float = _ik.solve_stick_length()
 	var blade: Vector3 = hand + stick_dir * sqrt(maxf(stick * stick - drop * drop, 0.0001))

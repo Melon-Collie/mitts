@@ -441,6 +441,12 @@ thing that measures how far the arm is out, the reach lean.
   ticks and stops dead after them. What has no bridge (the trunk's
   through-twist and lean, the legs' kick, the slapper's blade leaving contact)
   rides `finish_envelope`, eased at both ends, over the same `whip_attack_time`.
+- **A wrister's finish is as high as its shot**
+  (`wrister_follow_through_flat_share`): the hands' rise and the blade's lift
+  are the high rung's, and a shot along the ice takes that share of them. The
+  loft is latched at the release (`SkaterStateMachine.follow_through_loft`)
+  and restored through a reconcile with the finish's power: read live, a
+  scroll mid-finish moves the stick.
 - **What is still only drawn is small.** The stride's pump and the shaft's
   clearance ride `Skater.drawn_top_hand()`, and the stroke's cup rolls the
   blade about the hosel line (`Scripts/actors/CLAUDE.md`), which curls the

@@ -59,6 +59,10 @@ const _BLADE_CRADLE_CUP_DEG: float = 8.0             # axial twist (handedness-s
 # ease with it.
 const _BLADE_STROKE_CUP_DEG: float = 16.0
 const _STROKE_CUP_OMEGA: float = 18.0
+# Through a wrister's finish the wrists roll over: the face that pushed the
+# shot turns down over where the puck was and the toe comes round to the
+# target. About the hosel line, like the cup it carries on from.
+const _BLADE_FINISH_ROLL_DEG: float = 55.0
 
 # Shoulder anchor offset from body center. The shoulder (top-hand anchor)
 # sits on the OPPOSITE side of the body from the blade: a left-handed shooter
@@ -859,6 +863,10 @@ var _heel_cradle: float = 0.0
 # (radians) as last dressed, and the roll a swing started from (stick_roll).
 var _stroke_cup: float = 0.0
 var _stroke_cup_rate: float = 0.0
+# The finish's roll over (0..1, set_finish_roll) and the face it rolls, by the
+# cup's sign.
+var _finish_roll: float = 0.0
+var _finish_roll_side: float = 0.0
 var _stick_roll: float = 0.0
 var _stick_cup: float = 0.0
 var _swing_anchor_roll: float = 0.0
@@ -1530,7 +1538,7 @@ func _apply_blade_tilt() -> void:
 			- _heel_cradle * _BLADE_CRADLE_CUP_DEG \
 			- _reception_give_blend * reception_cup_deg) * blade_side_sign)
 	var cup: float = _stroke_cup * deg_to_rad(_BLADE_STROKE_CUP_DEG)
-	twist += cup
+	twist += cup + _finish_roll_side * _finish_roll * deg_to_rad(_BLADE_FINISH_ROLL_DEG)
 	_stick_roll = twist
 	_stick_cup = cup
 	# Mesh-only slides (never the marker):
@@ -2117,6 +2125,20 @@ func set_ankle_flatten(left: float, right: float, level_l: float = 0.0,
 
 func set_leg_contact(plant_l: float, plant_r: float, dt: float) -> void:
 	_legs.set_contact(plant_l, plant_r, maxf(dt, _anim_lod.span))
+
+
+# How far the wrists have rolled the stick over through a finish, 0..1.
+# Published by the gait, which derives the finish on every peer
+# (GaitShotLayer.wrist_roll). The face is the one that pushed the shot, taken
+# as the roll starts.
+func set_finish_roll(share: float) -> void:
+	if share == _finish_roll:
+		return
+	if _finish_roll <= 0.0:
+		_finish_roll_side = signf(_address_factor) if _address_factor != 0.0 \
+				else signf(_stroke_cup)
+	_finish_roll = share
+	_blade_tilt_dirty = true
 
 
 # How far into his faceoff address this centre is, 0..1 (zero for everyone

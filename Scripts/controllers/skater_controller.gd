@@ -902,6 +902,9 @@ var wrister_follow_through_min_power: float = 0.55  # amplitude floor at zero ch
 var quick_pass_follow_through_power: float = 0.5
 var wrister_follow_through_hand_y: float = 0.35
 var wrister_follow_through_blade_lift: float = 0.55  # high-finish blade height off the ice
+# How high a shot along the ice finishes, as a share of a high one's: the
+# finish is as high as the shot, so the heights above are the top rung's.
+var wrister_follow_through_flat_share: float = 0.45
 var wrister_follow_through_reach: float = 0.5  # forward hand CARRY along the shot line (= arm extension; the blade reaches a full stick beyond it)
 # Last fraction of every finish's timer spent relaxing out of the held pose
 # (the snap is whip_attack_time).
@@ -3240,10 +3243,15 @@ func _release_wrister(input: InputState) -> void:
 			_wrister_sweep_speed(input), _wrister_config())
 	release_power_t = minf(release_power_t, wrister_load.load_share)
 	_sm.follow_through_power = lerpf(wrister_follow_through_min_power, 1.0, release_power_t)
+	_sm.follow_through_loft = _release_loft()
 	var finish_s: float = wrister_follow_through_time(skater.shot_charge)
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = finish_s
 	_sm.follow_through_duration_total = finish_s
+
+func _release_loft() -> float:
+	return float(_elevation_level) / float(ShotMechanics.ELEVATION_HIGH)
+
 
 # Folds the skater's motion into a wrist shot's or quick pass's release
 # (ReleaseMomentum): the puck keeps the body's velocity, the hands correcting it
@@ -3281,6 +3289,7 @@ func _fire_quick_pass(input: InputState) -> void:
 
 	_sm.follow_through_is_slapper = false
 	_sm.follow_through_power = quick_pass_follow_through_power
+	_sm.follow_through_loft = _release_loft()
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = quick_pass_follow_through_duration
 	_sm.follow_through_duration_total = quick_pass_follow_through_duration

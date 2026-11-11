@@ -451,7 +451,12 @@ Twelve rules the rigs sit inside, all easy to break from in here:
   (`_BLADE_STROKE_CUP_DEG`, by the side the blade is drawn on, on a spring), so
   a dangle rolls the top wrist over and back with every stroke. The cup stays
   out of a slapshot's swing anchor and is laid back on as it fades, so the
-  blade comes through contact square. The carry seat eases on and off with
+  blade comes through contact square. Through a wrister's or a pass's finish
+  the wrists roll on over (`_BLADE_FINISH_ROLL_DEG`, `set_finish_roll`): the
+  face that pushed the shot turns down and the toe comes round to the target,
+  on the envelope the gait already derives for the finish's legs on every
+  peer (`GaitShotLayer.wrist_roll`), so it turns over as the stick goes out
+  and squares as it comes down. The carry seat eases on and off with
   the carry (`_seat_blend`): its slide grows with the roll, and snapped, a
   pickup stepped the blade. `test_carry_hold.gd`, `test_slapper_stance.gd`.
 - **The arms have a C++ port** (`NativeArmRig`, which writes the arm bones

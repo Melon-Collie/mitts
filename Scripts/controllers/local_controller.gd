@@ -562,6 +562,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_follow_through_is_slapper: bool = _sm.follow_through_is_slapper
 	var pre_follow_through_total: float = _sm.follow_through_duration_total
 	var pre_follow_through_power: float = _sm.follow_through_power
+	var pre_follow_through_loft: float = _sm.follow_through_loft
 	# shot_dir feeds the follow-through pose (blade sweep target + torso
 	# uncoil). Replay can overwrite it with a re-derived direction, or zero it
 	# outright when the replayed window walks the timer through
@@ -747,6 +748,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_sm.follow_through_is_slapper = pre_follow_through_is_slapper
 	_sm.follow_through_duration_total = pre_follow_through_total
 	_sm.follow_through_power = pre_follow_through_power
+	_sm.follow_through_loft = pre_follow_through_loft
 	_sm.aim_finish(pre_shot_dir, pre_finish_facing_dir, pre_finish_stick_dir)
 	_aiming.one_timer_window_timer = pre_one_timer_window_timer
 	_aiming.one_timer_retention_timer = pre_one_timer_retention_timer

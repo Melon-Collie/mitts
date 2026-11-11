@@ -10,7 +10,6 @@ extends Node
 # so the strip is FRAMES columns by three rows.
 
 const DT: float = 1.0 / 120.0
-const TILE: int = 320
 const FRAMES: int = 8
 const VIEWS: int = 3
 const OUT_DIR: String = "user://gait_strip"
@@ -83,10 +82,14 @@ const SCENARIOS: Array[Dictionary] = [
 	{"name": "slapfake", "warm": SLAP_RELEASE_AT - 2, "step": 8},
 	# Skating with the puck, a wrister up-ice and to the forehand: pressed at
 	# WRIST_AT, let go at WRIST_RELEASE_AT. The whole shot, then the release and
-	# the finish tick by tick, then the stick coming back to the ice.
+	# the finish tick by tick, then the stick coming back to the ice. Seen from
+	# over the blade first, then beside and ahead.
 	{"name": "wristshot", "warm": WRIST_AT - 10, "step": 14},
 	{"name": "wristdown", "warm": WRIST_RELEASE_AT - 2, "step": 4},
 	{"name": "wristup", "warm": WRIST_RELEASE_AT + 22, "step": 8},
+	# The release and the finish again at the high loft: the finish is as high
+	# as the shot.
+	{"name": "wristhigh", "warm": WRIST_RELEASE_AT - 2, "step": 4},
 ]
 # The slapshot scenarios' press and release ticks: past the set-up and a full
 # wind-up.
@@ -112,6 +115,8 @@ class StubGameState extends Node:
 		return faceoff_prep
 
 
+# Each view's size in pixels, square (tools/gait_strip.gd's --tile).
+var tile: int = 320
 var _scenarios: Array[Dictionary] = []
 var _index: int = -1
 var _camera: Camera3D = null
@@ -315,6 +320,8 @@ func _steer(input: InputState) -> void:
 			input.shoot_held = true
 	if _wristing():
 		aim = Vector2(0.26, -0.97)
+		input.elevation_level = ShotMechanics.ELEVATION_HIGH \
+				if String(_scenarios[_index]["name"]) == "wristhigh" else ShotMechanics.ELEVATION_FLAT
 		input.shoot_pressed = _tick == WRIST_AT
 		input.shoot_held = _tick >= WRIST_AT and _tick < WRIST_RELEASE_AT
 	input.move_vector = move
@@ -345,7 +352,7 @@ func _dangling() -> bool:
 
 
 func _wristing() -> bool:
-	return String(_scenarios[_index]["name"]) in ["wristshot", "wristdown", "wristup"]
+	return String(_scenarios[_index]["name"]) in ["wristshot", "wristdown", "wristup", "wristhigh"]
 
 
 func _slapping() -> bool:
@@ -361,6 +368,10 @@ func _place_camera(view: int) -> void:
 		aim = _skater.global_position + Vector3(0.0, -0.9, -1.0)
 		if view == 0:
 			view = -1
+	elif _wristing() and view == 0:
+		# From behind the body hides the stick: over the blade instead.
+		aim = _skater.global_position + travel * 1.7 + Vector3(0.0, -0.9, 0.0)
+		view = -1
 	match view:
 		-1:
 			offset = -travel * 0.6 + Vector3(0.0, 2.0, 0.0)
@@ -409,12 +420,12 @@ func _process(_delta: float) -> void:
 
 
 func _save_strip() -> void:
-	var sheet := Image.create(TILE * FRAMES, TILE * VIEWS, false, Image.FORMAT_RGBA8)
+	var sheet := Image.create(tile * FRAMES, tile * VIEWS, false, Image.FORMAT_RGBA8)
 	for i: int in _images.size():
 		var img: Image = _images[i]
 		img.convert(Image.FORMAT_RGBA8)
-		sheet.blit_rect(img, Rect2i(0, 0, TILE, TILE),
-				Vector2i((i / VIEWS) * TILE, (i % VIEWS) * TILE))
+		sheet.blit_rect(img, Rect2i(0, 0, tile, tile),
+				Vector2i((i / VIEWS) * tile, (i % VIEWS) * tile))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	var path: String = "%s/%s.png" % [OUT_DIR, String(_scenarios[_index]["name"])]
 	sheet.save_png(path)

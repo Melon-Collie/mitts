@@ -4,7 +4,8 @@ extends "res://tests/harness/body_jerk_harness.gd"
 # it is wound up, both hands stay on the stick from the press to the end of
 # the finish, and the finish hangs from the shoulder the body is drawn with,
 # posed level, so a body leaning at speed neither folds the top arm shut under
-# the chest nor takes the blade off the height it was given.
+# the chest nor takes the blade off the height it was given. The finish is as
+# high as the shot, and the wrists roll the blade over through it.
 
 const SKATING: String = "wrister: carry, charge, release, skating"
 const STANDING: String = "wrister standing, cursor to the backhand"
@@ -34,10 +35,18 @@ class Shot:
 	var sat_least: float = INF
 	var sat_after: float = 0.0
 	var power: float = 0.0
+	# The top hand's highest in the finish (UpperBody's frame, m).
+	var hand_high: float = -INF
+	# The stick's roll (radians, the way the wind-up's cup turned it): as the
+	# wind-up last held it, the furthest the finish took it, and once settled.
+	var roll_held: float = 0.0
+	var roll_most: float = -INF
+	var roll_after: float = 0.0
 
 
-# `scenario` skated with the cursor on `side` (the sign of x).
-func _shoot(scenario: String, side: float) -> Shot:
+# `scenario` skated with the cursor on `side` (the sign of x), shot at `loft`
+# (ShotMechanics.ELEVATION_*).
+func _shoot(scenario: String, side: float, loft: int = ShotMechanics.ELEVATION_FLAT) -> Shot:
 	var steer: Callable
 	for s: Dictionary in scenarios():
 		if String(s["name"]) == scenario:
@@ -46,9 +55,11 @@ func _shoot(scenario: String, side: float) -> Shot:
 	var input := InputState.new()
 	var shot := Shot.new()
 	var pressed_at := Vector3.INF
+	var cup_way: float = 0.0
 	for i: int in range(-SETTLE_TICKS, END_TICK):
 		input.delta = DT
 		input.host_timestamp += DT
+		input.elevation_level = loft
 		var aim: Vector3 = steer.call(input, i)
 		aim.x = absf(aim.x) * side
 		input.mouse_world_pos = _skater.global_position + aim
@@ -67,6 +78,8 @@ func _shoot(scenario: String, side: float) -> Shot:
 				pressed_at = off_body
 			shot.blade_strayed = maxf(shot.blade_strayed, off_body.distance_to(pressed_at))
 			shot.let_go = maxf(shot.let_go, _controller._ik._bh_release)
+			cup_way = signf(_skater._stick_cup)
+			shot.roll_held = _skater.stick_roll() * cup_way
 		elif state == SkaterStateMachine.State.FOLLOW_THROUGH:
 			var lift: float = blade.y - _controller.blade_height
 			shot.let_go = maxf(shot.let_go, _controller._ik._bh_release)
@@ -75,7 +88,10 @@ func _shoot(scenario: String, side: float) -> Shot:
 			shot.blade_high = maxf(shot.blade_high, lift)
 			shot.sat_least = minf(shot.sat_least, _skater.body_drop_below_frame())
 			shot.power = _controller._sm.follow_through_power
+			shot.hand_high = maxf(shot.hand_high, _skater.get_top_hand_position().y)
+			shot.roll_most = maxf(shot.roll_most, _skater.stick_roll() * cup_way)
 	shot.sat_after = _skater.body_drop_below_frame()
+	shot.roll_after = _skater.stick_roll() * cup_way
 	return shot
 
 
@@ -114,10 +130,33 @@ func test_the_blade_stays_over_the_ice() -> void:
 
 func test_the_blade_rises_to_its_finish() -> void:
 	for side: float in [-1.0, 1.0]:
-		var shot: Shot = _shoot(SKATING, side)
+		var shot: Shot = _shoot(SKATING, side, ShotMechanics.ELEVATION_HIGH)
 		assert_almost_eq(shot.blade_high,
 				_controller.wrister_follow_through_blade_lift * shot.power, EPS_M,
-				"cursor side %+.0f: the blade's high point is the finish's own" % side)
+				"cursor side %+.0f: a high shot's blade reaches the finish's own height" % side)
+
+
+func test_the_finish_is_as_high_as_the_shot() -> void:
+	var last: Shot = null
+	for loft: int in [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW,
+			ShotMechanics.ELEVATION_MID, ShotMechanics.ELEVATION_HIGH]:
+		var shot: Shot = _shoot(SKATING, -1.0, loft)
+		if last != null:
+			assert_gt(shot.blade_high, last.blade_high + EPS_M,
+					"loft %d: the blade finishes higher than the rung below" % loft)
+			assert_gt(shot.hand_high, last.hand_high, "and the hands with it")
+		last = shot
+
+
+# The wrists turn the pushing face over through the finish, past where the
+# wind-up's cup held it, and square the blade again once it is back down.
+func test_the_wrists_roll_over_through_the_finish() -> void:
+	for side: float in [-1.0, 1.0]:
+		var flat: Shot = _shoot(SKATING, side)
+		assert_gt(flat.roll_most, flat.roll_held + deg_to_rad(10.0),
+				"cursor side %+.0f: rolled %.0f° wound up, %.0f° at most in the finish"
+				% [side, rad_to_deg(flat.roll_held), rad_to_deg(flat.roll_most)])
+		assert_lt(flat.roll_after, flat.roll_held, "and back off it once the stick has settled")
 
 
 # Standing, where the crouch is the ready stance's own: the finish does not
