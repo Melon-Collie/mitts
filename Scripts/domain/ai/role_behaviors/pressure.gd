@@ -28,8 +28,9 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 		return d
 	var carrier_pos: Vector3 = ap.carrier_pos
 
-	# A committed hit loads him on a shoulder at half a stride, so a carrier who
-	# cuts is gone: the last man back never throws one (has_support_behind) —
+	# A hunted check skates him at the carrier's body with his stick in, off the
+	# cutoff, so a carrier who cuts is gone: the last man back never throws one
+	# (has_support_behind) —
 	# until the carrier has drawn level with him in our zone, when the inside he
 	# was keeping is lost or about to be.
 	var level: bool = is_level(ctx, ap)

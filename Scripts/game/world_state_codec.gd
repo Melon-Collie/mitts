@@ -75,7 +75,7 @@ const WS_SEQUENCE_OFFSET: int = 0     # u16
 const WS_HOST_TIME_OFFSET: int = 2    # u32, 0.1 ms units
 const WS_SKATER_COUNT_OFFSET: int = 6  # u8
 const WS_HEADER_SIZE: int = 7
-const SKATER_STATE_BYTES: int = 58  # inner skater state block; every encode/decode
+const SKATER_STATE_BYTES: int = 59  # inner skater state block; every encode/decode
                                     # site must read it from here, or a grown block
                                     # silently truncates instead of failing
 # Wire range of the balance lean's spring rate, rad/s.
@@ -470,12 +470,12 @@ func decode_stats(data: Array) -> void:
 
 # ── Quantization helpers ──────────────────────────────────────────────────────
 
-# Skater: SKATER_STATE_BYTES (58) bytes
+# Skater: SKATER_STATE_BYTES (59) bytes
 # Offsets: pos(0..4) vel(5..10) blade(11..16) top_hand(17..22)
 #          facing(23..24) ubrot(25..26) fav(27..28) ubav(29..30) lp_ts(31..34)
 #          flags(35) charge(36) stagger(37) knockdown(38) intent(39)
 #          tilt(40..43) tilt_vel(44..47) torso(48..51) posture(52..53) recoil(54)
-#          stick_check(55) body_lock(56) pin_strength(57)
+#          stick_check(55) body_lock(56) pin_strength(57) check_drive(58)
 # Writes the skater block into `b` at `o`, returning the next offset. Godot 4
 # passes Packed arrays to functions BY REFERENCE, so these writes land in the
 # caller's buffer — that is what lets the hot path fill one pre-sized packet
@@ -560,6 +560,7 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	b.encode_u8(o, (s.pin_role & 0x03) | (0x04 if s.diving else 0)
 			| (0x08 if s.slapshot_pinned else 0)); o += 1
 	b.encode_u8(o, clampi(roundi(s.pin_strength * 255.0), 0, 255)); o += 1
+	b.encode_u8(o, CheckDriveRules.pack(s.check_drive_phase, s.check_drive_elapsed)); o += 1
 	return o
 
 
@@ -649,7 +650,10 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	s.pin_role = lock & 0x03 if (lock & 0x03) <= BoardPinRules.Role.PINNED else 0
 	s.diving = (lock & 0x04) != 0
 	s.slapshot_pinned = (lock & 0x08) != 0
-	s.pin_strength = b.decode_u8(o) / 255.0
+	s.pin_strength = b.decode_u8(o) / 255.0; o += 1
+	var check_drive: int = b.decode_u8(o)
+	s.check_drive_phase = CheckDriveRules.unpack_phase(check_drive)
+	s.check_drive_elapsed = CheckDriveRules.unpack_elapsed(check_drive)
 	return s
 
 

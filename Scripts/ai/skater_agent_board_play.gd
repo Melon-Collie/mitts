@@ -121,9 +121,12 @@ func _reach_for_pin(input: InputState, snapshot: WorldSnapshot, me: SkaterNetwor
 		var closing: float = maxf(Vector2(me.velocity.x - man.velocity.x,
 				me.velocity.z - man.velocity.z).dot(to_man / dist), 0.0)
 		var man_caps: AISkaterCaps = _caps_by_peer.get(pid)
-		var kick: float = SkaterCollisionRules.victim_kick(closing,
-				caps.weight if caps != null else 1.0,
-				man_caps.weight if man_caps != null else 1.0, transfer)
+		var my_weight: float = caps.weight if caps != null else 1.0
+		var man_weight: float = man_caps.weight if man_caps != null else 1.0
+		var kick: float = SkaterCollisionRules.victim_kick(closing, my_weight, man_weight,
+				transfer) + CheckDriveRules.impact_share(closing) * CheckDriveRules.kick_dv(
+				caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2,
+				my_weight, man_weight)
 		var posture: BodyBalanceRules.Posture = BodyBalanceRules.posture_of(man.stance_active,
 				SkaterStateMachine.state_off_balance(man.shot_state))
 		if BodyBalanceRules.overshoot(to_man / dist * kick, man.facing, posture,

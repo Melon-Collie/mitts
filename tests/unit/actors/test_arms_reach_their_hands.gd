@@ -37,8 +37,8 @@ const _POSES: Array = [
 	["shot_block", false, Vector3.ZERO, [[30, Vector3(0.0, 0.0, -3.0), Vector2.ZERO, "block"]]],
 	["hit_commit_deep", false, Vector3.ZERO, [
 		[60, Vector3(1.6, 0.0, 2.4), Vector2(0.84, -0.55), "hit"]]],
-	["knockdown_side", false, Vector3(3.0, 0.0, 0.0), [[100, Vector3(0.0, 0.0, -3.0), Vector2.ZERO, ""]]],
-	["knockdown_back", false, Vector3(0.0, 0.0, 6.0), [[100, Vector3(0.0, 0.0, -3.0), Vector2.ZERO, ""]]],
+	["knockdown_side", false, Vector3(4.25, 0.0, 0.0), [[85, Vector3(0.0, 0.0, -3.0), Vector2.ZERO, ""]]],
+	["knockdown_back", false, Vector3(0.0, 0.0, 8.5), [[85, Vector3(0.0, 0.0, -3.0), Vector2.ZERO, ""]]],
 ]
 
 

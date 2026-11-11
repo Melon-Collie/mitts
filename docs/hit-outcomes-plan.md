@@ -1,6 +1,6 @@
 # Hit outcomes — balance, the rocked hit, and both bodies
 
-Status: **Phases 0–3 built**, playtest pending. Amends the physicality paragraphs of
+Status: **Phases 0–3 and 5 built**, playtest pending. Amends the physicality paragraphs of
 `docs/gameplay-design.md` and the body-check verbs of
 `docs/physicality-plan.md`. Four phases plus a small controls pass, each its
 own PR and playtest. The cross-check this plan names was retired at v88
@@ -424,6 +424,122 @@ snapshot with the commit saying the new numbers are intended.
 7. Into the boards: rocked and stripped at lower pace, never floored, pinnable.
 8. An uncommitted bump stays a jostle.
 
+## Phase 5 — the timed check (built)
+
+Why: a check's strength was closing speed and nothing else, so the way to hit
+hard was to arrive fast, and nothing cost the checker for it. Measured board
+checks close at about 3–4 m/s (the checker angles and matches speed first), and
+coaches teach the hit as a leg drive at contact. At 3 m/s a committed check
+landed 0.98 m/s, a stagger that strips nothing; the full-speed open-ice hit was
+the one that paid.
+
+### Decided with the user
+
+- **The press throws the check.** Pressing Hit starts a short leg drive; a
+  contact inside it is the timed check. Holding the button early is a shoulder
+  held in, which lands less.
+- **The drive adds impact, never speed.** A stride cannot push harder than a
+  stride, so with nobody there it gives nothing a normal stride doesn't, and
+  there is nothing to spam for pace.
+- **It has a cooldown**, and it re-arms only once the button is up.
+- **A hit thrown too fast costs its thrower.**
+
+### Rules
+
+- **The phase** (`CheckDriveRules`: `IDLE` → `DRIVE` → `SPENT`) is stepped from
+  the skater's own button and from whether he may commit at all, never from
+  whether it landed, like the stick lift's. `DRIVE` lasts `DRIVE_S`; `SPENT`
+  ends after `REARM_S` once the button is up. A press he cannot act on
+  (carrying, rocked, down, pinned, planted) is spent, so a button still held
+  when he becomes able to throws nothing. A carrier's Ctrl is still the brace.
+- **A tap is a whole check.** The commit holds through the drive's window, so
+  the stick is off the ice and the stride and edges are the commit's for all
+  of it.
+- **Delivery** (`SkaterCollisionRules.contact_transfer`): a checker inside his
+  drive lands his whole transfer; past it, `HELD_SHARE` of it; uncommitted, the
+  passive bump as before.
+- **The legs' kick** (`CheckDriveRules.kick_dv`, `SkaterCollisionRules
+  .drive_kick`): on an impact, a driving checker adds his stride's force over
+  `PUSH_S` to the other body, on that body's mass. It needs an impact to drive
+  through (`impact_share`: none of it under 0.5 m/s closing, all of it from
+  1.5), so a fresh press on a man already leaned on is still the press, which
+  staggers nobody. His skates take
+  the reaction, so nothing comes back on him. A braced carrier takes it cut by
+  his brace, as he takes the transfer. Against the boards it adds to the
+  backstopped strength (`BoardPinRules.backstop_hit_strength`).
+- **The checker's lean depends on how fast he arrives**
+  (`BodyBalanceRules.leaned_into`, `approach_speed`): the part of his own Δv
+  that drives him back counts at `checker_front_share` while he skates into
+  the contact at up to `checker_control_speed`, rising to all of it at
+  `checker_wild_speed`. It is his own speed, not the closing speed, so a man
+  set against a carrier skating into him leans in whatever the carrier's pace.
+- **The knockdown line moves with the kick.** `balance_ref_dv` goes 2.4 → 3.4,
+  which puts a timed side hit's knockdown where the old committed one was
+  (~6 m/s closing at equal builds), and `vulnerable_mult` goes 0.6 → 0.73 for
+  the same reason (a man caught shooting, from the side: ~3.5 m/s). A held or
+  passive hit floors far less often than before. The victim's ladder is the next phase's to reshape.
+
+### What it does, at the starting values (equal builds, open ice)
+
+The checker skating in on a man standing still, but for the last row:
+
+| contact | victim's Δv | his outcome | checker |
+|---|---|---|---|
+| timed, 1 m/s closing | 0.75 | stagger | nothing |
+| timed, 2 m/s | 1.49 | rocked, stripped | nothing |
+| timed, 3 m/s | 1.81 | rocked, stripped | nothing |
+| timed, 6 m/s | 2.79 | rocked; down from the side | rocked |
+| timed, 8 m/s | 3.44 | rocked; down from the side | rocked |
+| timed, 10 m/s | 4.09 | rocked; down from the side | rocked |
+| held, 3 m/s | 0.59 | nothing | nothing |
+| held, 8 m/s | 1.56 | rocked, stripped | rocked |
+| uncommitted, 8 m/s | 0.78 | stagger | stagger |
+| stand-up: set and timed, the carrier at 8 m/s | 3.44 | rocked, stripped | stagger |
+
+### Networking
+
+`check_drive_phase` and its elapsed ticks ride the skater block in one byte
+(`CheckDriveRules.pack`), on the stick lift's rail: filled by the simulating
+machine, written onto remotes, adopted by the local reconcile ahead of its
+replay. The contact reads both bodies' phases in all three reconstructions (the
+live resolver, the reconcile replay's `drive` record, the puck strip), so the
+transfer and the kick are the same wherever the pair is resolved. Nothing in
+the movement model changed, so the forward prediction and the native kernel
+are untouched. Protocol v99, replay format 21.
+
+### Pose
+
+`GaitCheckLayer` throws on the press, off the replicated phase: the trunk
+driven forward and a dip onto the knees, out and back over the drive's window
+(`check_throw_lean_deg`, `check_throw_stance`), under the load-up and before
+the landed drive. The commit sits on bent knees (`hit_commit_stance`). A wider
+base under it pops the legs where a stride starts from rest into a press, so it
+is not in.
+
+### Bots
+
+- **A hunted check is thrown at the contact** (`SkaterAgentStandUp`): the
+  dispatch's commit skates the bot at its man with Hit asked for, and the
+  per-tick pass holds the button back until the contact is inside
+  `AIStandUpRead.THROW_S`, so the bot arrives on full edges and its contact
+  lands inside its drive.
+- **Every prediction of a hit adds the kick** through `CheckDriveRules.kick_dv`:
+  the commit bar (`AIBodyCheck`), the stand-up (`AIStandUpRead.meets`) and the
+  pin reach's knockdown test.
+- Not built: a bot reading its own closing speed against what the hit will cost
+  it, and a carrier reading a checker's spent drive.
+
+### Tests
+
+- `test_check_drive_rules.gd`: the phase machine, the wire round trip, the kick.
+- `test_skater_collision_rules.gd`: the held share, the kick on the other body
+  only, none without a closing contact, the brace against it.
+- `test_body_balance_rules.gd`: the lean against the approach speed; the
+  checker's table and the knockdown grid (now a timed check's) re-pinned
+  (snapshots).
+- `test_contact_aggressor_side.gd`: on real skaters, the timed check against
+  the held shoulder, and the stand-up still only staggering its man.
+
 ## Docs that change when each phase lands
 
 - `docs/gameplay-design.md`: the physicality and stagger paragraphs (1, 2, 3)
@@ -443,6 +559,7 @@ snapshot with the commit saying the new numbers are intended.
 | Stagger, rocked and knockdown timers | `Scripts/domain/rules/body_check_rules.gd` |
 | Balance budget and tip share | new `Scripts/domain/rules/body_balance_rules.gd` |
 | Delivery (transfer from commit, possession, brace) | one function beside `SkaterCollisionRules.victim_kick` |
+| The timed check's phase, window, kick and held share | `Scripts/domain/rules/check_drive_rules.gd`, stepped by `SkaterCheckDrive` |
 | Both-body outcomes | `Skater._resolve_player_collisions`, `LocalController`'s replay contact |
 | Rocked effects (stick, stance, commit, grip) | `SkaterController`, keyed off `stagger_timer` |
 | Rocked pose | `Scripts/controllers/gait/gait_stagger_layer.gd` |

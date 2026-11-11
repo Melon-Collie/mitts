@@ -1,12 +1,14 @@
 class_name GaitCheckLayer
 extends GaitLayer
 
-# Both halves of a body check. The commit: holding Hit loads
-# the skater up — lean forward into it and sink a touch — off the replicated
-# hit_committed. The drive: the hitter's shoulder finishing through the contact,
-# started off the host-authoritative body_check_landed broadcast (and the replay
-# event dispatcher), so every machine plays the identical drive the same frame as
-# the burst and the thud.
+# The three parts of a body check. The commit: holding Hit loads the skater up —
+# lean forward into it and sit onto bent knees — off the replicated
+# hit_committed. The throw: the legs' drive off the press, off the replicated
+# check_drive_phase (CheckDriveRules), whether or not it lands. The drive: the
+# hitter's shoulder finishing through the contact, started off the
+# host-authoritative body_check_landed broadcast (and the replay event
+# dispatcher), so every machine plays the identical drive the same frame as the
+# burst and the thud.
 #
 # The gait owns no shoulder channel here, and must not grow one: the trunk
 # texture is symmetric, so a roll raises the trailing shoulder by exactly what
@@ -20,6 +22,9 @@ var _drive_intensity: float = 0.0       # 0..1 VFX hit hardness
 var _drive_env: float = 0.0
 var _commit_blend: float = 0.0
 var _commit_rate: float = 0.0
+var _throw_t: float = -1.0              # seconds into the throw; <0 = idle
+var _throw_env: float = 0.0
+var _was_driving: bool = false
 
 
 func stages() -> int:
@@ -33,10 +38,13 @@ func reset() -> void:
 	_drive_env = 0.0
 	_commit_blend = 0.0
 	_commit_rate = 0.0
+	_throw_t = -1.0
+	_throw_env = 0.0
+	_was_driving = false
 
 
 func is_quiet() -> bool:
-	return not _skater.hit_committed and _drive_t < 0.0
+	return not _skater.hit_committed and _drive_t < 0.0 and _throw_t < 0.0
 
 
 # During sustained contact or a quick follow-up hit inside an active drive the
@@ -65,6 +73,21 @@ func advance(delta: float) -> bool:
 			_drive_t = -1.0
 		else:
 			_drive_env = sin(PI * pow(du, 0.35)) * _drive_intensity
+	# The throw runs its whole window from the press, out and back, so a drive
+	# cut short (the checker rocked by his own hit) still comes back to rest.
+	var driving: bool = _skater.is_check_driving()
+	if driving and not _was_driving:
+		_throw_t = 0.0
+	_was_driving = driving
+	_throw_env = 0.0
+	if _throw_t >= 0.0:
+		_throw_t += delta
+		var tu: float = _throw_t / CheckDriveRules.DRIVE_S
+		if tu >= 1.0:
+			_throw_t = -1.0
+		else:
+			var s: float = sin(PI * tu)
+			_throw_env = s * s
 	# On a spring: the load is a crouch floor, which a lag would drop at full
 	# rate on the frame the button changes.
 	var target: float = 1.0 if _skater.hit_committed else 0.0
@@ -72,7 +95,7 @@ func advance(delta: float) -> bool:
 	var x: float = _commit_blend
 	_commit_blend = maxf(EaseRules.critical_x(x, _commit_rate, target, omega, delta), 0.0)
 	_commit_rate = EaseRules.critical_v(x, _commit_rate, target, omega, delta)
-	return _drive_env > 0.0 or _commit_blend > 0.001
+	return _drive_env > 0.0 or _commit_blend > 0.001 or _throw_env > 0.0
 
 
 # A landed check plants through the finish.
@@ -80,11 +103,12 @@ func stride_hold() -> float:
 	return _drive_env * _controller.shot_stride_fade
 
 
-# The load sits on bent knees, and the drive is delivered with the LEGS — the
-# finishing base under the shoulder.
+# The load sits on bent knees, the throw dips onto them, and the drive is
+# delivered with the LEGS — the finishing base under the shoulder.
 func stance_floor() -> float:
-	return maxf(_controller.check_drive_stance * _drive_env,
-			_controller.hit_commit_stance * _commit_blend)
+	return maxf(maxf(_controller.check_drive_stance * _drive_env,
+			_controller.hit_commit_stance * _commit_blend),
+			_controller.check_throw_stance * _throw_env)
 
 
 func shape_trunk(p: GaitPose) -> void:
@@ -99,3 +123,5 @@ func shape_trunk(p: GaitPose) -> void:
 		p.trunk_roll += -drive_mag * drive_local.x
 	if _commit_blend > 0.001:
 		p.trunk_pitch += -deg_to_rad(_controller.hit_commit_lean_deg) * _commit_blend
+	if _throw_env > 0.0:
+		p.trunk_pitch += -deg_to_rad(_controller.check_throw_lean_deg) * _throw_env

@@ -25,8 +25,15 @@ func test_not_while_the_carrier_can_still_turn_away() -> void:
 
 
 func test_not_for_a_contact_that_would_not_rock_him() -> void:
-	var too_slow: float = 0.9 * CFG_REF / SkaterCollisionRules.victim_kick(1.0, 1.0, 1.0, TRANSFER)
-	assert_false(_meets(too_slow, 0.01))
+	# The slowest carrier a timed check rocks, scanned on the resolver's own kick
+	# and the drive's.
+	var rocks_from: float = 0.0
+	while SkaterCollisionRules.victim_kick(rocks_from, 1.0, 1.0, TRANSFER) \
+			+ CheckDriveRules.impact_share(rocks_from) * CheckDriveRules.kick_dv(
+					GameRules.DEFAULT_SKATER_THRUST_M_S2, 1.0, 1.0) < CFG_REF:
+		rocks_from += 0.01
+	assert_false(_meets(0.9 * rocks_from, 0.01))
+	assert_true(_meets(1.1 * rocks_from, 0.01))
 
 
 func test_not_for_a_carrier_skating_away() -> void:

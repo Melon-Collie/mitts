@@ -207,9 +207,11 @@ const BRACE: float = 0.4
 const PASSIVE: float = 0.3
 
 
-func _ct(a_committed: bool, a_puck: bool, b_committed: bool, b_puck: bool) -> float:
-	return SkaterCollisionRules.contact_transfer(T, a_committed, a_puck, BRACE,
-			T, b_committed, b_puck, BRACE, PASSIVE)
+# A committed checker is inside his drive unless `driving` says otherwise.
+func _ct(a_committed: bool, a_puck: bool, b_committed: bool, b_puck: bool,
+		driving: bool = true) -> float:
+	return SkaterCollisionRules.contact_transfer(T, a_committed, driving, a_puck, BRACE,
+			T, b_committed, driving, b_puck, BRACE, PASSIVE)
 
 
 func test_contact_transfer_is_the_same_from_either_side() -> void:
@@ -226,6 +228,62 @@ func test_contact_transfer_is_the_same_from_either_side() -> void:
 func test_a_committed_checker_delivers_whoever_is_faster() -> void:
 	assert_almost_eq(_ct(true, false, false, false), T, 1e-6)
 	assert_almost_eq(_ct(false, true, true, false), T, 1e-6, "a carrier skating into a set defender")
+
+
+func test_a_checker_past_his_drive_delivers_the_held_share() -> void:
+	assert_almost_eq(_ct(true, false, false, false, false), T * CheckDriveRules.HELD_SHARE, 1e-6)
+	assert_almost_eq(_ct(false, true, true, false, false), T * CheckDriveRules.HELD_SHARE, 1e-6)
+	assert_gt(_ct(true, false, false, false, false), _ct(false, false, false, false, false),
+			"still more than the bump")
+
+
+func test_a_drive_kicks_the_other_body_and_never_its_thrower() -> void:
+	var out := SkaterCollisionRules.Result.new()
+	var plain := SkaterCollisionRules.Result.new()
+	var a_pos := Vector3.ZERO
+	var b_pos := Vector3(0.6, 0.0, 0.0)
+	var a_vel := Vector3(3.0, 0.0, 0.0)
+	SkaterCollisionRules.resolve(plain, a_pos, a_vel, 1.0, 0.35, b_pos, Vector3.ZERO, 1.0,
+			0.35, T)
+	SkaterCollisionRules.resolve(out, a_pos, a_vel, 1.0, 0.35, b_pos, Vector3.ZERO, 1.0,
+			0.35, T, Vector3.ZERO, 0.8, 0.0)
+	assert_almost_eq(out.dvel_b.x, plain.dvel_b.x + 0.8, 1e-5, "on top of the closing share")
+	assert_almost_eq(out.dvel_a.x, plain.dvel_a.x, 1e-6, "his skates take the reaction")
+	assert_almost_eq(out.kick_on_b, 0.8, 1e-6)
+
+
+func test_a_drive_into_a_man_already_leaned_on_is_no_kick() -> void:
+	var out := SkaterCollisionRules.Result.new()
+	SkaterCollisionRules.resolve(out, Vector3.ZERO,
+			Vector3(CheckDriveRules.IMPACT_FROM_M_S, 0.0, 0.0), 1.0, 0.35,
+			Vector3(0.6, 0.0, 0.0), Vector3.ZERO, 1.0, 0.35, T, Vector3.ZERO, 0.8, 0.0)
+	assert_eq(out.kick_on_b, 0.0)
+	var prev: float = 0.0
+	for i: int in 31:
+		var share: float = CheckDriveRules.impact_share(0.1 * i)
+		assert_gte(share, prev, "never less for a harder contact")
+		prev = share
+	assert_eq(prev, 1.0)
+
+
+func test_no_drive_kick_without_a_closing_contact() -> void:
+	var out := SkaterCollisionRules.Result.new()
+	SkaterCollisionRules.resolve(out, Vector3.ZERO, Vector3(-1.0, 0.0, 0.0), 1.0, 0.35,
+			Vector3(0.6, 0.0, 0.0), Vector3.ZERO, 1.0, 0.35, T, Vector3.ZERO, 0.8, 0.8)
+	assert_eq(out.dvel_b, Vector3.ZERO)
+	assert_eq(out.dvel_a, Vector3.ZERO)
+
+
+func test_only_a_driving_checker_kicks_and_a_braced_carrier_takes_less() -> void:
+	var kick: float = SkaterCollisionRules.drive_kick(true, true, false, 10.0, 1.0, 1.0,
+			false, BRACE)
+	assert_almost_eq(kick, CheckDriveRules.kick_dv(10.0, 1.0, 1.0), 1e-6)
+	assert_eq(SkaterCollisionRules.drive_kick(false, true, false, 10.0, 1.0, 1.0, false, BRACE),
+			0.0, "past his drive")
+	assert_eq(SkaterCollisionRules.drive_kick(true, true, true, 10.0, 1.0, 1.0, false, BRACE),
+			0.0, "a carrier's Ctrl is the brace")
+	assert_almost_eq(SkaterCollisionRules.drive_kick(true, true, false, 10.0, 1.0, 1.0, true,
+			BRACE), kick * BRACE, 1e-6)
 
 
 func test_with_nobody_committed_it_is_the_passive_bump() -> void:

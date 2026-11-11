@@ -22,7 +22,7 @@ passed per call, and only its own fields written.
 |---|---|
 | `SkaterAgentSteering` | body steering to an anchor: the field, brake-pivot, arrival brake, stance carve |
 | `SkaterAgentStickPlay` | the pressurer's stick on the puck's path and the lift, the tie and its pull, the stick-check button |
-| `SkaterAgentStandUp` | meeting a carrier about to skate into us with Ctrl held, so the contact is our check |
+| `SkaterAgentStandUp` | the timing of Ctrl: a check the dispatch is hunting thrown as the contact comes, and a carrier about to skate into us met the same way, so the contact lands inside our drive (`CheckDriveRules`) |
 | `SkaterAgentBoardPlay` | reaching for and holding a pin, the pinned slide, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
 | `SkaterAgentPress` | the press on a screen we are leaned on, a screener digging in against a defender on him, and a carrier putting his body into a man who stands him up |

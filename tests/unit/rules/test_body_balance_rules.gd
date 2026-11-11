@@ -75,11 +75,25 @@ func test_a_vulnerable_posture_wins_over_the_stance() -> void:
 	assert_eq(BodyBalanceRules.posture_of(false, false), P.UPRIGHT)
 
 
-# Closing speed (m/s) a committed check needs to knock him down.
+# Closing speed (m/s) a timed check (CheckDriveRules) needs to knock him down:
+# where the closing share and the drive's kick together reach his balance. Both
+# rise with the closing speed, so it is bisected.
 func _knockdown_closing(posture: P, deg: float, checker_w: float, victim_w: float) -> float:
 	var per_unit: float = BodyBalanceRules.overshoot(_from(deg), FACING, posture, 1.0, _cfg)
 	var dv_needed: float = 1.0 / per_unit
-	return dv_needed / SkaterCollisionRules.victim_kick(1.0, checker_w, victim_w, TRANSFER)
+	var kick: float = CheckDriveRules.kick_dv(GameRules.DEFAULT_SKATER_THRUST_M_S2,
+			checker_w, victim_w)
+	var lo: float = 0.0
+	var hi: float = 100.0
+	for _i: int in 40:
+		var mid: float = 0.5 * (lo + hi)
+		var dv: float = SkaterCollisionRules.victim_kick(mid, checker_w, victim_w, TRANSFER) \
+				+ kick * CheckDriveRules.impact_share(mid)
+		if dv < dv_needed:
+			lo = mid
+		else:
+			hi = mid
+	return 0.5 * (lo + hi)
 
 
 func test_the_knockdown_grid() -> void:
@@ -107,25 +121,48 @@ func test_square_and_upright_he_rides_a_full_speed_check() -> void:
 
 func test_a_checker_leans_into_what_drives_him_back_only() -> void:
 	var back: Vector2 = -FACING * 3.0
-	assert_almost_eq(BodyBalanceRules.leaned_into(back, FACING, _cfg).length(),
+	assert_almost_eq(BodyBalanceRules.leaned_into(back, FACING, 0.0, _cfg).length(),
 			3.0 * _cfg.checker_front_share, 1e-5)
 	var side := Vector2(3.0, 0.0)
-	assert_eq(BodyBalanceRules.leaned_into(side, FACING, _cfg), side, "across him, all of it")
+	assert_eq(BodyBalanceRules.leaned_into(side, FACING, 0.0, _cfg), side, "across him, all of it")
 	var forward: Vector2 = FACING * 3.0
-	assert_eq(BodyBalanceRules.leaned_into(forward, FACING, _cfg), forward)
+	assert_eq(BodyBalanceRules.leaned_into(forward, FACING, 0.0, _cfg), forward)
+
+
+func test_the_faster_he_arrives_the_more_of_his_own_hit_he_takes() -> void:
+	var back: Vector2 = -FACING * 3.0
+	var prev: float = 0.0
+	for i: int in 25:
+		var felt: float = BodyBalanceRules.leaned_into(back, FACING, 0.5 * i, _cfg).length()
+		assert_gte(felt, prev, "never less for arriving faster")
+		assert_lte(felt, 3.0 + 1e-6, "never more than it was")
+		prev = felt
+	assert_almost_eq(BodyBalanceRules.leaned_into(back, FACING, _cfg.checker_control_speed,
+			_cfg).length(), 3.0 * _cfg.checker_front_share, 1e-5, "under control, the lean")
+	assert_almost_eq(BodyBalanceRules.leaned_into(back, FACING, _cfg.checker_wild_speed,
+			_cfg).length(), 3.0, 1e-5, "at full pace, all of it")
+
+
+func test_the_approach_is_his_own_speed_into_the_hit() -> void:
+	var dv := Vector2(0.0, -2.0)
+	assert_almost_eq(BodyBalanceRules.approach_speed(Vector2(0.0, 4.0), dv), 6.0, 1e-5,
+			"skating 6 into it, knocked back to 4")
+	assert_almost_eq(BodyBalanceRules.approach_speed(dv, dv), 0.0, 1e-5, "set, then driven back")
+	assert_eq(BodyBalanceRules.approach_speed(Vector2(0.0, -5.0), dv), 0.0, "backing away from it")
 
 
 # The checker's own reading of his hit, square on (docs/hit-outcomes-plan.md,
-# Phase 3): the closing speed, both builds and who leans in.
+# Phases 3 and 5): the closing speed, how much of it is his own, both builds.
 func test_the_checkers_table() -> void:
 	var snap := Snapshot.new("res://tests/unit/rules/snapshots/checker_share.txt")
-	var rows: Dictionary = {"full speed on a stationary equal man": [10.0, 1.0, 1.0],
-			"stand-up 8 m/s equal": [8.0, 1.0, 1.0],
-			"light checker into heavy, full speed": [10.0, LIGHT_W, HEAVY_W],
-			"two checkers head-on 16 m/s": [16.0, 1.0, 1.0]}
+	var rows: Dictionary = {"full speed on a stationary equal man": [10.0, 10.0, 1.0, 1.0],
+			"controlled 4 m/s on a stationary equal man": [4.0, 4.0, 1.0, 1.0],
+			"stand-up 8 m/s equal": [8.0, 0.0, 1.0, 1.0],
+			"light checker into heavy, full speed": [10.0, 10.0, LIGHT_W, HEAVY_W],
+			"two checkers head-on 16 m/s": [16.0, 8.0, 1.0, 1.0]}
 	for row: String in rows:
 		var r: Array = rows[row]
-		var kick_on_checker: float = SkaterCollisionRules.victim_kick(r[0], r[2], r[1], TRANSFER)
+		var kick_on_checker: float = SkaterCollisionRules.victim_kick(r[0], r[3], r[2], TRANSFER)
 		snap.record(row, BodyBalanceRules.leaned_into(-FACING * kick_on_checker, FACING,
-				_cfg).length())
+				r[1], _cfg).length())
 	snap.verify(self)

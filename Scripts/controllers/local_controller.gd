@@ -622,6 +622,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# The lift phase rides the same rail: the host's at the ack, stepped on by
 	# the replayed inputs.
 	_adopt_stick_check(server_state)
+	_adopt_check_drive(server_state)
 	# The balance and torso leans ride the same rail: the host's values at the
 	# ack, then the replay steps them forward through the unacked inputs.
 	balance_tilt_vel = server_state.balance_tilt_vel
@@ -888,12 +889,19 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> v
 		var ovel: Vector3 = rec["velocity"]
 		# The live resolver's transfer, from this tick's commit and possession and
 		# the other's replicated ones.
+		var local_has_puck: bool = SkaterStateMachine.state_has_puck(skater.current_shot_state)
+		var local_driving: bool = skater.is_check_driving()
 		var transfer: float = SkaterCollisionRules.contact_transfer(
-				skater.body_check_transfer, local_hit_committed,
-				SkaterStateMachine.state_has_puck(skater.current_shot_state),
-				skater.body_check_brace_resistance,
-				other.body_check_transfer, rec["hit"], rec["puck"],
+				skater.body_check_transfer, local_hit_committed, local_driving,
+				local_has_puck, skater.body_check_brace_resistance,
+				other.body_check_transfer, rec["hit"], rec["drive"], rec["puck"],
 				other.body_check_brace_resistance, skater.hit_passive_transfer_mult)
+		var kick_on_other: float = SkaterCollisionRules.drive_kick(local_driving,
+				local_hit_committed, local_has_puck, skater.press_thrust, skater.weight,
+				other.weight, rec["hit"] and rec["puck"], other.body_check_brace_resistance)
+		var kick_on_local: float = SkaterCollisionRules.drive_kick(rec["drive"], rec["hit"],
+				rec["puck"], other.press_thrust, other.weight, skater.weight,
+				local_hit_committed and local_has_puck, skater.body_check_brace_resistance)
 		var n: Vector3 = axis
 		if axis == Vector3.ZERO:
 			n = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
@@ -910,14 +918,15 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> v
 		if local_is_aggressor:
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					my_pos, skater.velocity, skater.weight, my_radius,
-					opos, ovel, other.weight, other_radius, transfer, axis)
+					opos, ovel, other.weight, other_radius, transfer, axis,
+					kick_on_other, kick_on_local)
 			skater.velocity += _replay_collision_result.dvel_a
 			skater.global_position += _replay_collision_result.sep_a
 		else:
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					opos, ovel, other.weight, other_radius,
 					my_pos, skater.velocity, skater.weight, my_radius,
-					transfer, -axis)
+					transfer, -axis, kick_on_local, kick_on_other)
 			skater.velocity += _replay_collision_result.dvel_b
 			skater.global_position += _replay_collision_result.sep_b
 

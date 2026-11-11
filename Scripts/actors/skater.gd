@@ -363,17 +363,19 @@ var body_check_transfer: float = 0.65
 var body_check_brace_resistance: float = 0.4
 # Fraction of body_check_transfer that lands WITHOUT the hit button committed.
 # The hit button (Ctrl / input.hit_held) is the intent gate: a committed check
-# delivers the full transfer, an incidental bump only this fraction — so skating
-# into someone uncommitted jostles but rarely staggers, and knocks down only a
-# head-on with both near top speed (~18.5 m/s closing at equal mass).
-# Set by the controller each tick via hit_committed below (re-derived from
-# input.hit_held, so it survives reconcile with no wire cost).
+# delivers the transfer (whole inside its drive, CheckDriveRules), an incidental
+# bump only this fraction — so skating into someone uncommitted jostles but
+# rarely staggers.
 var hit_passive_transfer_mult: float = 0.3
-# True this tick when this skater has Ctrl committed (hit button held and not
-# refused: locomotion suppressed, pinned, knocked down, rocked). Written by
+# True this tick when this skater has Ctrl committed (hit button held, or his
+# drive still running off a tap, and not refused: locomotion suppressed, pinned,
+# knocked down, rocked). Written by
 # SkaterController._apply_movement from the input; replicated, and written onto a
 # remote from the wire, so contact_transfer reads both bodies' on every machine.
 var hit_committed: bool = false
+# The timed check's phase (CheckDriveRules.Phase), set where hit_committed is:
+# a contact inside the drive is the full check with the legs' push through it.
+var check_drive_phase: int = CheckDriveRules.Phase.IDLE
 
 # Machine-authority flags, injected once at spawn by GameManager._on_player_spawned
 # (collaborator pattern — the actor stays autoload-free). They gate the victim-side
@@ -1233,10 +1235,12 @@ func _resolve_player_collisions() -> void:
 		# (SkaterCollisionRules.contact_transfer), so it is the same whichever
 		# side's resolver runs, on every machine and through reconcile.
 		var transfer: float = contact_transfer_with(other)
+		var kick_on_other: float = drive_kick_on(other)
+		var kick_on_self: float = other.drive_kick_on(self)
 		SkaterCollisionRules.resolve(_collision_result,
 				my_pos, velocity, weight, my_radius,
 				other_pos, other.velocity, other.weight, other_radius,
-				transfer, axis)
+				transfer, axis, kick_on_other, kick_on_self)
 		if not _collision_result.overlapping:
 			continue
 		# Self: separation + inelastic decel / drive-through, applied
@@ -1253,7 +1257,8 @@ func _resolve_player_collisions() -> void:
 		# reconcile replay; ours is captured by the body_check_delta above.
 		if (is_host_machine or is_local_skater) and self_delta.length_squared() > 0.0001:
 			body_check_received.emit(self_delta,
-					_backstopped(self, other, self_delta, -n, transfer))
+					_backstopped(self, other, self_delta, -n, transfer,
+							_collision_result.kick_on_a))
 		if is_host_machine or other.is_local_skater:
 			other.global_position += _collision_result.sep_b
 			var other_vel_before: Vector3 = other.velocity
@@ -1262,7 +1267,8 @@ func _resolve_player_collisions() -> void:
 			if other_delta.length_squared() > 0.0001:
 				other.body_check_impulse_applied.emit(other_delta)
 				other.body_check_received.emit(other_delta,
-						_backstopped(other, self, other_delta, n, transfer))
+						_backstopped(other, self, other_delta, n, transfer,
+								_collision_result.kick_on_b))
 		# Credit / claim / strip — only on a real (closing) hit, NOT gated by
 		# authority (it must fire on the checker's own machine and the host for
 		# lag-comp validation, Lever A). It is the CHECKER's: the committed body
@@ -1285,23 +1291,38 @@ func delivers_checks() -> bool:
 # The transfer a contact between this body and `other` lands at.
 func contact_transfer_with(other: Skater) -> float:
 	return SkaterCollisionRules.contact_transfer(
-			body_check_transfer, hit_committed,
+			body_check_transfer, hit_committed, is_check_driving(),
 			SkaterStateMachine.state_has_puck(current_shot_state), body_check_brace_resistance,
-			other.body_check_transfer, other.hit_committed,
+			other.body_check_transfer, other.hit_committed, other.is_check_driving(),
 			SkaterStateMachine.state_has_puck(other.current_shot_state),
 			other.body_check_brace_resistance, hit_passive_transfer_mult)
 
 
+func is_check_driving() -> bool:
+	return CheckDriveRules.is_driving(check_drive_phase)
+
+
+# The Δv (m/s) this body's leg drive adds to `other` in a contact at full impact
+# (SkaterCollisionRules.drive_kick).
+func drive_kick_on(other: Skater) -> float:
+	var other_has_puck: bool = SkaterStateMachine.state_has_puck(other.current_shot_state)
+	return SkaterCollisionRules.drive_kick(is_check_driving(), hit_committed,
+			SkaterStateMachine.state_has_puck(current_shot_state), press_thrust,
+			weight, other.weight, other.hit_committed and other_has_puck,
+			other.body_check_brace_resistance)
+
+
 # How hard the hit landed on `victim` for his stagger: his own Δv, or more when
 # the boards are behind him (BoardPinRules) — `from` is the body that drove him,
-# along `n` (unit, toward the victim). The knockback itself is untouched.
+# along `n` (unit, toward the victim), `drive_kick` what his leg drive added.
+# The knockback itself is untouched.
 func _backstopped(victim: Skater, from: Skater, delta_v: Vector3, n: Vector3,
-		transfer: float) -> float:
+		transfer: float, drive_kick: float) -> float:
 	var wall_out: Vector2 = BoardPinRules.wall_normal(victim.global_position,
 			victim.collision_radius(), BoardPinRules.BACKSTOP_MARGIN_M)
 	return BoardPinRules.backstop_hit_strength(delta_v.length(),
 			_collision_result.closing_speed, transfer, Vector2(n.x, n.z), wall_out,
-			from.weight, victim.weight)
+			from.weight, victim.weight, drive_kick)
 
 
 # Holds the body inside the rink by projecting its XZ onto the inner board

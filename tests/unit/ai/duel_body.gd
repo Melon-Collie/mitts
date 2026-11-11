@@ -13,6 +13,7 @@ var radius: float
 var transfer: float
 var brace: float
 var passive_mult: float
+var thrust: float
 var check_cfg: BodyCheckRules.Config
 var balance_cfg: BodyBalanceRules.Config
 var fall_cfg: KnockdownFallRules.Config
@@ -35,6 +36,7 @@ static func capture(skater: Skater, ctrl: SkaterController, puck: Puck) -> RefCo
 	body.transfer = skater.body_check_transfer
 	body.brace = skater.body_check_brace_resistance
 	body.passive_mult = skater.hit_passive_transfer_mult
+	body.thrust = ctrl.thrust
 	body.check_cfg = ctrl._body_check_config()
 	body.balance_cfg = ctrl._balance_config()
 	body.fall_cfg = ctrl._fall_config()
@@ -51,23 +53,34 @@ static func capture(skater: Skater, ctrl: SkaterController, puck: Puck) -> RefCo
 	return body
 
 
-# The transfer a contact between two bodies lands at, from each one's commit and
-# possession.
-func contact_transfer(a_committed: bool, a_has_puck: bool, b_committed: bool,
-		b_has_puck: bool) -> float:
-	return SkaterCollisionRules.contact_transfer(transfer, a_committed, a_has_puck, brace,
-			transfer, b_committed, b_has_puck, brace, passive_mult)
+# The transfer a contact between two bodies lands at, from each one's commit,
+# drive and possession.
+func contact_transfer(a_committed: bool, a_driving: bool, a_has_puck: bool,
+		b_committed: bool, b_driving: bool, b_has_puck: bool) -> float:
+	return SkaterCollisionRules.contact_transfer(transfer, a_committed, a_driving,
+			a_has_puck, brace, transfer, b_committed, b_driving, b_has_puck, brace,
+			passive_mult)
+
+
+# What a body's leg drive adds to the body it hits (Skater.drive_kick_on).
+func drive_kick(driving: bool, committed: bool, has_puck: bool, other_braced: bool) -> float:
+	return SkaterCollisionRules.drive_kick(driving, committed, has_puck, thrust, weight,
+			weight, other_braced, brace)
 
 
 # The Δv `impulse` landing on a body facing `facing`, `strength` its board-backed
 # hardness: returns his (stagger, knockdown) timers, each extended, never
-# shortened. `delivers` (committed without the puck) leans him into it.
+# shortened. `delivers` (committed without the puck) leans him into it, by how
+# fast he was skating into it (`velocity_after` is his after the kick).
 func absorb(stagger: float, knockdown: float, impulse: Vector3, strength: float,
-		facing: Vector2, stance: bool, off_balance: bool, delivers: bool) -> Vector2:
+		facing: Vector2, stance: bool, off_balance: bool, delivers: bool,
+		velocity_after: Vector3) -> Vector2:
 	var felt: Vector3 = impulse
 	if delivers:
-		var leaned: Vector2 = BodyBalanceRules.leaned_into(Vector2(impulse.x, impulse.z),
-				facing, balance_cfg)
+		var dv := Vector2(impulse.x, impulse.z)
+		var leaned: Vector2 = BodyBalanceRules.leaned_into(dv, facing,
+				BodyBalanceRules.approach_speed(Vector2(velocity_after.x, velocity_after.z), dv),
+				balance_cfg)
 		felt = Vector3(leaned.x, 0.0, leaned.y)
 	var magnitude: float = felt.length()
 	var felt_share: float = magnitude / maxf(impulse.length(), 1e-6)
@@ -88,11 +101,11 @@ func absorb(stagger: float, knockdown: float, impulse: Vector3, strength: float,
 # boards behind him counted (Puck.on_body_check): ≥ hit_cooldown_threshold locks
 # him off the puck, ≥ strip_threshold knocks it off his stick.
 func strip_impulse(closing: float, contact: float, hit_dir: Vector2,
-		wall_out: Vector2) -> float:
+		wall_out: Vector2, kick: float) -> float:
 	var delivered: float = BodyCheckRules.puck_strip_impulse(weight * closing, weight,
-			contact, weight)
+			contact, weight) + kick
 	return BoardPinRules.backstop_hit_strength(delivered, closing, contact, hit_dir,
-			wall_out, weight, weight)
+			wall_out, weight, weight, kick)
 
 
 # The puck off a carrier struck at `delivered` along `hit_dir`.

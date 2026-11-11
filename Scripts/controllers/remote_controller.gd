@@ -429,6 +429,7 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		_sample_scratch.velocity = newest.velocity
 		_sample_scratch.brake_intent = newest.brake_intent
 		_sample_scratch.hit_committed = newest.hit_committed
+		_sample_scratch.check_drive_phase = newest.check_drive_phase
 		_sample_scratch.shot_state = newest.shot_state
 		# Ghost gate for the reconcile replay's body-check re-resolution — left
 		# unset the scratch holds the constructor default (false) and replay
@@ -454,6 +455,7 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		# two had already moved past.
 		_sample_scratch.brake_intent = to.brake_intent
 		_sample_scratch.hit_committed = to.hit_committed
+		_sample_scratch.check_drive_phase = to.check_drive_phase
 		_sample_scratch.shot_state = to.shot_state
 		_sample_scratch.is_ghost = to.is_ghost
 		var fa: float = BufferedStateInterpolator.hermite_angle(
@@ -822,6 +824,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# Replicated hit-commit so the body-check resolver reads this remote's brace /
 	# full-vs-passive delivery on this machine.
 	skater.hit_committed = state.hit_committed
+	skater.check_drive_phase = state.check_drive_phase
 	# The skid VFX (SkaterVFX trail marks + spray) keys off skater.is_braking,
 	# which only _process_input stamps — mirror it from the replicated brake
 	# bit so another player's hockey stop actually sprays on this machine.

@@ -88,7 +88,7 @@ func test_he_gets_his_stick_and_his_legs_back_at_the_full_stagger() -> void:
 
 
 func test_a_knockdown_leaves_his_stick_to_the_fall() -> void:
-	_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+	_controller._on_body_check_received(Vector3(4.25, 0.0, 0.0))
 	_tick(InputState.new())
 	assert_true(_skater.is_knocked_down)
 	assert_false(_skater.stick_jarred, "down, not rocked")
@@ -114,16 +114,17 @@ func test_the_rules_defaults_are_the_controllers_tuning() -> void:
 	var balance: BodyBalanceRules.Config = _controller.get_balance_config()
 	var balance_defaults := BodyBalanceRules.Config.new()
 	for field: String in ["balance_ref_dv", "along_share", "sight_behind", "vulnerable_mult",
-			"stance_base_ratio"]:
+			"stance_base_ratio", "checker_front_share", "checker_control_speed",
+			"checker_wild_speed"]:
 		assert_almost_eq(balance.get(field) as float, balance_defaults.get(field) as float, 1e-6, field)
 
 
 func test_square_on_he_rides_what_floors_him_from_the_side() -> void:
-	_controller._on_body_check_received(Vector3(0.0, 0.0, -3.0))
+	_controller._on_body_check_received(Vector3(0.0, 0.0, -4.25))
 	assert_eq(_controller.knockdown_timer, 0.0, "square from the front: rocked, on his feet")
 	assert_true(BodyCheckRules.is_rocked(_controller.stagger_timer, _controller.get_body_check_config()))
 	before_each()
-	_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+	_controller._on_body_check_received(Vector3(4.25, 0.0, 0.0))
 	assert_gt(_controller.knockdown_timer, 0.0, "across his blades: down")
 
 
@@ -132,19 +133,28 @@ func test_in_the_stance_he_rides_the_side_hit() -> void:
 	input.stance_held = true
 	_tick(input)
 	assert_true(_controller.stance_active)
-	_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+	_controller._on_body_check_received(Vector3(4.25, 0.0, 0.0))
 	assert_eq(_controller.knockdown_timer, 0.0)
 
 
-# Committed without the puck, he leans into the hit he lands: a full-speed check
-# on a stationary equal man (3.25 m/s back the way he faces) staggers him.
-func test_a_checker_rides_his_own_full_speed_check() -> void:
+# Committed without the puck, he leans into the hit he lands: his own share of a
+# full-speed check on a stationary equal man (3.25 m/s back the way he faces)
+# staggers a man who was set for it, and rocks one who threw it at full speed.
+func test_a_checker_rides_his_own_check_set_and_not_thrown_at_full_speed() -> void:
+	var own_share := Vector3(0.0, 0.0, -3.25)
 	_tick(_committed())
 	assert_true(_skater.delivers_checks())
-	_controller._on_body_check_received(Vector3(0.0, 0.0, -3.25))
+	_skater.velocity = own_share
+	_controller._on_body_check_received(own_share)
 	assert_false(BodyCheckRules.is_rocked(_controller.stagger_timer,
 			_controller.get_body_check_config()))
 	assert_gt(_controller.stagger_timer, 0.0, "slowed and staggered")
+	before_each()
+	_tick(_committed())
+	_skater.velocity = Vector3(0.0, 0.0, GameRules.DEFAULT_SKATER_MAX_SPEED_M_S) + own_share
+	_controller._on_body_check_received(own_share)
+	assert_true(BodyCheckRules.is_rocked(_controller.stagger_timer,
+			_controller.get_body_check_config()), "thrown too fast, it rocks its thrower")
 
 
 func test_uncommitted_the_same_hit_rocks_him() -> void:
@@ -156,7 +166,7 @@ func test_uncommitted_the_same_hit_rocks_him() -> void:
 # He is on the ice before the get-up starts: the window is the fall, a lie and
 # the get-up, however softly he goes down.
 func test_the_get_up_waits_for_the_ice() -> void:
-	for dv: float in [1.93, 3.0, 6.0]:
+	for dv: float in [2.73, 4.25, 8.5]:
 		before_each()
 		_controller._on_body_check_received(Vector3(dv, 0.0, 0.0))
 		var landing: float = KnockdownFallRules.first_impact_time(dv, _controller._fall_config())

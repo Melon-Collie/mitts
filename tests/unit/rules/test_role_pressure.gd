@@ -81,16 +81,19 @@ func _head_on_check(transfer: float, last_man: bool = false) -> RoleDecision:
 
 func test_commits_exactly_when_the_hit_would_separate() -> void:
 	# A reachable head-on carrier: the pressurer commits iff the collision
-	# resolver's own kick at his closing speed clears the separating-hit bar, so
-	# a heavy hitter hunts it and a light one keeps containing. Committed, he
-	# steers at the carrier's body, not the cutoff point.
+	# resolver's own kick at his closing speed, with his drive's, clears the
+	# separating-hit bar, so a heavy hitter hunts it and a light one keeps
+	# containing. Committed, he steers at the carrier's body, not the cutoff
+	# point.
 	var defaults := RoleContext.new()
 	var committed: int = 0
 	for k: int in range(1, 21):
 		var transfer: float = 0.05 * k
 		var d: RoleDecision = _head_on_check(transfer)
 		var kick: float = SkaterCollisionRules.victim_kick(9.0, defaults.self_weight,
-				AIBodyCheck.LEAGUE_VICTIM_WEIGHT, transfer)
+				AIBodyCheck.LEAGUE_VICTIM_WEIGHT, transfer) \
+				+ CheckDriveRules.kick_dv(defaults.self_max_accel, defaults.self_weight,
+						AIBodyCheck.LEAGUE_VICTIM_WEIGHT)
 		var separates: bool = kick >= AIBodyCheck.COMMIT_IMPULSE_M_S / defaults.check_aggression
 		assert_eq(d.commit_check, separates,
 				"transfer %.2f (kick %.2f m/s) commits iff the hit separates" % [transfer, kick])

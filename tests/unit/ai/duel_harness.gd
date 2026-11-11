@@ -183,6 +183,8 @@ class SimSkater:
 	var stagger: float = 0.0
 	var knockdown: float = 0.0
 	var hit_active: bool = false
+	var drive_phase: int = CheckDriveRules.Phase.IDLE
+	var drive_elapsed: float = 0.0
 	var stance_active: bool = false
 	# The blade marker's offset off the body, latched as a wrister charge starts
 	# (see step()).
@@ -743,7 +745,12 @@ func _move(s: SimSkater) -> void:
 	var loaded: bool = s.input.slap_held or s.swing_at >= ticks
 	var cfg: BodyCheckRules.Config = _match_body.check_cfg
 	var rocked: bool = BodyCheckRules.is_rocked(s.stagger, cfg)
-	s.hit_active = not loaded and s.input.hit_held and not rocked
+	var may_commit: bool = not loaded and not rocked
+	var drive: Vector2 = CheckDriveRules.step(s.drive_phase, s.drive_elapsed,
+			s.input.hit_held, may_commit and not carrying, DT)
+	s.drive_phase = int(drive.x)
+	s.drive_elapsed = drive.y
+	s.hit_active = may_commit and (s.input.hit_held or _driving(s))
 	s.stance_active = not loaded and s.input.stance_held and not s.hit_active and not rocked
 	s.stagger = maxf(s.stagger - DT, 0.0)
 	var stick: Vector2 = s.input.move_vector
@@ -783,6 +790,10 @@ func _delivers(s: SimSkater) -> bool:
 	return s.hit_active and carrier_id != s.peer_id
 
 
+func _driving(s: SimSkater) -> bool:
+	return CheckDriveRules.is_driving(s.drive_phase)
+
+
 # Skater._resolve_player_collisions: each overlapping pair once, from the side
 # closing harder (the lower id on a tie), each body taking its own Δv as a hit
 # (the boards behind it counted), and a real closing hit is the committed
@@ -805,50 +816,64 @@ func _resolve_contacts() -> void:
 				a = b
 				b = t
 				n = -n
-			var contact: float = body.contact_transfer(a.hit_active, carrier_id == a.peer_id,
-					b.hit_active, carrier_id == b.peer_id)
+			var a_carries: bool = carrier_id == a.peer_id
+			var b_carries: bool = carrier_id == b.peer_id
+			var contact: float = body.contact_transfer(a.hit_active, _driving(a), a_carries,
+					b.hit_active, _driving(b), b_carries)
+			var kick_on_b: float = body.drive_kick(_driving(a), a.hit_active, a_carries,
+					b.hit_active and b_carries)
+			var kick_on_a: float = body.drive_kick(_driving(b), b.hit_active, b_carries,
+					a.hit_active and a_carries)
 			SkaterCollisionRules.resolve(_collision, a.pos, a.vel, body.weight, body.radius,
-					b.pos, b.vel, body.weight, body.radius, contact)
+					b.pos, b.vel, body.weight, body.radius, contact, Vector3.ZERO,
+					kick_on_b, kick_on_a)
 			if not _collision.overlapping:
 				continue
 			a.pos += _collision.sep_a
 			a.vel += _collision.dvel_a
 			b.pos += _collision.sep_b
 			b.vel += _collision.dvel_b
-			_take_hit(a, _collision.dvel_a, -n, contact)
-			_take_hit(b, _collision.dvel_b, n, contact)
+			_take_hit(a, _collision.dvel_a, -n, contact, _collision.kick_on_a)
+			_take_hit(b, _collision.dvel_b, n, contact, _collision.kick_on_b)
 			if not _collision.impulse_applied:
 				continue
 			var checker: SimSkater = b if _delivers(b) and not _delivers(a) else a
 			var victim: SimSkater = a if checker == b else b
-			_check_strip(checker, victim, n if checker == a else -n, contact)
+			_check_strip(checker, victim, n if checker == a else -n, contact,
+					_collision.kick_on_b if checker == a else _collision.kick_on_a)
 
 
-# A Δv landing on `s`, driven along `n` (toward him).
-func _take_hit(s: SimSkater, dv: Vector3, n: Vector3, contact: float) -> void:
+# A Δv landing on `s`, driven along `n` (toward him), `kick` of it the other
+# body's leg drive.
+func _take_hit(s: SimSkater, dv: Vector3, n: Vector3, contact: float, kick: float) -> void:
 	if dv.length_squared() <= 0.0001:
 		return
 	var strength: float = BoardPinRules.backstop_hit_strength(dv.length(),
 			_collision.closing_speed, contact, Vector2(n.x, n.z),
 			BoardPinRules.wall_normal(s.pos, _match_body.radius, BoardPinRules.BACKSTOP_MARGIN_M),
-			_match_body.weight, _match_body.weight)
+			_match_body.weight, _match_body.weight, kick)
 	var timers: Vector2 = _match_body.absorb(s.stagger, s.knockdown, dv, strength, s.facing,
-			s.stance_active, SkaterStateMachine.state_off_balance(_shot_state(s)), _delivers(s))
+			s.stance_active, SkaterStateMachine.state_off_balance(_shot_state(s)), _delivers(s),
+			s.vel)
 	s.stagger = timers.x
 	s.knockdown = timers.y
 
 
 # Puck.on_body_check: a hard hit locks the struck body off the puck, and one hard
 # enough on the carrier knocks it off his stick along the hit.
-func _check_strip(checker: SimSkater, victim: SimSkater, n: Vector3, contact: float) -> void:
+func _check_strip(checker: SimSkater, victim: SimSkater, n: Vector3, contact: float,
+		kick: float) -> void:
 	var delivered: float = _match_body.strip_impulse(_collision.closing_speed, contact,
 			Vector2(n.x, n.z),
-			BoardPinRules.wall_normal(victim.pos, _match_body.radius, BoardPinRules.BACKSTOP_MARGIN_M))
+			BoardPinRules.wall_normal(victim.pos, _match_body.radius, BoardPinRules.BACKSTOP_MARGIN_M),
+			kick)
 	if delivered < _match_body.hit_cooldown_threshold:
 		return
 	_release_grace[victim.peer_id] = maxi(int(_release_grace.get(victim.peer_id, 0)),
 			ticks + roundi(_match_body.hit_cooldown_s / DT))
 	if carrier_id != victim.peer_id or delivered < _match_body.strip_threshold:
+		return
+	if not victim.script_path.is_empty() and not victim.script_strippable:
 		return
 	hit_strips += 1
 	carrier_id = -1
@@ -1333,6 +1358,8 @@ func _build_snapshot() -> WorldSnapshot:
 		st.brake_intent = s.input.brake
 		st.stance_active = s.stance_active
 		st.hit_committed = s.hit_active
+		st.check_drive_phase = s.drive_phase
+		st.check_drive_elapsed = s.drive_elapsed
 		st.stagger_timer = s.stagger
 		st.knockdown_timer = s.knockdown
 		st.stick_check_phase = s.check_phase

@@ -48,15 +48,17 @@ var stance_scrape: float = 3.0 / GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 var stance_stride_mult: float = 0.6
 var stance_max_speed_mult: float = 0.85
 # ── Hit-Button (Body-Check Commit) Tuning ─────────────────────────────────────
-# The hit button (Ctrl / input.hit_held) commits a check: it delivers the full
-# body-check transfer (see Skater.hit_passive_transfer_mult for the uncommitted
-# floor), and pays for it by pulling the stick off the ice — while committed you
-# can't poke, receive a pass, or corral a loose puck (gated in
-# PuckController/PickupClaim on the replicated skater.hit_committed) — and by
-# skating loaded on a shoulder: less grip, weaker strides. A commit loaded early
-# is visible and can't follow a carrier who cuts; one thrown late costs almost
-# nothing. Deterministic from the replicated input.hit_held, so every cost
-# re-derives through reconcile replay.
+# The hit button (Ctrl / input.hit_held) commits a check. The press throws a
+# leg drive (CheckDriveRules): a contact inside it delivers the full body-check
+# transfer and the legs' kick, one past it the held share (see
+# Skater.hit_passive_transfer_mult for the uncommitted floor). It pays by
+# pulling the stick off the ice — while committed you can't poke, receive a
+# pass, or corral a loose puck (gated in PuckController/PickupClaim on the
+# replicated skater.hit_committed) — and by skating loaded on a shoulder: less
+# grip, weaker strides, for the drive's whole window even off a tap. A commit
+# loaded early is visible, has spent its drive and can't follow a carrier who
+# cuts. Deterministic from input.hit_held, so every cost re-derives through
+# reconcile replay.
 var commit_grip_mult: float = 0.6
 var commit_stride_mult: float = 0.5
 # Commit stance (cosmetic): while the Hit button is held the skater visibly loads
@@ -170,11 +172,13 @@ var rocked_catch_rate: float = 15.0      # the catch's ease rate: a step out in 
 # SAME replicated / snapped / decayed rail as stagger_timer. At these values a
 # square, upright man rides any one-sided check below top speed, and a side hit
 # floors him from ~6 m/s closing at equal builds (docs/hit-outcomes-plan.md).
-var balance_ref_dv: float = 2.4            # m/s a square, upright, reference-height man rides
+var balance_ref_dv: float = 3.4            # m/s a square, upright, reference-height man rides
 var balance_along_share: float = 0.5       # share of a hit along his blades that tips him
 var balance_sight_behind: float = 0.6      # his balance with his back to the hitter
-var balance_vulnerable_mult: float = 0.6   # ... mid-shot: a wind-up, a load, a follow-through
+var balance_vulnerable_mult: float = 0.73  # ... mid-shot: a wind-up, a load, a follow-through
 var balance_checker_front_share: float = 0.4  # a committed checker takes his own hit at this
+var balance_checker_control_speed: float = 4.0  # ... arriving up to this fast (m/s)
+var balance_checker_wild_speed: float = 8.0     # ... and whole from this
 var knockdown_ref_overshoot: float = 1.7   # past his balance by this, the longest knockdown
 var knockdown_lie_min_seconds: float = 0.15  # on the ice before the get-up, just past his balance
 var knockdown_lie_max_seconds: float = 0.7   # ... at knockdown_ref_overshoot: ~1.9 s down in all
@@ -941,6 +945,8 @@ var shot_stride_fade: float = 0.8              # stride suppression while loadin
 var check_drive_time: float = 0.45        # seconds of shoulder-drive after a landed hit
 var check_drive_lean_deg: float = 14.0    # trunk drives INTO the hit at full hardness
 var check_drive_stance: float = 0.6       # legs drive under the hit — the finishing base
+var check_throw_lean_deg: float = 10.0    # trunk thrown forward at the middle of the press's drive
+var check_throw_stance: float = 1.8       # crouch floor the throw dips to (× stance_hip_deg)
 var stick_lift_trunk_deg: float = 3.0     # slight chest-up pop while working under a stick
 var stick_lift_stance: float = 0.2        # coiled working posture while the blade is up
 var stick_lift_blend_speed: float = 10.0  # how fast the lift read engages/releases
@@ -1055,6 +1061,7 @@ var _pose_bridge := SkaterPoseBridge.new()
 var _skating: SkaterSkatingCoordinator = SkaterSkatingCoordinator.new()
 var _ik: SkaterIKCoordinator = SkaterIKCoordinator.new()
 var _stick_check: SkaterStickCheck = SkaterStickCheck.new()
+var _check_drive: SkaterCheckDrive = SkaterCheckDrive.new()
 var _settle: SkaterSettleGate = SkaterSettleGate.new()
 # The puck's velocity in this skater's frame at its last catch (world XZ),
 # quantized as the grant carries it.
@@ -1636,8 +1643,10 @@ func _on_body_check_received(impulse: Vector3, stagger_strength: float = -1.0) -
 func _absorb_hit(impulse: Vector3, stagger_strength: float) -> void:
 	var felt: Vector3 = impulse
 	if skater.delivers_checks():
-		var leaned: Vector2 = BodyBalanceRules.leaned_into(Vector2(impulse.x, impulse.z),
-				skater.get_facing(), _balance_config())
+		var dv := Vector2(impulse.x, impulse.z)
+		var leaned: Vector2 = BodyBalanceRules.leaned_into(dv, skater.get_facing(),
+				BodyBalanceRules.approach_speed(
+						Vector2(skater.velocity.x, skater.velocity.z), dv), _balance_config())
 		felt = Vector3(leaned.x, 0.0, leaned.y)
 	var impulse_magnitude: float = felt.length()
 	var felt_share: float = impulse_magnitude / maxf(impulse.length(), 1e-6)
@@ -1753,6 +1762,20 @@ func _advance_stick_check(input: InputState, delta: float) -> void:
 func _adopt_stick_check(state: SkaterNetworkState) -> void:
 	_stick_check.adopt(state.stick_check_phase, state.stick_check_elapsed)
 	skater.stick_check_phase = _stick_check.phase
+
+
+# Adopts the host's check-drive phase ahead of a reconcile replay, which steps
+# it on.
+func _adopt_check_drive(state: SkaterNetworkState) -> void:
+	_check_drive.adopt(state.check_drive_phase, state.check_drive_elapsed)
+	skater.check_drive_phase = _check_drive.phase
+
+
+# Steps the timed check from the button (CheckDriveRules). `may_commit` is
+# whether this tick lets him commit at all; a carrier's Ctrl is the brace.
+func _advance_check_drive(held: bool, may_commit: bool, delta: float) -> void:
+	_check_drive.advance(held, may_commit and not has_puck, delta)
+	skater.check_drive_phase = _check_drive.phase
 
 
 func _process_input(input: InputState, delta: float) -> void:
@@ -2234,6 +2257,8 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.stick_check_phase = _stick_check.phase
 	state.stick_check_elapsed = _stick_check.elapsed
 	state.stick_tied = skater.stick_tied
+	state.check_drive_phase = _check_drive.phase
+	state.check_drive_elapsed = _check_drive.elapsed
 	state.pin_role = skater.pin_role
 	state.pin_strength = skater.pin_strength
 	state.diving = skater.is_diving
@@ -2335,6 +2360,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.move_intent = state.move_intent
 	skater.brake_intent = state.brake_intent
 	skater.hit_committed = state.hit_committed
+	skater.check_drive_phase = state.check_drive_phase
 	# Same for the shot-state renders Skater._process drives every frame:
 	# stick flex (shot_state transitions fire the release whip, shot_charge
 	# sets the load bow) and the loft-level blade scoop. Goal replays run on
@@ -2616,6 +2642,8 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	skater.hit_committed = false
 	_stick_check.reset()
 	skater.stick_check_phase = _stick_check.phase
+	_check_drive.reset()
+	skater.check_drive_phase = _check_drive.phase
 	_settle.clear()
 	stagger_timer = 0.0
 	balance_tilt_vel = Vector2.ZERO
@@ -3621,6 +3649,7 @@ func _apply_movement(input: InputState, delta: float) -> void:
 		stance_active = false
 		hit_active = false
 		skater.hit_committed = false
+		_advance_check_drive(input.hit_held, false, delta)
 		stagger_timer = maxf(stagger_timer - delta, 0.0)
 		skater.velocity = skater.velocity.move_toward(Vector3.ZERO, knockdown_friction * delta)
 		return
@@ -3636,10 +3665,14 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	# Neither side of a pin commits (it is held on the stick button, and nothing
 	# stacks on it); the pinned one, pressed into the glass, has no stance either.
 	# A rocked skater has neither: the hit took his legs out of both.
+	# A drive under way holds the commit through its window, so a tap is a whole
+	# check and costs the whole of one.
 	var locked: bool = skater.pin_role != BoardPinRules.Role.NONE
 	var rocked: bool = BodyCheckRules.is_rocked(stagger_timer, _body_check_config())
-	hit_active = not locomotion_suppressed and not loaded and input.hit_held and not locked \
+	var may_commit: bool = not locomotion_suppressed and not loaded and not locked \
 			and not rocked
+	_advance_check_drive(input.hit_held, may_commit, delta)
+	hit_active = may_commit and (input.hit_held or skater.is_check_driving())
 	skater.hit_committed = hit_active
 	stance_active = not locomotion_suppressed and not loaded and input.stance_held \
 			and not hit_active and skater.pin_role != BoardPinRules.Role.PINNED and not rocked
@@ -3941,6 +3974,8 @@ func _balance_config() -> BodyBalanceRules.Config:
 		_cached_balance_cfg.sight_behind = balance_sight_behind
 		_cached_balance_cfg.vulnerable_mult = balance_vulnerable_mult
 		_cached_balance_cfg.checker_front_share = balance_checker_front_share
+		_cached_balance_cfg.checker_control_speed = balance_checker_control_speed
+		_cached_balance_cfg.checker_wild_speed = balance_checker_wild_speed
 		_cached_balance_cfg.stance_base_ratio = \
 				(GaitPose.HIP_HALF_WIDTH + stance_width_m) / GaitPose.HIP_HALF_WIDTH
 	return _cached_balance_cfg

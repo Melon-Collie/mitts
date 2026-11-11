@@ -1,9 +1,10 @@
 class_name SkaterAgentStandUp
 extends RefCounted
 
-# One bot meeting a carrier who is about to skate into it (AIStandUpRead),
-# every physics tick after dispatch: Ctrl held for the beat before contact, so
-# the contact is the bot's check. Owns no state.
+# One bot's timing of the Hit button, every physics tick after dispatch: a check
+# the dispatch is hunting is thrown as the contact comes, and a carrier about to
+# skate into the bot is met the same way (AIStandUpRead), so either contact lands
+# inside the bot's drive (CheckDriveRules). Owns no state.
 
 static var _check_cfg := BodyCheckRules.Config.new()
 
@@ -33,9 +34,13 @@ func apply(input: InputState, snapshot: WorldSnapshot, check_aggression: float) 
 	if me == null or man == null or me.pin_role != BoardPinRules.Role.NONE \
 			or SkaterStateMachine.state_has_puck(me.shot_state):
 		return
+	if input.hit_held and AIPinThreatRead.time_to_contact(me.position, me.velocity,
+			man.position, man.velocity) > AIStandUpRead.THROW_S:
+		input.hit_held = false
 	var caps: AISkaterCaps = _caps_by_peer.get(_peer_id)
 	var man_caps: AISkaterCaps = _caps_by_peer.get(carrier_pid)
 	if AIStandUpRead.meets(me.position, me.velocity, caps.weight if caps != null else 1.0,
 			man.position, man.velocity, man_caps.weight if man_caps != null else 1.0,
-			caps.body_check_transfer if caps != null else 0.65, _check_cfg.ref_impulse):
+			caps.body_check_transfer if caps != null else 0.65, _check_cfg.ref_impulse,
+			caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2):
 		input.hit_held = true

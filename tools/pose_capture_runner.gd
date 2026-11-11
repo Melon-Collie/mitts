@@ -302,6 +302,12 @@ const POSES: Array = [
 		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 		[40, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
+	# The throw at the middle of its window (CheckDriveRules.DRIVE_S / 2): the dip
+	# and the trunk driven forward off the press.
+	{"name": "hit_throw_side", "puck": false, "cam": Vector3(-3.4, 0.9, 0.3), "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[14, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
 	# ── Board pin ───────────────────────────────────────────────────────────
 	# Both locked roles against the +x boards, facing them (the boards are not
 	# drawn here; the tiles are for the lean and the sit): the pinned skater
@@ -370,15 +376,15 @@ const POSES: Array = [
 	# the side and backward. These are the tiles that show where the fall
 	# pivots: a body lying a hip-height above the ice, or one sunk through it,
 	# is a proportion no display-less test catches.
-	{"name": "knockdown_mid_fall", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+	{"name": "knockdown_mid_fall", "puck": false, "knockdown": Vector3(4.25, 0.0, 0.0),
 		"cam": Vector3(0.6, -0.2, 3.4), "cam_aim": Vector3(0.6, -0.5, 0.0),
 		"steps": [[30, {}]]},
-	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(4.25, 0.0, 0.0),
 		"cam": Vector3(0.9, -0.45, 2.6), "cam_aim": Vector3(0.9, -0.95, 0.0),
-		"steps": [[100, {}]]},
-	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 6.0),
+		"steps": [[85, {}]]},
+	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 8.5),
 		"cam": Vector3(2.6, -0.45, 0.9), "cam_aim": Vector3(0.0, -0.95, 0.9),
-		"steps": [[100, {}]]},
+		"steps": [[85, {}]]},
 	# A full check short of the knockdown line rocks him: the reel, the splayed
 	# catch, the stick jarred up. Hit from the side, seen from behind and from
 	# the side the hit came from.

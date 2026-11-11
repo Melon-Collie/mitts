@@ -477,3 +477,9 @@ here whenever you bump, in the same format.
 #      before confirming a snapshot within the box tolerance. A v97 peer would
 #      read the digest as bits past the blob's end, so mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged.
+# v99: the skater block grows a byte, to 59: the timed check's phase and ticks
+#      into it (CheckDriveRules.pack), which a contact reads on both bodies
+#      (full transfer and the legs' kick inside the drive, the held share past
+#      it) and the local reconcile adopts. The hit button's meaning changed
+#      with it: a contact outside the drive lands at CheckDriveRules.HELD_SHARE
+#      of the transfer. Replay FORMAT_VERSION 21: the frames hold the block.

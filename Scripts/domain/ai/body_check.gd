@@ -3,12 +3,11 @@ class_name AIBodyCheck
 # Pure decision: should an on-puck defensive bot COMMIT to a body check on the
 # carrier right now, and where's the body-intercept to drive at?
 #
-# There is no "throw a hit" action: a bot delivers one by driving its body into
-# the intercept while holding the Hit button (input.hit_held), and
-# Skater._resolve_player_collisions turns the closing velocity into the impulse
-# exactly as for a human. Holding Hit is what delivers the FULL transfer
-# predicted_impulse assumes; an uncommitted drive lands only the passive
-# fraction.
+# A bot delivers one as a human does: it drives its body at the intercept and
+# presses Hit as the contact comes (SkaterAgentStandUp, inside
+# AIStandUpRead.THROW_S), so the contact lands inside its drive
+# (CheckDriveRules) at the full transfer and the legs' kick predicted_impulse
+# assumes. Pressed early or not at all it lands the held or the passive share.
 #
 # Committing abandons containment, so only roles with support behind them ask:
 # PRESSURE (in-zone pressurer and forecheck F1) and NZ_F1 once goal-side of
@@ -29,8 +28,9 @@ const MAX_LEAD_S: float = 0.6
 # rocks and strips him (BodyCheckRules' rocked band and the puck-strip threshold,
 # both at stagger_ref_impulse 1.35) with a little margin, and short of what
 # floors a square, upright man (BodyBalanceRules.balance_ref_dv): the knockdown
-# is the angle's and the moment's. At equal mass a committed drive kicks the
-# victim ~0.325 × closing, so a baseline bot commits from ~5 m/s closing.
+# is the angle's and the moment's. At equal mass a timed check kicks the victim
+# ~0.325 × closing plus the legs' ~0.84, so a baseline bot commits from ~2.3 m/s
+# closing.
 const COMMIT_IMPULSE_M_S: float = 1.6
 
 # League-average victim mass (Skater.weight default), for a carrier whose build
@@ -59,7 +59,8 @@ static func evaluate(
 		carrier_pos: Vector3,
 		carrier_vel: Vector3,
 		commit_impulse_threshold: float = COMMIT_IMPULSE_M_S,
-		victim_weight: float = LEAGUE_VICTIM_WEIGHT) -> Result:
+		victim_weight: float = LEAGUE_VICTIM_WEIGHT,
+		self_thrust: float = GameRules.DEFAULT_SKATER_THRUST_M_S2) -> Result:
 	var r := Result.new()
 
 	if self_stagger_timer > 0.0:
@@ -81,12 +82,14 @@ static func evaluate(
 	if gap > self_max_speed * t + REACH_SLACK_M:
 		return r
 
-	# 3. Real hit, predicted through the resolver's own delivery function
-	# (SkaterCollisionRules.victim_kick), so prediction and physics are one
-	# formula.
+	# 3. Real hit, predicted through the resolver's own delivery functions
+	# (SkaterCollisionRules.victim_kick and the drive's CheckDriveRules.kick_dv),
+	# so prediction and physics are one formula.
 	var approach: float = _predicted_approach(self_pos, self_max_speed, intercept, carrier_vel)
 	var predicted_impulse: float = SkaterCollisionRules.victim_kick(
-			approach, self_weight, victim_weight, self_body_check_transfer)
+			approach, self_weight, victim_weight, self_body_check_transfer) \
+			+ CheckDriveRules.kick_dv(self_thrust, self_weight, victim_weight) \
+			* CheckDriveRules.impact_share(approach)
 	if predicted_impulse < commit_impulse_threshold:
 		return r
 

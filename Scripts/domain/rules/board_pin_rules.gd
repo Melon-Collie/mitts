@@ -105,14 +105,15 @@ static func locked_gap(victim_pos: Vector3, victim_radius: float, pinner_pos: Ve
 # impulse (closing × transfer × his mass) on the victim's mass alone — the wall
 # stops him, so none of it goes into his recoil and none is shared with it. The
 # knockdown does not read this: being knocked off his feet is being moved, and
-# the wall is what stops the moving.
+# the wall is what stops the moving. `drive_kick` (m/s) is the attacker's leg
+# drive, already on the victim's mass alone and inside open_ice_dv.
 static func backstop_hit_strength(open_ice_dv: float, closing_speed: float,
 		transfer: float, hit_dir: Vector2, wall_out: Vector2, attacker_mass: float,
-		victim_mass: float) -> float:
+		victim_mass: float, drive_kick: float = 0.0) -> float:
 	if wall_out == Vector2.ZERO or hit_dir.dot(wall_out) < BACKSTOP_MIN_INTO_WALL:
 		return open_ice_dv
 	return maxf(open_ice_dv,
-			closing_speed * transfer * attacker_mass / maxf(victim_mass, 0.001))
+			closing_speed * transfer * attacker_mass / maxf(victim_mass, 0.001) + drive_kick)
 
 
 static func pin_strength(defender_mass: float, victim_mass: float) -> float:
