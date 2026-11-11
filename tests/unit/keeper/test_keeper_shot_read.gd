@@ -28,13 +28,12 @@ func _read(x: float, y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT) -> KeeperS
 func test_every_line_the_game_scores_clean_is_read_on_net() -> void:
 	var r: float = GameRules.PUCK_COLLISION_RADIUS
 	var limit: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - r
-	var x: float = -limit
-	while x <= limit + 1e-6:
+	for i: int in 41:
+		var x: float = lerpf(-limit, limit, float(i) / 40.0)
 		assert_true(GoalDetectionRules.point_in_mouth(x, GameRules.PUCK_COLLISION_HALF_HEIGHT,
 				GameRules.NET_HALF_WIDTH, GameRules.NET_HEIGHT, GameRules.NET_POST_RADIUS, r,
 				GameRules.PUCK_COLLISION_HALF_HEIGHT), "a goal at %.3f" % x)
 		assert_true(_read(x).on_net(), "on net at %.3f" % x)
-		x += limit / 20.0
 
 
 func test_a_shot_tight_inside_the_far_post_is_on_net() -> void:
