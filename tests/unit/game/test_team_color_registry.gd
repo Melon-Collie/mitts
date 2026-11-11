@@ -132,22 +132,24 @@ func test_collar_and_yoke_are_optional_and_parse_null() -> void:
 	assert_eq(named.jersey.collar, Color("#0000FF"))
 
 
-# A yoke is cut off at the armhole's seam unless the kit names it round: the
-# shoulders' caps are the sleeve's, so a round one is carried over them by a
-# stripe at the sleeve's top, under the kit's own sleeve stripes.
-func test_only_a_round_yoke_runs_on_over_the_sleeves_top() -> void:
+# The shoulders' caps are the sleeve's, so a yoke is carried over them by a
+# stripe at the sleeve's top in the kit's yoke_shape, under the kit's own sleeve
+# stripes.
+func test_a_yoke_runs_on_over_the_sleeves_top_in_its_shape() -> void:
 	var sleeve := {"base": "#FF0000", "stripes": [{"pos": 0.7, "width": 0.1, "color": "#0000FF"}]}
 	var square: Dictionary = TeamColorRegistry._parse_kit(
 			{"jersey": {"base": "#FF0000", "yoke": "#00FF00"}, "sleeve": sleeve})
 	assert_eq(square.jersey.yoke_shape, SleevePaint.YOKE_SQUARE, "a yoke is square unless named round")
-	assert_eq(square.sleeve.stripes.size(), 1, "and leaves the sleeve as the kit wrote it")
+	assert_eq(square.sleeve.stripes.size(), 2)
+	assert_eq(square.sleeve.stripes[0],
+			SleevePaint.yoke_cap(SleevePaint.YOKE_SQUARE, Color("#00FF00")),
+			"painted first, so the kit's own stripes lie over it")
+	assert_eq(square.sleeve.stripes[1].color, Color("#0000FF"))
 	var round_yoke: Dictionary = TeamColorRegistry._parse_kit(
 			{"jersey": {"base": "#FF0000", "yoke": "#00FF00", "yoke_shape": "round"},
 			"sleeve": sleeve})
-	assert_eq(round_yoke.sleeve.stripes.size(), 2)
-	assert_eq(round_yoke.sleeve.stripes[0], SleevePaint.yoke_cap(Color("#00FF00")),
-			"painted first, so the kit's own stripes lie over it")
-	assert_eq(round_yoke.sleeve.stripes[1].color, Color("#0000FF"))
+	assert_eq(round_yoke.sleeve.stripes[0],
+			SleevePaint.yoke_cap(SleevePaint.YOKE_ROUND, Color("#00FF00")))
 	var no_yoke: Dictionary = TeamColorRegistry._parse_kit(
 			{"jersey": {"base": "#FF0000", "yoke_shape": "round"}, "sleeve": sleeve})
 	assert_eq(no_yoke.sleeve.stripes.size(), 1, "a shape with no yoke to shape adds nothing")

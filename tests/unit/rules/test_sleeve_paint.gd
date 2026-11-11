@@ -84,12 +84,18 @@ func _painted(stripe: Dictionary, u: float, down_m: float) -> bool:
 	return false
 
 
-func test_a_round_yoke_covers_the_cap_and_stops_above_the_number() -> void:
-	var cap: Dictionary = SleevePaint.yoke_cap(Color.RED)
+func test_a_yoke_covers_the_caps_top_and_a_round_one_runs_over_its_edge() -> void:
+	var square: Dictionary = SleevePaint.yoke_cap(SleevePaint.YOKE_SQUARE, Color.RED)
+	var round_cap: Dictionary = SleevePaint.yoke_cap(SleevePaint.YOKE_ROUND, Color.RED)
+	# The cap's top is drawn at the sleeve's top texel (SleeveDecal.TOP_V).
+	var cap_top_m: float = SleeveDecal.TOP_V * SleevePaint.LENGTH_M
 	for u: float in [0.05, 0.25, 0.5, 0.75]:
-		assert_true(_painted(cap, u, 0.002), "u %.2f: the sleeve's top is the yoke's" % u)
-		assert_true(_painted(cap, u, SleevePaint.YOKE_CAP_M - 0.004), "u %.2f: down to the cap" % u)
-		assert_false(_painted(cap, u, SleevePaint.YOKE_CAP_M + 0.004), "u %.2f: and no further" % u)
+		assert_true(_painted(square, u, cap_top_m), "u %.2f: a square yoke has the cap's top" % u)
+		assert_false(_painted(square, u, 0.01), "u %.2f: and none of the arm under its edge" % u)
+		assert_true(_painted(round_cap, u, cap_top_m), "u %.2f: a round one has it too" % u)
+		assert_true(_painted(round_cap, u, 0.02), "u %.2f: and runs on over the edge" % u)
+		assert_false(_painted(round_cap, u, SleevePaint.YOKE_ROUND_M + 0.004),
+				"u %.2f: no further than its depth" % u)
 	# The number's glyphs stand about 0.7 of their em.
-	assert_lt(SleevePaint.YOKE_CAP_M, SleevePaint.NUMBER_CENTER_M - 0.35 * SleeveDecal.NUMBER_EM_M,
-			"the number sits on the sleeve below it")
+	assert_lt(SleevePaint.YOKE_ROUND_M, SleevePaint.NUMBER_CENTER_M - 0.35 * SleeveDecal.NUMBER_EM_M,
+			"the number sits on the sleeve below either")
