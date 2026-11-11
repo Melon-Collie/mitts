@@ -121,10 +121,9 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   `StripeOutline`; the jersey's stripes take the same, in `JerseyDecal`) drawn
   down a texture with the number on the outside near its top, U round the arm
   and V down its whole length, one paint zone per arm (`sleeve_surface`). The
-  shoulder's cap is the sleeve's, so a kit's yoke runs on over it as a sleeve
-  stripe the registry lays first (`SleevePaint.yoke_stripe`): cut off at the
-  cap, above the number, or in a round yoke on down the outside of the arm
-  past the number to a rounded end. The
+  shoulder's cap is the sleeve's, so a kit's yoke is cut off at the armhole's
+  seam (square) unless its `yoke_shape` is round, which the registry carries
+  over the cap as a sleeve stripe laid first (`SleevePaint.yoke_cap`). The
   goalie's jersey is a skin of the same build (`KeeperJerseyMesh`, its own
   CLAUDE.md), painted by the same two decals.
 - **The knees** blend through a middle bone at half the shin's turn

@@ -20,15 +20,11 @@ const GIRTH_M: float = 0.60
 const SHOULDER_BAND_M: float = 0.15
 # Where the number sits on the sleeve, its centre down from the shoulder.
 const NUMBER_CENTER_M: float = 0.08
-# A jersey's yoke comes this far down the sleeve: over the shoulder's cap and
-# cut off there, above the number.
+# A round yoke comes this far down the sleeve: over the shoulder's cap and no
+# further, above the number.
 const YOKE_CAP_M: float = 0.03
-# A round yoke runs on down the outside of the arm to here, past the number,
-# rounding back up to the cap's line under the arm.
-const YOKE_ROUND_TIP_M: float = 0.155
-# A round yoke's stripe reaches this far above the sleeve's top at its lowest,
-# so none of the sleeve shows over it.
-const _YOKE_OVERREACH_M: float = 0.03
+# A jersey's yoke is cut off at the armhole's seam (square) or rounds over the
+# shoulder's cap, which is the sleeve's (round).
 const YOKE_SQUARE: String = "square"
 const YOKE_ROUND: String = "round"
 # The two-segment form: each segment 0.33 m, its stripes shrunk about its
@@ -86,18 +82,9 @@ static func _from_segment(s: Dictionary, start_m: float) -> Dictionary:
 			"color": s.color}
 
 
-# The stripe a jersey's yoke lays on the sleeve's top. Square, it is cut off
-# straight round the arm at the cap. Round, its lower edge is one sine wave
-# round the arm, from the cap's line under the arm down to the tip on the
-# outside, its upper edge above the sleeve's top the whole way round.
-static func yoke_stripe(shape: String, color: Color) -> Dictionary:
-	if shape != YOKE_ROUND:
-		return _band(0.0, YOKE_CAP_M, color)
-	var depth_m: float = YOKE_ROUND_TIP_M - YOKE_CAP_M
-	var width_m: float = YOKE_CAP_M + depth_m + _YOKE_OVERREACH_M
-	return {"pos": pos_of(YOKE_CAP_M - width_m * 0.5), "width": width_m / LENGTH_M,
-			"color": color,
-			"peak": {"depth": pos_of(depth_m), "count": 1, "u": 0.5, "shape": "sine"}}
+# The stripe a round yoke lays on the sleeve's top: the shoulder's cap.
+static func yoke_cap(color: Color) -> Dictionary:
+	return _band(0.0, YOKE_CAP_M, color)
 
 
 static func _band(from_m: float, to_m: float, color: Color) -> Dictionary:
