@@ -292,9 +292,8 @@ var arm_working_extension: float = 0.97
 # back: an arm bent over a stick held off the hip hangs its elbow beside and
 # behind the ribs, and the steer (SkaterArmPoses.steer_turn) takes it out
 # further only where the jersey is in the way. With more flare a hand held
-# under its shoulder wings the elbow out level with it; with less, a raised
-# arm's line comes near the pole's and its elbow flips (the celebration's
-# fist, test_body_stays_smooth.gd).
+# under its shoulder wings the elbow out level with it; a raised arm takes
+# more of its own (SkaterArmRig._raised_pole).
 var arm_pole_local: Vector3 = Vector3(0.4, -1.0, 0.2)
 # Base size of the arm bone meshes (diameter). scale.z is set per tick to the
 # bone's actual length; X/Y control arm thickness. A loose jersey sleeve, not a
@@ -616,6 +615,10 @@ var _drawn_tick: int = -1
 # render concerns: run once per rendered frame here, visibility-gated, like the
 # stick/arm mesh rebuild below. Empty Callable = no hook (safe default).
 var render_pose_update: Callable = Callable()
+# Its tick-rate sibling: the controller's eases that every live tick steps once
+# whichever path drove the body (play, a locked phase, a remote's
+# interpolation), and a reconcile's replay never does. Takes the tick's delta.
+var tick_pose_update: Callable = Callable()
 # Resolves the skater's current team_id by deferring to the registry. Set by
 # PlayerRegistry on spawn so the goalie / VFX / other Skater-holding code can
 # query team affiliation without growing a cached field that has to be
@@ -1131,6 +1134,8 @@ func _physics_process(delta: float) -> void:
 	_prev_blade_world_pos = blade_world_pos
 	if _draw.is_tracking():
 		_draw.update(delta, blade_world_velocity)
+	if tick_pose_update.is_valid():
+		tick_pose_update.call(delta)
 	# Backstop: never let a NaN/Inf velocity or position reach the transform write —
 	# it poisons every downstream reader (camera, IK, the wire state) irrecoverably.
 	# This should never fire; when it does it logs the offending state so the
@@ -1568,6 +1573,15 @@ func _apply_blade_tilt() -> void:
 	var rot: Basis = _rigid_blade_basis(hand - heel, twist)
 	heel = _toe_on_ice(heel, rot, hand, twist, marker_global.origin.y, up)
 	rot = _swing_rigid(_rigid_blade_basis(hand - heel, twist), marker.basis, hand - heel, cup)
+	# The swing's blade is the anchor's, turned, not one solved to the ice: a
+	# toe that would go under it lifts the heel, and the blade turns with the
+	# shaft that leaves.
+	var under: float = minf(marker_global.origin.y
+			+ (heel + rot * Vector3(0.0, 0.0, -blade_length)).dot(up), 0.0) * _swing_weight
+	if under < 0.0:
+		var shaft: Vector3 = (hand - heel).normalized()
+		heel -= up * under
+		rot = Basis(Quaternion(shaft, (hand - heel).normalized())) * rot
 	var keep_scale: Vector3 = _blade_mesh_instance.transform.basis.get_scale()
 	_blade_mesh_instance.transform = Transform3D(rot.scaled(keep_scale), heel)
 	_blade_drawn = marker * _blade_mesh_instance.transform

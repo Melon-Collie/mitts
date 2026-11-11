@@ -60,11 +60,17 @@ public:
 		S_GLOVE_SPACING,
 		S_HAS_NET_ANCHOR,
 		S_REACH_PURPOSE,
-		// SkaterIKCoordinator.chest_fold, carry_reach_floor (0 without the puck)
-		// and the forehand floor's strength (TopHandIK.Config.hand_forward).
+		// SkaterIKCoordinator.chest_fold, _reach_floor and the forehand floor's
+		// strength (TopHandIK.Config.hand_forward).
 		S_CHEST_FOLD,
-		S_CARRY_FLOOR,
+		S_REACH_FLOOR,
 		S_HAND_FORWARD,
+		// The hold (SkaterIKCoordinator._held_hand): _hold_share, the fold the
+		// target is laid by (_lay_fold) and the one the hand is held under
+		// (ready_fold).
+		S_HOLD_SHARE,
+		S_LAY_FOLD,
+		S_READY_FOLD,
 		S_COUNT,
 	};
 	// run()'s vector inputs, by index.
@@ -132,6 +138,27 @@ private:
 	double faceoff_center_grip_fraction = 0.0;
 	double twist_limit = 0.0;
 
+	// StickHoldRules.Config and its bands, and SkaterIKCoordinator's own for
+	// the hold (configure_hold).
+	double hold_lie = 0.0;
+	double hold_home_out = 0.0;
+	double hold_home_ahead = 0.0;
+	double hold_reach_ahead = 0.0;
+	double hold_reach_out = 0.0;
+	double hold_reach_across = 0.0;
+	double hold_draw = 0.0;
+	double hold_draw_out = 0.0;
+	double hold_draw_back = 0.0;
+	double hold_draw_share = 0.0;
+	double hold_low_share = 0.0;
+	double hold_edge_band = 0.0;
+	double hold_rest_band = 0.0;
+	double hold_draw_from_lo = 0.0;
+	double hold_draw_from_hi = 0.0;
+	double hold_reaching_from = 0.0;
+	double hold_reaching_to = 0.0;
+	double hold_reach_band = 0.0;
+
 	// The settle's held reach target, in the skater root's frame.
 	godot::Vector3 held_seat_local;
 	bool seat_held = false;
@@ -163,6 +190,7 @@ private:
 	// Every goalie's save boxes, GoalieContactDetector's packed layout.
 	godot::PackedFloat32Array goalie_boxes;
 	godot::Vector3 hand;
+	godot::Vector3 reach_hand;
 	godot::Vector3 intended_blade;
 	godot::Vector3 wall_clamped;
 	godot::Vector3 heel_world;
@@ -174,6 +202,7 @@ private:
 	// Outputs.
 	bool skipped = false;
 	godot::Vector3 out_hand;
+	godot::Vector3 out_reach_hand;
 	godot::Vector3 out_blade;
 	godot::Vector3 out_last_target;
 	godot::Vector3 out_smoothed;
@@ -192,9 +221,20 @@ private:
 	Cfg ik_config(double p_blade_y, double max_reach) const;
 	Cfg level_config(double hang_y, double p_blade_y, double max_reach) const;
 	double lean_corrected_y(double x, double z) const;
-	godot::Vector2 blade_target_for(const godot::Vector2 &cursor_xz) const;
+	godot::Vector2 blade_target_along(const godot::Vector2 &cursor_xz, const godot::Vector2 &shaft) const;
 	godot::Vector3 held_out(const godot::Vector3 &cursor_world) const;
-	godot::Vector3 folded(const godot::Vector3 &marker) const;
+	godot::Vector3 folded(const godot::Vector3 &marker, double fold) const;
+	godot::Vector3 held_hand(const godot::Vector3 &p_reach_hand, const godot::Vector3 &blade_local,
+			double fold) const;
+
+	// StickHoldRules.
+	godot::Vector3 hold_top_hand(const godot::Vector3 &shoulder, const godot::Vector3 &blade,
+			double length, double own_side) const;
+	godot::Vector3 hold_reaching(const godot::Vector3 &p_hand, const godot::Vector3 &reaching_hand,
+			const godot::Vector3 &blade, const godot::Vector3 &shoulder, double from, double to) const;
+	godot::Vector3 hold_within_reach(const godot::Vector3 &p_hand, const godot::Vector3 &blade,
+			const godot::Vector3 &shoulder, double arm, double band) const;
+	double hold_reach(const godot::Vector2 &dir, double own_side) const;
 	void place_arm_shoulder();
 	double board_reach_limit(const godot::Vector2 &target_xz, const godot::Vector3 &shoulder_world) const;
 	double purpose(const godot::Vector3 &skater_pos) const;
@@ -267,6 +307,8 @@ public:
 	// onto the bound NativeTopHandIK. False when one is missing: a binary older
 	// than a tunable the scripts read.
 	bool configure(const godot::Dictionary &tunables);
+	// The hold's, by StickHoldRules.Config's names and the bands' own.
+	bool configure_hold(const godot::Dictionary &tunables);
 	void reset_seat() { seat_held = false; }
 
 	// One pass. `goalies` is (x, z, butterfly, rotation_y) per goalie, read only
@@ -283,6 +325,7 @@ public:
 
 	bool get_skipped() const { return skipped; }
 	godot::Vector3 get_hand() const { return out_hand; }
+	godot::Vector3 get_reach_hand() const { return out_reach_hand; }
 	godot::Vector3 get_blade() const { return out_blade; }
 	godot::Vector3 get_last_target() const { return out_last_target; }
 	godot::Vector3 get_smoothed_blade() const { return out_smoothed; }

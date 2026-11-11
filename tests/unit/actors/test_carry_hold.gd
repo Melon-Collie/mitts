@@ -1,12 +1,12 @@
 extends GutTest
 
-# How a carrier is drawn holding his stick (StickHoldRules, through
-# SkaterIKCoordinator._hold_offset, and the carry's posture): the top hand in
-# its pocket off the hip, so the shaft stays near its lie and under the
-# shoulder across the distances a puck is carried at; the body come down to
-# it, so both elbows bend; the top fist turned with the blade's face as a
-# stroke cups the puck. Mesh only: the markers the tick placed do not move.
-# Driven through the real controller and render pass.
+# How a carrier holds his stick (StickHoldRules, through
+# SkaterIKCoordinator._held_hand, and the ready stance): the top hand in its
+# pocket off the hip, so the shaft stays near its lie and under the shoulder
+# across the distances a puck is carried at; the body come down to it, so both
+# elbows bend; the top fist turned with the blade's face as a stroke cups the
+# puck. The hand is the TopHand marker's, so the stick drawn is the stick the
+# tick placed. Driven through the real controller and render pass.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -108,27 +108,34 @@ func test_the_body_comes_down_to_the_stick() -> void:
 			"the shoulders well under where an upright trunk on straight legs has them")
 
 
-func test_the_hold_moves_no_marker() -> void:
+func test_the_marker_is_the_held_hand() -> void:
 	var c: SkaterController = _make_carrier()
 	_hold(c, Vector3(-0.2, 0.0, -1.15))
 	var sk: Skater = c.skater
 	var marker: Vector3 = sk.get_top_hand_position()
 	var blade: Vector3 = sk.get_blade_position()
-	assert_gt(sk.drawn_top_hand().distance_to(marker), 0.05, "the hand is drawn off its marker")
-	assert_almost_eq(sk.drawn_top_hand().distance_to(sk.drawn_blade().origin),
-			marker.distance_to(blade), 0.002, "the drawn stick is the tick's length")
-	sk._process(DT)
-	assert_eq(sk.get_top_hand_position(), marker, "the marker stays where the tick put it")
-	assert_eq(sk.get_blade_position(), blade, "and the blade")
+	assert_lt(sk.drawn_top_hand().distance_to(marker), 0.005, "the hand is drawn where the tick put it")
+	assert_gt(marker.distance_to(c._ik.reach_hand_local), 0.05,
+			"which is not where the reach solve's arm had it")
+	assert_almost_eq(marker.distance_to(blade), c._ik.reach_hand_local.distance_to(blade), 0.0005,
+			"on a stick the length the solve gave it")
+	var along: Vector3 = sk.upper_body_to_global(blade) - sk.upper_body_to_global(marker)
+	along.y = 0.0
+	var forward: Vector3 = -sk.blade.global_transform.basis.z
+	forward.y = 0.0
+	assert_lt(rad_to_deg(along.angle_to(forward)), 0.1, "and the blade lies along that shaft")
 
 
-func test_a_shot_poses_its_own_hands() -> void:
+func test_a_blade_lifted_off_the_ice_is_held_as_the_reach_has_it() -> void:
 	var c: SkaterController = _make_carrier()
 	_hold(c, Vector3(-0.2, 0.0, -1.15))
-	assert_gt(c._ik._hold_share, 0.99, "the carry is held")
-	c._ik._pump_hold = 0.0
-	c._ik._hold_offset(c.skater.get_top_hand_position(), c.skater.get_blade_position(), -1.0)
-	assert_eq(c._ik._hold_share, 0.0, "a stick the tracked solve does not own is not")
+	var reach: Vector3 = c._ik.reach_hand_local
+	var blade: Vector3 = c.skater.get_blade_position()
+	var fold: float = c._ik.ready_fold()
+	assert_gt(c._ik._held_hand(reach, blade, fold).distance_to(reach), 0.05,
+			"on the ice it is held")
+	c.skater._blade_lift_blend = 1.0
+	assert_eq(c._ik._held_hand(reach, blade, fold), reach, "lifted, the hands turn the stick up")
 
 
 # The cup rolls the whole stick, so the fist that grips it turns by as much:

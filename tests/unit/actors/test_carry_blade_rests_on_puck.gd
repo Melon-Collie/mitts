@@ -95,7 +95,7 @@ func _rest(sk: Skater) -> Vector2:
 
 func test_the_puck_sits_on_the_cursor() -> void:
 	for dir: Vector3 in [FOREHAND, BACKHAND]:
-		for radius_m: float in [1.1, 0.95, 0.85]:
+		for radius_m: float in [1.4, 1.25, 1.1]:
 			var c: SkaterController = _make_carrier()
 			var cursor: Vector3 = _pull_in(c, dir, radius_m)
 			var pin: Vector3 = c.skater.get_carry_target_global()

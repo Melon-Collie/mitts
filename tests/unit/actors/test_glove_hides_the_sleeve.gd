@@ -25,6 +25,12 @@ class StubGameState extends Node:
 		return false
 
 
+# How far off the forearm's axis (cuff radii) a sleeve vertex still counts as
+# the forearm's: with the elbow bent past a right angle on a short arm, the
+# upper sleeve's hanging underside comes level with the cuff a quarter of its
+# radius outside it.
+const NEAR_CUFF_RADII: float = 1.15
+
 var _skater: Skater = null
 var _controller: SkaterController = null
 
@@ -128,7 +134,7 @@ func _bare_sleeve(arm: Array) -> Vector2i:
 	var bare: int = 0
 	for p: Vector3 in _skinned_sleeve(body, arm[0]):
 		var in_cuff: Vector3 = to_cuff * p
-		if in_cuff.y > cuff_top:
+		if in_cuff.y > cuff_top or Vector2(in_cuff.x, in_cuff.z).length() > NEAR_CUFF_RADII:
 			continue
 		covered += 1
 		var in_fist: Vector3 = to_fist * p

@@ -365,11 +365,12 @@ point is the `Blade` marker's, and the rigs only read it.
 Twelve rules the rigs sit inside, all easy to break from in here:
 
 - **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
-  marker: the marker plus a render-only offset (the hold, the stride's pump,
-  the shaft's clearance; `Scripts/controllers/CLAUDE.md`, *Where the hands are
-  drawn*), so the arm, the stick and the blade's dressing pivot about a blade
-  that has not moved. The rebuild gate compares the drawn hand, or the offset
-  would never redraw.
+  marker: the marker, which is where the hands hold the stick
+  (`Scripts/controllers/CLAUDE.md`, *Where the hands hold the stick*), plus a
+  small render-only offset (the stride's pump, the shaft's clearance), so the
+  arm, the stick and the blade's dressing pivot about a blade that has not
+  moved. The rebuild gate compares the drawn hand, or the offset would never
+  redraw.
 - **The rig reads the markers and the frames where the engine draws them**
   (`drawn_top_hand`, `Skater.drawn_blade`, `drawn_upper_body`,
   `drawn_lower_body`): between where the latest tick found them and where they
@@ -422,7 +423,11 @@ Twelve rules the rigs sit inside, all easy to break from in here:
   speed stays continuous where it engages and where it reaches its stop. The
   ease is state, so the rebuild gate keeps redrawing while it settles
   (`SkaterArmRig.take_steering`). `test_elbow_steers_round_the_torso.gd` holds
-  the steer, `test_body_stays_smooth.gd` the jerk.
+  the steer, `test_body_stays_smooth.gd` the jerk. The pole itself swings out
+  to the arm's side as the hand rises past its shoulder
+  (`SkaterArmRig._raised_pole`): a raised arm's elbow points out, and on the
+  hanging arm's pole a fist rising in front of the chest passes the line
+  straight away from it, where the elbow turns half round in a few frames.
 - **The top fist rolls round the shaft.** A glove holds the stick like a sword
   (`SkaterArmPoses.glove_basis`), the wrist deviating in the plane of the
   forearm and the shaft; for the top hand, a shaft running down and away from a

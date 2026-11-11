@@ -443,14 +443,23 @@ var velocity_lean_speed: float = 6.0
 # standing or skating — its shoulders, and with them his hands, out in front of
 # his hips where both can hold it.
 var carry_fold_deg: float = 22.0
-# And how far it is drawn folded (SkaterIKCoordinator.drawn_chest_fold): a
-# trunk ~40° off upright with the hips sat back under it brings the shoulders
-# down to a stick whose top hand rides at the waist, so both elbows bend.
-var carry_fold_drawn_deg: float = 36.0
+# How far the chest folds over a carried puck as the hands hold the stick and
+# the body is drawn (SkaterIKCoordinator.ready_fold): a trunk ~40° off upright
+# with the hips sat back under it brings the shoulders down to a stick whose
+# top hand rides at the waist, so both elbows bend. And over an empty stick on
+# the ice, the ready stance a skater off the puck stands in.
+var hold_fold_deg: float = 36.0
+var ready_fold_deg: float = 24.0
 # The least a carried puck comes off the centre of his body (m; CarryPostureRules
-# .held_out): pulled in closer, the shaft stands up beside him, the top hand rises
-# into his armpit and the bottom arm reaches it only through his belly.
-var carry_reach_min_m: float = 0.8
+# .held_out). A stick spans ~1 m of ice at its lie from a hand held off the
+# hip, so a blade nearer than that stands the shaft up and brings the top hand
+# to the chest: at this floor the shaft is ~12° past its lie, and closer the
+# stick cannot be held as a stick is.
+var carry_reach_min_m: float = 0.97
+# And the least an empty stick's blade comes in: nearer than a carry's, to
+# reach a loose puck lying at his skates (a puck is picked up 0.5 m off the
+# blade's middle, and lies no nearer than his body lets it).
+var stick_reach_min_m: float = 0.8
 # And this much further out with his chest folded over his skating by
 # velocity_lean_forward_max_deg: the fold brings his shoulder down to the
 # hands, and held as close as standing, the top hand rises level with it, the
@@ -679,6 +688,7 @@ var stance_crouch: float = 1.7           # crouch floor in the stance (× stance
 var stance_width_m: float = 0.125        # each skate set out from under its hip
 var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
 var carry_crouch: float = 2.3            # crouch floor carrying, standing (× stance_hip_deg): the hips ~0.12 m under rest
+var ready_crouch: float = 1.2            # and off the puck with the stick on the ice, short of the loaded stance's
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
 # glide (speed is power per stride, not faster turnover). cruise_gear (fast AND
@@ -751,7 +761,7 @@ var head_track_max_deg: float = 60.0
 # less as the skater picks up speed: eyes up on open ice.
 var head_puck_nod_deg: float = 28.0
 var head_puck_hands_band: Vector2 = Vector2(1.0, 3.5)
-var head_puck_close_band: Vector2 = Vector2(1.05, 0.85)
+var head_puck_close_band: Vector2 = Vector2(1.3, 1.05)
 var head_puck_skate_band: Vector2 = Vector2(3.0, 7.0)
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
@@ -1197,6 +1207,14 @@ func has_celebration_window() -> bool:
 	return _celebration_timer > 0.0
 
 
+# How much of the celebration's raised stick is on (0 when idle).
+func celebration_share() -> float:
+	if not is_celebrating():
+		return 0.0
+	return SkaterShotPoseCoordinator.celebration_ramp(
+			_celebration_total - _celebration_timer, _celebration_timer)
+
+
 # 0..1 progress through the celebration window (0 when idle).
 func celebration_progress() -> float:
 	if not is_celebrating():
@@ -1283,6 +1301,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	# the blade world frame. RemoteController overrides _render_pose_update to
 	# drop head tracking (a wire-fed body has no cursor aim).
 	skater.render_pose_update = _render_pose_update
+	skater.tick_pose_update = _ik.ready.advance
 
 # Reach ROM is derived from arm length, not an independent tunable. The
 # forehand side is shoulder-joint-limited (about 56% of arm length — the top
@@ -1343,6 +1362,7 @@ var loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH
 var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
 var _base_carry_reach_min_m:            float = 0.0
+var _base_stick_reach_min_m:            float = 0.0
 var _base_carry_reach_fold_m:           float = 0.0
 
 
@@ -1386,9 +1406,11 @@ func build_ai_caps() -> AISkaterCaps:
 	# exactly the lever ratio (attributes v4 — reach + stick length), so a
 	# longer lever protects the puck further out. _base is captured on the
 	# first apply_attributes (always run before this).
+	# No nearer than a carried puck comes (carry_reach_min_m): a hold the bot
+	# prices inside the floor is one its blade is held out of.
 	if _base_max_blade_speed > 0.001:
-		caps.handle_reach = AIBotMechanics.EVADE_CARRY_HANDLE_M \
-				* (max_blade_speed / _base_max_blade_speed)
+		caps.handle_reach = maxf(AIBotMechanics.EVADE_CARRY_HANDLE_M
+				* (max_blade_speed / _base_max_blade_speed), carry_reach_min_m)
 	# Blade reach cone: the exact IK gate SkaterPoseCoordinator.apply_facing
 	# enforces (ROM backhand + torso twist), so the bot models the same off-facing
 	# reach the body actually has. Fixed geometry — not attribute-scaled.
@@ -1515,6 +1537,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	hand_rest_y = _base_hand_rest_y * m_height
 	hand_y_max  = _base_hand_y_max  * m_height
 	carry_reach_min_m = _base_carry_reach_min_m * m_height
+	stick_reach_min_m = _base_stick_reach_min_m * m_height
 	carry_reach_fold_m = _base_carry_reach_fold_m * m_height
 	# The gait's crouch drop rides the same leg scale the appearance pass
 	# applies to the leg pivot chain, so flexed knees sink a tall build
@@ -1599,6 +1622,7 @@ func _capture_attribute_bases() -> void:
 	_base_hand_rest_y                  = hand_rest_y
 	_base_hand_y_max                   = hand_y_max
 	_base_carry_reach_min_m            = carry_reach_min_m
+	_base_stick_reach_min_m            = stick_reach_min_m
 	_base_carry_reach_fold_m           = carry_reach_fold_m
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
@@ -2301,12 +2325,24 @@ func chest_fold() -> float:
 	return _ik.chest_fold()
 
 
-func drawn_chest_fold() -> float:
-	return _ik.drawn_chest_fold()
+func ready_fold() -> float:
+	return _ik.ready_fold()
 
 
-func carrying() -> bool:
-	return _ik.carrying()
+func tracking() -> bool:
+	return _ik.tracking()
+
+
+# The crouch floor a skater standing with his stick on the ice sits at.
+func ready_sit() -> float:
+	if not _ik.tracking():
+		return 0.0
+	return (carry_crouch if has_puck else ready_crouch) * (1.0 - celebration_share())
+
+
+# The reach solve's own top hand (SkaterIKCoordinator.reach_hand_local).
+func reach_hand() -> Vector3:
+	return _ik.reach_hand_local
 
 
 # The gait's (stop weight as the scrape hears it, skid weight, turn load) this

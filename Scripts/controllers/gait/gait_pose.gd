@@ -112,6 +112,9 @@ var trunk_roll: float = 0.0
 # Added after that filter: a shake the filter would blunt.
 var wobble_pitch: float = 0.0
 var wobble_roll: float = 0.0
+# And a pitch the tick has already eased, which the hands were placed by: the
+# filter would draw the shoulders behind them.
+var eased_pitch: float = 0.0
 
 
 func leg_length() -> float:
@@ -206,6 +209,7 @@ func load_native_trunk(native: RefCounted) -> void:
 	trunk_pitch = trunk.y
 	trunk_roll = trunk.z
 	wobble_pitch = 0.0
+	eased_pitch = 0.0
 	wobble_roll = 0.0
 	edge_l = seed_pose.z
 	edge_r = seed_pose.w
@@ -353,6 +357,7 @@ func seed_trunk(loco: SkaterLocomotion) -> void:
 	trunk_pitch = loco.trunk_pitch
 	trunk_roll = loco.trunk_roll
 	wobble_pitch = 0.0
+	eased_pitch = 0.0
 	wobble_roll = 0.0
 	edge_l = clampf(maxf(loco.l_push * loco.intensity, loco.edge_floor), 0.0, 1.0)
 	edge_r = clampf(maxf(loco.r_push * loco.intensity, loco.edge_floor), 0.0, 1.0)

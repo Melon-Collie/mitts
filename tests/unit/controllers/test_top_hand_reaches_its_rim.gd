@@ -82,12 +82,12 @@ func _reach(c: SkaterController, deg: float, purpose: bool = true) -> void:
 		sk._process(DT)
 
 
-# The hand off the shoulder its arm is drawn from, in the arm's level frame —
+# The reach solve's hand off the shoulder its arm is drawn from, in the arm's level frame —
 # where the ROM is a horizontal disc.
 func _hand_off_shoulder(c: SkaterController) -> Vector2:
 	var rot: Vector3 = c.skater.upper_body.rotation
 	var tilt: Basis = Basis.from_euler(Vector3(rot.x, 0.0, rot.z))
-	var hand: Vector3 = tilt * c.skater.get_top_hand_position()
+	var hand: Vector3 = tilt * c._ik.reach_hand_local
 	var shoulder: Vector3 = tilt * c._ik.arm_shoulder()
 	return Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
 

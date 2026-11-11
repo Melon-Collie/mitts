@@ -18,7 +18,7 @@ const BOUNDS: Dictionary = {
 	"pickup / drop, cursor far ahead":
 		[8.0, 30.0, 8.0, 47.0, 35.0, 43.0],
 	"forward → backward pivot (cursor flipped)":
-		[30.0, 31.0, 13.0, 46.0, 52.0, 49.0],
+		[30.0, 31.0, 25.0, 82.0, 65.0, 87.0],
 	"backward → forward (move reversed)":
 		[15.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 	"forward → backward (move reversed)":
@@ -28,7 +28,7 @@ const BOUNDS: Dictionary = {
 	"stop and restart":
 		[30.0, 8.0, 8.0, 8.0, 9.0, 8.0],
 	"wrister: carry, charge, release, skating":
-		[23.0, 15.0, 20.0, 81.0, 33.0, 125.0],
+		[23.0, 15.0, 20.0, 81.0, 44.0, 125.0],
 	"crossovers into and out of a held turn":
 		[13.0, 8.0, 8.0, 14.0, 14.0, 17.0],
 	"knocked down from the side and up again":
@@ -38,11 +38,11 @@ const BOUNDS: Dictionary = {
 	"shot block down and back up, puck ahead":
 		[28.0, 35.0, 27.0, 37.0, 25.0, 27.0],
 	"goal celebration while gliding":
-		[10.0, 16.0, 8.0, 25.0, 32.0, 23.0],
+		[10.0, 16.0, 8.0, 25.0, 14.0, 14.0],
 	"shuffle: Space + D held, released":
 		[20.0, 8.0, 8.0, 8.0, 9.0, 8.0],
 	"press: drive into a man dug in, and off":
-		[12.0, 20.0, 8.0, 50.0, 72.0, 79.0],
+		[16.0, 20.0, 8.0, 50.0, 72.0, 79.0],
 	"press: dug in against a driver, and off":
 		[12.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 }

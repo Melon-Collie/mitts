@@ -556,7 +556,9 @@ func apply_upper_body(delta: float) -> void:
 
 	var target_angle: float = 0.0
 	var target_lean: Vector2 = Vector2.ZERO
-	# Measured as the solve measures it (SkaterIKCoordinator._solve_top_hand): off
+	# The reach solve's own hand, not the marker's, which is held in its pocket
+	# until the arm is nearly out. Measured as the solve measures it
+	# (SkaterIKCoordinator._solve_top_hand): off
 	# the shoulder the arm is drawn from, the chest's fold over the stick
 	# included (or the hands it carries out front read as a reach, and lean on
 	# it twice), in the arm's level frame — less the faceoff fold, which the
@@ -566,7 +568,7 @@ func apply_upper_body(delta: float) -> void:
 	var shoulder: Vector3 = tilt * CarryPostureRules.folded_shoulder(
 			SkaterSpineRig.shoulder_in_frame(_skater.shoulder.position, rot, 0.0,
 			_skater.trunk_fold()), _controller.chest_fold())
-	var hand: Vector3 = tilt * _skater.top_hand.position
+	var hand: Vector3 = tilt * _controller.reach_hand()
 	var hand_vec := Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
 	var hand_reach: float = hand_vec.length()
 

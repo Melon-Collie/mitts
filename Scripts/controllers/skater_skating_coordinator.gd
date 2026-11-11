@@ -70,7 +70,7 @@ var _native: RefCounted = null
 # layer; a blocker who gets run over goes down, so the knockdown is last.
 var _faceoff := GaitFaceoffLayer.new()
 var _stance := GaitStanceLayer.new()
-var _carry := GaitCarryLayer.new()
+var _ready := GaitReadyLayer.new()
 var _shot := GaitShotLayer.new()
 var _check := GaitCheckLayer.new()
 var _pin := GaitPinLayer.new()
@@ -80,7 +80,7 @@ var _celebration := GaitCelebrationLayer.new()
 var _stagger := GaitStaggerLayer.new()
 var _block := GaitBlockLayer.new()
 var _knockdown := GaitKnockdownLayer.new()
-var _layers: Array[GaitLayer] = [_faceoff, _stance, _carry, _shot, _check, _pin, _press, _lift,
+var _layers: Array[GaitLayer] = [_faceoff, _stance, _ready, _shot, _check, _pin, _press, _lift,
 		_celebration, _stagger, _block, _knockdown]
 # Per-stage subsets of _layers in the same order, each beside its layers' bits
 # in the pass's active mask (built in setup).
@@ -472,7 +472,7 @@ func apply(delta: float) -> void:
 		tex_ease = minf(_controller.trunk_texture_smooth_rate * delta, 1.0)
 	_trunk_pitch_s = lerpf(_trunk_pitch_s, p.trunk_pitch, tex_ease)
 	_trunk_roll_s = lerpf(_trunk_roll_s, p.trunk_roll, tex_ease)
-	trunk_pitch_add = _trunk_pitch_s + p.wobble_pitch
+	trunk_pitch_add = _trunk_pitch_s + p.wobble_pitch + p.eased_pitch
 	trunk_roll_add = _trunk_roll_s + p.wobble_roll
 	if _skater.on_camera():
 		_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)

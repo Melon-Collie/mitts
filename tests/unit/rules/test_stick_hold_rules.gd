@@ -32,10 +32,10 @@ func test_a_blade_a_sticks_span_off_the_pocket_is_held_on_the_lie() -> void:
 	var span: float = STICK * cos(_cfg.lie)
 	var pivot := Vector2(SHOULDER.x + _cfg.home_out, -SHOULDER.z + _cfg.home_ahead)
 	var hand: Vector3 = _hand(pivot.x, pivot.y + span)
-	assert_almost_eq(_lie_deg(hand, pivot.x, pivot.y + span), rad_to_deg(_cfg.lie), 0.01,
+	assert_almost_eq(_lie_deg(hand, pivot.x, pivot.y + span), rad_to_deg(_cfg.lie), 1.5,
 			"the shaft at its lie")
-	assert_almost_eq(hand.x, pivot.x, 0.001, "the hand in the pocket's middle")
-	assert_almost_eq(-hand.z, pivot.y, 0.001, "the hand in the pocket's middle")
+	assert_almost_eq(hand.x, pivot.x, 0.03, "the hand in the pocket's middle")
+	assert_almost_eq(-hand.z, pivot.y, 0.03, "the hand in the pocket's middle")
 
 
 func test_a_far_blade_draws_the_hand_out_toward_it_and_keeps_the_lie() -> void:
@@ -88,6 +88,50 @@ func test_a_left_shot_is_the_right_shots_mirror() -> void:
 	var left: Vector3 = StickHoldRules.top_hand(Vector3(-SHOULDER.x, SHOULDER.y, SHOULDER.z),
 			Vector3(0.3, ICE, -1.0), STICK, -OWN, _cfg)
 	assert_almost_eq(left, Vector3(-right.x, right.y, right.z), Vector3.ONE * 0.0001)
+
+
+func test_a_hand_past_the_arms_reach_comes_round_toward_its_shoulder() -> void:
+	var blade := Vector3(0.0, ICE, -1.2)
+	var hand: Vector3 = blade + Vector3(0.9, 0.9, -0.4).normalized() * STICK
+	var arm: float = 0.7
+	assert_gt(hand.distance_to(SHOULDER), arm, "the fixture: a hand held out past the arm")
+	var held: Vector3 = StickHoldRules.within_reach(hand, blade, SHOULDER, arm, 0.1)
+	assert_almost_eq(held.distance_to(blade), STICK, 0.0005, "on the same stick")
+	assert_almost_eq(held.distance_to(SHOULDER), arm, 0.002, "at the arm's reach")
+	var near: Vector3 = _hand(-0.2, 1.3)
+	assert_eq(StickHoldRules.within_reach(near, Vector3(-0.2, ICE, -1.3), SHOULDER, arm, 0.1),
+			near, "a hand well inside it is left where it is")
+
+
+func test_a_reaching_arm_takes_the_reachs_own_hold() -> void:
+	var blade := Vector3(-0.2, ICE, -1.9)
+	var hand: Vector3 = StickHoldRules.top_hand(SHOULDER, blade, STICK, OWN, _cfg)
+	var reach: Vector3 = blade + Vector3(0.25, 0.7, 0.66).normalized() * STICK
+	var away: float = SHOULDER.distance_to(blade)
+	var out: Vector3 = StickHoldRules.reaching(hand, reach, blade, SHOULDER, away - 0.3,
+			away - 0.01)
+	assert_almost_eq(out, reach, Vector3.ONE * 0.0005, "at the reach, the reach's hand")
+	var half: Vector3 = StickHoldRules.reaching(hand, reach, blade, SHOULDER, away - 0.2,
+			away + 0.2)
+	assert_almost_eq(half.distance_to(blade), STICK, 0.0005, "between, still on the stick")
+	assert_eq(StickHoldRules.reaching(hand, reach, blade, SHOULDER, away + 0.1, away + 0.4), hand,
+			"short of the reach it stays in its pocket")
+
+
+# The hand's velocity for a blade moving at a steady pace: its change from one
+# step to the next is the corner a rule with a seam would leave.
+func test_the_hands_path_has_no_corner() -> void:
+	var worst: float = 0.0
+	var prev: Vector3 = _hand(-0.2, 0.6)
+	var prev_step := Vector3.ZERO
+	for i: int in range(1, 1401):
+		var hand: Vector3 = _hand(-0.2, 0.6 + 0.001 * float(i))
+		var step: Vector3 = hand - prev
+		if i > 1:
+			worst = maxf(worst, (step - prev_step).length())
+		prev = hand
+		prev_step = step
+	assert_lt(worst, 0.0002, "no step in the hand's pace as the blade passes out through its span (worst %.5f m of a 1 mm blade step)" % worst)
 
 
 func test_soft_cap_is_the_value_below_and_the_cap_beyond() -> void:

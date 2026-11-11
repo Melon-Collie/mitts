@@ -431,6 +431,7 @@ func _append_prediction_snapshot() -> void:
 	snap.record_tick_state(skater)
 	snap.carry_side_smoothed = skater.carry_read_side()
 	snap.carry_hop = skater.carry_read_hop()
+	snap.ready_fold = _ik.ready.state()
 	snap.blade_dangle_vel = _ik.blade_dangle_velocity()
 	_prediction_history.append(snap)
 	if _prediction_history.size() > _PREDICTION_HISTORY_CAP:
@@ -676,6 +677,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# its live values come back after the replay.
 	var live_carry_side: float = skater.carry_read_side()
 	var live_carry_hop: float = skater.carry_read_hop()
+	var live_ready_fold: float = _ik.ready.state()
 	var carry_from: PredictedState = predicted
 	is_replaying = true
 	# Walk the (already ack-trimmed, chronological) prediction history alongside
@@ -685,6 +687,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	for input in _input_history:
 		if carry_from != null:
 			skater.adopt_carry_read(carry_from.carry_side_smoothed, carry_from.carry_hop)
+			_ik.ready.adopt(carry_from.ready_fold)
 		_process_input(input, input.delta)
 		skater.global_position += skater.velocity * input.delta
 		# Re-resolve skater-vs-skater body checks against where the host actually had
@@ -736,6 +739,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			replay_hist_i += 1
 	is_replaying = false
 	skater.adopt_carry_read(live_carry_side, live_carry_hop)
+	_ik.ready.adopt(live_ready_fold)
 	var replayed_state: State = _sm.get_state()
 	# Restore shot-state fields that replay must not transition past.
 	_sm.set_state(pre_state)

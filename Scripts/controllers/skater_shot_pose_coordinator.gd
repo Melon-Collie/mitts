@@ -153,8 +153,7 @@ const CELEBRATION_EASE_S: float = 0.4
 # window.
 func apply_celebration_pose(elapsed: float, left: float) -> void:
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
-	var ramp: float = _smootherstep(elapsed / CELEBRATION_EASE_S) \
-			* _smootherstep(left / CELEBRATION_EASE_S)
+	var ramp: float = celebration_ramp(elapsed, left)
 	var pump: float = _controller.celebration_pump()
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length
 	var top_side: float = signf(_skater.shoulder.position.x)
@@ -194,6 +193,12 @@ func apply_celebration_pose(elapsed: float, left: float) -> void:
 
 
 # 0..1 ease with no step in its rate or its acceleration at either end.
+# How much of the celebration's pose is on, `elapsed` into its window with
+# `left` to go.
+static func celebration_ramp(elapsed: float, left: float) -> float:
+	return _smootherstep(elapsed / CELEBRATION_EASE_S) * _smootherstep(left / CELEBRATION_EASE_S)
+
+
 static func _smootherstep(x: float) -> float:
 	var t: float = clampf(x, 0.0, 1.0)
 	return t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
