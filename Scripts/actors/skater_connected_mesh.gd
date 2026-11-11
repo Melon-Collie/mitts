@@ -29,12 +29,13 @@ static var preview_pants_only: bool = false
 # each shoulder's middle, two thirds of the way from the chest to the upper arm,
 # for the same reason as the elbow's; then each shoulder girdle, the third of
 # the arm's swing the collarbone and the shoulder blade take (the scapulohumeral
-# rhythm), which the armhole and the top of the shoulder ride.
+# rhythm), which the armhole and the top of the shoulder ride; last, the neck's
+# foot, which the rigid parts' neck stands in the collar on (SkaterRigidParts).
 enum Deform {
 	UPPER_L, ELBOW_L, FORE_L, UPPER_R, ELBOW_R, FORE_R, KNEE_L, KNEE_R, SHOULDER_L, SHOULDER_R,
-	GIRDLE_L, GIRDLE_R,
+	GIRDLE_L, GIRDLE_R, NECK_FOOT,
 }
-const DEFORM_COUNT: int = 12
+const DEFORM_COUNT: int = 13
 # The share of the arm's swing off the chest the shoulder's middle turns by,
 # and the girdle's: little with the arm down, rising as it lifts — the
 # collarbone and shoulder blade only come up with an arm raised, and the
@@ -62,9 +63,10 @@ const _SOCK_DROP_M: float = 0.19
 
 # The arms' bind hang, right side (the left mirrors it): from the shoulder
 # marker's rest place (Skater.shoulder_offset, shoulder_height) the upper arm
-# out, forward and 35° under level, the forearm bent on toward the front. The
-# middle of the range the IK asks for — hanging at the sides, reaching for the
-# stick, up over the head for a slapshot — so none of it is far from the bind.
+# out and forward, about 35° off straight down, the forearm bent on toward the
+# front. The middle of the range the IK asks for — hanging at the sides,
+# reaching for the stick, up over the head for a slapshot — so none of it is
+# far from the bind.
 const _BIND_SHOULDER := Vector3(0.18, 0.45, 0.0)
 const _BIND_UPPER_DIR := Vector3(0.55, -0.85, -0.3)
 const _BIND_FORE_DIR := Vector3(0.15, -0.45, -0.88)
@@ -139,29 +141,27 @@ const _ARMHOLE_HALF_WIDTH: int = 2
 const _ARMHOLE_CENTRE := Vector3(0.215, _BIND_SHOULDER.y - 0.035, 0.0)
 const _ARMHOLE_RADII := Vector2(0.125, 0.100)   # across (z), along the seam
 const _ARMHOLE_TILT: float = 0.15
-# How far each armhole vertex rides the shoulder girdle, round the loop from the
-# top's back corner (_cut_armhole's order) — all of it, so the loop turns as
-# one ring and the sleeve leaving it cannot fold back over itself — and the
-# chest's vertices round it: the ring above (the trapezius, which takes the
-# shrug) and the one below, column by column.
-const _ARMHOLE_GIRDLE: Array[float] = [
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+# How far the chest's vertices over each armhole ride the shoulder girdle,
+# column by column: the trapezius, which takes the shrug. The armhole itself
+# rides it wholly until the sleeve is hung from it (SleeveHang), and the chest
+# under it stays the chest's, where the sleeve hangs from.
 const _TRAP_GIRDLE: Array[float] = [0.05, 0.1, 0.15, 0.1, 0.05]
-const _FLANK_GIRDLE: Array[float] = [0.1, 0.25, 0.35, 0.25, 0.1]
 
 # The sleeve, out from the armhole's seam: rings along the arm, each (s along
 # its segment, radius, its share on the elbow's middle). The first is joined to
 # the seam. The elbow's turn is spread over ~25 cm of sleeve, eased in and out,
 # each ring built turned by its share (_round_elbow), so the bend is a curve
 # rather than a crease — a cloth sleeve over a pad, not a hinge.
-# The share of the upper arm's first ring, the one joined to the seam, on the
-# arm rather than the shoulder's middle: over the top of the arm, and under it,
-# where it hangs back as armpit cloth does, so an arm raised overhead does not
-# swing it up past the seam and fold the band between them over.
-const _FIRST_RING_ARM_SHARE := Vector2(0.55, 0.15)
-# The share of the seam's lowest point (the armpit) on the shoulder's middle
-# rather than the girdle, easing to none at the seam's middle height.
-const _ARMPIT_SHOULDER: float = 0.5
+# The shoulder's cap: over the top of the arm the ring between the seam and the
+# first ring stands out from the seam's top (this far out, this far down), so
+# the shoulder's top runs on level to the arm's outside and turns down there,
+# as over a shoulder pad, rather than sloping straight from the seam to the
+# arm. `_CAP_OVER` is where up the seam's height (0 its middle, 1 its top) the
+# cap eases in, and `_CAP_GIRDLE` the cap's share on the girdle, which keeps it
+# up where an arm hangs.
+const _CAP_REACH_M := Vector2(0.060, 0.012)
+const _CAP_OVER := Vector2(0.2, 0.8)
+const _CAP_GIRDLE: float = 0.8
 const _UPPER_RINGS: Array[Vector3] = [
 	Vector3(0.12, 0.100, 0.0), Vector3(0.17, 0.091, 0.0), Vector3(0.205, 0.086, 0.08),
 	Vector3(0.24, 0.084, 0.25), Vector3(0.275, 0.084, 0.5), Vector3(0.305, 0.085, 0.8),
@@ -361,7 +361,7 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 
 	var torso_zone: int = zone(_UpperSurface.TORSO)
 	for i: int in rings.size() - 1:
-		var v0: float = 0.5 * (y_top - ys[i]) / span
+		var v0: float = maxf(0.5 * (y_top - ys[i]) / span, JerseyDecal.SIDE_TOP_V)
 		var v1: float = 0.5 * (y_top - ys[i + 1]) / span
 		var inside := Vector3(0.0, (ys[i] + ys[i + 1]) * 0.5, 0.0) + lift
 		var n: int = rings[i].size()
@@ -525,7 +525,8 @@ static func _lathe_ring(station: Vector3, sides: int, phase: float) -> PackedVec
 
 
 # The armhole round `column`: the chest vertices round its facets, laid on the
-# tipped loop, and the shoulder round it put partly on the girdle. Returns the loop, from the top's back corner round.
+# tipped loop, and the trapezius over it put partly on the girdle. Returns the
+# loop, from the top's back corner round.
 static func _cut_armhole(b: ConnectedSkinBuilder, rings: Array[PackedInt32Array], column: int,
 		side: float) -> PackedInt32Array:
 	var a: int = _ARMHOLE_TOP
@@ -558,13 +559,10 @@ static func _cut_armhole(b: ConnectedSkinBuilder, rings: Array[PackedInt32Array]
 		var angle: float = offset + step * float(i)
 		b.move(hole[i], centre + along * sin(angle) * _ARMHOLE_RADII.y
 				+ Vector3.BACK * cos(angle) * _ARMHOLE_RADII.x)
-		b.reweight(hole[i], [Bind.TORSO, girdle],
-				[1.0 - _ARMHOLE_GIRDLE[i], _ARMHOLE_GIRDLE[i]])
-	for edge: Array in [[a - 1, _TRAP_GIRDLE], [a + 3, _FLANK_GIRDLE]]:
-		var ring: PackedInt32Array = rings[edge[0]]
-		var shares: Array[float] = edge[1]
-		for c: int in cols.size():
-			b.reweight(ring[cols[c]], [Bind.TORSO, girdle], [1.0 - shares[c], shares[c]])
+		b.reweight(hole[i], [girdle], [1.0])
+	for c: int in cols.size():
+		b.reweight(rings[a - 1][cols[c]], [Bind.TORSO, girdle],
+				[1.0 - _TRAP_GIRDLE[c], _TRAP_GIRDLE[c]])
 	return hole
 
 
@@ -612,8 +610,6 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	var upper: Transform3D = frames[0]
 	var fore: Transform3D = frames[2]
 
-	# The upper arm's first ring is joined straight to the seam, and rides
-	# halfway from the shoulder's middle to the arm so the joint does not pinch.
 	var rings: Array[PackedInt32Array] = []
 	# Each ring's frame (U is laid round its axis) and its place down the
 	# sleeve (V, SleevePaint's fraction of it).
@@ -621,17 +617,12 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	var vs := PackedFloat32Array()
 	for r: Vector3 in _UPPER_RINGS:
 		var frame: Transform3D = round_elbow(frames, r.z * 0.5)
-		if rings.is_empty():
-			var first: PackedInt32Array = limb_ring(b, upper, r.x, r.y, 0.0, shoulder_bind,
-					upper_bind, _FIRST_RING_ARM_SHARE.x)
-			hang_underside(b, first, arm[0], [shoulder_bind, upper_bind],
-					_FIRST_RING_ARM_SHARE)
-			rings.append(first)
-		else:
-			rings.append(limb_ring(b, frame, r.x - BIND_ARM_SEGMENT_M, r.y, _ELBOW_PAD_M * r.z,
-					upper_bind, elbow_bind, r.z))
+		rings.append(limb_ring(b, frame, r.x - BIND_ARM_SEGMENT_M, r.y, _ELBOW_PAD_M * r.z,
+				upper_bind, elbow_bind, r.z))
 		axes.append(frame)
 		vs.append(SleevePaint.pos_of(r.x))
+	var under: PackedFloat32Array = SleeveHang.under_shares(b, rings[0], upper.basis.y)
+	SleeveHang.ride_shoulder(b, rings[0], under, shoulder_bind, upper_bind)
 	rings.append(limb_ring(b, frames[1], 0.0, _ELBOW_RADIUS_M, _ELBOW_PAD_M,
 			elbow_bind, elbow_bind, 1.0))
 	axes.append(frames[1])
@@ -642,29 +633,33 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 		axes.append(frame)
 		vs.append(SleevePaint.pos_of(BIND_ARM_SEGMENT_M + r.x))
 
-	# Between the seam and the arm's first ring, a ring on the straight line
-	# joining them: no shape of its own at rest, but riding halfway from the
-	# girdle to the shoulder's middle, so the turn between the chest and the arm
+	# Between the seam and the arm's first ring, a ring riding from the girdle
+	# toward the shoulder's middle, so the turn between the chest and the arm
 	# bends over two bands, not one that stretches flat or turns inside out.
+	# Under the arm it is on the straight line joining them; over it, the cap.
 	var seam: PackedInt32Array = b.aligned(hole, rings[0])
 	var girdle_bind: int = Bind.GIRDLE_L if left else Bind.GIRDLE_R
 	var between := PackedInt32Array()
+	var cap_reach := Vector3(side * _CAP_REACH_M.x, -_CAP_REACH_M.y, 0.0)
 	for m: int in LIMB_SIDES:
-		between.append(b.vertex(b.position(seam[m]).lerp(b.position(rings[0][m]), 0.5),
-				[girdle_bind, shoulder_bind], [0.5, 0.5]))
-	# The seam's armpit edge goes partly with the shoulder, so a raised arm
-	# lifts it rather than folding the band under the arm over itself.
-	for m: int in LIMB_SIDES:
-		var under: float = smoothstep(0.0, -_ARMHOLE_RADII.y,
-				b.position(seam[m]).y - _ARMHOLE_CENTRE.y)
-		if under > 0.0:
-			b.reweight(seam[m], [girdle_bind, shoulder_bind],
-					[1.0 - _ARMPIT_SHOULDER * under, _ARMPIT_SHOULDER * under])
+		var at_seam: Vector3 = b.position(seam[m])
+		var over: float = smoothstep(_CAP_OVER.x, _CAP_OVER.y,
+				(at_seam.y - _ARMHOLE_CENTRE.y) / _ARMHOLE_RADII.y)
+		var girdle: float = lerpf(0.5, _CAP_GIRDLE, over)
+		between.append(b.vertex(
+				at_seam.lerp(b.position(rings[0][m]), 0.5).lerp(at_seam + cap_reach, over),
+				[girdle_bind, shoulder_bind], [girdle, 1.0 - girdle]))
+	var columns: Array[PackedInt32Array] = [seam, between]
+	columns.append_array(rings.slice(0, _UPPER_RINGS.size() + 1))
+	var elbow_shares := PackedFloat32Array([0.0, 0.0])
+	for r: Vector3 in _UPPER_RINGS:
+		elbow_shares.append(r.z)
+	SleeveHang.hang(b, columns, under, Bind.TORSO, upper_bind, elbow_bind, elbow_shares)
 	# The seam and the ring after it lie across the arm's root: V is how far
 	# each point is down the upper arm, never above the sleeve's top.
 	var uv: Callable = func(p: Vector3) -> Vector2:
-		return Vector2(_sleeve_u(p, upper),
-				SleevePaint.pos_of(maxf((p - arm[0]).dot(upper.basis.y), 0.0)))
+		return Vector2(_sleeve_u(p, upper), maxf(
+				SleevePaint.pos_of((p - arm[0]).dot(upper.basis.y)), SleeveDecal.TOP_V))
 	b.join(seam, between, sleeve_zone, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
 	b.join(between, rings[0], sleeve_zone, uv,
 			(b.centroid(between) + b.centroid(rings[0])) * 0.5)
@@ -732,13 +727,3 @@ static func limb_ring(b: ConnectedSkinBuilder, frame: Transform3D, s: float, rad
 		var r: float = radius + bulge * maxf(cos(phi), 0.0) ** 2
 		ids.append(b.vertex(frame * Vector3(sin(phi) * r, s, cos(phi) * r), binds, weights))
 	return ids
-
-
-# Re-weights `ring` from `shares.x` on its second bind over the top of it to
-# `shares.y` under it — facing down from `joint` in the bind pose.
-static func hang_underside(b: ConnectedSkinBuilder, ring: PackedInt32Array, joint: Vector3,
-		binds: Array, shares: Vector2) -> void:
-	for id: int in ring:
-		var under: float = smoothstep(0.1, -0.9, (b.position(id) - joint).normalized().y)
-		var share: float = lerpf(shares.x, shares.y, under)
-		b.reweight(id, binds, [1.0 - share, share])

@@ -971,9 +971,8 @@ func _run_faceoff(spec: Dictionary) -> void:
 			rad_to_deg(_skater.lower_body.rotation.y),
 			_skater.blade_mark_position(true).y,
 			_skater.blade_mark_position(false).y])
-	print("      dot %.3v stick_horiz %.3f blade %.3v" % [
-			dot, _controller._ik.stick_horiz(),
-			_skater.upper_body_to_global(_skater.get_blade_position())])
+	print("      dot %.3v blade %.3v" % [
+			dot, _skater.upper_body_to_global(_skater.get_blade_position())])
 
 
 # Against the +x boards as the role stands there: the pinned skater's edge at the

@@ -332,6 +332,137 @@ stick pivoting about its blade. It is an offset on `Skater.drawn_top_hand()`,
 which the arm, the stick and the bottom hand are drawn to; the `TopHand` marker
 every claim reads never takes it.
 
+### Where the hands hold the stick
+
+The reach solve (`TopHandIK`) decides where the BLADE may go: the cursor's
+projection onto the reach, the rim, the two-hand limits. Its own hand lies on
+the line from the shoulder to the blade, raised over the shoulder when the
+blade comes inside the stick's span, which at a dangle's distance stands the
+shaft up past 60° with the top hand at the chest and the elbow winged level
+with the shoulder. So with the puck that hand is not the one the tick writes:
+the `TopHand` marker takes the hand a player holds that stick with
+(`StickHoldRules`, `SkaterIKCoordinator._held_hand`), turned there about the
+blade so the stick keeps the length the solve gave it. It is the marker's, so
+the stick every peer draws, the wire carries and every claim reads is one
+stick. The solve's hand is kept beside it (`reach_hand_local`) for the one
+thing that measures how far the arm is out, the reach lean.
+
+- **Without the puck the stick is the top hand's alone, and that is the
+  solve's own hand.** Off the puck a player carries his stick in one hand, on
+  the line from its shoulder to the blade, out along it to reach: the reach
+  the coaching asks of a defender, and exactly what `TopHandIK` solves. So the
+  two-handed hold below is a carrier's, and how much of it is on is the
+  **grip** (`SkaterHoldEase.grip`), eased on the tick toward `has_puck` in
+  about a quarter second and replayed like the fold. Never put the pocket on an
+  empty stick: it turns every defender's blade off the shoulder's line, and
+  the bots' whole defensive shape moved with it
+  (`test_five_on_five_set_shape.gd`). Never draw a lone hand back along the
+  shaft for a blade in close either: the shaft then runs through the near leg,
+  the clearance shoves the hand out, and the arm's line crosses the elbow's
+  pole. A pickup folds the chest in one tick (`chest_fold`), so until the grip
+  has come on the hand is the one the empty stick had, through the solve's
+  inverse off the unfolded shoulder (`_free_hand`). `test_empty_stick_hold.gd`.
+- **A defender's bottom hand is off the stick** (`_defends_one_handed`, drawn
+  only): the other team has the puck on a stick, and nothing he is doing asks
+  for both hands (a lift, a tie, the commit, the address). A loose puck, or his
+  own team's, has both hands ready for it.
+- **The hand lives in a pocket off its own hip, and the stick pivots through
+  it.** A stick is 1.02 m across the ice at its lie, so a blade that far off
+  the pocket is held on the lie with the hand at the waist; a blade further off
+  draws the hand out toward it, and one nearer draws it out to its own side
+  and back, the stick across the front of the body. The hand takes half of the
+  draw that would keep the lie (`draw_share`) and the shaft stands up for the
+  rest: all of it moves the hand sideways twice as fast as a blade coming
+  straight in. The hand's height is never chosen: it is what the rigid stick
+  leaves. `test_stick_hold_rules.gd`.
+- **It is closed form, and smooth by construction.** Every join is eased
+  (`eased_in`, `soft_cap`), and a term that fades does so over a distance, not
+  a bearing (a blade passing close by the pocket swings through any bearing in
+  a few ticks). Never search for the hold and never filter it: a searched hand
+  hops between answers, and a filtered one lags the blade it holds, so the
+  drawn stick stops being the tick's.
+- **A carrier's blade is laid along the held shaft.** The cursor names
+  mid-blade, so the target steps half a blade back along the shaft
+  (`_blade_target_along`): solved once along the shoulder's aim, then laid
+  again along the held shaft where that landed. The second lay holds the stick
+  under the carry's settled fold and its whole grip (`_lay_fold`), never the
+  eased ones, so the blade is a function of the tick's state. An empty stick's
+  hand is on the shoulder's line already, and takes the one lay.
+- **The pocket hangs from shoulders under the ready fold** (`ready_fold`,
+  `SkaterHoldEase`): the chest folded over a tracked stick, 36° carrying and
+  24° without the puck, less as the blade comes in and 8° at least. It is
+  eased on the tick, stepped once a live tick on every peer
+  (`Skater.tick_pose_update`), and the gait draws the same fold on the trunk
+  past its own filter (`GaitReadyLayer`, `GaitPose.eased_pitch`), so a pickup
+  moves the hands and the trunk together. It is tick state the blade pass
+  reads, so a reconcile's replay plays back the fold each live tick left
+  (`PredictedState.hold_ease`) rather than stepping it again. Deeper than
+  the fold the reach solve measures its shoulders at (`chest_fold`): the reach
+  the tick allows is the shallower fold's, and shoulders ahead of the solve's
+  are only ever nearer the hands.
+- **It is the tracked stick's, with the blade on the ice** (`_hold_share`,
+  under the grip).
+  The centre's address and a knockdown pose their own hands and a lifted blade
+  is turned up about them, each on its own ease; a shot, the block, the check
+  commit and a celebration own the stick outright, and the pose bridge eases
+  the change. Out toward the rim the hand leaves its pocket for the solve's
+  own, between half and nine tenths of the arm's reach (`reaching`): held in
+  the pocket to the arm's end, the stick swings off the arm's line the instant
+  the blade comes back.
+- **The body comes down to the stick.** A top hand at the waist under
+  shoulders 1.45 m up locks the bottom arm straight and bunches the hands, so
+  besides the fold he sits (`carry_crouch` carrying, `ready_crouch` without
+  the puck, standing; `SkaterController.ready_sit`).
+- **A carrier gives up the tight range for it.** No two hands can be drawn
+  holding a stick whose blade is at its skates, so a carrier's cursor is held
+  out to a floor (`carry_reach_min_m`, below). An empty stick keeps the range:
+  it is more restricted with the puck than without.
+- **A shot's stick hangs from the same shoulder.** The wrister's finish and
+  the slapper's wind-up and finish place the hand themselves, off the shoulder
+  the body is drawn with (`SkaterShotPoseCoordinator._drawn_shoulder`: the
+  trunk's, under what the ease still has of the ready fold). Off the marker
+  the hand of a shot let go from a folded chest lies in the armpit. The
+  wrister's finish is posed in the same level frame as the hold, from the
+  hold's pocket out along the shot and back to it: authored in UpperBody's
+  frame it leans with the body, which at speed tucks the hand back under the
+  chest and puts the blade at a height read for another span.
+  `test_wrister_finish.gd`.
+- **A shot is both hands' work.** Three things keep the bottom hand on, from
+  the press to the end of the finish. The wound-up blade is held at the pass's
+  own fixed point, the smoothed blade carried with the skater
+  (`_frozen_blade`): never the `Blade` marker read back, which the hand solve
+  lands past the blade it was given once the body leans, so a target read from
+  it walks out to the one-handed rim, 0.4 m in a third of a second skating.
+  The wrister's finish comes in toward the bottom shoulder as far as that hand
+  needs to keep hold (`BottomHandIK.drawn_in`, eased in before the reach runs
+  out). And the drawn hand does not let go for reach while a shot has the
+  stick (`_shooting`): short of its grip, the arm reaches as far as it goes.
+- **He stays over the stick through a finish** (`_finishing`,
+  `SkaterController.ready_sit`): the ready fold and sit hold their empty-stick
+  values through `FOLLOW_THROUGH`, the same on every peer. Released to nothing
+  there, he stands up through the finish and sits down again after it.
+- **The finish's stick leaves at speed and eases into its hold**
+  (`SkaterShotPoseCoordinator.whip_envelope`): the pose bridge eases its
+  start, so an attack that eases in as well goes nowhere for the bridge's
+  ticks and stops dead after them. What has no bridge (the trunk's
+  through-twist and lean, the legs' kick, the slapper's blade leaving contact)
+  rides `finish_envelope`, eased at both ends, over the same `whip_attack_time`.
+- **A wrister's finish is as high as its shot**
+  (`wrister_follow_through_flat_share`): the hands' rise and the blade's lift
+  are the high rung's, and a shot along the ice takes that share of them. The
+  loft is latched at the release (`SkaterStateMachine.follow_through_loft`)
+  and restored through a reconcile with the finish's power: read live, a
+  scroll mid-finish moves the stick.
+- **What is still only drawn is small.** The stride's pump and the shaft's
+  clearance ride `Skater.drawn_top_hand()`, and the stroke's cup rolls the
+  blade about the hosel line (`Scripts/actors/CLAUDE.md`), which curls the
+  drawn toe ~12° off the marker's. The contact the claims and the deflections
+  read is the marker's.
+
+`test_carry_hold.gd` holds the carry on the live rig, and
+`.claude/hooks/render-arms.sh` prints the hold per frame (hand and shoulder
+heights, the shaft's angle, the hands' spacing, both elbows).
+
 ### The gait's numeric core is native
 
 Where the extension is built, `NativeSkaterGait` runs `SkaterLocomotion`, the
@@ -352,17 +483,18 @@ Where the extension is built, `NativeBladePass` runs the whole of
 `SkaterIKCoordinator.apply_blade_toward`: everything from the cursor to the two
 markers, the clamps included. The GDScript is the reference and the fallback.
 Change `apply_blade_toward` or anything it calls (`_solve_top_hand` and its
-reach limits, `_board_reach_limit`, `_blade_target_for`,
-`_carry_backhand_stop`, `_commit_hand_pose`, `resolve_blade_against_goalies` (and
+reach limits, `_board_reach_limit`, `_blade_target_along`, `_held_hand` (and
+`StickHoldRules` under it), `_carry_backhand_stop`, `_commit_hand_pose`, `resolve_blade_against_goalies` (and
 `GoalieGearCollision` under it),
 `resolve_blade_against_net`, `Skater.clamp_blade_to_walls`, and the
 `TopHandIK`, `NetGeometry`, `NetBladeCollision`, `ReachPurposeRules` and
 rink functions under them) and the port changes with it, or
 `test_native_blade_pass_parity.gd` fails. A tunable the pass newly reads goes
-into `_sync_pass_config` too. What the pass reads live from the controller
-and the skater mid-tick comes in as a scalar the GDScript computes
-(`chest_fold`, `carry_reach_floor`, `_hand_forward`), so the two paths share
-one definition; the one the GDScript re-reads after a release — the chest's
+into `_sync_pass_config` too, and the hold's config and bands go over each
+time the config is rebuilt (`_sync_hold_config`). What the pass reads live from
+the controller and the skater mid-tick comes in as a scalar the GDScript
+computes (`chest_fold`, `_reach_floor`, `_hand_forward`, `_hold_share`,
+`_lay_fold`, `ready_fold`, the grip, `_reach_behind`), so the two paths share one definition; the one the GDScript re-reads after a release — the chest's
 fold, on `has_puck` — the port drops when it resumes without the puck.
 
 ### Pose the hand, not the blade
@@ -430,8 +562,9 @@ hand the drawn arm could not reach or barely extended toward:
   blade marker and the posture's own fold, which it tops up rather than adds
   to, so it needs no wire field: full while the puck is ahead and out, none
   round beside or behind him, none pulled in tight. A shot or the block,
-  posing their own stick, take none. The gait draws exactly that fold on the
-  trunk texture, with a crouch under it standing (`GaitCarryLayer`).
+  posing their own stick, take none. The hands are held and the body drawn
+  under a deeper, eased fold, with a crouch under it standing
+  (`ready_fold`, `GaitReadyLayer`; *Where the hands hold the stick*).
   `test_carry_posture_rules.gd`.
 - **Round the forehand the hand comes across the body**
   (`top_hand_forward_m`, `TopHandIK.Config.hand_forward`). Held at its own
@@ -451,9 +584,34 @@ hand the drawn arm could not reach or barely extended toward:
 The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
 
-**A carrier keeps both hands on the stick.** An empty stick reaches one-handed
-to the rim when there is a puck to reach for (`ReachPurposeRules`) and rests in
-both hands, where a carry would, when there is not; with the puck the blade stops where the bottom hand could no longer
+**An empty stick reaches when it is meant to, and rests when it is not**
+(`ReachPurposeRules`, `SkaterIKCoordinator.reach_purpose`). Two things mean it:
+the puck is coming within reach (`purpose`), or the cursor is placed where the
+stick can go (`intent`: within the rim of the build's reach, fading out by
+`reach_intent_far_m` past it). A cursor far off is where the player is
+looking, which it is most of the time, so there the blade rests where both
+hands would hold it and the trunk keeps out of the reach lean, whatever the
+bearing; nobody skates the length of the ice lunging at a far cursor. Inside
+that, the whole range is the player's: the blade goes to a cursor placed
+anywhere in it with no puck about.
+
+**The same reading widens the swing behind on the top hand's side, and moves
+the pivot with it** (`SkaterController.reach_behind_for`,
+`rom_backhand_angle_empty_deg`). The top hand alone carries the stick back
+past its own shoulder, 110° against the 90° a carrier has; the forehand side
+gains nothing, the arm crosses the chest there, so the range is handed. The
+hips pivot between the two skating lines where the blade stops
+(`FacingRules.reach_edge`), so that edge goes out with it
+(`SkaterPoseCoordinator._empty_stick_rules`): a cursor placed near, behind on
+that side, reaches back without turning him, and a far one there still turns
+him round at the old edge. Never widen the blade's range without the edge, or
+the edge without the cursor's distance: at 177° flat, a backward skater who
+flicks the cursor ahead on that side never turns. A bot turns by a cursor
+placed near its body, so its input opts out (`InputState.bot_cursor_turns`,
+set by `AIController`) and its turning is unchanged.
+`test_top_hand_reaches_its_rim.gd`, `test_facing_follows_travel.gd`.
+
+**A carrier keeps both hands on the stick.** With the puck the blade stops where the bottom hand could no longer
 hold the shaft (`TopHandIK.two_hand_reach`, from the bottom shoulder read the
 way `arm_shoulder` reads the top one) and, on the backhand, at the angle past
 which it lets go (`bh_release_angle_deg`, `_carry_backhand_stop`) — the puck
@@ -480,9 +638,9 @@ top hand rises level with it, the elbow hangs below the fist and the shaft
 leaves it past the little finger — a dagger, not a sword. Never answer that
 with a lower hand ceiling on the carrier's target: a ceiling lands the target
 past the cursor along the shoulder's aim, the shoulder twists toward the blade,
-and the puck creeps on its own for seconds. An empty stick keeps the tight range;
-reaching for a loose puck at its skates it goes one-handed and nothing crosses
-the body. `test_carry_blade_rests_on_puck.gd` and `test_carry_posture_rules.gd`.
+and the puck creeps on its own for seconds. An empty stick keeps the tight
+range; reaching for a loose puck at its skates it is the top hand's alone and
+nothing crosses the body. `test_carry_blade_rests_on_puck.gd` and `test_carry_posture_rules.gd`.
 
 "Hold the shaft" means a glove's width below the top hand
 (`SkaterIKCoordinator._glove_spacing`, the drawn fist's width), never on it.

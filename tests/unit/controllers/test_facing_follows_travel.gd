@@ -267,3 +267,46 @@ func test_the_stance_squares_only_when_slow() -> void:
 	_skater.set_facing(Vector2(0.0, -1.0))
 	_skate(AHEAD, 6.0, LEFT, 120, Vector2(0.0, -1.0), true)
 	assert_lt(_facing_off(AHEAD), 5.0, "at speed the stance just crouches")
+
+
+# ── The reach behind on the top hand's side ───────────────────────────────────
+
+# Skating up-ice with the cursor `deg` round the top hand's side at `cursor_m`.
+func _reach_back(deg: float, cursor_m: float, bot: bool = false) -> void:
+	var top_side: float = -FacingRules.forehand_sign(_skater.is_left_handed)
+	var a: float = deg_to_rad(deg) * top_side
+	# Vector2.rotated turns x toward y; in XZ that is AHEAD toward +X for a > 0.
+	var dir2: Vector2 = Vector2(AHEAD.x, AHEAD.z).rotated(a)
+	var dir := Vector3(dir2.x, 0.0, dir2.y)
+	for _i: int in 150:
+		_skater.velocity = AHEAD * 6.0
+		var input := InputState.new()
+		input.mouse_world_pos = _skater.global_position + dir * cursor_m
+		input.mouse_world_pos.y = 0.0
+		input.delta = DT
+		input.bot_cursor_turns = bot
+		_controller._process_input(input, DT)
+
+
+func test_a_cursor_placed_behind_on_the_top_hands_side_reaches_back_without_a_turn() -> void:
+	_reach_back(168.0, 1.3)
+	assert_lt(_facing_off(AHEAD), 8.0, "the hips stay on the line")
+	var blade: Vector3 = _skater.upper_body_to_global(_skater.get_blade_position()) \
+			- _skater.global_position
+	var off: float = rad_to_deg(absf(Vector2(AHEAD.x, AHEAD.z).angle_to(Vector2(blade.x, blade.z))))
+	assert_gt(off, 160.0, "and the blade is back there: %.0f° round" % off)
+
+
+func test_a_far_cursor_behind_on_that_side_still_turns_him_round() -> void:
+	_reach_back(168.0, 8.0)
+	assert_lt(_facing_off(BEHIND), 20.0, "looking back there, he pivots to skate backward")
+
+
+func test_a_bots_near_cursor_behind_still_turns_it_round() -> void:
+	_reach_back(168.0, 1.3, true)
+	assert_lt(_facing_off(BEHIND), 20.0, "a bot turns by a cursor near its body")
+
+
+func test_the_forehand_side_gains_nothing() -> void:
+	_reach_back(-168.0, 1.3)
+	assert_lt(_facing_off(BEHIND), 20.0, "across the body the arm stops, and he turns")

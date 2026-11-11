@@ -113,7 +113,8 @@ func _drop_glove(top: bool, carried: Vector3) -> void:
 		if (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
 			continue
 		var surface := ArrayMesh.new()
-		surface.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		surface.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {},
+				ConnectedSkinBuilder.FACET_FORMAT)
 		var mi := MeshInstance3D.new()
 		mi.mesh = surface
 		mi.material_override = _skater.body_material()

@@ -58,6 +58,7 @@ var native_enabled: bool = true
 var _native_arms: Array[RefCounted] = []
 # NativeArmRig.pose's answers (its Result enum).
 const _NATIVE_DEGENERATE: int = 0
+const _NATIVE_POSE_ARGS: int = 10
 const _NATIVE_SETTLING: int = 2
 var _native_dirty: bool = true
 var _trunk_texture := Basis.IDENTITY
@@ -102,8 +103,11 @@ func build(skeleton: Skeleton3D) -> void:
 	_base_pos.resize(count)
 	_skeleton = skeleton
 
+	# A binary whose pose predates an argument takes the GDScript path.
 	if ClassDB.class_exists(&"NativeArmRig") \
-			and ClassDB.class_has_method(&"NativeArmRig", &"configure_torso"):
+			and ClassDB.class_has_method(&"NativeArmRig", &"configure_torso") \
+			and ClassDB.class_get_method_argument_count(&"NativeArmRig", &"pose") \
+			== _NATIVE_POSE_ARGS:
 		_native_arms = [ClassDB.instantiate(&"NativeArmRig") as RefCounted,
 				ClassDB.instantiate(&"NativeArmRig") as RefCounted]
 		for arm: int in 2:
@@ -215,7 +219,7 @@ func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vect
 	var frame: Transform3D = _skater.drawn_upper_body()
 	var hand_s: Vector3 = frame * hand_local
 	var shoulder_s: Vector3 = arm_root(marker_local, hand_local)
-	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, pole_sign)
+	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, hand_local, pole_sign)
 	var turn: float = _ease_steer(arm, delta, SkaterArmPoses.steer_turn(shoulder_s, hand_s,
 			_skater.upper_arm_length, _skater.forearm_length, pole_s,
 			spine.basis * Vector3(pole_sign, 0.0, 0.0),
@@ -230,10 +234,11 @@ func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vect
 	var grip_deg: float = _skater.top_grip_angle_deg if arm == 0 \
 			else _skater.bottom_grip_angle_deg
 	# The bottom hand holds the shaft from underneath, palm up, as the plane grip
-	# already has it; only the top fist rolls.
+	# already has it, and lets it turn in the fingers; only the top fist rolls,
+	# and it turns with the stick it grips (Skater.stick_roll).
 	var roll: float = 0.0 if arm != 0 else _ease_roll(arm, delta,
 			_grip_roll(shoulder_s, elbow_s, hand_s, shaft_s, grip_deg,
-			SkaterArmPoses.knuckles_forward(_skater.is_left_handed)))
+			SkaterArmPoses.knuckles_forward(_skater.is_left_handed))) - _skater.stick_roll()
 	_pose_glove(glove, elbow_s, hand_s, shaft_s, grip_deg, roll)
 
 
@@ -285,7 +290,7 @@ func _native_update_arm(arm: int, delta: float, marker_local: Vector3, hand_loca
 		grip_local: Vector3, pole_sign: float) -> bool:
 	if _native_dirty:
 		_configure_native()
-	var pole: Vector3 = _skater.arm_pole_local
+	var pole: Vector3 = _raised_pole(marker_local, hand_local)
 	pole.x *= pole_sign
 	var arm_len: float = _skater.upper_arm_length + _skater.forearm_length
 	var result: int = _native_arms[arm].pose(marker_local, hand_local, grip_local,
@@ -295,7 +300,8 @@ func _native_update_arm(arm: int, delta: float, marker_local: Vector3, hand_loca
 			Vector3(_skater.get_check_lead(), _skater.shoulder_offset,
 			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset),
 			Vector3(delta, SkaterArmPoses.knuckles_forward(_skater.is_left_handed)
-			if arm == 0 else 0.0, pole_sign))
+			if arm == 0 else 0.0, pole_sign),
+			-_skater.stick_roll() if arm == 0 else 0.0)
 	if result == _NATIVE_SETTLING:
 		_steering = true
 	return result != _NATIVE_DEGENERATE
@@ -314,12 +320,34 @@ func _configure_native() -> void:
 				wrist, steer_omega)
 
 
+# How far out to its side the pole swings for a hand raised past its shoulder
+# (added to the pole's x), and the rise it comes on over: the up component of
+# the shoulder→hand line, UpperBody's frame. A raised arm's elbow points out.
+# Left on the hanging arm's pole, a hand rising in front of the chest passes
+# the line straight away from that pole, where the elbow turns half round in a
+# few frames.
+const _RAISED_POLE_OUT: float = 0.45
+const _RAISED_POLE_OVER := Vector2(-0.2, 0.8)
+
+
 # The elbow's pole on this arm's side, tucked by a check load.
-func _arm_pole(marker_local: Vector3, pole_sign: float) -> Vector3:
-	var pole_local: Vector3 = _skater.arm_pole_local
+func _arm_pole(marker_local: Vector3, hand_local: Vector3, pole_sign: float) -> Vector3:
+	var pole_local: Vector3 = _raised_pole(marker_local, hand_local)
 	pole_local.x *= pole_sign
 	return CheckStanceRules.tucked_pole(pole_local, CheckStanceRules.side_load(
 			_skater.get_check_lead(), signf(marker_local.x)))
+
+
+# The pole of an arm from the shoulder at `marker_local` to `hand_local`
+# (UpperBody's frame), x still away from the body.
+func _raised_pole(marker_local: Vector3, hand_local: Vector3) -> Vector3:
+	var pole: Vector3 = _skater.arm_pole_local
+	var line: Vector3 = hand_local - marker_local
+	var length: float = line.length()
+	if length > 0.0001:
+		pole.x += _RAISED_POLE_OUT * smoothstep(_RAISED_POLE_OVER.x, _RAISED_POLE_OVER.y,
+				line.y / length)
+	return pole
 
 
 # How far a point in skeleton space lies outside the jersey as the torso is

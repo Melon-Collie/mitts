@@ -123,6 +123,7 @@ func override(p: GaitPose) -> void:
 			-deg_to_rad(GETUP_LEAN_DEG) * up, weight)
 	p.trunk_roll = lerpf(p.trunk_roll, 0.0, weight)
 	p.wobble_pitch = lerpf(p.wobble_pitch, 0.0, weight)
+	p.eased_pitch = lerpf(p.eased_pitch, 0.0, weight)
 	p.wobble_roll = lerpf(p.wobble_roll, 0.0, weight)
 
 

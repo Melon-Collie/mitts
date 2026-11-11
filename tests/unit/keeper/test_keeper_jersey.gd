@@ -151,6 +151,72 @@ func test_a_right_catcher_wears_its_reflection() -> void:
 		assert_lt(worst, 1e-4, "%s: each right-catcher corner the reflection of a left-catcher one" % stance[0])
 
 
+# The seam's corners (where the body and a sleeve meet) in the jersey's own
+# mesh, bind space, as indices into `_skinned`'s order.
+func _seam() -> PackedInt32Array:
+	var arrays: Array = KeeperJerseyMesh.shared_mesh().surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var zones: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	var in_body: Dictionary = {}
+	for v: int in verts.size():
+		if roundi(zones[v].x) == KeeperJerseyMesh.ZONE_TORSO:
+			in_body[Vector3i((verts[v] * 1e5).round())] = true
+	var out := PackedInt32Array()
+	for v: int in verts.size():
+		if roundi(zones[v].x) == KeeperJerseyMesh.ZONE_SLEEVE \
+				and in_body.has(Vector3i((verts[v] * 1e5).round())):
+			out.append(v)
+	return out
+
+
+func test_the_armhole_is_no_wider_than_the_chests_side() -> void:
+	# Past the side's corners the body's faces beside the seam lie folded under
+	# it, and turn inside out as soon as the arm lifts.
+	var h: Vector3 = KeeperGear.half_extents(KeeperGear.Part.CHEST)
+	var side: float = 0.0
+	for ring: int in range(KeeperJerseyMesh._ARMHOLE_TOP, KeeperJerseyMesh._ARMHOLE_TOP + 3):
+		var pts: PackedVector3Array = KeeperGearMeshes.jersey_ring(h,
+				KeeperGearMeshes.JERSEY_STATIONS - 1 - ring, KeeperJerseyMesh.TORSO_PER_EDGE)
+		for c: int in [-KeeperJerseyMesh._ARMHOLE_HALF_WIDTH, KeeperJerseyMesh._ARMHOLE_HALF_WIDTH]:
+			side = maxf(side, absf(pts[KeeperJerseyMesh._ARMHOLE_COLUMN[1] + c].z))
+	var verts: PackedVector3Array = KeeperJerseyMesh.shared_mesh().surface_get_arrays(0) \
+			[Mesh.ARRAY_VERTEX]
+	var seam: PackedInt32Array = _seam()
+	assert_gt(seam.size(), 0)
+	for v: int in seam:
+		assert_lte(absf(verts[v].z), side + 1e-3, "the seam's corner at %s" % verts[v])
+
+
+func test_a_raised_arm_leaves_the_armpit_on_the_chest() -> void:
+	# The sleeve under the arm hangs from the chest (SleeveHang), so both arms
+	# thrown up draw it out from the flank; riding the shoulder instead, the
+	# armhole's bottom swings up with the arm.
+	var verts: PackedVector3Array = KeeperJerseyMesh.shared_mesh().surface_get_arrays(0) \
+			[Mesh.ARRAY_VERTEX]
+	var armpits: Array[int] = [-1, -1]
+	for v: int in _seam():
+		var side: int = 0 if verts[v].x < 0.0 else 1
+		if armpits[side] < 0 or verts[v].y < verts[armpits[side]].y:
+			armpits[side] = v
+	var in_chest: Array[PackedVector3Array] = []
+	for raised: bool in [false, true]:
+		_pose(func(p: KeeperPose) -> void:
+			KeeperPoses.ready(p)
+			if raised:
+				p.glove_from_chest = false
+				p.glove_hand = Vector3(-0.55, 1.80, -0.15)
+				p.blocker_reach = true
+				p.blocker_grip = Vector3(0.55, 1.80, -0.15), false)
+		var to_chest: Transform3D = KeeperGear.box(_keeper.skeleton, KeeperGear.Part.CHEST) \
+				.affine_inverse()
+		var skinned: PackedVector3Array = _skinned()
+		in_chest.append(PackedVector3Array([to_chest * skinned[armpits[0]],
+				to_chest * skinned[armpits[1]]]))
+	for side: int in 2:
+		assert_almost_eq(in_chest[1][side], in_chest[0][side], Vector3.ONE * 0.005,
+				"side %d: the armpit, in the chest's frame" % side)
+
+
 # The tail (KeeperJerseyTail) hangs from the body's hem and wears the same
 # decal: where a corner of its top row and one of the body's hem stand at one
 # place, both carry one UV, so the kit's bands and the hem's peaks run on
@@ -179,6 +245,23 @@ func test_the_tails_paint_runs_on_from_the_hem() -> void:
 		assert_almost_eq(wrapf(uvs[v].x - uv.x, -0.5, 0.5), 0.0, 1e-4, "U at %s" % verts[v])
 		assert_almost_eq(uvs[v].y, uv.y, 1e-4, "V at %s" % verts[v])
 	assert_gt(met, 8, "the tail's top row meets the hem all round")
+
+
+func test_neither_paint_is_sampled_across_its_wrap() -> void:
+	# On V = 0 itself a repeating texture filters its last row into its first:
+	# the cuff's color into the sleeve's top (SleeveDecal.TOP_V), the caps' into
+	# the neckline (JerseyDecal.SIDE_TOP_V).
+	var arrays: Array = KeeperJerseyMesh.shared_mesh().surface_get_arrays(0)
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var zones: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	var top_v: Dictionary = {KeeperJerseyMesh.ZONE_SLEEVE: INF, KeeperJerseyMesh.ZONE_TORSO: INF}
+	for v: int in uvs.size():
+		var zone: int = roundi(zones[v].x)
+		top_v[zone] = minf(top_v[zone], uvs[v].y)
+	assert_gte(top_v[KeeperJerseyMesh.ZONE_SLEEVE], SleeveDecal.TOP_V,
+			"the sleeves' top a texel inside their paint")
+	assert_gte(top_v[KeeperJerseyMesh.ZONE_TORSO], JerseyDecal.SIDE_TOP_V,
+			"the neckline a texel inside the jersey's paint")
 
 
 # How far `p` lies outside the box (its centre and axes `box`, half sizes `h`).

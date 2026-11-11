@@ -301,6 +301,16 @@ func scenarios() -> Array[Dictionary]:
 	_add(out, "forward → backward (move reversed)", 360, func(inp: InputState, i: int) -> Vector3:
 		inp.move_vector = Vector2(0.0, -1.0) if i < 120 else Vector2(0.0, 1.0)
 		return _up(3.0), 12.0)
+	# An empty stick placed round behind on the top hand's side and brought back,
+	# skating: the cursor near enough to be a reach, not a look (the wider swing,
+	# SkaterController.reach_behind_for).
+	_add(out, "empty stick reached round behind the top hand's side", 360,
+			func(inp: InputState, i: int) -> Vector3:
+		inp.move_vector = Vector2(0.0, -1.0)
+		var top_side: float = -FacingRules.forehand_sign(_skater.is_left_handed)
+		var swept: float = deg_to_rad(170.0) * smoothstep(60.0, 150.0, float(i)) \
+				* (1.0 - smoothstep(210.0, 300.0, float(i)))
+		return Vector3(sin(swept) * top_side, 0.0, -cos(swept)) * 1.4, 26.0)
 	# The loaded stance on and off, skating and standing.
 	_add(out, "stance on/off while skating", 360, func(inp: InputState, i: int) -> Vector3:
 		inp.move_vector = Vector2(0.0, -1.0)

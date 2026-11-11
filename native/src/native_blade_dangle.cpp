@@ -38,6 +38,15 @@ Vector3 NativeBladeDangle::get_dangle_velocity() const {
 	return blade_dangle_vel;
 }
 
+Vector3 NativeBladeDangle::carried_to(const Vector3 &skater_pos, const Vector3 &fallback) const {
+	if (!smoothed_blade_initialized) {
+		return fallback;
+	}
+	Vector3 carried = smoothed_blade_world + skater_pos - prev_skater_pos;
+	carried.y = 0.0;
+	return carried;
+}
+
 Vector3 NativeBladeDangle::advance(
 		const Vector3 &target_blade_world,
 		const Vector3 &skater_pos,
@@ -122,6 +131,8 @@ void NativeBladeDangle::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("seed_moving", "world_pos", "skater_pos", "velocity"),
 			&NativeBladeDangle::seed_moving);
 	ClassDB::bind_method(D_METHOD("get_dangle_velocity"), &NativeBladeDangle::get_dangle_velocity);
+	ClassDB::bind_method(D_METHOD("carried_to", "skater_pos", "fallback"),
+			&NativeBladeDangle::carried_to);
 	ClassDB::bind_method(
 			D_METHOD("advance", "target_blade_world", "skater_pos", "delta", "wrister_aim"),
 			&NativeBladeDangle::advance);

@@ -7,7 +7,7 @@ extends RefCounted
 # sleeve the girdle, the shoulder's middle, the upper arm, the elbow's middle and
 # the forearm, framed on the elbow's hinge (the ELBOW bone's Z) and scaled by the
 # live arm against the bind arm; per knee the middle of the bend, half the
-# shin's turn on its LEG bone. Called after the rigs' render pass, so it reads
+# shin's turn on its LEG bone; and the neck's foot. Called after the rigs' render pass, so it reads
 # this frame's poses. A display figure with no Skater (LockerMannequin) drives it
 # the same way, through build and pose.
 
@@ -31,6 +31,8 @@ var _bare: bool = false
 # SkaterConnectedMesh.bind_rests, and their inverses where a pose is read back
 # against them.
 var _rests: Array[Transform3D] = []
+# The helmet's rest frame in the torso's.
+var _neck_foot_in_torso := Transform3D.IDENTITY
 
 
 func setup(skater: Skater) -> void:
@@ -41,6 +43,8 @@ func build(skeleton: Skeleton3D, body_material: Material, tuck: int,
 		tongue: int = GearModelRegistry.TONGUE_TUCKED) -> void:
 	_skeleton = skeleton
 	_rests = SkaterConnectedMesh.bind_rests()
+	_neck_foot_in_torso = _rests[SkaterConnectedMesh.Bind.TORSO].affine_inverse() \
+			* SkaterRigidParts.HELMET_REST
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "Body"
 	_mesh.skin = SkaterBodyMesh.shared_skin()
@@ -92,6 +96,23 @@ func pose(top_side: int) -> void:
 		_pose_sleeve(_ARM_BONES[arm], top_side if arm == 0 else 1 - top_side)
 	for side: int in 2:
 		_pose_knee(side)
+	_pose_neck_foot()
+
+
+# The neck's foot is the helmet's frame where the torso holds it at rest, so
+# the neck stands in the collar wherever the head is carried, turned about its
+# own axis as far as the head is turned off the trunk: a neck held still under
+# a turned head is wrung between them.
+func _pose_neck_foot() -> void:
+	var foot: Transform3D = _skeleton.get_bone_global_pose(_UpperBone.TORSO) \
+			* _neck_foot_in_torso
+	var head: Basis = _skeleton.get_bone_global_pose(_UpperBone.HELMET).basis.orthonormalized()
+	var turn: Quaternion = (foot.basis.orthonormalized().inverse() * head) \
+			.get_rotation_quaternion()
+	var twist: float = 2.0 * atan2(turn.y, turn.w) if turn.w >= 0.0 \
+			else 2.0 * atan2(-turn.y, -turn.w)
+	_skeleton.set_bone_pose(SkaterBodySkeleton.deform_bone(SkaterConnectedMesh.Deform.NECK_FOOT),
+			Transform3D(foot.basis * Basis(Vector3.UP, twist), foot.origin))
 
 
 func _pose_sleeve(bones: Array, side: int) -> void:

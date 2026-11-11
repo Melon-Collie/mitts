@@ -6,7 +6,8 @@ extends RefCounted
 # (SkaterBodyMesh). Every part is one zone of its mesh (BodyZoneMesh), zone =
 # UPPER_ZONE_BASE + SkaterMeshBuilder.UpperSurface or SkaterMeshBuilder.LegSurface,
 # rigid to its bone but for the skate's upper (SkateUpperMesh), which bends
-# across the ankle. The helmet's shell is drawn with a hockey helmet's ridge down
+# across the ankle, and the neck, which bends between the collar and the head
+# (neck_foot_share). The helmet's shell is drawn with a hockey helmet's ridge down
 # its crown and a rib either side of it; the hair and face gear fitted under the plain
 # shell still fit, as the crest only ever raises it and stops above the brow
 # the face gear hangs from.
@@ -86,8 +87,9 @@ static func upper_body_mesh(top_right: bool = true, bare: bool = false) -> Array
 					_UpperSurface.TOP_HAND if top else _UpperSurface.BOTTOM_HAND, hand)
 			_add(b, cuff.surface_get_arrays(0),
 					_UpperSurface.TOP_CUFF if top else _UpperSurface.BOTTOM_CUFF, cuff_bone)
-		_add(b, SkaterMeshBuilder.shared_helmet_assembly().surface_get_arrays(
-				SkaterMeshBuilder.HELMET_SURF_SKIN), _UpperSurface.HELMET_SKIN, _UpperBone.HELMET)
+		b.add(_neck_weighted(SkaterMeshBuilder.shared_helmet_assembly().surface_get_arrays(
+				SkaterMeshBuilder.HELMET_SURF_SKIN)),
+				SkaterMeshBuilder.UPPER_ZONE_BASE + _UpperSurface.HELMET_SKIN)
 		_add(b, _crested(SkaterMeshBuilder.shared_helmet_shell(_HELMET_LON, _HELMET_LAT)),
 				_UpperSurface.HELMET_SHELL, _UpperBone.HELMET)
 		var hardware: ArrayMesh = SkaterMeshBuilder.shared_helmet_hardware()
@@ -118,8 +120,44 @@ static func glove_mesh(top: bool, top_right: bool) -> ArrayMesh:
 		var out := ArrayMesh.new()
 		for part: BodyZoneMesh in [hand, cuff]:
 			out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,
-					part.commit().surface_get_arrays(0))
+					part.commit().surface_get_arrays(0), [], {}, ConnectedSkinBuilder.FACET_FORMAT)
 		return out)
+
+
+# Where the scene places the helmet in the trunk's frame (Scenes/Skater.tscn:
+# Helmet): the helmet's frame as the torso carries it is the neck's foot.
+const HELMET_REST := Transform3D(Basis(Vector3(0.75, 0.0, 0.0), Vector3(0.0, 0.75, 0.0),
+		Vector3(0.0, 0.0, 0.75)), Vector3(0.0, 0.7, 0.0))
+# The bind past the legs' and the skate uppers' feet (SkaterBodyMesh.shared_skin):
+# the neck's foot (SkaterConnectedMesh.Deform.NECK_FOOT).
+const NECK_FOOT_BIND: int = SkaterMeshBuilder.UPPER_BONE_COUNT \
+		+ SkaterMeshBuilder.LEG_BONE_COUNT + 2
+
+
+# How far the neck at helmet-local height `y` rides its foot rather than the
+# head: wholly from its collar station down, so it stands in the collar
+# wherever the head is carried, and less on up to its top inside the head.
+static func neck_foot_share(y: float) -> float:
+	var profile: Array[Vector2] = SkaterMeshBuilder.NECK_PROFILE
+	return clampf(inverse_lerp(profile[0].x,
+			profile[SkaterMeshBuilder.NECK_COLLAR_STATION].x, y), 0.0, 1.0)
+
+
+# The helmet assembly's skin with its neck weighted from the head onto its
+# foot (neck_foot_share); the head itself is rigid to the helmet.
+static func _neck_weighted(arrays: Array) -> Array:
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var neck_start: int = SkaterMeshBuilder.helmet_skin_neck_start()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	for i: int in verts.size():
+		var foot: float = neck_foot_share(verts[i].y) if i >= neck_start else 0.0
+		bones.append_array([_UpperBone.HELMET, NECK_FOOT_BIND, 0, 0])
+		weights.append_array([1.0 - foot, foot, 0.0, 0.0])
+	var out: Array = arrays.duplicate()
+	out[Mesh.ARRAY_BONES] = bones
+	out[Mesh.ARRAY_WEIGHTS] = weights
+	return out
 
 
 # The skate upper's zones, in SkateUpperMesh.Surface order, from a side's
@@ -248,6 +286,11 @@ static func _crested(shell: ArrayMesh) -> Array:
 		var n: Vector3 = (verts[indices[t + 2]] - a).cross(verts[indices[t + 1]] - a).normalized()
 		for c: int in 3:
 			normals[indices[t + c]] = n
+	# The shell's grid is laid a quad at a time ahead of its liner, and the
+	# ridge and ribs bend those quads: each is lit as one facet, as the jersey's.
+	if arrays[Mesh.ARRAY_INDEX] == null:
+		arrays[Mesh.ARRAY_CUSTOM0] = ConnectedSkinBuilder.facet_pairs(verts, normals,
+				_HELMET_LON * _HELMET_LAT)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	return arrays

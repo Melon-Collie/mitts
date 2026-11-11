@@ -148,7 +148,9 @@ func test_the_sleeve_girth_is_the_arm_under_the_number() -> void:
 
 
 # Metres down the arm per unit V: the decal's SleevePaint.LENGTH_M, through
-# the upper arm.
+# the upper arm, by the half of each ring over the outside of the arm, where
+# the number and the stripes are read. Under the arm the sleeve hangs toward
+# the chest, off the arm's own line.
 func test_the_sleeve_runs_down_its_v_scale() -> void:
 	for side: float in [-1.0, 1.0]:
 		var rings: Dictionary = _rings(SkaterConnectedMesh.sleeve_surface(side), 1.0)
@@ -159,13 +161,21 @@ func test_the_sleeve_runs_down_its_v_scale() -> void:
 				vs.append(v)
 		vs.sort()
 		assert_gt(vs.size(), 2)
-		var length: float = _centre(rings[vs.front()]).distance_to(_centre(rings[vs.back()]))
+		var length: float = _outside(rings[vs.front()], side).distance_to(
+				_outside(rings[vs.back()], side))
 		assert_almost_eq(length / (vs.back() - vs.front()), SleevePaint.LENGTH_M,
 				SleevePaint.LENGTH_M * 0.05, "side %d" % side)
 
 
-func _centre(ring: Dictionary) -> Vector3:
+# The middle of a ring's half on the outside of the arm on `side`: the decal's
+# number is at U 0.5, which the sleeve's material turns outward by a quarter
+# (SleeveDecal.part_material).
+func _outside(ring: Dictionary, side: float) -> Vector3:
+	var number_u: float = 0.5 - 0.25 * side
 	var sum := Vector3.ZERO
-	for p: Vector3 in ring.values():
-		sum += p
-	return sum / float(ring.size())
+	var count: int = 0
+	for u: float in ring:
+		if absf(wrapf(u - number_u, -0.5, 0.5)) < 0.25:
+			sum += ring[u]
+			count += 1
+	return sum / float(maxi(count, 1))

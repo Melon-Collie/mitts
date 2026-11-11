@@ -114,7 +114,10 @@ keeper (`Scripts/domain/keeper/`) in every taught stance from the
 front, side, three-quarter, the shooter's spot on the dot line and behind, with
 the mouth as a straight-on shot sees him (seams red), save boxes overlaid, to
 `.preview/keeper/` (`tools/keeper_capture.gd`), and diffs each sheet against
-a baseline recorded with `--baseline`. `.claude/hooks/render-keeper-strip.sh`
+a baseline recorded with `--baseline`. No taught stance raises an arm, so
+`KEEPER_CAPTURE_STANCES` also takes its reaches (`reach_glove_high`,
+`reach_glove_out`, `reach_both_high`: a hand put where a save takes it), which
+is where his sleeves' hang shows. `.claude/hooks/render-keeper-strip.sh`
 draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recovery, the sink into the low ready and the drop from it, the butterfly slide and the rotation on his knees, the RVH's ways in and out and the push off the post, a whole sequence of them through `KeeperMotor`, goals given to it with the moves `KeeperRoute` picks, the first brain tracking a puck round the zone, his saves against a shot read as in a match, and a puck dribbling in to his feet covered) frame by frame (`tools/keeper_strip.gd`).
 
 **To see the BODY's skin, render it.** `.claude/hooks/render-body.sh
@@ -123,8 +126,11 @@ draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recover
 pose to `.preview/body/` (`tools/body_preview_runner.gd`); `--pants` draws the
 pants alone, and `--audit` skins the body on the CPU per pose and counts the
 faces folded inside out, by paint zone — what shows as a hole; `--head` frames
-the helmet, `--waist` the belt, where a tuck goes in, and `--skate` the near
-skate.
+the helmet, `--shoulders` the yoke square on, `--waist` the belt, where a tuck
+goes in, and `--skate` the near skate; `--tile=900` draws each view that many
+pixels square, which is what a seam needs. `BODY_PREVIEW_RENDERER=forward_plus`
+draws it on the renderer the game ships instead (software Vulkan here): the
+check for a change to the body's shader.
 
 **To see HAIR, render it.** `.claude/hooks/render-hair.sh [shots]` draws every
 hair style against every facial-hair style, one head each, from the front, side,
@@ -135,20 +141,26 @@ and enlarge it.
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`
 skates scripted inputs (a start, a stride, a reach for a loose puck, a held arc,
-keyboard turns, taps, a stop, backward, a dive)
-through the real controller and captures a frame every few ticks from behind,
-beside and ahead, printing the locomotion mix per frame — which state the legs
-skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot
-show a stroke or a state firing at the wrong time.
+keyboard turns, taps, a stop, backward, a dive, a slapshot, a wrister flat and
+lofted) through the real controller and captures a frame every few ticks from
+behind (a dangle and a wrister from over the blade instead), beside and ahead,
+printing the locomotion mix per frame — which state the legs skated, and when
+it came on (`tools/gait_strip_runner.gd`). A held pose cannot show a stroke or
+a state firing at the wrong time. `--tile=560` draws each view that many
+pixels square, which is what a blade's roll needs.
 
 **To see the ARMS round the body, sweep them.** `.claude/hooks/render-arms.sh
 [scenarios]` walks the cursor round a carrier (the facing held, so the blade
 goes round the body; standing; skating with the puck round each side) and draws
 each step from the chest, both sides and overhead to `user://arm_sweep`,
 printing per frame each arm's closest approach to the torso
-(`SkaterArmRig.torso_clearance`) and how the shaft sits in each glove, and for
-the moving scenarios the blade against the cursor tick by tick — where a turn
-that catches shows (`tools/arm_sweep_runner.gd`; `--list` prints the names).
+(`SkaterArmRig.torso_clearance`), how the shaft sits in each glove and how the
+stick is held (the hands' and shoulder's heights, the shaft's angle, the
+elbows), and for the moving scenarios the blade against the cursor tick by
+tick — where a turn that catches shows (`tools/arm_sweep_runner.gd`; `--list`
+prints the names). The `dangle` scenarios swing the cursor across his front a
+frame every 1/30 s, which is where the wrist's roll shows; `--tile=512` draws
+each view that many pixels square.
 
 **To see the PUCK's tilt and spin, render a strip.** `.claude/hooks/render-puck.sh
 [scenarios]` drives the real `Puck` through the host's analytic drive (a board

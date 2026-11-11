@@ -73,3 +73,23 @@ func test_the_registry_reads_a_jersey_stripes_shape_but_not_a_socks() -> void:
 			"stripes": [{"pos": 0.9, "width": 0.1, "color": "#000000",
 					"peak": {"depth": 0.1, "count": 3, "shape": "sine"}}]}})
 	assert_eq(wave.jersey.stripes[0].peak.shape, "sine")
+
+
+# Whether `stripe` paints the sleeve at (u round the arm, `down_m` down it).
+func _painted(stripe: Dictionary, u: float, down_m: float) -> bool:
+	var at := Vector2(u, SleevePaint.pos_of(down_m))
+	for piece: PackedVector2Array in SleevePaint.stripe_polygons(stripe):
+		if Geometry2D.is_point_in_polygon(at, piece):
+			return true
+	return false
+
+
+func test_a_round_yoke_covers_the_cap_and_stops_above_the_number() -> void:
+	var cap: Dictionary = SleevePaint.yoke_cap(Color.RED)
+	for u: float in [0.05, 0.25, 0.5, 0.75]:
+		assert_true(_painted(cap, u, 0.002), "u %.2f: the sleeve's top is the yoke's" % u)
+		assert_true(_painted(cap, u, SleevePaint.YOKE_CAP_M - 0.004), "u %.2f: down to the cap" % u)
+		assert_false(_painted(cap, u, SleevePaint.YOKE_CAP_M + 0.004), "u %.2f: and no further" % u)
+	# The number's glyphs stand about 0.7 of their em.
+	assert_lt(SleevePaint.YOKE_CAP_M, SleevePaint.NUMBER_CENTER_M - 0.35 * SleeveDecal.NUMBER_EM_M,
+			"the number sits on the sleeve below it")
