@@ -50,11 +50,9 @@ const _BOX_FADE := Vector2(-0.25, 0.15)
 static var _cache: Dictionary = {}
 
 # A bare fist (the gloves off for a fight) is the glove's fist without its
-# padding: its shape at this share of the glove's size, in the skin's zone.
+# padding: its shape at this share of the glove's size, in the skin's zone, on
+# the end of the sleeve. No wrist: the sleeve runs to where the cuff began.
 const BARE_FIST_SCALE: float = 0.72
-# Where the cuff was, a bare wrist: the cuff's length at this share of its
-# girth, also skin.
-const BARE_WRIST_GIRTH: float = 0.55
 
 
 # `top_right`: the top hand is his right, as a left shot's is. `bare`: the
@@ -67,8 +65,6 @@ static func upper_body_mesh(top_right: bool = true, bare: bool = false) -> Array
 		var skin: int = SkaterMeshBuilder.UPPER_ZONE_BASE + _UpperSurface.HELMET_SKIN
 		var fist_xform := Transform3D(Basis.from_scale(Vector3.ONE * BARE_FIST_SCALE),
 				Vector3.ZERO)
-		var wrist_xform := Transform3D(Basis.from_scale(
-				Vector3(1.0, BARE_WRIST_GIRTH, BARE_WRIST_GIRTH)), Vector3.ZERO)
 		for top: bool in [true, false]:
 			var fist: ArrayMesh = SkaterMeshBuilder.shared_glove_fist(top == top_right)
 			var hand: int = _UpperBone.TOP_HAND if top else _UpperBone.BOTTOM_HAND
@@ -77,7 +73,6 @@ static func upper_body_mesh(top_right: bool = true, bare: bool = false) -> Array
 				for part: int in [SkaterMeshBuilder.FIST_PART_BACK,
 						SkaterMeshBuilder.FIST_PART_FINGERS, SkaterMeshBuilder.FIST_PART_THUMB]:
 					b.add(fist.surface_get_arrays(part), skin, hand, fist_xform)
-				b.add(cuff.surface_get_arrays(0), skin, cuff_bone, wrist_xform)
 				continue
 			_add(b, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_BACK),
 					_UpperSurface.TOP_HAND if top else _UpperSurface.BOTTOM_HAND, hand)
