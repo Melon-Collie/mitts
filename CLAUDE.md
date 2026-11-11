@@ -152,9 +152,13 @@ show a stroke or a state firing at the wrong time.
 goes round the body; standing; skating with the puck round each side) and draws
 each step from the chest, both sides and overhead to `user://arm_sweep`,
 printing per frame each arm's closest approach to the torso
-(`SkaterArmRig.torso_clearance`) and how the shaft sits in each glove, and for
-the moving scenarios the blade against the cursor tick by tick — where a turn
-that catches shows (`tools/arm_sweep_runner.gd`; `--list` prints the names).
+(`SkaterArmRig.torso_clearance`), how the shaft sits in each glove and how the
+stick is held (the hands' and shoulder's heights, the shaft's angle, the
+elbows), and for the moving scenarios the blade against the cursor tick by
+tick — where a turn that catches shows (`tools/arm_sweep_runner.gd`; `--list`
+prints the names). The `dangle` scenarios swing the cursor across his front a
+frame every 1/30 s, which is where the wrist's roll shows; `--tile=512` draws
+each view that many pixels square.
 
 **To see the PUCK's tilt and spin, render a strip.** `.claude/hooks/render-puck.sh
 [scenarios]` drives the real `Puck` through the host's analytic drive (a board

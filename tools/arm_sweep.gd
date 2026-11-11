@@ -5,7 +5,7 @@ extends SceneTree
 # sits in each glove; the skating scenarios also trace the blade against the
 # cursor tick by tick, which is where a turn that catches shows.
 #
-#   .claude/hooks/render-arms.sh [scenario,scenario]   # --list prints them
+#   .claude/hooks/render-arms.sh [scenario,scenario] [--tile=512]   # --list prints them
 #
 # A two-line bootstrap for the reason pose_capture.gd gives: the runner names
 # Skater and SkaterController, which only compile once the autoloads exist.
@@ -16,8 +16,17 @@ var _started: bool = false
 
 
 func _init() -> void:
-	DisplayServer.window_set_size(Vector2i(TILE, TILE))
+	DisplayServer.window_set_size(Vector2i(_tile(), _tile()))
 	process_frame.connect(_on_frame)
+
+
+# Each view's size in pixels, square: --tile=N, for a pose that needs reading
+# closer than the sheet's default.
+func _tile() -> int:
+	for a: String in OS.get_cmdline_user_args():
+		if a.begins_with("--tile="):
+			return maxi(int(a.trim_prefix("--tile=")), 64)
+	return TILE
 
 
 func _on_frame() -> void:
@@ -31,4 +40,5 @@ func _on_frame() -> void:
 	for a: String in args:
 		if a.begins_with("--only="):
 			only = a.trim_prefix("--only=")
+	runner.set("tile", _tile())
 	runner.call("begin", only, args.has("--list"))
