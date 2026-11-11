@@ -81,11 +81,19 @@ const SCENARIOS: Array[Dictionary] = [
 	# The same wind-up called off at SLAP_RELEASE_AT (the wrister button): the
 	# fake, and the stick coming back down to the puck over the recovery.
 	{"name": "slapfake", "warm": SLAP_RELEASE_AT - 2, "step": 8},
+	# Skating with the puck, a wrister up-ice and to the forehand: pressed at
+	# WRIST_AT, let go at WRIST_RELEASE_AT. The whole shot, then the release and
+	# the finish tick by tick, then the stick coming back to the ice.
+	{"name": "wristshot", "warm": WRIST_AT - 10, "step": 14},
+	{"name": "wristdown", "warm": WRIST_RELEASE_AT - 2, "step": 4},
+	{"name": "wristup", "warm": WRIST_RELEASE_AT + 22, "step": 8},
 ]
 # The slapshot scenarios' press and release ticks: past the set-up and a full
 # wind-up.
 const SLAP_AT: int = 60
 const SLAP_RELEASE_AT: int = 190
+const WRIST_AT: int = 200
+const WRIST_RELEASE_AT: int = 260
 # The dangle scenario's sweep: ~4.4 m/s across the middle, a hard dangle.
 const DANGLE_HZ: float = 2.0
 const DANGLE_HALF_WIDTH: float = 0.35
@@ -209,7 +217,7 @@ func _build_actor() -> void:
 	add_child(_controller)
 	_controller.setup(_skater, _puck, _state)
 	_controller.apply_attributes(attrs)
-	if _dangling() or _slapping():
+	if _dangling() or _slapping() or _wristing():
 		_puck.visible = true
 		_puck.set_carrier(_skater)
 		_controller.on_puck_picked_up_network()
@@ -305,6 +313,10 @@ func _steer(input: InputState) -> void:
 			input.slap_held = true
 			input.shoot_pressed = true
 			input.shoot_held = true
+	if _wristing():
+		aim = Vector2(0.26, -0.97)
+		input.shoot_pressed = _tick == WRIST_AT
+		input.shoot_held = _tick >= WRIST_AT and _tick < WRIST_RELEASE_AT
 	input.move_vector = move
 	if String(_scenarios[_index]["name"]) in ["shuffle", "sidehold", "sidestop"]:
 		_shuffle_steps.shape(input, _skater.velocity, _controller.shuffle_step_distance,
@@ -330,6 +342,10 @@ func _skate(ticks: int) -> void:
 
 func _dangling() -> bool:
 	return String(_scenarios[_index]["name"]) == "dangle"
+
+
+func _wristing() -> bool:
+	return String(_scenarios[_index]["name"]) in ["wristshot", "wristdown", "wristup"]
 
 
 func _slapping() -> bool:

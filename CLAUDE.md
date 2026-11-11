@@ -141,7 +141,7 @@ and enlarge it.
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`
 skates scripted inputs (a start, a stride, a reach for a loose puck, a held arc,
-keyboard turns, taps, a stop, backward, a dive)
+keyboard turns, taps, a stop, backward, a dive, a slapshot, a wrister)
 through the real controller and captures a frame every few ticks from behind,
 beside and ahead, printing the locomotion mix per frame — which state the legs
 skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot

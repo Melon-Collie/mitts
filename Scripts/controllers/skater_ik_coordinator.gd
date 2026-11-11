@@ -1102,7 +1102,7 @@ func _stride_pump(delta: float) -> Vector3:
 # The pocket's size as shares of the arm (StickHoldRules.Config): its middle
 # off the shoulder (inside it, toward the belt buckle, and ahead), then its
 # reach ahead, out and across.
-const _HOLD_HOME_OF_ARM := Vector2(-0.15, 0.27)
+const HOLD_HOME_OF_ARM := Vector2(-0.15, 0.27)
 const _HOLD_REACH_OF_ARM := Vector3(0.44, 0.37, 0.44)
 # How far it draws out to its own side from a blade in close, of the arm.
 const _HOLD_DRAW_OF_ARM: float = 0.32
@@ -1190,8 +1190,8 @@ func _hold_config() -> StickHoldRules.Config:
 		var arm: float = _skater.upper_arm_length + _skater.forearm_length
 		var cfg := StickHoldRules.Config.new()
 		cfg.lie = deg_to_rad(_skater.blade_lie_deg)
-		cfg.home_out = _HOLD_HOME_OF_ARM.x * arm
-		cfg.home_ahead = _HOLD_HOME_OF_ARM.y * arm
+		cfg.home_out = HOLD_HOME_OF_ARM.x * arm
+		cfg.home_ahead = HOLD_HOME_OF_ARM.y * arm
 		cfg.reach_ahead = _HOLD_REACH_OF_ARM.x * arm
 		cfg.reach_out = _HOLD_REACH_OF_ARM.y * arm
 		cfg.reach_across = _HOLD_REACH_OF_ARM.z * arm
@@ -1621,9 +1621,8 @@ func solve_stick_length() -> float:
 	return _controller.stick_length - _skater.grip_choke()
 
 
-# Horizontal projection of the stick onto the XZ plane, given the fixed
-# vertical drop from hand to blade. Used by follow-through to keep stick
-# length consistent with the IK solver.
+# Horizontal projection of the stick onto the XZ plane with the hand at its
+# rest height and the blade on the ice.
 func stick_horiz() -> float:
 	var drop: float = _controller.hand_rest_y - blade_y_local()
 	var length: float = solve_stick_length()

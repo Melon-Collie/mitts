@@ -90,10 +90,11 @@ func _wind_up_blade(wind_up_t: float) -> Vector3:
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
 	var eased: float = sqrt(wind_up_t)
 	var contact: Vector3 = _contact_local()
+	var shoulder: Vector3 = _drawn_shoulder()
 	var apex := Vector3(
-			_skater.shoulder.position.x + blade_side_sign * _controller.slapper_wind_up_blade_x,
+			shoulder.x + blade_side_sign * _controller.slapper_wind_up_blade_x,
 			_controller.slapper_wind_up_height,
-			_skater.shoulder.position.z + _controller.slapper_wind_up_blade_z)
+			shoulder.z + _controller.slapper_wind_up_blade_z)
 	return Vector3(
 			lerpf(contact.x, apex.x, eased),
 			lerpf(contact.y, apex.y, wind_up_t),
@@ -103,11 +104,26 @@ func _wind_up_blade(wind_up_t: float) -> Vector3:
 func _wind_up_hand(wind_up_t: float) -> Vector3:
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
 	var eased: float = sqrt(wind_up_t)
+	var shoulder: Vector3 = _drawn_shoulder()
 	return Vector3(
-			_skater.shoulder.position.x + blade_side_sign * _controller.slapper_wind_up_hand_inward * eased,
-			_controller.hand_rest_y + _controller.slapper_wind_up_hand_up * eased,
-			_skater.shoulder.position.z + (_controller.slapper_wind_up_hand_back
+			shoulder.x + blade_side_sign * _controller.slapper_wind_up_hand_inward * eased,
+			_rest_hand_y(shoulder) + _controller.slapper_wind_up_hand_up * eased,
+			shoulder.z + (_controller.slapper_wind_up_hand_back
 				- _controller.slapper_wind_up_hand_forward) * eased)
+
+
+# The top shoulder the body is drawn with this tick (UpperBody's frame): the
+# solve's, under what the hold's ease still has of the ready fold. The poses
+# here take the stick from a chest folded over it, and the fold eases off
+# after; a hand placed off the marker lies behind the shoulder it hangs from
+# until it has.
+func _drawn_shoulder() -> Vector3:
+	return CarryPostureRules.folded_shoulder(_ik.arm_shoulder(), _ik.ready_fold())
+
+
+# The height the top hand hangs at below `shoulder` with the arm at rest.
+func _rest_hand_y(shoulder: Vector3) -> float:
+	return shoulder.y - (_skater.shoulder.position.y - _controller.hand_rest_y)
 
 # ── Shot-Block Pose ───────────────────────────────────────────────────────────
 # Choreographed "stick down" block: the blade lies flat on the ice extended
@@ -234,18 +250,19 @@ func apply_wrister_follow_through() -> void:
 	_apply_wrister_whip(t, aim_world, stick_world)
 
 # Blade whip for the frozen wrister (coil → instant release → blade replays the
-# shot). ARM-CONTROLLED, same geometry as the tracked follow-through: the hand
-# sits near the shoulder plus a carry along the shot line, and the blade is one
-# stick-length beyond it along `stick_world`, the finish line
+# shot), posed in the arm's level frame, the hold's own (StickHoldRules): below
+# the shoulder is below it and the ice is flat however the body leans, so a
+# finish at speed has the shape of one standing. The hand goes from the hold's
+# pocket out along the shot line and up, and the blade is one stick-length
+# beyond it along `stick_world`, the finish line
 # (SkaterStateMachine.finish_stick_dir): the shot line when the torso drove the
 # shot, where the puck sat when only the arms pushed it. So a loaded shot's blade
 # extends along the shot vector FROM THE BODY — never radially outward — and an
 # unloaded one pushes the stick through the puck rather than swinging it round
-# the body; the arm stays short (= the carry) so it can't stretch. The
-# frozen-specific parts: the aim points straight down the shot line from t=0 (no
-# coiled-back sweep, no retracted-origin bridge) and the reach rides an
-# attack-hold-release envelope, so the blade SNAPS to the extended finish, HOLDS
-# it, then relaxes — the explosive discharge, committed.
+# the body. The aim points straight down the shot line from t=0 (no coiled-back
+# sweep) and the reach rides an attack-hold-release envelope, so the blade
+# SNAPS to the extended finish, HOLDS it, then comes back down to the ice with
+# the hand in its pocket, which is where the tracked stick takes it from.
 func _apply_wrister_whip(t: float, aim_world: Vector3, stick_world: Vector3) -> void:
 	var env: float = finish_envelope(t, _sm.follow_through_duration_total,
 			_controller.whip_attack_time, _controller.wrister_whip_release_frac) \
@@ -254,29 +271,29 @@ func _apply_wrister_whip(t: float, aim_world: Vector3, stick_world: Vector3) -> 
 	if axis.length_squared() < 0.0001:
 		axis = -_skater.global_transform.basis.z  # whiff: skate-forward, never radial
 		axis.y = 0.0
-	var upper_basis: Basis = _skater.upper_body.global_transform.basis
-	var local_dir: Vector3 = ShotMechanics.whip_local_dir(axis, upper_basis)
-	if local_dir.length_squared() < 0.0001:
+	var lean: Vector3 = _skater.upper_body.rotation
+	var tilt: Basis = Basis.from_euler(Vector3(lean.x, 0.0, lean.z))
+	var level_basis: Basis = _skater.upper_body.global_transform.basis * tilt.transposed()
+	var shot_dir: Vector3 = ShotMechanics.whip_local_dir(axis, level_basis)
+	if shot_dir.length_squared() < 0.0001:
 		return
-	var stick_dir: Vector3 = ShotMechanics.whip_local_dir(stick_world, upper_basis)
+	var stick_dir: Vector3 = ShotMechanics.whip_local_dir(stick_world, level_basis)
 	if stick_dir.length_squared() < 0.0001:
-		stick_dir = local_dir
-	# Hand near the shoulder + a carry along the shot, blade one stick-length
-	# along the finish line at ice + lift. This is the shared finish shape — the
-	# slapper's is the same pose reached a different way (see _place_finish).
+		stick_dir = shot_dir
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
-	var carry: float = env * _controller.wrister_follow_through_reach
-	var hand_pos: Vector3 = _skater.shoulder.position + local_dir * carry
-	hand_pos.y = _controller.hand_rest_y + env * _controller.wrister_follow_through_hand_y
-	var probe: Vector3 = hand_pos + stick_dir * _ik.stick_horiz()
-	var blade_y: float = _ik.blade_y_lean_corrected(probe.x, probe.z) \
-			+ env * _controller.wrister_follow_through_blade_lift
-	var drop: float = hand_pos.y - blade_y
+	var shoulder: Vector3 = tilt * _drawn_shoulder()
+	var home: Vector2 = SkaterIKCoordinator.HOLD_HOME_OF_ARM \
+			* (_skater.upper_arm_length + _skater.forearm_length)
+	var pocket := Vector3(signf(_skater.shoulder.position.x) * home.x, 0.0, -home.y)
+	var hand: Vector3 = shoulder + pocket.lerp(
+			shot_dir * _controller.wrister_follow_through_reach, env)
+	hand.y = _rest_hand_y(shoulder) + env * _controller.wrister_follow_through_hand_y
+	var blade_y: float = _ik.blade_y_local() + env * _controller.wrister_follow_through_blade_lift
+	var drop: float = hand.y - blade_y
 	var stick: float = _ik.solve_stick_length()
-	var horiz: float = sqrt(maxf(stick * stick - drop * drop, 0.0001))
-	var blade_pos: Vector3 = hand_pos + stick_dir * horiz
-	blade_pos.y = blade_y
-	_place_finish(hand_pos, blade_pos, blade_side_sign)
+	var blade: Vector3 = hand + stick_dir * sqrt(maxf(stick * stick - drop * drop, 0.0001))
+	blade.y = blade_y
+	_place_finish(tilt.transposed() * hand, tilt.transposed() * blade, blade_side_sign)
 
 # ── Slapper Follow-Through ────────────────────────────────────────────────────
 # A real swing in two phases. Downswing (the first slapper_downswing_time of
@@ -304,8 +321,8 @@ func apply_slapper_follow_through() -> void:
 	if dir_local.length_squared() < 0.0001:
 		dir_local = Vector3.FORWARD
 	var contact: Vector3 = _contact_local()
-	var hand_pos := Vector3(
-			_skater.shoulder.position.x, _controller.hand_rest_y, _skater.shoulder.position.z)
+	var shoulder: Vector3 = _drawn_shoulder()
+	var hand_pos := Vector3(shoulder.x, _rest_hand_y(shoulder), shoulder.z)
 	var blade_pos: Vector3
 	var cf: float = clampf(_controller.slapper_downswing_time / total, 0.05, 0.9)
 	if t < cf:

@@ -411,6 +411,16 @@ thing that measures how far the arm is out, the reach lean.
   holding a stick whose blade is at its skates, so a carrier's cursor is held
   out to a floor (`carry_reach_min_m`, below). An empty stick keeps the range:
   it is more restricted with the puck than without.
+- **A shot's stick hangs from the same shoulder.** The wrister's finish and
+  the slapper's wind-up and finish place the hand themselves, off the shoulder
+  the body is drawn with (`SkaterShotPoseCoordinator._drawn_shoulder`: the
+  trunk's, under what the ease still has of the ready fold). Off the marker
+  the hand of a shot let go from a folded chest lies in the armpit. The
+  wrister's finish is posed in the same level frame as the hold, from the
+  hold's pocket out along the shot and back to it: authored in UpperBody's
+  frame it leans with the body, which at speed tucks the hand back under the
+  chest and puts the blade at a height read for another span.
+  `test_wrister_finish.gd`.
 - **What is still only drawn is small.** The stride's pump and the shaft's
   clearance ride `Skater.drawn_top_hand()`, and the stroke's cup rolls the
   blade about the hosel line (`Scripts/actors/CLAUDE.md`), which curls the
