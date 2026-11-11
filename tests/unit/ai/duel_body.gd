@@ -109,7 +109,7 @@ func strip_impulse(closing: float, contact: float, hit_dir: Vector2,
 		wall_out: Vector2, kick: float) -> float:
 	var delivered: float = BodyCheckRules.puck_strip_impulse(weight * closing, weight,
 			contact, weight) + kick
-	return BoardPinRules.backstop_hit_strength(delivered, closing, contact, hit_dir,
+	return BoardWallRules.backstop_hit_strength(delivered, closing, contact, hit_dir,
 			wall_out, weight, weight, kick)
 
 

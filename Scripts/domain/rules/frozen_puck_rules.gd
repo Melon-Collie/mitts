@@ -1,15 +1,18 @@
 class_name FrozenPuckRules
 extends RefCounted
 
-# A puck trapped on the boards by a pinned body: nobody can play it, so play
-# stops (NHL, a faceoff at the nearest dot) or the puck squirts free (ARCADE).
-# The count runs only while the trap holds — puck slow and at the wall, a pinned
+# A puck trapped on the boards under a man held there (BoardWallRules' squeeze):
+# loose at his feet or still on his stick, nobody gets it out, so play stops
+# (NHL, a faceoff at the nearest dot) or the puck squirts free (ARCADE). The
+# count runs only while the trap holds — puck slow and at the wall, a held
 # skater on it — and restarts whenever the puck moves off its anchor.
 
 const BOARD_MARGIN_M: float = 0.6
 const SPEED_MAX_M_S: float = 1.0
-# Body edge to puck: the pinned skater's skates and a stick held in to his body.
+# Body edge to puck: the held skater's skates and a stick held in to his body.
 const REACH_M: float = 0.9
+# Bodies this far apart, edge to edge, are still leaning on each other.
+const HELD_GAP_M: float = 0.1
 const SLOP_M: float = 0.3
 const FROZEN_S: float = 2.0
 const SQUIRT_SPEED_M_S: float = 4.0
@@ -25,7 +28,25 @@ class State:
 
 
 static func near_boards(puck_pos: Vector3) -> bool:
-	return BoardPinRules.wall_normal(puck_pos, 0.0, BOARD_MARGIN_M) != Vector2.ZERO
+	return BoardWallRules.wall_normal(puck_pos, 0.0, BOARD_MARGIN_M) != Vector2.ZERO
+
+
+# Whether the body at `pos` is held on the boards by an opponent at `other_pos`:
+# against the wall, leaned on, and him engaged (the check button) on the open-ice
+# side, square enough to the wall to be pressing into it.
+static func held_on_boards(pos: Vector3, radius: float, other_pos: Vector3,
+		other_radius: float, other_engaged: bool) -> bool:
+	if not other_engaged:
+		return false
+	var wall_out: Vector2 = BoardWallRules.wall_normal(pos, radius,
+			BoardWallRules.SQUEEZE_MARGIN_M)
+	if wall_out == Vector2.ZERO:
+		return false
+	var d := Vector2(pos.x - other_pos.x, pos.z - other_pos.z)
+	var dist: float = d.length()
+	if dist < 1e-4 or dist - radius - other_radius > HELD_GAP_M:
+		return false
+	return (d / dist).dot(wall_out) >= BoardWallRules.BACKSTOP_MIN_INTO_WALL
 
 
 # Advances the count; true on the tick it reaches FROZEN_S (and clears it).
@@ -43,9 +64,9 @@ static func step(state: State, puck_pos: Vector3, trapped: bool, delta: float) -
 	return true
 
 
-# Along the boards, away from the pinned body.
+# Along the boards, away from the held body.
 static func squirt_velocity(puck_pos: Vector3, pinned_pos: Vector3) -> Vector3:
-	var out: Vector2 = BoardPinRules.wall_normal(puck_pos, 0.0, BOARD_MARGIN_M)
+	var out: Vector2 = BoardWallRules.wall_normal(puck_pos, 0.0, BOARD_MARGIN_M)
 	if out == Vector2.ZERO:
 		return Vector3.ZERO
 	var along := Vector2(-out.y, out.x)

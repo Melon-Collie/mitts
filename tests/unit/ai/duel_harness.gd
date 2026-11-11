@@ -825,8 +825,7 @@ func _resolve_contacts() -> void:
 			var kick_on_a: float = body.drive_kick(_driving(b), b.hit_active, b_carries,
 					a.hit_active and a_carries)
 			SkaterCollisionRules.resolve(_collision, a.pos, a.vel, body.weight, body.radius,
-					b.pos, b.vel, body.weight, body.radius, contact, Vector3.ZERO,
-					kick_on_b, kick_on_a)
+					b.pos, b.vel, body.weight, body.radius, contact, kick_on_b, kick_on_a)
 			if not _collision.overlapping:
 				continue
 			a.pos += _collision.sep_a
@@ -848,9 +847,9 @@ func _resolve_contacts() -> void:
 func _take_hit(s: SimSkater, dv: Vector3, n: Vector3, contact: float, kick: float) -> void:
 	if dv.length_squared() <= 0.0001:
 		return
-	var strength: float = BoardPinRules.backstop_hit_strength(dv.length(),
+	var strength: float = BoardWallRules.backstop_hit_strength(dv.length(),
 			_collision.closing_speed, contact, Vector2(n.x, n.z),
-			BoardPinRules.wall_normal(s.pos, _match_body.radius, BoardPinRules.BACKSTOP_MARGIN_M),
+			BoardWallRules.wall_normal(s.pos, _match_body.radius, BoardWallRules.BACKSTOP_MARGIN_M),
 			_match_body.weight, _match_body.weight, kick)
 	var timers: Vector2 = _match_body.absorb(s.stagger, s.knockdown, dv, strength, s.facing,
 			s.stance_active, SkaterStateMachine.state_off_balance(_shot_state(s)), _delivers(s),
@@ -865,7 +864,7 @@ func _check_strip(checker: SimSkater, victim: SimSkater, n: Vector3, contact: fl
 		kick: float) -> void:
 	var delivered: float = _match_body.strip_impulse(_collision.closing_speed, contact,
 			Vector2(n.x, n.z),
-			BoardPinRules.wall_normal(victim.pos, _match_body.radius, BoardPinRules.BACKSTOP_MARGIN_M),
+			BoardWallRules.wall_normal(victim.pos, _match_body.radius, BoardWallRules.BACKSTOP_MARGIN_M),
 			kick)
 	if delivered < _match_body.hit_cooldown_threshold:
 		return

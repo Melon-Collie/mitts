@@ -621,7 +621,7 @@ func _step_def_for(step_id: int) -> TutorialStep:
 			return _step(
 				"Stick Lift",
 				"Get beside the opponent with your blade under their stick and tap {stick_check} to lift it — the puck comes loose off their blade.",
-				"Let go of {stick_check} and your blade drops straight back onto the puck. Hold it too long and your stick stays up while the puck gets away. Held into a man on the boards, {stick_check} pins him there.")
+				"Let go of {stick_check} and your blade drops straight back onto the puck. Hold it too long and your stick stays up while the puck gets away.")
 		STEP_SHOT_BLOCK:
 			return _step(
 				"Shot Block",

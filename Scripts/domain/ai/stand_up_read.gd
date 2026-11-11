@@ -11,8 +11,7 @@ class_name AIStandUpRead
 # a carrier he can't avoid, inside which the carrier can no longer turn away.
 const MEET_S: float = 0.15
 # How long before contact a bot hunting a check throws it: inside the drive's
-# window with margin for a closing speed that eases, and the pin reach's own
-# lead (SkaterAgentBoardPlay.PIN_REACH_S), which reads the press.
+# window with margin for a closing speed that eases.
 const THROW_S: float = 0.2
 
 

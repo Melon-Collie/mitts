@@ -368,7 +368,7 @@ var body_check_brace_resistance: float = 0.4
 # rarely staggers.
 var hit_passive_transfer_mult: float = 0.3
 # True this tick when this skater has Ctrl committed (hit button held, or his
-# drive still running off a tap, and not refused: locomotion suppressed, pinned,
+# drive still running off a tap, and not refused: locomotion suppressed,
 # knocked down, rocked). Written by
 # SkaterController._apply_movement from the input; replicated, and written onto a
 # remote from the wire, so contact_transfer reads both bodies' on every machine.
@@ -476,7 +476,7 @@ signal body_check_impulse_applied(impulse: Vector3)
 # (m/s, world space) it just absorbed — its magnitude and direction for the
 # knockdown, its direction for the recoil lean — and how hard it landed for the
 # stagger (`stagger_strength`, m/s: the Δv's own magnitude, or more when the
-# boards were behind him, BoardPinRules). There is no bounce to mistake for a
+# boards were behind him, BoardWallRules). There is no bounce to mistake for a
 # hit (the contact is inelastic), and a committed checker's controller leans
 # into his own share (BodyBalanceRules.leaned_into). body_check_impulse_applied
 # is the other body's Δv for its reconcile buffer. See
@@ -720,11 +720,6 @@ var stick_tied: bool = false
 # controller. Read only by the host's StickTieTracker (either player holding keeps
 # a tie); never replicated.
 var stick_check_held: bool = false
-# Locked in a board pin (BoardPinTracker, host-only writer; replicated): the role
-# (BoardPinRules.Role) and the pinner's share of the pair's weight. Both locked
-# players' sticks play no puck, and each slides along the wall at its role's cap.
-var pin_role: int = BoardPinRules.Role.NONE
-var pin_strength: float = 0.0
 # Down in a dive (DiveRules): set with the down timer by the controller on every
 # machine that simulates or applies the skater, and replicated. Down like a
 # knockdown, but until the get-up (`dive_laid_out`) its stick knocks the puck
@@ -1200,30 +1195,21 @@ func _resolve_player_collisions() -> void:
 		return
 	var my_radius: float = collision_radius()
 	var my_pos: Vector3 = global_position
-	var pinned: bool = pin_role != BoardPinRules.Role.NONE
 	for other: Skater in others:
 		if other == null or other == self or other.is_ghost:
 			continue
 		# Center-to-center axis on XZ, n pointing self -> other (the hit direction).
 		# Fallback for coincident centers matches SkaterCollisionRules so the emit
 		# direction and the resolved geometry agree.
-		# A locked pin pair touches flat, along the boards' normal instead; only a
-		# pair with both roles set can be one.
 		var other_pos: Vector3 = other.global_position
 		var other_radius: float = other.collision_radius()
 		var d: Vector3 = other_pos - my_pos
 		d.y = 0.0
-		var axis: Vector3 = Vector3.ZERO
-		if pinned and other.pin_role != BoardPinRules.Role.NONE:
-			axis = BoardPinRules.locked_contact_axis(my_pos, pin_role, my_radius,
-					other_pos, other.pin_role, other_radius)
-		var dist: float = d.length() if axis == Vector3.ZERO else d.dot(axis)
+		var dist: float = d.length()
 		# Exactly the resolver's own no-overlap test, so a skip changes nothing.
 		if dist >= my_radius + other_radius:
 			continue
-		var n: Vector3 = axis
-		if axis == Vector3.ZERO:
-			n = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
+		var n: Vector3 = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
 		# Aggressor gate — resolve each pair EXACTLY once, from the side moving toward
 		# the other more. agg_metric = (v_self + v_other)·n: > 0 → self is
 		# the aggressor and resolves this pair; < 0 → the other side does; ~0 (head-on
@@ -1243,7 +1229,7 @@ func _resolve_player_collisions() -> void:
 		SkaterCollisionRules.resolve(_collision_result,
 				my_pos, velocity, weight, my_radius,
 				other_pos, other.velocity, other.weight, other_radius,
-				transfer, axis, kick_on_other, kick_on_self)
+				transfer, kick_on_other, kick_on_self)
 		if not _collision_result.overlapping:
 			continue
 		# Self: separation + inelastic decel / drive-through, applied
@@ -1316,14 +1302,14 @@ func drive_kick_on(other: Skater) -> float:
 
 
 # How hard the hit landed on `victim` for his stagger: his own Δv, or more when
-# the boards are behind him (BoardPinRules) — `from` is the body that drove him,
+# the boards are behind him (BoardWallRules) — `from` is the body that drove him,
 # along `n` (unit, toward the victim), `drive_kick` what his leg drive added.
 # The knockback itself is untouched.
 func _backstopped(victim: Skater, from: Skater, delta_v: Vector3, n: Vector3,
 		transfer: float, drive_kick: float) -> float:
-	var wall_out: Vector2 = BoardPinRules.wall_normal(victim.global_position,
-			victim.collision_radius(), BoardPinRules.BACKSTOP_MARGIN_M)
-	return BoardPinRules.backstop_hit_strength(delta_v.length(),
+	var wall_out: Vector2 = BoardWallRules.wall_normal(victim.global_position,
+			victim.collision_radius(), BoardWallRules.BACKSTOP_MARGIN_M)
+	return BoardWallRules.backstop_hit_strength(delta_v.length(),
 			_collision_result.closing_speed, transfer, Vector2(n.x, n.z), wall_out,
 			from.weight, victim.weight, drive_kick)
 

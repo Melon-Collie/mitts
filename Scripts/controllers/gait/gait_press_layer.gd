@@ -6,7 +6,7 @@ extends GaitLayer
 # held), the one skating into him drives — feet set split, the back leg pushing,
 # low, the trunk into him — and the one braking digs in — sat deep and wide on
 # the stop's edges, his trunk into the push. The lean is laid along the line to the other body in body space,
-# the same decomposition the check's drive and the pin use. The facing is the
+# the same decomposition the check's drive uses. The facing is the
 # player's own.
 
 enum Role { NONE, DRIVE, ANCHOR }
@@ -47,7 +47,7 @@ func advance(delta: float) -> bool:
 # The role this body plays against the nearest body it touches, and the line to
 # him (into _toward).
 func _read_role() -> int:
-	if _skater.is_knocked_down or _skater.pin_role != BoardPinRules.Role.NONE:
+	if _skater.is_knocked_down:
 		return Role.NONE
 	var driving: bool = _skater.hit_committed and not _skater.brake_intent \
 			and _skater.move_intent.length_squared() > 0.01

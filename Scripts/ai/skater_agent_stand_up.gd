@@ -31,7 +31,7 @@ func apply(input: InputState, snapshot: WorldSnapshot, check_aggression: float) 
 		return
 	var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	var man: SkaterNetworkState = snapshot.skater_states.get(carrier_pid)
-	if me == null or man == null or me.pin_role != BoardPinRules.Role.NONE \
+	if me == null or man == null \
 			or SkaterStateMachine.state_has_puck(me.shot_state):
 		return
 	if input.hit_held and AIPinThreatRead.time_to_contact(me.position, me.velocity,

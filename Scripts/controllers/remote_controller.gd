@@ -532,7 +532,7 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
 				newest.stagger_timer, _body_check_config(), first_tick)
 	# The cache holds the raw integration, so a resumed run continues from it; the
-	# pin's cap is a correction to each window's result, not part of the state.
+	# downed slide is a correction to each window's result, not part of the state.
 	_fwd_from = newest
 	_fwd_cfg = cfg
 	_fwd_ticks = ticks
@@ -543,15 +543,12 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 	_sample_scratch.velocity = _fp_result.velocity
 
 
-# A snapshot's downed slide and board pin over a forward window, on _fp_result —
-# the corrections LagCompRewind makes host-side too (render == rewind).
+# A snapshot's downed slide over a forward window, on _fp_result — the
+# correction LagCompRewind makes host-side too (render == rewind).
 func _correct_forward(snap: SkaterNetworkState, window_s: float) -> void:
 	if snap.knockdown_timer > 0.0:
 		SkaterMovementRules.slide_forward(_fp_result, snap.position, snap.velocity,
 				knockdown_friction, snap.knockdown_timer, window_s)
-	if snap.pin_role != BoardPinRules.Role.NONE:
-		BoardPinRules.forward_cap_locked(_fp_result, snap.position, skater.collision_radius(),
-				snap.pin_role, snap.pin_strength, window_s)
 
 
 func _interpolate(delta: float) -> void:
@@ -703,8 +700,7 @@ func _interpolate(delta: float) -> void:
 					1.0 / float(Constants.PHYSICS_TICK), fp_ticks,
 					Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
 					fp_stagger, _body_check_config())
-		# The interpolated base, as the host's rewind reads it (pin fields from the
-		# newer endpoint, the position interpolated).
+		# The interpolated base, as the host's rewind reads it.
 		_correct_forward(interpolated, float(fp_ticks) / float(Constants.PHYSICS_TICK))
 		interpolated.position = _fp_result.position
 		interpolated.velocity = _fp_result.velocity
@@ -804,7 +800,6 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
 	skater.stick_tied = state.stick_tied
-	_adopt_pin(state)
 	_adopt_slapshot_pin(state)
 	skater.current_shot_state = state.shot_state
 	# The blade side, applied by state (the wire bit is garbage outside a wrister

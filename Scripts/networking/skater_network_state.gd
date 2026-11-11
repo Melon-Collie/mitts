@@ -33,12 +33,6 @@ var stick_tied: bool = false
 # the pair before replay.
 var check_drive_phase: int = 0
 var check_drive_elapsed: float = 0.0
-# Board pin (BoardPinTracker): the role (BoardPinRules.Role) and the pinner's
-# weight share. Host-authoritative, applied every broadcast like stick_tied, and
-# fed to the forward prediction (BoardPinRules.forward_cap) on the render and the
-# rewind.
-var pin_role: int = 0
-var pin_strength: float = 0.0
 # Skater.is_diving: a dive's down window rides knockdown_timer and recoil_dir;
 # this says it is a dive (its stick still plays, its body blocks low).
 var diving: bool = false
@@ -156,8 +150,6 @@ func to_array() -> Array:
 		stick_check_phase,
 		stick_check_elapsed,
 		stick_tied,
-		pin_role,
-		pin_strength,
 		diving,
 		slapshot_pinned,
 		check_drive_phase,
@@ -175,8 +167,6 @@ func copy_stick_play_from(s: SkaterNetworkState) -> void:
 	stick_check_phase = s.stick_check_phase
 	stick_check_elapsed = s.stick_check_elapsed
 	stick_tied = s.stick_tied
-	pin_role = s.pin_role
-	pin_strength = s.pin_strength
 	diving = s.diving
 	stumbling = s.stumbling
 	slapshot_pinned = s.slapshot_pinned
@@ -212,8 +202,6 @@ func copy_from(s: SkaterNetworkState) -> void:
 	stick_check_phase = s.stick_check_phase
 	stick_check_elapsed = s.stick_check_elapsed
 	stick_tied = s.stick_tied
-	pin_role = s.pin_role
-	pin_strength = s.pin_strength
 	diving = s.diving
 	slapshot_pinned = s.slapshot_pinned
 	check_drive_phase = s.check_drive_phase
@@ -269,16 +257,13 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.stick_check_elapsed = data[27]
 	if data.size() > 28:
 		state.stick_tied = data[28]
+	if data.size() > 29:
+		state.diving = data[29]
 	if data.size() > 30:
-		state.pin_role = data[29]
-		state.pin_strength = data[30]
-	if data.size() > 31:
-		state.diving = data[31]
+		state.slapshot_pinned = data[30]
 	if data.size() > 32:
-		state.slapshot_pinned = data[32]
-	if data.size() > 34:
-		state.check_drive_phase = data[33]
-		state.check_drive_elapsed = data[34]
-	if data.size() > 35:
-		state.stumbling = data[35]
+		state.check_drive_phase = data[31]
+		state.check_drive_elapsed = data[32]
+	if data.size() > 33:
+		state.stumbling = data[33]
 	return state

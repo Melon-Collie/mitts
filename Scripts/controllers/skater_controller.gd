@@ -956,13 +956,6 @@ var check_throw_stance: float = 1.8       # crouch floor the throw dips to (× s
 var stick_lift_trunk_deg: float = 3.0     # slight chest-up pop while working under a stick
 var stick_lift_stance: float = 0.2        # coiled working posture while the blade is up
 var stick_lift_blend_speed: float = 10.0  # how fast the lift read engages/releases
-# Board pin pose (GaitPinLayer): both locked bodies sit low, and lean their
-# trunks into the boards — the pinned one pressed flat to the glass, the pinner
-# driving in behind him, harder.
-var pin_stance: float = 0.6
-var pin_pressed_lean_deg: float = 12.0
-var pin_drive_lean_deg: float = 18.0
-var pin_pose_speed: float = 6.0
 # Press pose (GaitPressLayer): the driver sits into a lunge and leans into the
 # man; the man dug in sits deep and wide and leans back into the push.
 var press_drive_stance: float = 0.7
@@ -1763,11 +1756,10 @@ func _deflect_lift_share() -> float:
 
 # A lift starts only from plain puckless skating: a puck on the blade, a shot, a
 # block or a check owns the stick. Any of those arriving mid-lift ends it, as does
-# an opponent's lift, a tie, or being pinned; a pinner's stick stays in its hold.
+# an opponent's lift or a tie.
 func _advance_stick_check(input: InputState, delta: float) -> void:
 	var stick_taken: bool = has_puck or skater.hit_committed or skater.is_knocked_down \
 			or skater.is_forced_lift_active() or skater.stick_tied \
-			or skater.pin_role == BoardPinRules.Role.PINNED \
 			or _sm.get_state() != State.SKATING_WITHOUT_PUCK
 	# F under Ctrl is dead: the commit has the stick.
 	_stick_check.advance(input.stick_check_pressed and not input.hit_held,
@@ -2283,8 +2275,6 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.stick_tied = skater.stick_tied
 	state.check_drive_phase = _check_drive.phase
 	state.check_drive_elapsed = _check_drive.elapsed
-	state.pin_role = skater.pin_role
-	state.pin_strength = skater.pin_strength
 	state.diving = skater.is_diving
 	state.stumbling = skater.is_stumbling
 	state.slapshot_pinned = skater.is_slapshot_pinning()
@@ -2376,8 +2366,6 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
 	skater.stick_tied = state.stick_tied
-	skater.pin_role = state.pin_role
-	skater.pin_strength = state.pin_strength
 	# Intent feeds the gait's input-driven reads below (glide / dig-in /
 	# crossovers / brake stop) — stamp it like the live controllers do, so
 	# playback strides match live play instead of reading zero (file viewer)
@@ -3543,7 +3531,7 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 	var zone_xz := Vector2(zone_world.x, zone_world.z)
 	var puck_xz := Vector2(view.position.x, view.position.z)
 	# A tied stick swings through nothing: the tie holds the blade off the line.
-	if skater.stick_tied or skater.pin_role != BoardPinRules.Role.NONE \
+	if skater.stick_tied \
 			or not ShotReleaseRules.one_timer_connects(
 			zone_xz, slapper_zone_radius, puck_xz,
 			Vector2(view.velocity.x, view.velocity.z),
@@ -3622,26 +3610,6 @@ func one_timer_would_connect() -> bool:
 			one_timer_contact_back_time(), one_timer_leniency_time)
 
 
-# A board pin is the host's to start and end (BoardPinTracker) and lands every
-# broadcast like a tie; the replay reads the adopted role, so the cap below is
-# reproduced exactly.
-func _adopt_pin(state: SkaterNetworkState) -> void:
-	skater.pin_role = state.pin_role
-	skater.pin_strength = state.pin_strength
-
-
-# Locked in a pin, the body slides along the wall no faster than its role's cap.
-# After the movement kernel, which has C++ ports held by parity tests that the
-# pin is not part of; a function of replicated state only.
-func _apply_pin_slide_cap() -> void:
-	if skater.pin_role == BoardPinRules.Role.NONE:
-		return
-	skater.velocity = BoardPinRules.apply_slide_cap(skater.velocity,
-			BoardPinRules.locked_wall_normal(skater.global_position, skater.collision_radius(),
-					skater.pin_role),
-			BoardPinRules.slide_cap(skater.pin_role, skater.pin_strength))
-
-
 func _apply_movement(input: InputState, delta: float) -> void:
 	# Brake held — drives hockey stop VFX (gated on speed in skater_vfx.gd).
 	skater.is_braking = input.brake
@@ -3687,20 +3655,16 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	# The commit wins over the stance: being caught upright is its whole cost.
 	# Mirrored to the skater so the collision resolver reads full-vs-passive
 	# transfer. Deterministic from the input, so reconcile replay reproduces both.
-	# Neither side of a pin commits (it is held on the stick button, and nothing
-	# stacks on it); the pinned one, pressed into the glass, has no stance either.
 	# A rocked skater has neither: the hit took his legs out of both.
 	# A drive under way holds the commit through its window, so a tap is a whole
 	# check and costs the whole of one.
-	var locked: bool = skater.pin_role != BoardPinRules.Role.NONE
 	var rocked: bool = BodyCheckRules.is_rocked(stagger_timer, _body_check_config())
-	var may_commit: bool = not locomotion_suppressed and not loaded and not locked \
-			and not rocked
+	var may_commit: bool = not locomotion_suppressed and not loaded and not rocked
 	_advance_check_drive(input.hit_held, may_commit, delta)
 	hit_active = may_commit and (input.hit_held or skater.is_check_driving())
 	skater.hit_committed = hit_active
 	stance_active = not locomotion_suppressed and not loaded and input.stance_held \
-			and not hit_active and skater.pin_role != BoardPinRules.Role.PINNED and not rocked
+			and not hit_active and not rocked
 	# Body-check stagger decays deterministically every tick (including during a
 	# planted charge/block and through reconcile replay), so the penalties ease
 	# back on their own. Decayed before the suppression early-out so a player
@@ -3733,7 +3697,6 @@ func _apply_movement(input: InputState, delta: float) -> void:
 		skater.velocity = SkaterMovementRules.apply_movement(
 				skater.velocity, stick, skater.rotation.y,
 				has_puck, brake, delta, cfg, posture, grip_scale)
-	_apply_pin_slide_cap()
 
 # The block stance plants the feet; it skates itself (_apply_block_movement).
 static func plants_feet(state: int) -> bool:
@@ -3768,7 +3731,7 @@ var _press_partner: PressPartner = PressPartner.new()
 
 
 func _apply_press(input: InputState, delta: float, tick_start_velocity: Vector3) -> void:
-	if skater.is_knocked_down or skater.is_ghost or skater.pin_role != BoardPinRules.Role.NONE \
+	if skater.is_knocked_down or skater.is_ghost \
 			or plants_feet(_sm.get_state()) or delta <= 0.0:
 		return
 	if skater.contact_suspended_provider.is_valid() and bool(skater.contact_suspended_provider.call()):
@@ -3807,6 +3770,15 @@ func _apply_press(input: InputState, delta: float, tick_start_velocity: Vector3)
 	if absf(u_new) > absf(u):
 		u_new = clampf(u_new, -maxf(p.cfg.max_speed, absf(u)), maxf(cfg.max_speed, absf(u)))
 	skater.velocity += n3 * (u_new - skater.velocity.dot(n3))
+	# Pressed into the boards he is held against them (BoardWallRules): what
+	# presses him in, less what he pushes back with, grips his slide along the
+	# wall, so he gets out by unloading it.
+	var pressed_in: float = (p.weight * drive_other - skater.weight * drive_self) \
+			/ maxf(skater.weight, 0.001)
+	var wall_out: Vector2 = BoardWallRules.wall_normal(skater.global_position,
+			skater.collision_radius(), BoardWallRules.SQUEEZE_MARGIN_M)
+	skater.velocity = BoardWallRules.gripped(skater.velocity, wall_out,
+			BoardWallRules.squeeze_grip(pressed_in, -n, wall_out) * delta)
 
 
 # The nearest body this one is pressed against (PressRules.touching, exact),
@@ -3819,7 +3791,7 @@ func _find_press_partner(_host_ts: float, out: PressPartner) -> bool:
 	var best_gap: float = INF
 	for other: Skater in skater.contact_others():
 		if other == null or other == skater or other.is_ghost or other.is_knocked_down \
-				or other.pin_role != BoardPinRules.Role.NONE or other.press_cfg == null:
+				or other.press_cfg == null:
 			continue
 		var d: Vector3 = other.global_position - my_pos
 		d.y = 0.0

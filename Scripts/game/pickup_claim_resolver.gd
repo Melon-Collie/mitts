@@ -286,7 +286,7 @@ func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
 	# bobbles everything it touches, which the present-time loop applies.
 	# Down — a knockdown or a dive — catches nothing; a diver's stick only knocks
 	# pucks away, which the present-time loop applies.
-	if skater_snap.stick_tied or skater_snap.pin_role != BoardPinRules.Role.NONE \
+	if skater_snap.stick_tied \
 			or skater_snap.knockdown_timer > 0.0 \
 			or StickCheckRules.is_stick_busy(skater_snap.stick_check_phase):
 		NetworkManager.send_pickup_claim_nack(peer_id)

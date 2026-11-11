@@ -667,11 +667,11 @@ func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_dir
 	var strip_impulse: float = BodyCheckRules.puck_strip_impulse(
 			impact_force, checker.weight, transfer, victim.weight) + drive_kick
 	# Crushed square into the boards he takes the whole hit, as his stagger does.
-	strip_impulse = BoardPinRules.backstop_hit_strength(strip_impulse,
+	strip_impulse = BoardWallRules.backstop_hit_strength(strip_impulse,
 			impact_force / maxf(checker.weight, 0.001), transfer,
 			Vector2(hit_direction.x, hit_direction.z),
-			BoardPinRules.wall_normal(victim.global_position, victim.collision_radius(),
-					BoardPinRules.BACKSTOP_MARGIN_M),
+			BoardWallRules.wall_normal(victim.global_position, victim.collision_radius(),
+					BoardWallRules.BACKSTOP_MARGIN_M),
 			checker.weight, victim.weight, drive_kick)
 	if strip_impulse < hit_pickup_cooldown_threshold:
 		return
@@ -762,18 +762,6 @@ func apply_goalie_clear(goalie: Goalie, velocity: Vector3) -> void:
 # and the lifter gets no checker cooldown at all: their blade dropping back onto
 # the puck is the take. Same signals as apply_poke_check so the carrier-clear,
 # stats, and victim-notify paths fire identically.
-# A carrier pinned to the boards loses the puck where it is: it goes on at his
-# speed and sits loose at both players' feet, for whichever side's support gets
-# there first. The pinner is credited, as the defender who made the play.
-func apply_pin_strip(pinner: Skater) -> void:
-	var ex_carrier: Skater = carrier
-	clear_carrier()
-	linear_velocity = Vector3(ex_carrier.velocity.x, 0.0, ex_carrier.velocity.z)
-	_set_cooldown(ex_carrier, reattach_cooldown)
-	puck_stripped.emit(ex_carrier, pinner)
-	puck_released.emit()
-
-
 func apply_stick_lift_strip(checker_skater: Skater, regrab_cooldown: float) -> void:
 	var ex_carrier: Skater = carrier  # capture before clear_carrier()
 	clear_carrier()

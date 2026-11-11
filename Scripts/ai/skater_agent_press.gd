@@ -42,7 +42,7 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 	if snapshot == null or snapshot.puck_state == null:
 		return false
 	var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	if me == null or me.knockdown_timer > 0.0 or me.pin_role != BoardPinRules.Role.NONE \
+	if me == null or me.knockdown_timer > 0.0 \
 			or me.is_ghost or input.block_held:
 		return false
 	if snapshot.puck_state.carrier_peer_id == _peer_id:
@@ -61,7 +61,7 @@ func _press_the_screen(input: InputState, snapshot: WorldSnapshot, me: SkaterNet
 		return false
 	var man: SkaterNetworkState = snapshot.skater_states.get(man_pid)
 	var goalie: GoalieNetworkState = snapshot.goalie_states.get(_team_id)
-	if man == null or goalie == null or man.is_ghost or man.pin_role != BoardPinRules.Role.NONE \
+	if man == null or goalie == null or man.is_ghost \
 			or own_goal_dir * man.position.z < GameRules.BLUE_LINE_Z \
 			or AIPressRead.gap_m(me.position, man.position) > AIPressRead.STEP_IN_M:
 		return false
@@ -119,7 +119,7 @@ func _drive_through(input: InputState, snapshot: WorldSnapshot, me: SkaterNetwor
 		if _team_id_by_peer.get(pid, -1) == _team_id:
 			continue
 		var opp: SkaterNetworkState = snapshot.skater_states[pid]
-		if opp.is_ghost or opp.pin_role != BoardPinRules.Role.NONE or opp.knockdown_timer > 0.0:
+		if opp.is_ghost or opp.knockdown_timer > 0.0:
 			continue
 		var gap: float = AIPressRead.gap_m(me.position, opp.position)
 		if gap <= best_gap:

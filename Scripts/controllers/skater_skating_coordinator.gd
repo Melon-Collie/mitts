@@ -73,14 +73,13 @@ var _stance := GaitStanceLayer.new()
 var _carry := GaitCarryLayer.new()
 var _shot := GaitShotLayer.new()
 var _check := GaitCheckLayer.new()
-var _pin := GaitPinLayer.new()
 var _press := GaitPressLayer.new()
 var _lift := GaitStickLiftLayer.new()
 var _celebration := GaitCelebrationLayer.new()
 var _stagger := GaitStaggerLayer.new()
 var _block := GaitBlockLayer.new()
 var _knockdown := GaitKnockdownLayer.new()
-var _layers: Array[GaitLayer] = [_faceoff, _stance, _carry, _shot, _check, _pin, _press, _lift,
+var _layers: Array[GaitLayer] = [_faceoff, _stance, _carry, _shot, _check, _press, _lift,
 		_celebration, _stagger, _block, _knockdown]
 # Per-stage subsets of _layers in the same order, each beside its layers' bits
 # in the pass's active mask (built in setup).

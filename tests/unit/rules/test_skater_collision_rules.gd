@@ -183,22 +183,6 @@ func test_coincident_centers_no_nan() -> void:
 	assert_false(is_nan(out.sep_a.x))
 
 
-# ── a flat contact (a locked pin pair) ────────────────────────────────────────
-
-func test_a_given_axis_separates_and_pushes_along_it_only() -> void:
-	var out := _res()
-	# Offset 0.6 along z, 0.9 apart along the x axis given → overlap 0.1 along x.
-	SkaterCollisionRules.resolve(out,
-		Vector3.ZERO, Vector3(2.0, 0.0, 0.0), 80.0, R,
-		Vector3(0.9, 0.0, 0.6), Vector3.ZERO, 80.0, R,
-		1.0, Vector3(1.0, 0.0, 0.0))
-	assert_true(out.overlapping, "touching flat, though the centres are 1.08 apart")
-	assert_almost_eq(out.sep_b.x, 0.05, 0.0001)
-	assert_eq(out.sep_b.z, 0.0, "no squeeze along the contact")
-	assert_eq(out.dvel_b.z, 0.0)
-	assert_gt(out.dvel_b.x, 0.0)
-
-
 # ── contact_transfer ──────────────────────────────────────────────────────────
 # The one delivery rule the resolver, the reconcile replay and the strip read.
 
@@ -246,7 +230,7 @@ func test_a_drive_kicks_the_other_body_and_never_its_thrower() -> void:
 	SkaterCollisionRules.resolve(plain, a_pos, a_vel, 1.0, 0.35, b_pos, Vector3.ZERO, 1.0,
 			0.35, T)
 	SkaterCollisionRules.resolve(out, a_pos, a_vel, 1.0, 0.35, b_pos, Vector3.ZERO, 1.0,
-			0.35, T, Vector3.ZERO, 0.8, 0.0)
+			0.35, T, 0.8, 0.0)
 	assert_almost_eq(out.dvel_b.x, plain.dvel_b.x + 0.8, 1e-5, "on top of the closing share")
 	assert_almost_eq(out.dvel_a.x, plain.dvel_a.x, 1e-6, "his skates take the reaction")
 	assert_almost_eq(out.kick_on_b, 0.8, 1e-6)
@@ -257,7 +241,7 @@ func test_a_drive_kicks_the_other_body_and_never_its_thrower() -> void:
 func test_a_drive_into_a_man_he_leans_on_is_a_shove() -> void:
 	var out := SkaterCollisionRules.Result.new()
 	SkaterCollisionRules.resolve(out, Vector3.ZERO, Vector3(0.1, 0.0, 0.0), 1.0, 0.35,
-			Vector3(0.6, 0.0, 0.0), Vector3.ZERO, 1.0, 0.35, T, Vector3.ZERO, 0.8, 0.0)
+			Vector3(0.6, 0.0, 0.0), Vector3.ZERO, 1.0, 0.35, T, 0.8, 0.0)
 	assert_almost_eq(out.kick_on_b, 0.8, 1e-6)
 	assert_gt(out.dvel_b.x, 0.8)
 
@@ -265,7 +249,7 @@ func test_a_drive_into_a_man_he_leans_on_is_a_shove() -> void:
 func test_no_drive_kick_without_a_closing_contact() -> void:
 	var out := SkaterCollisionRules.Result.new()
 	SkaterCollisionRules.resolve(out, Vector3.ZERO, Vector3(-1.0, 0.0, 0.0), 1.0, 0.35,
-			Vector3(0.6, 0.0, 0.0), Vector3.ZERO, 1.0, 0.35, T, Vector3.ZERO, 0.8, 0.8)
+			Vector3(0.6, 0.0, 0.0), Vector3.ZERO, 1.0, 0.35, T, 0.8, 0.8)
 	assert_eq(out.dvel_b, Vector3.ZERO)
 	assert_eq(out.dvel_a, Vector3.ZERO)
 

@@ -92,3 +92,45 @@ func test_chest_on_pushes_harder_than_side_on() -> void:
 	var side_on: float = _gave("nothing", "skate commit side-on")
 	assert_gt(side_on, HELD_M)
 	assert_lt(side_on, 0.7 * square)
+
+
+# ── On the boards ────────────────────────────────────────────────────────────
+# The man against the boards, the attacker square on his open-ice side
+# (BoardWallRules' squeeze).
+
+const BOARDS_S: float = 1.0
+# Slid less than this along the wall, he was held there.
+const BOARDS_HELD_M: float = 0.05
+const PUSHING_BACK: String = "commit back along facing"
+
+
+func _on_the_boards(man: String, attacker: String = "skate commit", man_lbs: int = 201,
+		attacker_lbs: int = 201, at_boards: bool = true) -> PressHarness.Result:
+	var s: PressHarness.Spec = _spec(man_lbs, attacker_lbs, man, attacker, "beside")
+	s.at_boards = at_boards
+	return PressHarness.new(self).run(s, BOARDS_S)
+
+
+func test_an_engaged_man_square_on_him_holds_an_equal_against_the_boards() -> void:
+	assert_lt(_on_the_boards("along").slid, BOARDS_HELD_M, "he cannot skate off along the glass")
+	assert_gt(_on_the_boards("along", "skate commit", 201, 201, false).slid, BOARDS_HELD_M,
+			"as he does in open ice")
+
+
+func test_a_man_who_only_skates_into_him_holds_nobody_there() -> void:
+	assert_gt(_on_the_boards("along", "skate").slid, BOARDS_HELD_M)
+
+
+func test_a_shove_gets_a_held_man_off_the_wall() -> void:
+	var shoved: PressHarness.Result = _on_the_boards(PUSHING_BACK + " shove")
+	assert_gt(shoved.slid, _on_the_boards(PUSHING_BACK).slid)
+	assert_gt(shoved.slid, BOARDS_HELD_M)
+	assert_lt(shoved.gave, -BoardWallRules.SQUEEZE_MARGIN_M, "and off the boards")
+
+
+func test_weight_decides_who_is_held_there() -> void:
+	var equal: float = _on_the_boards(PUSHING_BACK).slid
+	assert_gt(_on_the_boards(PUSHING_BACK, "skate commit", 235, 170).slid,
+			maxf(equal, BOARDS_HELD_M), "a heavy man pushes a light one off him")
+	assert_lt(_on_the_boards(PUSHING_BACK, "skate commit", 170, 235).slid, BOARDS_HELD_M,
+			"a light man does not")

@@ -34,7 +34,7 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 		return
 	var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	var puck: PuckNetworkState = snapshot.puck_state
-	if me == null or me.knockdown_timer > 0.0 or me.pin_role != BoardPinRules.Role.NONE \
+	if me == null or me.knockdown_timer > 0.0 \
 			or puck.carrier_peer_id == _peer_id:
 		return
 	var goal := Vector3(0.0, 0.0, own_goal_dir * GameRules.GOAL_LINE_Z)

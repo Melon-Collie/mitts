@@ -308,16 +308,6 @@ const POSES: Array = [
 		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 		[14, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
-	# ── Board pin ───────────────────────────────────────────────────────────
-	# Both locked roles against the +x boards, facing them (the boards are not
-	# drawn here; the tiles are for the lean and the sit): the pinned skater
-	# pressed flat to the glass, the pinner a body off it, driving in.
-	# Shot side-on from the ice (the default camera would sit outside the boards).
-	{"name": "pin_pinned", "puck": false, "pin_role": BoardPinRules.Role.PINNED,
-		"cam": Vector3(-0.8, 0.6, 3.2), "steps": [[60, {"aim": Vector3(3.0, 0.0, 0.0)}]]},
-	{"name": "pin_pinner", "puck": false, "pin_role": BoardPinRules.Role.PINNER,
-		"cam": Vector3(-0.8, 0.6, 3.2),
-		"steps": [[60, {"stick": true, "aim": Vector3(3.0, 0.0, 0.0)}]]},
 	# ── The press ───────────────────────────────────────────────────────────
 	# Two bodies pressed together (PressRules), framed from the side: the posed
 	# skater drives into the man ahead of him with Ctrl, and the man (the away
@@ -697,8 +687,6 @@ func _run_pose() -> void:
 	_state.faceoff_prep = false
 	if pose.has("knockdown"):
 		_controller._on_body_check_received(pose["knockdown"] as Vector3)
-	if pose.has("pin_role"):
-		_place_for_pin(int(pose["pin_role"]))
 	if pose.has("celebrate"):
 		_controller.start_celebration(float(pose["celebrate"]))
 	var steps: Array = pose.get("steps", [])
@@ -918,19 +906,6 @@ func _run_faceoff(spec: Dictionary) -> void:
 	print("      dot %.3v stick_horiz %.3f blade %.3v" % [
 			dot, _controller._ik.stick_horiz(),
 			_skater.upper_body_to_global(_skater.get_blade_position())])
-
-
-# Against the +x boards as the role stands there: the pinned skater's edge at the
-# boards, the pinner one body and the lock's give further off.
-func _place_for_pin(role: int) -> void:
-	var r: float = _skater.collision_radius()
-	var gap: float = 0.05
-	if role == BoardPinRules.Role.PINNER:
-		gap += 2.0 * r + BoardPinRules.PIN_CONTACT_SLACK_M
-	_skater.global_position = Vector3(GameRules.INNER_HALF_WIDTH - r - gap,
-			GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
-	_skater.pin_role = role
-	_skater.pin_strength = 0.5
 
 
 # The partner's held input: `aim` and `move` as _fill_input reads them, relative

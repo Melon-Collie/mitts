@@ -36,9 +36,8 @@ extends RefCounted
 #                      torso_lean 2×s16 + posture_lean s16, all @π/32767 rad (v62),
 #                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63),
 #                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v70),
-#                      body lock u8 (pin_role[1:0] BoardPinRules.Role (v74) + diving[2] (v75)
-#                                    + slapshot_pinned[3] (v91) + stumbling[4] (v100)),
-#                      pin_strength u8@1/255 (v74),
+#                      body state u8 (diving[2] (v75) + slapshot_pinned[3] (v91)
+#                                     + stumbling[4] (v100); bits 0-1 unused since v101),
 #                      check_drive u8 (phase[1:0] + ticks elapsed[7:2]) (v99)
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie (142 B): root (12 B) + the keeper's pose (KeeperPoseCodec, 130 B).
@@ -76,7 +75,7 @@ const WS_SEQUENCE_OFFSET: int = 0     # u16
 const WS_HOST_TIME_OFFSET: int = 2    # u32, 0.1 ms units
 const WS_SKATER_COUNT_OFFSET: int = 6  # u8
 const WS_HEADER_SIZE: int = 7
-const SKATER_STATE_BYTES: int = 59  # inner skater state block; every encode/decode
+const SKATER_STATE_BYTES: int = 58  # inner skater state block; every encode/decode
                                     # site must read it from here, or a grown block
                                     # silently truncates instead of failing
 # Wire range of the balance lean's spring rate, rad/s.
@@ -471,12 +470,12 @@ func decode_stats(data: Array) -> void:
 
 # ── Quantization helpers ──────────────────────────────────────────────────────
 
-# Skater: SKATER_STATE_BYTES (59) bytes
+# Skater: SKATER_STATE_BYTES (58) bytes
 # Offsets: pos(0..4) vel(5..10) blade(11..16) top_hand(17..22)
 #          facing(23..24) ubrot(25..26) fav(27..28) ubav(29..30) lp_ts(31..34)
 #          flags(35) charge(36) stagger(37) knockdown(38) intent(39)
 #          tilt(40..43) tilt_vel(44..47) torso(48..51) posture(52..53) recoil(54)
-#          stick_check(55) body_lock(56) pin_strength(57) check_drive(58)
+#          stick_check(55) body_state(56) check_drive(57)
 # Writes the skater block into `b` at `o`, returning the next offset. Godot 4
 # passes Packed arrays to functions BY REFERENCE, so these writes land in the
 # caller's buffer — that is what lets the hot path fill one pre-sized packet
@@ -558,9 +557,8 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	# peaks near 13°, so a half step tilts the torso by well under 0.2°.
 	b.encode_u8(o, posmod(roundi(atan2(s.recoil_dir.x, s.recoil_dir.y) / TAU * 256.0), 256)); o += 1
 	b.encode_u8(o, StickCheckRules.pack(s.stick_check_phase, s.stick_check_elapsed)); o += 1
-	b.encode_u8(o, (s.pin_role & 0x03) | (0x04 if s.diving else 0)
-			| (0x08 if s.slapshot_pinned else 0) | (0x10 if s.stumbling else 0)); o += 1
-	b.encode_u8(o, clampi(roundi(s.pin_strength * 255.0), 0, 255)); o += 1
+	b.encode_u8(o, (0x04 if s.diving else 0) | (0x08 if s.slapshot_pinned else 0)
+			| (0x10 if s.stumbling else 0)); o += 1
 	b.encode_u8(o, CheckDriveRules.pack(s.check_drive_phase, s.check_drive_elapsed)); o += 1
 	return o
 
@@ -648,11 +646,9 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	s.stick_check_phase = StickCheckRules.unpack_phase(stick_check)
 	s.stick_check_elapsed = StickCheckRules.unpack_elapsed(stick_check)
 	var lock: int = b.decode_u8(o); o += 1
-	s.pin_role = lock & 0x03 if (lock & 0x03) <= BoardPinRules.Role.PINNED else 0
 	s.diving = (lock & 0x04) != 0
 	s.slapshot_pinned = (lock & 0x08) != 0
 	s.stumbling = (lock & 0x10) != 0
-	s.pin_strength = b.decode_u8(o) / 255.0; o += 1
 	var check_drive: int = b.decode_u8(o)
 	s.check_drive_phase = CheckDriveRules.unpack_phase(check_drive)
 	s.check_drive_elapsed = CheckDriveRules.unpack_elapsed(check_drive)

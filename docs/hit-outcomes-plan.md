@@ -3,8 +3,9 @@
 Status: **Phases 0–3, 5 and 6 built**, playtest pending. Amends the physicality paragraphs of
 `docs/gameplay-design.md` and the body-check verbs of
 `docs/physicality-plan.md`. Four phases plus a small controls pass, each its
-own PR and playtest. The cross-check this plan names was retired at v88
-(`docs/net-front-battles-plan.md`); its rows here record what was decided then.
+own PR and playtest. The cross-check this plan names was retired at v88 and
+the board pin at v101 (`docs/net-front-battles-plan.md`); their rows here, the
+bots' pin reach among them, record what was decided then.
 
 ## Decisions banked
 

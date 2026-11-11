@@ -1,23 +1,24 @@
 class_name AIPinThreatRead
 extends RefCounted
 
-# A carrier on the boards with a checker coming square, stick out for the pin: get out of his
-# line before he arrives, and brace only when that can't be done — bracing costs
-# the stride and the edges, so it is the last resort, as coached. Read off the
+# A carrier on the boards with an engaged checker coming square, to hit him into
+# them and hold him there: get out of his line before he arrives, and brace only
+# when that can't be done — bracing costs the stride and the edges, so it is
+# the last resort, as coached. Read off the
 # bot's perceived snapshot, so a drive is seen late by the tier's delay: a fast
 # square drive catches it still thinking it has time, and a slow one never does.
 
 enum Answer { ESCAPE, BRACE }
 
 # Bodies touch at two of the bots' body radius (GameRules.OFFSIDE_LINE_SLACK, the
-# skater collision radius) plus the pin's contact slack.
-const TOUCHING_M: float = 2.0 * GameRules.OFFSIDE_LINE_SLACK + BoardPinRules.PIN_CONTACT_SLACK_M
+# skater collision radius) plus the slack a pressed pair sits apart at.
+const TOUCHING_M: float = 2.0 * GameRules.OFFSIDE_LINE_SLACK + 0.05
 
 
 # Along-wall offset from the checker at contact past which his hit is no longer
-# square into the boards (BoardPinRules.BACKSTOP_MIN_INTO_WALL), so no pin.
+# square into the boards (BoardWallRules.BACKSTOP_MIN_INTO_WALL), so no hold.
 static func escape_along_m() -> float:
-	var c: float = BoardPinRules.BACKSTOP_MIN_INTO_WALL
+	var c: float = BoardWallRules.BACKSTOP_MIN_INTO_WALL
 	return TOUCHING_M * sqrt(1.0 - c * c)
 
 

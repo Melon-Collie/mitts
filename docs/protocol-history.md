@@ -489,3 +489,9 @@ here whenever you bump, in the same format.
 #      flat_overshoot. A v99 peer would predict a different outcome for the same
 #      hit and draw a stumble lying down, so mixed builds must be refused.
 #      Replay FORMAT_VERSION unchanged: the block's layout did not move.
+# v101: the board pin is gone. The skater block loses its pin_strength byte (58
+#      bytes) and the body-state byte's bits 0-1 (pin_role) are unused; a man is
+#      held on the boards by the press's squeeze instead (BoardWallRules), which
+#      every machine lays from state already replicated. A v100 peer would read
+#      the check drive where the pin strength was, so mixed builds must be
+#      refused. Replay FORMAT_VERSION 22.

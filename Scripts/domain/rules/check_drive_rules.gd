@@ -29,7 +29,7 @@ const HELD_SHARE: float = 0.6
 
 # One tick of the phase machine, as (phase, seconds elapsed in it) in a Vector2
 # so the per-tick call allocates nothing. `held` is the button; `eligible` is
-# whether he may commit a check this tick (on his skates, not rocked, pinned or
+# whether he may commit a check this tick (on his skates, not rocked or
 # planted, and without the puck). A press he may not act on is spent: the drive
 # never fires off a button still held when he becomes able to.
 static func step(phase: int, elapsed: float, held: bool, eligible: bool,

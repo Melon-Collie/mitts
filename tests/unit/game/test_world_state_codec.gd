@@ -521,53 +521,17 @@ func test_skater_stick_tied_round_trips_beside_every_flag() -> void:
 		assert_eq(dec.elevation_level, 3)
 
 
-func test_skater_pin_round_trips() -> void:
-	var s := SkaterNetworkState.new()
-	s.pin_role = BoardPinRules.Role.PINNED
-	s.pin_strength = 0.62
-	var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
-			WorldStateCodec._encode_skater_quantized(s))
-	assert_eq(dec.pin_role, BoardPinRules.Role.PINNED)
-	assert_almost_eq(dec.pin_strength, 0.62, 1.0 / 255.0)
-
-
-func test_skater_dive_rides_the_body_lock_byte_beside_the_pin() -> void:
-	for role: int in [BoardPinRules.Role.NONE, BoardPinRules.Role.PINNER, BoardPinRules.Role.PINNED]:
-		for diving: bool in [false, true]:
-			var s := SkaterNetworkState.new()
-			s.pin_role = role
-			s.diving = diving
-			var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
-					WorldStateCodec._encode_skater_quantized(s))
-			assert_eq(dec.pin_role, role)
-			assert_eq(dec.diving, diving)
-
-
-func test_skater_slapshot_pin_rides_the_body_lock_byte() -> void:
-	for pinned: bool in [false, true]:
+func test_the_body_state_bits_do_not_disturb_each_other() -> void:
+	for bits: int in 8:
 		var s := SkaterNetworkState.new()
-		s.pin_role = BoardPinRules.Role.PINNED
-		s.diving = true
-		s.slapshot_pinned = pinned
+		s.diving = bits & 1 != 0
+		s.slapshot_pinned = bits & 2 != 0
+		s.stumbling = bits & 4 != 0
 		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 				WorldStateCodec._encode_skater_quantized(s))
-		assert_eq(dec.slapshot_pinned, pinned)
-		assert_eq(dec.pin_role, BoardPinRules.Role.PINNED, "the pin bit leaves the role alone")
-		assert_true(dec.diving, "the pin bit leaves the dive alone")
-
-
-func test_skater_stumble_rides_the_body_lock_byte() -> void:
-	for stumbling: bool in [false, true]:
-		var s := SkaterNetworkState.new()
-		s.pin_role = BoardPinRules.Role.PINNER
-		s.slapshot_pinned = true
-		s.stumbling = stumbling
-		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
-				WorldStateCodec._encode_skater_quantized(s))
-		assert_eq(dec.stumbling, stumbling)
-		assert_eq(dec.pin_role, BoardPinRules.Role.PINNER, "the stumble bit leaves the role alone")
-		assert_true(dec.slapshot_pinned, "and the slapshot pin")
-		assert_false(dec.diving, "and the dive")
+		assert_eq(dec.diving, s.diving)
+		assert_eq(dec.slapshot_pinned, s.slapshot_pinned)
+		assert_eq(dec.stumbling, s.stumbling)
 
 
 func test_skater_check_drive_round_trips() -> void:
@@ -576,12 +540,12 @@ func test_skater_check_drive_round_trips() -> void:
 		var s := SkaterNetworkState.new()
 		s.check_drive_phase = phase
 		s.check_drive_elapsed = 0.2
-		s.pin_strength = 0.5
+		s.stumbling = true
 		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 				WorldStateCodec._encode_skater_quantized(s))
 		assert_eq(dec.check_drive_phase, phase)
 		assert_almost_eq(dec.check_drive_elapsed, 0.2, 0.5 * Constants.TICK_DURATION + 1e-6)
-		assert_almost_eq(dec.pin_strength, 0.5, 1.0 / 255.0, "the byte before it is untouched")
+		assert_true(dec.stumbling, "the byte before it is untouched")
 
 
 func test_skater_stagger_round_trips() -> void:

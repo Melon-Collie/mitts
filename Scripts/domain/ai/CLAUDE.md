@@ -423,24 +423,24 @@ gate, closed on Easy. The tie reads the covered man from
 transition, where the stick belongs in the passing lane, so they publish no lock
 and never tie.
 
-**On the boards, the checker's extra is the pin** (`apply_board_play`, every
-tick after dispatch). A check driven into a man on the wall that will not knock
-him down reaches for the pin on the stick button instead, and the hold follows
-what is coached: keep the stick on him while our support beats theirs to the puck (the same momentum-blind top-speed
-bound for both sides), or in our own end to kill the play; never as the last man
-back outside it. Locked, the pinner drives into the wall and matches the victim's
-slide, read through a lag of `BoardPinRules.PIN_LAG_BUDGET_S`, so a bot is
-beaten by the same reversals a human would be. It rides the PACE physicality knob
-(`check_aggression`, zero on Easy), not a cognition gate. A pinned bot slides
-along the wall and reverses when its pinner commits to following (his along-wall
-speed our way past half our cap), no sooner than a reversal can land. A carrier
-at the wall with a checker coming square, stick out, answers him as coached,
-bracing last (`AIPinThreatRead`): he skates out of the checker's line along the
-wall if he gets past the offset where the hit stops being square before contact,
-and holds the commit only when he can't. Bracing costs the commit's grip and
-stride, so it is never free insurance. Read through the tier's perception delay,
-a fast square drive catches him still thinking he has time, and a slow approach
-gives him time to leave. The `protects_the_puck` cognition gate.
+**On the boards a man is held with the body** (`apply_board_play`, every tick
+after dispatch; `BoardWallRules`' squeeze). Leaned on a man at the wall who has
+the puck or stands over it, from his open-ice side, a bot puts the body into him
+(Ctrl, the stick toward him) while holding him is what is coached: our support
+beats theirs to the puck (the same momentum-blind top-speed bound for both
+sides), or it is our own end and the hold kills the play; never as the last man
+back outside it. It rides the PACE physicality knob (`check_aggression`, zero on
+Easy), not a cognition gate. A bot held there pushes back into the man and out
+along the wall in equal parts, which unloads the squeeze, and lets the button up
+whenever its drive has re-armed so the next press is a shove. A carrier at the
+wall with an engaged checker coming square answers him as coached, bracing last
+(`AIPinThreatRead`): he skates out of the checker's line along the wall if he
+gets past the offset where the hit stops being square before contact, and holds
+the commit only when he can't. Bracing costs the commit's grip and stride, so it
+is never free insurance. Read through the tier's perception delay, a fast square
+drive catches him still thinking he has time, and a slow approach gives him time
+to leave. The `protects_the_puck` cognition gate, which a held carrier's push
+back rides too.
 
 **Any defender meets a carrier skating into him with the shoulder**
 (`AIStandUpRead`, applied by `SkaterAgentStandUp` after dispatch): Ctrl held
