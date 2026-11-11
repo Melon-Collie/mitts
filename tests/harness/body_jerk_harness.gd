@@ -396,13 +396,13 @@ func _add_play(out: Array[Dictionary]) -> void:
 
 # The press (PressRules) from both sides: driving into a man dug in ahead, and
 # dug in with a man driving into us from behind. Each comes on at t60 and goes
-# off at t200, from a standstill in contact. The driver's shoulder is in from
+# off at t200, from a standstill in contact. Every check button is down from
 # the start, its drive (CheckDriveRules) spent, so what lands is the press and
-# not a timed check.
+# not a shove.
 func _add_press(out: Array[Dictionary]) -> void:
 	var dug_in: Callable = func(inp: InputState, _i: int) -> Vector3:
 		inp.brake = true
-		inp.stance_held = true
+		inp.hit_held = true
 		return _up(-2.0)
 	_add(out, "press: drive into a man dug in, and off", 320, func(inp: InputState, i: int) -> Vector3:
 		var on: bool = i >= 60 and i < 200
@@ -413,7 +413,7 @@ func _add_press(out: Array[Dictionary]) -> void:
 	_add(out, "press: dug in against a driver, and off", 320, func(inp: InputState, i: int) -> Vector3:
 		var on: bool = i >= 60 and i < 200
 		inp.brake = on
-		inp.stance_held = on
+		inp.hit_held = true
 		return _up(2.0), 0.0, -1.0, {"dir": Vector3(0.0, 0.0, 1.0),
 				"face": Vector2(0.0, -1.0),
 				"steer": func(inp: InputState, i: int) -> Vector3:

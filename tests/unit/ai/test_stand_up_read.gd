@@ -29,7 +29,7 @@ func test_not_for_a_contact_that_would_not_rock_him() -> void:
 	# and the drive's.
 	var rocks_from: float = 0.0
 	while SkaterCollisionRules.victim_kick(rocks_from, 1.0, 1.0, TRANSFER) \
-			+ CheckDriveRules.impact_share(rocks_from) * CheckDriveRules.kick_dv(
+			+ CheckDriveRules.kick_dv(
 					GameRules.DEFAULT_SKATER_THRUST_M_S2, 1.0, 1.0) < CFG_REF:
 		rocks_from += 0.01
 	assert_false(_meets(0.9 * rocks_from, 0.01))

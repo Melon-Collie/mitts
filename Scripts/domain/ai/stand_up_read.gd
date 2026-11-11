@@ -32,5 +32,4 @@ static func meets(me_pos: Vector3, me_vel: Vector3, my_weight: float,
 		return false
 	var closing: float = Vector2(me_vel.x - man_vel.x, me_vel.z - man_vel.z).dot(to_man / dist)
 	return SkaterCollisionRules.victim_kick(closing, my_weight, man_weight, transfer) \
-			+ CheckDriveRules.kick_dv(my_thrust, my_weight, man_weight) \
-			* CheckDriveRules.impact_share(closing) >= ref_impulse
+			+ CheckDriveRules.kick_dv(my_thrust, my_weight, man_weight) >= ref_impulse

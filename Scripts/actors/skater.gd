@@ -1305,7 +1305,7 @@ func is_check_driving() -> bool:
 	return CheckDriveRules.is_driving(check_drive_phase)
 
 
-# The Δv (m/s) this body's leg drive adds to `other` in a contact at full impact
+# The Δv (m/s) this body's leg drive adds to `other` in a contact
 # (SkaterCollisionRules.drive_kick).
 func drive_kick_on(other: Skater) -> float:
 	var other_has_puck: bool = SkaterStateMachine.state_has_puck(other.current_shot_state)

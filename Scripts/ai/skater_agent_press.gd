@@ -6,8 +6,9 @@ extends RefCounted
 # - covering a man at our net who hides the release from our goalie, leaned on
 #   him: drive into him (Ctrl, the stick toward him) when the press moves him
 #   off the sightline;
-# - screening their goalie with an opponent on us: dig in (the brake in the
-#   stance), the stop's edges anchored by the stance's base;
+# - screening their goalie with an engaged opponent on us: dig in (Ctrl and the
+#   brake, the edges set), unless the stick is up for a tip, which Ctrl would
+#   take off the ice;
 # - carrying into a man who stands us up: put the body into it (Ctrl, which a
 #   carrier holds as the brace, the stick staying on the puck).
 # A held tie keeps its stick through the press: the commit takes the stick off
@@ -78,10 +79,11 @@ func _press_the_screen(input: InputState, snapshot: WorldSnapshot, me: SkaterNet
 	return true
 
 
-# Screening their goalie, slow, with an opponent on us: brake in the stance.
+# Screening their goalie, slow, with an engaged opponent on us: set the edges.
 func _dig_in(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
 		own_goal_dir: float) -> bool:
 	if own_goal_dir * me.position.z > -GameRules.BLUE_LINE_Z or input.hit_held \
+			or input.stick_lift_held \
 			or Vector2(me.velocity.x, me.velocity.z).length() > SkaterMovementRules.SHUFFLE_MAX_SPEED:
 		return false
 	var their_goalie: GoalieNetworkState = snapshot.goalie_states.get(1 - _team_id)
@@ -93,9 +95,11 @@ func _dig_in(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
 		if _team_id_by_peer.get(pid, -1) == _team_id:
 			continue
 		var opp: SkaterNetworkState = snapshot.skater_states[pid]
-		if not opp.is_ghost and AIPressRead.gap_m(me.position, opp.position) <= AIPressRead.STEP_IN_M:
+		if not opp.is_ghost and opp.hit_committed \
+				and AIPressRead.gap_m(me.position, opp.position) <= AIPressRead.STEP_IN_M:
+			input.hit_held = true
 			input.brake = true
-			input.stance_held = true
+			input.stance_held = false
 			return true
 	return false
 

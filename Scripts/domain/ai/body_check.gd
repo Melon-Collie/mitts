@@ -88,8 +88,7 @@ static func evaluate(
 	var approach: float = _predicted_approach(self_pos, self_max_speed, intercept, carrier_vel)
 	var predicted_impulse: float = SkaterCollisionRules.victim_kick(
 			approach, self_weight, victim_weight, self_body_check_transfer) \
-			+ CheckDriveRules.kick_dv(self_thrust, self_weight, victim_weight) \
-			* CheckDriveRules.impact_share(approach)
+			+ CheckDriveRules.kick_dv(self_thrust, self_weight, victim_weight)
 	if predicted_impulse < commit_impulse_threshold:
 		return r
 

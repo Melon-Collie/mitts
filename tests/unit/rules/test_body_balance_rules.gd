@@ -88,7 +88,7 @@ func _knockdown_closing(posture: P, deg: float, checker_w: float, victim_w: floa
 	for _i: int in 40:
 		var mid: float = 0.5 * (lo + hi)
 		var dv: float = SkaterCollisionRules.victim_kick(mid, checker_w, victim_w, TRANSFER) \
-				+ kick * CheckDriveRules.impact_share(mid)
+				+ kick
 		if dv < dv_needed:
 			lo = mid
 		else:

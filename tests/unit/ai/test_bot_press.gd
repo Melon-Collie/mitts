@@ -64,14 +64,29 @@ func test_a_coverer_leaned_on_a_screen_presses_him_off() -> void:
 	assert_almost_eq(input.move_vector.angle_to(Vector2(1.0, 0.0)), 0.0, 1e-3, "into him")
 
 
-func test_no_press_against_a_man_who_holds_it() -> void:
+# A man engaged and set holds a press; the shove that opens a fresh one breaks
+# him loose, so the bot presses him only with its drive in hand.
+func test_a_set_man_is_pressed_only_with_a_shove_to_open_it() -> void:
+	var s: WorldSnapshot = _screen_snap()
+	var man: SkaterNetworkState = s.skater_states[OPP_ID]
+	man.brake_intent = true
+	man.hit_committed = true
+	s.skater_states[SELF_ID].check_drive_phase = CheckDriveRules.Phase.SPENT
+	var input := InputState.new()
+	assert_false(sm.apply_press(input, s), "set, he does not move")
+	assert_false(input.hit_held)
+	s.skater_states[SELF_ID].check_drive_phase = CheckDriveRules.Phase.IDLE
+	assert_true(sm.apply_press(input, s), "shoved first, he does")
+	assert_true(input.hit_held)
+
+
+func test_the_stance_holds_nothing() -> void:
 	var s: WorldSnapshot = _screen_snap()
 	var man: SkaterNetworkState = s.skater_states[OPP_ID]
 	man.brake_intent = true
 	man.stance_active = true
-	var input := InputState.new()
-	assert_false(sm.apply_press(input, s), "dug in, he does not move")
-	assert_false(input.hit_held)
+	s.skater_states[SELF_ID].check_drive_phase = CheckDriveRules.Phase.SPENT
+	assert_true(sm.apply_press(InputState.new(), s), "braking in the stance is not engaged")
 
 
 func test_no_press_from_a_step_away() -> void:
@@ -94,18 +109,29 @@ func _screener_snap() -> WorldSnapshot:
 	s.skater_states[MATE_ID] = _state(s.puck_state.position, Vector2(0.0, -1.0))
 	s.skater_states[SELF_ID] = _state(Vector3(0.0, 0.85, -_goal_z + 3.0), Vector2(0.0, 1.0))
 	s.skater_states[OPP_ID] = _state(Vector3(-TOUCHING_M, 0.85, -_goal_z + 3.0), Vector2(1.0, 0.0))
+	s.skater_states[OPP_ID].hit_committed = true
 	s.goalie_states[1] = _goalie(-_goal_z + 0.6)
 	return s
 
 
-func test_a_screener_with_a_defender_on_him_digs_in() -> void:
+func test_a_screener_with_an_engaged_defender_on_him_digs_in() -> void:
 	var input := InputState.new()
 	assert_true(sm.apply_press(input, _screener_snap()))
-	assert_true(input.brake and input.stance_held, "the stop's edges, in the stance")
+	assert_true(input.hit_held and input.brake, "engaged, on the stop's edges")
 	sm._protects_the_puck = false
 	input = InputState.new()
 	assert_false(sm.apply_press(input, _screener_snap()), "the beginner tier does not read it")
 	assert_false(input.brake)
+
+
+func test_a_screener_keeps_his_stick_for_a_tip_or_a_man_who_only_stands_there() -> void:
+	var tipping := InputState.new()
+	tipping.stick_lift_held = true
+	assert_false(sm.apply_press(tipping, _screener_snap()), "Ctrl would take the stick off the ice")
+	assert_false(tipping.hit_held)
+	var s: WorldSnapshot = _screener_snap()
+	s.skater_states[OPP_ID].hit_committed = false
+	assert_false(sm.apply_press(InputState.new(), s), "nobody is pushing him")
 
 
 func test_a_screener_on_the_move_does_not_dig_in() -> void:

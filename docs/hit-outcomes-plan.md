@@ -459,11 +459,10 @@ the one that paid.
   drive lands his whole transfer; past it, `HELD_SHARE` of it; uncommitted, the
   passive bump as before.
 - **The legs' kick** (`CheckDriveRules.kick_dv`, `SkaterCollisionRules
-  .drive_kick`): on an impact, a driving checker adds his stride's force over
-  `PUSH_S` to the other body, on that body's mass. It needs an impact to drive
-  through (`impact_share`: none of it under 0.5 m/s closing, all of it from
-  1.5), so a fresh press on a man already leaned on is still the press, which
-  staggers nobody. His skates take
+  .drive_kick`): on a closing contact, a driving checker adds his stride's
+  force over `PUSH_S` to the other body, on that body's mass. Thrown into a
+  man he is already leaning on it is the whole of the hit, a shove that
+  staggers him and breaks his set (`docs/net-front-battles-plan.md`, Phase 4). His skates take
   the reaction, so nothing comes back on him. A braced carrier takes it cut by
   his brace, as he takes the transfer. Against the boards it adds to the
   backstopped strength (`BoardPinRules.backstop_hit_strength`).
@@ -485,7 +484,7 @@ The checker skating in on a man standing still, but for the last row:
 
 | contact | victim's Δv | his outcome | checker |
 |---|---|---|---|
-| timed, 1 m/s closing | 0.75 | stagger | nothing |
+| timed, 1 m/s closing | 1.17 | stagger | nothing |
 | timed, 2 m/s | 1.49 | rocked, stripped | nothing |
 | timed, 3 m/s | 1.81 | rocked, stripped | nothing |
 | timed, 6 m/s | 2.79 | rocked; down from the side | rocked |

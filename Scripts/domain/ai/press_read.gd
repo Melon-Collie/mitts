@@ -4,9 +4,9 @@ extends RefCounted
 # When a bot's press is worth its commit, read from what the bot can see. The
 # pair's motion is the one both bodies' movement steps would lay (PressRules, on
 # the league body scaled by each build's caps), against the man as he stands
-# now: his facing, posture, brake, stagger and intent (not a planted shot
-# state, which the domain does not name; a planted screener reads as standing
-# on his own edges). The push runs along the
+# now: his facing, whether he is engaged, his brake, stagger and intent (not a
+# planted shot state, which the domain does not name; a planted screener reads
+# as standing on his own edges). The push runs along the
 # contact normal, from the presser through the man, so a press clears a screen
 # only from the side that moves him off the sightline. Pure/static, no
 # allocation.
@@ -28,26 +28,34 @@ static func gap_m(a: Vector3, b: Vector3) -> float:
 	return Vector2(b.x - a.x, b.z - a.z).length() - 2.0 * GameRules.OFFSIDE_LINE_SLACK
 
 
-# How far (m) a committed press from `me` (driving straight at him, at the
-# build's thrust) moves `man` along the normal in READ_S; `*_caps` null reads a
-# league body. Never negative: a press he holds moves him nowhere.
+# How far (m) a committed press from `me` (driving straight at him, chest-on,
+# at the build's thrust) moves `man` along the normal in READ_S; `*_caps` null
+# reads a league body. Never negative: a press he holds moves him nowhere. With
+# his drive in hand (CheckDriveRules) the press opens with a shove, which
+# staggers the man and breaks his set.
 static func displacement_m(me: SkaterNetworkState, my_caps: AISkaterCaps,
 		man: SkaterNetworkState, man_caps: AISkaterCaps) -> float:
 	var d := Vector2(man.position.x - me.position.x, man.position.z - me.position.z)
 	if d.length_squared() < 0.0001:
 		return 0.0
 	var n: Vector2 = d.normalized()
-	var a: float = pair_accel(me, my_caps, SkaterMovementRules.Posture.COMMIT, n, n, man, man_caps)
-	return 0.5 * maxf(a, 0.0) * READ_S * READ_S
+	var shove_s: float = 0.0
+	if me.check_drive_phase == CheckDriveRules.Phase.IDLE:
+		shove_s = BodyCheckRules.stagger_seconds_from_impulse(CheckDriveRules.kick_dv(
+				_thrust(my_caps), my_caps.weight if my_caps != null else 1.0,
+				man_caps.weight if man_caps != null else 1.0), _check_cfg)
+	var a: float = pair_accel(me, my_caps, SkaterMovementRules.Posture.COMMIT, n, n, man,
+			man_caps, shove_s)
+	return PressRules.displacement(a, READ_S)
 
 
 # The pair's acceleration (m/s²) as a press starts, along the normal from `me`
 # toward `man` (positive moves him back), with `me` skating `intent` in
-# `posture` facing `my_facing`, against the man as he stands now. Zero when
-# neither body drives into the other.
+# `posture` facing `my_facing`, against the man as he stands now, staggered for
+# at least `man_stagger_s`. Zero when neither body drives into the other.
 static func pair_accel(me: SkaterNetworkState, my_caps: AISkaterCaps, posture: int,
 		intent: Vector2, my_facing: Vector2, man: SkaterNetworkState,
-		man_caps: AISkaterCaps) -> float:
+		man_caps: AISkaterCaps, man_stagger_s: float = 0.0) -> float:
 	var d := Vector2(man.position.x - me.position.x, man.position.z - me.position.z)
 	if d.length_squared() < 0.0001:
 		return 0.0
@@ -59,11 +67,12 @@ static func pair_accel(me: SkaterNetworkState, my_caps: AISkaterCaps, posture: i
 	var hold_me: float = PressRules.hold(_league, posture, false, false,
 			BodyCheckRules.grip_mult(me.stagger_timer, _check_cfg), my_facing, n, 0.0)
 	var man_posture: int = SkaterMovementRules.posture_of(man.stance_active, man.hit_committed)
+	var man_stagger: float = maxf(man.stagger_timer, man_stagger_s)
 	var drive_man: float = PressRules.drive(_league, _thrust(man_caps), man_posture,
-			man.brake_intent, false, BodyCheckRules.thrust_mult(man.stagger_timer, _check_cfg),
+			man.brake_intent, false, BodyCheckRules.thrust_mult(man_stagger, _check_cfg),
 			man.facing, man.move_intent, -n, 0.0)
 	var hold_man: float = PressRules.hold(_league, man_posture, man.brake_intent, false,
-			BodyCheckRules.grip_mult(man.stagger_timer, _check_cfg), man.facing, n, 0.0)
+			BodyCheckRules.grip_mult(man_stagger, _check_cfg), man.facing, n, 0.0)
 	if not PressRules.pressing(drive_me, drive_man):
 		return 0.0
 	return PressRules.pair_accel(my_mass, drive_me, hold_me, man_mass, drive_man, hold_man,

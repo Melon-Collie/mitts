@@ -124,7 +124,7 @@ func _reach_for_pin(input: InputState, snapshot: WorldSnapshot, me: SkaterNetwor
 		var my_weight: float = caps.weight if caps != null else 1.0
 		var man_weight: float = man_caps.weight if man_caps != null else 1.0
 		var kick: float = SkaterCollisionRules.victim_kick(closing, my_weight, man_weight,
-				transfer) + CheckDriveRules.impact_share(closing) * CheckDriveRules.kick_dv(
+				transfer) + CheckDriveRules.kick_dv(
 				caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2,
 				my_weight, man_weight)
 		var posture: BodyBalanceRules.Posture = BodyBalanceRules.posture_of(man.stance_active,

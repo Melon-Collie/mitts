@@ -15,9 +15,9 @@ class_name SkaterCollisionRules
 #      so an attacker is never pushed backward past a stop. The pinball bounce is
 #      structurally impossible here, not merely tuned to zero.
 #
-#   3. Each body's leg drive (CheckDriveRules), on a contact closing fast
-#      enough to be an impact: a kick on the OTHER body along the axis, with no
-#      reaction on the driver, whose skates take it.
+#   3. Each body's leg drive (CheckDriveRules), on a closing contact: a kick on
+#      the OTHER body along the axis, with no reaction on the driver, whose
+#      skates take it.
 #
 # All the gameplay attributes AND the hit button enter through ONE caller-supplied
 # scalar, `transfer` (0..1), from contact_transfer. It scales the shared impulse, so:
@@ -75,8 +75,8 @@ class Result:
 # caller builds it from the attacker's delivery × hit-commit and the victim's brace.
 # A non-zero `axis` (unit, A -> B) replaces the disc axis and measures the overlap
 # along it: a flat contact (BoardPinRules.locked_contact_axis). `kick_on_b` and
-# `kick_on_a` (m/s) are what A's and B's leg drives add to the other body at
-# full impact (drive_kick); what lands is out.kick_on_*.
+# `kick_on_a` (m/s) are what A's and B's leg drives add to the other body
+# (drive_kick), on a closing contact.
 static func resolve(
 		out: Result,
 		pos_a: Vector3, vel_a: Vector3, mass_a: float, radius_a: float,
@@ -134,9 +134,8 @@ static func resolve(
 	# every PREDICTOR of it (the AI's check-commit gate) on one formula.
 	var kick_b: float = victim_kick(s, mass_a, mass_b, transfer)
 	# Equal-and-opposite momentum: Δv_a = J/m_a = kick_b · m_b/m_a.
-	var impact: float = CheckDriveRules.impact_share(s)
-	out.kick_on_a = kick_on_a * impact
-	out.kick_on_b = kick_on_b * impact
+	out.kick_on_a = kick_on_a
+	out.kick_on_b = kick_on_b
 	out.dvel_a = -n * (kick_b * mass_b * inv_a + out.kick_on_a)   # attacker decelerates (drive-through emerges)
 	out.dvel_b = n * (kick_b + out.kick_on_b)                     # victim launched along the hit line
 	out.impulse_applied = true
@@ -190,10 +189,9 @@ static func _delivered(transfer: float, delivers: bool, driving: bool) -> float:
 	return transfer if driving else transfer * CheckDriveRules.HELD_SHARE
 
 
-# The Δv (m/s) a body's leg drive adds to the body it hits at full impact
-# (resolve's kick_on_*): CheckDriveRules.kick_dv while he is a checker inside his
-# drive, cut by the brace of a carrier holding Ctrl as the transfer is, else
-# nothing.
+# The Δv (m/s) a body's leg drive adds to the body it hits (resolve's
+# kick_on_*): CheckDriveRules.kick_dv while he is a checker inside his drive,
+# cut by the brace of a carrier holding Ctrl as the transfer is, else nothing.
 static func drive_kick(driving: bool, committed: bool, has_puck: bool, thrust: float,
 		mass: float, other_mass: float, other_braced: bool, other_brace: float) -> float:
 	if not driving or not committed or has_puck:

@@ -252,18 +252,14 @@ func test_a_drive_kicks_the_other_body_and_never_its_thrower() -> void:
 	assert_almost_eq(out.kick_on_b, 0.8, 1e-6)
 
 
-func test_a_drive_into_a_man_already_leaned_on_is_no_kick() -> void:
+# Thrown into a man he is leaning on, where the closing speed is a stride's
+# worth a tick, the kick is all of the hit: a shove.
+func test_a_drive_into_a_man_he_leans_on_is_a_shove() -> void:
 	var out := SkaterCollisionRules.Result.new()
-	SkaterCollisionRules.resolve(out, Vector3.ZERO,
-			Vector3(CheckDriveRules.IMPACT_FROM_M_S, 0.0, 0.0), 1.0, 0.35,
+	SkaterCollisionRules.resolve(out, Vector3.ZERO, Vector3(0.1, 0.0, 0.0), 1.0, 0.35,
 			Vector3(0.6, 0.0, 0.0), Vector3.ZERO, 1.0, 0.35, T, Vector3.ZERO, 0.8, 0.0)
-	assert_eq(out.kick_on_b, 0.0)
-	var prev: float = 0.0
-	for i: int in 31:
-		var share: float = CheckDriveRules.impact_share(0.1 * i)
-		assert_gte(share, prev, "never less for a harder contact")
-		prev = share
-	assert_eq(prev, 1.0)
+	assert_almost_eq(out.kick_on_b, 0.8, 1e-6)
+	assert_gt(out.dvel_b.x, 0.8)
 
 
 func test_no_drive_kick_without_a_closing_contact() -> void:

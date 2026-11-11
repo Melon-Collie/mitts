@@ -31,7 +31,7 @@ func _eval(carrier_pos: Vector3, carrier_vel: Vector3,
 # the drive's.
 func _hit(closing: float, self_weight: float, victim_weight: float) -> float:
 	return SkaterCollisionRules.victim_kick(closing, self_weight, victim_weight, TRANSFER) \
-			+ CheckDriveRules.impact_share(closing) * CheckDriveRules.kick_dv(
+			+ CheckDriveRules.kick_dv(
 					GameRules.DEFAULT_SKATER_THRUST_M_S2, self_weight, victim_weight)
 
 

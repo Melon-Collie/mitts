@@ -2,10 +2,10 @@ class_name GaitPressLayer
 extends GaitLayer
 
 # Both sides of a press (PressRules), off replicated state alone, so a remote
-# reads the same pose: touching another body, the one committed and skating into
-# him drives — feet set split, the back leg pushing, low, the trunk into him —
-# and the one braking digs in — sat deep and wide on the stop's edges, his trunk
-# into the push. The lean is laid along the line to the other body in body space,
+# reads the same pose: touching another body and engaged (the check button
+# held), the one skating into him drives — feet set split, the back leg pushing,
+# low, the trunk into him — and the one braking digs in — sat deep and wide on
+# the stop's edges, his trunk into the push. The lean is laid along the line to the other body in body space,
 # the same decomposition the check's drive and the pin use. The facing is the
 # player's own.
 
@@ -51,7 +51,7 @@ func _read_role() -> int:
 		return Role.NONE
 	var driving: bool = _skater.hit_committed and not _skater.brake_intent \
 			and _skater.move_intent.length_squared() > 0.01
-	var braking: bool = _skater.brake_intent \
+	var braking: bool = _skater.hit_committed and _skater.brake_intent \
 			and Vector2(_skater.velocity.x, _skater.velocity.z).length() <= SkaterMovementRules.SHUFFLE_MAX_SPEED
 	if not driving and not braking:
 		return Role.NONE

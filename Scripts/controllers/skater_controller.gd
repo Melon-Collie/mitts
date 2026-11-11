@@ -968,7 +968,7 @@ var pin_pose_speed: float = 6.0
 var press_drive_stance: float = 0.7
 var press_drive_lean_deg: float = 20.0
 var press_drive_split_deg: float = 18.0
-var press_anchor_stance: float = 0.9
+var press_anchor_stance: float = 2.0
 var press_anchor_lean_deg: float = 22.0
 var press_anchor_width_m: float = 0.06
 var press_pose_speed: float = 6.0
@@ -3802,7 +3802,8 @@ func _apply_press(input: InputState, delta: float, tick_start_velocity: Vector3)
 			BodyCheckRules.grip_mult(p.stagger, bc), p.facing, n, u)
 	var u_new: float = u + delta * PressRules.pair_accel(skater.weight, drive_self, hold_self,
 			p.weight, drive_other, hold_other, u, delta)
-	# The pair goes no faster than its winner skates: a press is a stride.
+	# A press fades out at a walk (PressRules.MAX_SPEED_M_S); a pair already
+	# moving faster is never sped up by it.
 	if absf(u_new) > absf(u):
 		u_new = clampf(u_new, -maxf(p.cfg.max_speed, absf(u)), maxf(cfg.max_speed, absf(u)))
 	skater.velocity += n3 * (u_new - skater.velocity.dot(n3))

@@ -1,7 +1,9 @@
 # Net-front battles — the press, and retiring the cross-check
 
-Status: **all three phases built** (the press, the bots' press and dig-in, the
-press's poses and scrape, the cross-check retired), playtest pending. Amends the physicality
+Status: **all four phases built** (the press, the bots' press and dig-in, the
+press's poses and scrape, the cross-check retired, and Phase 4's rework of who
+pushes and who holds, which supersedes Phase 1's controls and table), playtest
+pending. Amends the physicality
 paragraph of `docs/gameplay-design.md` and Phase B of
 `docs/physicality-plan.md` (the cross-check). The stick half of the battle is
 `docs/defensive-play-plan.md`'s tie; the crease itself (jams, stuffs, wraps)
@@ -310,6 +312,96 @@ and its replay alike, counting him touching within the travel its timing
 allows (`PressRules.touching`, `LocalController.PRESS_READ_TIMING_S`). A
 carried man reaches 6 m/s, where a client a tick off with the bare slack lost
 him on most ticks (`test_press_reads_one_instant.gd`).
+
+## Phase 4 — in the battle or out of it (built)
+
+Supersedes Phase 1's controls, its table and its open-question decisions 1–4.
+
+Why: measured on the live rig the press was all or nothing. A man who did
+nothing was carried 7.5 m in two seconds at close to skating pace; a man
+holding Space + Shift could not be moved at all; a man who leaned back into
+the push, the natural answer, was carried 5.7 m; and Shift alone did nothing
+from behind. Nothing rewarded getting to the spot first.
+
+### Decided with the user
+
+- **Ctrl is the battle.** Both players hold it. Only an engaged body pushes
+  with his whole stride or holds his ground; a body not holding it is moved.
+- **Ctrl + skating into him pushes; Ctrl + Space holds.** Space without Ctrl is
+  the ordinary brake and holds little.
+- **Shift is nothing here.** Getting low is not an answer to being pushed.
+- **Position matters more.**
+- **A fresh Ctrl press on a man you are touching is a shove**, with a stagger.
+- **Engaging costs the stick**, as the commit always has: a screener holding
+  his spot cannot tip or receive until he lets go of Ctrl.
+
+### Rules (`PressRules`)
+
+- **The drive:** an engaged body's whole stride, an unengaged one's passive
+  share (0.3), nothing braking. It is scaled by how squarely he faces the man
+  (`SIDE_ON_SHARE`, 0.4 side-on or with his back to him, up to 1 chest-on), so
+  the man who is square behind the other has the push; and it fades to nothing
+  as the pair reaches a walking pace (`MAX_SPEED_M_S`, 1.5 m/s).
+- **The hold:** an engaged body braking has set his edges (`SET_ANCHOR`), from
+  any side. Set, they hold an equal man's drive; once the pair is sliding, or
+  while he is staggered, they have broken loose and hold `LOOSE_SHARE` (0.6) of
+  that, which an equal drive overcomes. So the man set first holds, a man
+  caught sliding is moved until he pushes back to stall it, and nothing has to
+  be remembered between ticks: it is static against sliding friction, read off
+  the pair's own speed. An unengaged brake holds `PASSIVE_BRAKE_SHARE`.
+- **The shove** is the timed check thrown into a man already leaned on
+  (`CheckDriveRules.kick_dv`, `docs/hit-outcomes-plan.md` Phase 5): it kicks
+  him back and staggers him, which breaks his set, on the drive's cooldown.
+- The posture the stance names is read as unengaged; across-the-blades grip is
+  gone from the press.
+
+### What it does (live rig, 201 lb each unless noted, `test_net_front_press.gd`)
+
+| the man | pushed chest-on from behind, 1 s | 2 s |
+|---|---|---|
+| not engaged, does nothing | 1.00 m | 2.36 m, at 1.4 m/s |
+| not engaged, braking | 0.77 | 1.81 |
+| not engaged, in the stance | 1.00 | 2.36 |
+| not engaged, pushed side-on | 0.57 | 1.61 |
+| engaged, pushing back with his back to him | 0.57 | 1.35 |
+| engaged, pushing back chest to chest | 0.00 | 0.00 |
+| engaged and set | 0.00 | 0.00 |
+| engaged and set, shoved first | 0.51 | 0.96, staggered 0.55 s |
+| 170 lb engaged and set, 235 lb pushing | 0.04 | 0.09 |
+| 235 lb engaged and set, 170 lb pushing | 0.00 | 0.00 |
+
+### Bots
+
+- **A screener digs in with Ctrl and the brake**, when an engaged opponent is
+  on him, and not while his stick is up for a tip, which Ctrl would take off
+  the ice (`SkaterAgentPress._dig_in`).
+- **A coverer prices the walking pace and the shove**
+  (`AIPressRead.displacement_m`, `PressRules.displacement`): with his drive in
+  hand the press opens with a shove, so the man is read staggered and his set
+  broken; with it spent, a set man is not worth pressing.
+
+### Pose
+
+`GaitPressLayer` draws the dig-in only on an engaged body braking, sat deeper
+than the commit's own crouch (`press_anchor_stance`).
+
+### Networking
+
+Nothing new on the wire: engagement is `hit_committed`, the brake and the
+intent are the intent byte, and the pair's speed is both bodies' own. The
+shove is the timed check's kick, already replicated. No protocol change beyond
+v100.
+
+### Tests
+
+- `test_press_rules.gd`: only an engaged body sets his edges, from any side;
+  loose edges hold less; the stance is an unengaged body; chest-on pushes
+  hardest; the drive fades out at a walk.
+- `test_press.gd` (live rig): the properties above, the stall chest to chest,
+  weight at the margin, a shove breaking a set man loose.
+- `tests/slow/controllers/test_press_table.gd`: the table, re-pinned.
+- `test_bot_press.gd`: the dig-in's controls and when it keeps the stick; a
+  set man pressed only with a shove to open it.
 
 ## Docs that change when each phase lands
 

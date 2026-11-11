@@ -25,12 +25,6 @@ const REARM_S: float = 0.7
 const PUSH_S: float = 0.08
 # What a shoulder merely held into a contact delivers of the driven check.
 const HELD_SHARE: float = 0.6
-# The kick needs an impact to drive through: none of it lands under the first
-# closing speed (m/s) and all of it from the second. Two bodies already leaning
-# on each other close at a stride's worth a tick, and what the legs do there is
-# the press (PressRules), which moves the pair and staggers nobody.
-const IMPACT_FROM_M_S: float = 0.5
-const IMPACT_FULL_M_S: float = 1.5
 
 
 # One tick of the phase machine, as (phase, seconds elapsed in it) in a Vector2
@@ -62,16 +56,12 @@ static func is_driving(phase: int) -> bool:
 	return phase == Phase.DRIVE
 
 
-# The Δv (m/s) a driving checker's legs add to the man he hits at full impact:
-# his stride force (`thrust` m/s² on his own mass) over the push, on the other
-# man's mass. His skates take the reaction, so none of it comes back on him.
+# The Δv (m/s) a driving checker's legs add to the man he hits: his stride force
+# (`thrust` m/s² on his own mass) over the push, on the other man's mass. His
+# skates take the reaction, so none of it comes back on him. Thrown into a man
+# he is already leaning on it is the whole of the hit: a shove.
 static func kick_dv(thrust: float, mass: float, other_mass: float) -> float:
 	return thrust * PUSH_S * mass / maxf(other_mass, 0.001)
-
-
-# 0..1 of the kick a contact closing at `closing` (m/s) lands.
-static func impact_share(closing: float) -> float:
-	return clampf((closing - IMPACT_FROM_M_S) / (IMPACT_FULL_M_S - IMPACT_FROM_M_S), 0.0, 1.0)
 
 
 # Wire packing: phase in bits 0-1, time elapsed in bits 2-7 as whole ticks.

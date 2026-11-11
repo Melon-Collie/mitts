@@ -24,16 +24,30 @@ class HostStub:
 		return false
 
 
-# What each body does through the press.
+# What each body does through the press. Either body's check button is down
+# from before the contact, its drive (CheckDriveRules) spent, unless the
+# attacker `shove`s: then his press is fresh, and lands as one.
 class Spec:
 	var man_lbs: int = 201
 	var attacker_lbs: int = 201
 	var side: String = "behind"
 	var man_stance: bool = false
+	var man_commit: bool = false    # engaged: the check button held
 	var man_back: bool = false      # skates back into the attacker
+	var man_faces_him: bool = false # turned to face the attacker, not up ice
 	var man_brake: bool = false
 	var man_stagger_s: float = 0.0  # a stagger he starts the press under
-	var attacker: String = "skate commit"   # "skate", "skate commit", "skate stance"
+	# Words: "skate", "commit" (engaged), "stance", "shove" (a fresh press),
+	# "side-on" (facing across the push instead of into it).
+	var attacker: String = "skate commit"
+
+		# What the man does, as words: "commit", "brake", "back", "stance", "facing".
+	func man_does(words: String) -> void:
+		man_stance = words.contains("stance")
+		man_commit = words.contains("commit")
+		man_brake = words.contains("brake")
+		man_back = words.contains("back")
+		man_faces_him = words.contains("facing")
 
 
 class Result:
@@ -56,6 +70,7 @@ var attacker: SkaterController = null
 # The host runs its controllers in scene order; which comes first must not
 # change the press.
 var attacker_first: bool = false
+var _man_look := Vector3(0.0, 0.0, 1.0)
 var _test: GutTest = null
 
 
@@ -95,7 +110,7 @@ func _tick(mi: InputState, ai: InputState) -> void:
 	ai.delta = DT
 	mi.host_timestamp += DT
 	ai.host_timestamp += DT
-	mi.mouse_world_pos = man.skater.global_position + Vector3(0.0, 0.0, 3.0)
+	mi.mouse_world_pos = man.skater.global_position + _man_look * 3.0
 	if attacker_first:
 		attacker._process_input(ai, DT)
 		man._process_input(mi, DT)
@@ -104,6 +119,12 @@ func _tick(mi: InputState, ai: InputState) -> void:
 		attacker._process_input(ai, DT)
 	man.skater._physics_process(DT)
 	attacker.skater._physics_process(DT)
+
+
+# The button down since before the contact: the drive it threw is long spent.
+func _spend_drive(c: SkaterController) -> void:
+	c._check_drive.adopt(CheckDriveRules.Phase.SPENT, CheckDriveRules.REARM_S)
+	c.skater.check_drive_phase = CheckDriveRules.Phase.SPENT
 
 
 func _face(c: SkaterController, facing: Vector2) -> void:
@@ -117,12 +138,15 @@ func run(spec: Spec, seconds: float) -> Result:
 	var mi := InputState.new()
 	var ai := InputState.new()
 	# Both set, in contact and still, before the press starts: the man faces up
-	# ice, the attacker the push.
+	# ice, the attacker the push, or across it side-on.
 	var home := Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
-	_face(man, Vector2(0.0, 1.0))
-	_face(attacker, Vector2(push.x, push.z))
+	var look: Vector3 = Vector3(push.z, 0.0, -push.x) if spec.attacker.contains("side-on") else push
+	var man_look: Vector3 = -push if spec.man_faces_him else Vector3(0.0, 0.0, 1.0)
+	_man_look = man_look
+	_face(man, Vector2(man_look.x, man_look.z))
+	_face(attacker, Vector2(look.x, look.z))
 	for i: int in SETTLE_TICKS:
-		ai.mouse_world_pos = attacker.skater.global_position + push * 3.0
+		ai.mouse_world_pos = attacker.skater.global_position + look * 3.0
 		_tick(mi, ai)
 		var gap: float = man.skater.collision_radius() + attacker.skater.collision_radius()
 		man.skater.global_position = home
@@ -130,14 +154,18 @@ func run(spec: Spec, seconds: float) -> Result:
 		attacker.skater.global_position = home - push * gap
 		attacker.skater.velocity = Vector3.ZERO
 	man.stagger_timer = spec.man_stagger_s
+	_spend_drive(man)
+	if not spec.attacker.contains("shove"):
+		_spend_drive(attacker)
 	var r := Result.new()
 	var man_from: Vector3 = man.skater.global_position
 	var attacker_from: Vector3 = attacker.skater.global_position
 	for i: int in int(seconds / DT):
 		mi.stance_held = spec.man_stance
+		mi.hit_held = spec.man_commit
 		mi.brake = spec.man_brake
 		mi.move_vector = Vector2(-push.x, -push.z) if spec.man_back else Vector2.ZERO
-		ai.mouse_world_pos = attacker.skater.global_position + push * 3.0
+		ai.mouse_world_pos = attacker.skater.global_position + look * 3.0
 		ai.stance_held = spec.attacker.contains("stance")
 		ai.hit_held = spec.attacker.contains("commit")
 		ai.move_vector = Vector2(push.x, push.z)
