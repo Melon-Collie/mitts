@@ -2575,6 +2575,11 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 func apply_offside_guard(input: InputState, snapshot: WorldSnapshot) -> void:
 	if snapshot == null or snapshot.puck_state == null:
 		return
+	# A hunter follows his man over the line: the whistle is his team's price for
+	# the hunt. An owed tag-up still comes first (_state_off_puck), and a hunter
+	# carrying the puck holds the line like any carrier.
+	if _hunt_peer_id != -1 and snapshot.real_puck_carrier_peer_id != _peer_id:
+		return
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state == null:
 		return

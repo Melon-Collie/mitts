@@ -424,7 +424,11 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   queued through `AICoordinator`), so the others cover his job, and skates to
   a stand `HUNT_STAND_OFF_M` off the man facing him
   (`SkaterAgentStateMachine._hunt`, the man stamped by
-  `AIController.prep_for_decide`), leaving loose pucks and feeds alone. Face
+  `AIController.prep_for_decide`), leaving loose pucks and feeds alone. He
+  follows the man over the attacking blue line ahead of the puck (the offside
+  brake stands down for him, `apply_offside_guard`), so a hunt can cost his
+  team an offside; an owed tag-up still comes first, and a hunter who picks up
+  the puck carries it as any carrier would. Face
   to face (`FightRules.can_challenge`) he calls him out, and after each
   refusal and its cooldown again. A refusal spends `REFUSAL_COST` of the
   grudge that sent him (and of his own), so the third takes it under
