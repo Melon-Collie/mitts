@@ -29,12 +29,13 @@ static var preview_pants_only: bool = false
 # each shoulder's middle, two thirds of the way from the chest to the upper arm,
 # for the same reason as the elbow's; then each shoulder girdle, the third of
 # the arm's swing the collarbone and the shoulder blade take (the scapulohumeral
-# rhythm), which the armhole and the top of the shoulder ride.
+# rhythm), which the armhole and the top of the shoulder ride; last, the neck's
+# foot, which the rigid parts' neck stands in the collar on (SkaterRigidParts).
 enum Deform {
 	UPPER_L, ELBOW_L, FORE_L, UPPER_R, ELBOW_R, FORE_R, KNEE_L, KNEE_R, SHOULDER_L, SHOULDER_R,
-	GIRDLE_L, GIRDLE_R,
+	GIRDLE_L, GIRDLE_R, NECK_FOOT,
 }
-const DEFORM_COUNT: int = 12
+const DEFORM_COUNT: int = 13
 # The share of the arm's swing off the chest the shoulder's middle turns by,
 # and the girdle's: little with the arm down, rising as it lifts — the
 # collarbone and shoulder blade only come up with an arm raised, and the
@@ -360,7 +361,7 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 
 	var torso_zone: int = zone(_UpperSurface.TORSO)
 	for i: int in rings.size() - 1:
-		var v0: float = 0.5 * (y_top - ys[i]) / span
+		var v0: float = maxf(0.5 * (y_top - ys[i]) / span, JerseyDecal.SIDE_TOP_V)
 		var v1: float = 0.5 * (y_top - ys[i + 1]) / span
 		var inside := Vector3(0.0, (ys[i] + ys[i + 1]) * 0.5, 0.0) + lift
 		var n: int = rings[i].size()
@@ -657,8 +658,8 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	# The seam and the ring after it lie across the arm's root: V is how far
 	# each point is down the upper arm, never above the sleeve's top.
 	var uv: Callable = func(p: Vector3) -> Vector2:
-		return Vector2(_sleeve_u(p, upper),
-				SleevePaint.pos_of(maxf((p - arm[0]).dot(upper.basis.y), 0.0)))
+		return Vector2(_sleeve_u(p, upper), maxf(
+				SleevePaint.pos_of((p - arm[0]).dot(upper.basis.y)), SleeveDecal.TOP_V))
 	b.join(seam, between, sleeve_zone, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
 	b.join(between, rings[0], sleeve_zone, uv,
 			(b.centroid(between) + b.centroid(rings[0])) * 0.5)

@@ -20,6 +20,13 @@ const GIRTH_M: float = 0.60
 const SHOULDER_BAND_M: float = 0.15
 # Where the number sits on the sleeve, its centre down from the shoulder.
 const NUMBER_CENTER_M: float = 0.08
+# A round yoke comes this far down the sleeve: over the shoulder's cap and no
+# further, above the number.
+const YOKE_CAP_M: float = 0.03
+# A jersey's yoke is cut off at the armhole's seam (square) or rounds over the
+# shoulder's cap, which is the sleeve's (round).
+const YOKE_SQUARE: String = "square"
+const YOKE_ROUND: String = "round"
 # The two-segment form: each segment 0.33 m, its stripes shrunk about its
 # centre by the sock's length (0.30 m) over the segment's, so an authored width
 # paints the same band height on an arm as on a sock.
@@ -73,6 +80,11 @@ static func _from_segment(s: Dictionary, start_m: float) -> Dictionary:
 	return {"pos": pos_of(centre_m),
 			"width": float(s.width) * _SEGMENT_STRIPE_SCALE * _SEGMENT_M / LENGTH_M,
 			"color": s.color}
+
+
+# The stripe a round yoke lays on the sleeve's top: the shoulder's cap.
+static func yoke_cap(color: Color) -> Dictionary:
+	return _band(0.0, YOKE_CAP_M, color)
 
 
 static func _band(from_m: float, to_m: float, color: Color) -> Dictionary:

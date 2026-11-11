@@ -28,6 +28,10 @@ const BACK_CENTER_X: int = IMG_W / 4
 # side surface; cap disks use the bottom half. All visible torso side content
 # stays inside [0, SIDE_V_MAX_PX).
 const SIDE_V_MAX_PX: int = IMG_H / 2
+# The highest V the side may sample: a texel down from the texture's top. The
+# body's shader repeats its textures, so a sample on V = 0 filters the caps'
+# last row in across the wrap.
+const SIDE_TOP_V: float = 1.0 / IMG_H
 # Top-cap disk region after uv1_offset: the cap UV centers at
 # (0.25 + UV_OFFSET_X, 0.75) with radius 0.25, disjoint from the bottom cap's
 # (which wraps round the seam), so filling this rect paints only the top cap.

@@ -227,7 +227,7 @@ static func _build_torso(b: ConnectedSkinBuilder) -> Array[PackedInt32Array]:
 		rings.append(ids)
 		us.append(u)
 		ys.append(pts[0].y)
-		vs.append(torso_v(h.y - pts[0].y))
+		vs.append(maxf(torso_v(h.y - pts[0].y), JerseyDecal.SIDE_TOP_V))
 	var holes: Array[PackedInt32Array] = []
 	for side: int in 2:
 		holes.append(_cut_armhole(b, rings, side))
@@ -374,7 +374,7 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: int, hole: PackedInt32A
 	SleeveHang.hang(b, columns, under, Bind.CHEST, upper_bind, elbow_bind, elbow_shares)
 	var uv: Callable = func(p: Vector3) -> Vector2:
 		return Vector2(_sleeve_u(p, upper, sx),
-				_upper_v(maxf((p - shoulder).dot(upper.basis.y), 0.0)))
+				maxf(_upper_v((p - shoulder).dot(upper.basis.y)), SleeveDecal.TOP_V))
 	b.join(seam, between, ZONE_SLEEVE, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
 	b.join(between, rings[0], ZONE_SLEEVE, uv, (b.centroid(between) + b.centroid(rings[0])) * 0.5)
 	var n: int = SkaterConnectedMesh.LIMB_SIDES
