@@ -132,3 +132,20 @@ func test_the_shoulders_top_runs_out_level_over_the_arm() -> void:
 		assert_gt(reach, joint.x * side + SkaterConnectedMesh.BIND_SLEEVE_RADIUS_M * 0.9,
 				"side %d: the shoulder's top reaches the arm's outside while still level" % int(side))
 
+
+func test_no_sleeve_samples_its_paint_across_the_wrap() -> void:
+	# The cap over the shoulder lies above the arm's joint, where the sleeve's V
+	# is held at its top. Held on V = 0 itself the repeating texture filters the
+	# cuff's color in, and the cap is drawn half shoulder and half cuff.
+	var arrays: Array = SkaterConnectedMesh.shared_mesh(GearModelRegistry.TUCK_NONE) \
+			.surface_get_arrays(0)
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var zones: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	for side: float in [-1.0, 1.0]:
+		var zone: int = SkaterConnectedMesh.zone(SkaterConnectedMesh.sleeve_surface(side))
+		var top_v: float = INF
+		for v: int in uvs.size():
+			if roundi(zones[v].x) == zone:
+				top_v = minf(top_v, uvs[v].y)
+		assert_gte(top_v, SleeveDecal.TOP_V,
+				"side %d: the sleeve's top a texel inside its paint" % int(side))

@@ -374,7 +374,7 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: int, hole: PackedInt32A
 	SleeveHang.hang(b, columns, under, Bind.CHEST, upper_bind, elbow_bind, elbow_shares)
 	var uv: Callable = func(p: Vector3) -> Vector2:
 		return Vector2(_sleeve_u(p, upper, sx),
-				_upper_v(maxf((p - shoulder).dot(upper.basis.y), 0.0)))
+				maxf(_upper_v((p - shoulder).dot(upper.basis.y)), SleeveDecal.TOP_V))
 	b.join(seam, between, ZONE_SLEEVE, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
 	b.join(between, rings[0], ZONE_SLEEVE, uv, (b.centroid(between) + b.centroid(rings[0])) * 0.5)
 	var n: int = SkaterConnectedMesh.LIMB_SIDES

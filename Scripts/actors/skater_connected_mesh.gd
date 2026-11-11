@@ -657,8 +657,8 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	# The seam and the ring after it lie across the arm's root: V is how far
 	# each point is down the upper arm, never above the sleeve's top.
 	var uv: Callable = func(p: Vector3) -> Vector2:
-		return Vector2(_sleeve_u(p, upper),
-				SleevePaint.pos_of(maxf((p - arm[0]).dot(upper.basis.y), 0.0)))
+		return Vector2(_sleeve_u(p, upper), maxf(
+				SleevePaint.pos_of((p - arm[0]).dot(upper.basis.y)), SleeveDecal.TOP_V))
 	b.join(seam, between, sleeve_zone, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
 	b.join(between, rings[0], sleeve_zone, uv,
 			(b.centroid(between) + b.centroid(rings[0])) * 0.5)
