@@ -377,11 +377,11 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
 
 ## The fight camera
 
-Through the stoppage, `GameCamera` leaves the puck and circles the fight:
-`GameManager.fight_focus` (the player's own fight, or the nearest one), 5.5 m
-out and 3.2 m up, looking at the pair's chests, orbiting at 12°/s. It eases in
-from the live framing over 0.8 s and back out when play restarts. The orbit is
-slow on purpose: a fighter's cursor is unprojected through this camera onto the
-ice, where it places his fist, so the orbit drifts a still mouse's fist target
-round the pair, by ~0.2 m/s at a metre out. Spectator cameras
-(`CameraDirector`) are unchanged.
+Through the stoppage, `GameCamera` keeps its own top-down framing, locked,
+with its centre pinned on the fight (`GameManager.fight_focus`: the player's
+own fight, or the nearest) instead of on the player, and the puck out of the
+fit, so it sits at its closest zoom. Its usual smoothing carries it there and
+back. An orbiting close-up was tried and dropped: the cursor is unprojected
+through this camera onto the ice, and skating and the fist both read it, so a
+moving view moved the controls. Spectator cameras (`CameraDirector`) are
+unchanged.

@@ -189,25 +189,6 @@ func hold_period_break_wide(duration: float) -> void:
 	_smoothed_attack_dir = 0.0
 	_smoothed_direction_factor = 1.0
 
-# ── Fight cam ─────────────────────────────────────────────────────────────────
-# Through a fight's stoppage the camera leaves the puck and comes down to circle
-# the fighters (GameManager.fight_focus: his own fight, or the nearest), close in
-# and low, slowly enough that a fighter's cursor — unprojected through this
-# camera onto the ice, where it places his fist — barely drifts under a still
-# mouse. Eased in from wherever the live framing was and back out to it.
-const _FIGHT_DISTANCE_M: float = 5.5
-const _FIGHT_HEIGHT_M: float = 3.2
-# What it looks at: the pair's chests.
-const _FIGHT_LOOK_HEIGHT_M: float = 1.0
-const _FIGHT_ORBIT_DEG_S: float = 12.0
-const _FIGHT_EASE_S: float = 0.8
-# How fast its centre follows the pair as they move, 1/s.
-const _FIGHT_FOLLOW_SPEED: float = 4.0
-var _fight_blend: float = 0.0
-var _fight_yaw: float = 0.0
-var _fight_center: Vector3 = Vector3.ZERO
-
-
 func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_getter: Callable,
 		carrier_getter: Callable) -> void:
 	_goal_0 = goal_0
@@ -414,6 +395,15 @@ func _process(delta: float) -> void:
 
 	var player_pos: Vector3 = skater.global_position + skater.visual_offset
 	player_pos.y = 0.0
+	# Through a fight's stoppage the puck is dead: the same top-down framing,
+	# locked, pins its centre on the fight instead (GameManager.fight_focus: his
+	# own, or the nearest), and the smoothing below carries it there and back.
+	var fight_center: Vector3 = GameManager.fight_focus(skater.global_position) \
+			if GameManager.is_in_fight() else Vector3.INF
+	if fight_center != Vector3.INF:
+		locked = true
+		has_puck = false
+		player_pos = fight_center
 	var puck_pos: Vector3 = player_pos
 	if has_puck:
 		puck_pos = puck.global_position
@@ -677,8 +667,6 @@ func _process(delta: float) -> void:
 		var eased_wide: float = _wide_blend * _wide_blend * (3.0 - 2.0 * _wide_blend)
 		global_transform = global_transform.interpolate_with(_wide_hold_transform, eased_wide)
 
-	_apply_fight_cam(delta)
-
 	# ── Step 7: Pre-game intro sweep ──────────────────────────────────────────
 	# Crane down from a high wide shot onto the live gameplay framing computed
 	# above. The blend target is re-sampled every frame, so at full weight the
@@ -695,26 +683,3 @@ func _process(delta: float) -> void:
 		var eased: float = w * w * (3.0 - 2.0 * w)
 		global_transform = _intro_start.interpolate_with(global_transform, eased)
 
-
-# The fight cam (see its constants), laid over the live framing by its blend.
-func _apply_fight_cam(delta: float) -> void:
-	var focus: Vector3 = GameManager.fight_focus(skater.global_position) \
-			if GameManager.is_in_fight() else Vector3.INF
-	var on: bool = focus != Vector3.INF
-	if on and _fight_blend <= 0.0:
-		# Coming in, it starts round the pair from the side the camera is on.
-		_fight_center = focus
-		var from := Vector2(global_position.x - focus.x, global_position.z - focus.z)
-		_fight_yaw = atan2(from.x, from.y) if from.length_squared() > 0.01 else 0.0
-	_fight_blend = clampf(_fight_blend + (1.0 if on else -1.0) * delta / _FIGHT_EASE_S, 0.0, 1.0)
-	if _fight_blend <= 0.0:
-		return
-	if on:
-		_fight_center = _fight_center.lerp(focus, _smooth_t(_FIGHT_FOLLOW_SPEED, delta))
-	_fight_yaw = wrapf(_fight_yaw + deg_to_rad(_FIGHT_ORBIT_DEG_S) * delta, -PI, PI)
-	var eye: Vector3 = _fight_center + Vector3(sin(_fight_yaw), 0.0, cos(_fight_yaw)) \
-			* _FIGHT_DISTANCE_M + Vector3.UP * _FIGHT_HEIGHT_M
-	var look: Vector3 = _fight_center + Vector3.UP * _FIGHT_LOOK_HEIGHT_M
-	var orbit := Transform3D(Basis.looking_at(look - eye, Vector3.UP), eye)
-	var w: float = _fight_blend * _fight_blend * (3.0 - 2.0 * _fight_blend)
-	global_transform = global_transform.interpolate_with(orbit, w)
