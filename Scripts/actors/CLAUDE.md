@@ -48,9 +48,20 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   bones and tail columns are what cost per frame (the cloth is linear in its
   columns: ~20 µs a skater natively at 20). The pants and legs are
   `SkaterConnectedPants`.
+- **A quad is one facet.** The body is lit flat, and a quad is lit by ONE
+  normal across both its triangles (`ConnectedSkinBuilder.quad`, read by
+  `body_zones.gdshaderinc`), so its split never shows however the weights pull
+  it out of plane. Lit a triangle at a time, every quad that is not planar
+  (the armhole, the yoke, the tail over the pants, any band across a bent
+  joint) shows its diagonal, and the skin reads as triangles there and as
+  facets on the limbs. A bent quad is split along the diagonal that stands
+  proud, so the two sleeves are each other's mirror
+  (`test_skin_quads_are_facets.gd`). The helmet's shell takes the same
+  (`ConnectedSkinBuilder.facet_pairs`); the other rigid parts are lit a
+  triangle at a time.
 - **It is authored in a bind pose**, the body skeleton with HIPS/WAIST/SPINE at
-  identity, the legs straight and the arms out, forward and 35° under level
-  (`bind_arm`). Each bind's inverse rest is its bone's global pose there
+  identity, the legs straight and the arms hung out and forward, about 35° off
+  straight down (`bind_arm`). Each bind's inverse rest is its bone's global pose there
   (`bind_rests`), so it rides the rigs' bones untouched; the torso's rings are
   built round `SkaterMeshBuilder`'s rest stations (`torso_ring`), and its tail
   hangs from the belt on `SkaterHemFlaps`' column bones. Its pants stand their
@@ -67,18 +78,42 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   elbow's middle and the forearm share the ELBOW bone's hinge.
 - **The armhole is a jersey's seam**, near upright from the shoulders' flat
   top down to under the arm, so the torso carries the shoulder's top out level
-  from the neck and the sleeve leaves it at the side; the seam joins the
-  upper arm's first ring directly: one tube narrowing from the seam down the
-  arm. Any ring between them reads as a separate shoulder part, a kink where
-  the sleeve meets it.
+  from the neck and the sleeve leaves it at the side. One ring lies between
+  the seam and the upper arm's first ring. Under the arm it is on the line
+  between them and only spreads the turn over two bands. Over the arm it is
+  the shoulder's cap: stood out level from the seam's top to the arm's outside
+  and riding the girdle, so the top stays square over an arm that hangs, as
+  over a pad, rather than sloping from the seam straight down the arm
+  (`test_connected_body.gd`). The cap is laid off the seam, in the chest's
+  terms. Laid round the arm instead (a ring square to it at the joint) it
+  leans forward with the arm and is narrower fore and aft than the seam, and
+  the band between them folds in when the arm swings forward.
 - **The shoulder splits the arm's turn off the chest into swing and twist.** The
-  girdle (the armhole and the top of the shoulder) takes a share of the swing
+  girdle (the armhole's top and the shoulder's cap) takes a share of the swing
   that rises as the arm lifts, as the collarbone and shoulder blade do (the
-  scapulohumeral rhythm), the shoulder's middle (half of the upper arm's
-  first ring) two thirds, the upper arm all of it and half
-  the twist, the elbow the rest. Blending the chest straight into the arm
-  collapses the pad into a fin past ~90°; putting the whole twist on one ring
-  pinches the sleeve shut.
+  scapulohumeral rhythm), the shoulder's middle two thirds, the upper arm all
+  of it and half the twist, the elbow the rest. Blending the chest straight
+  into the arm collapses the pad into a fin past ~90°; putting the whole twist
+  on one ring pinches the sleeve shut.
+- **The sleeve is cloth hung between the armhole and the elbow, not a tube on
+  the arm** (`SleeveHang`, which hangs the keeper's sleeves too). Round from
+  over the arm to under it, each column of it is laid toward the straight line
+  from the seam to the elbow and hung from the chest: wholly at the seam, less
+  by the way down to the elbow. A raised arm then draws the underside out
+  straight from the flank, and the armhole's bottom stays on the chest
+  (`test_raised_sleeve_hangs_straight.gd`, and `test_keeper_jersey.gd` for
+  his). Three things that came out of getting there:
+  - Riding the shoulder's bones, the armhole's bottom and the sleeve's first
+    rings swing up with the arm as a ball and the arm steps out of it, since
+    all of the turn left over falls between the last ring on the shoulder and
+    the first on the arm.
+  - The underside is laid straight because the tube's own underside is buried
+    in the chest at the bind: anything hung from the chest starts out folded
+    there, and unfolds inside out.
+  - The armhole's top turns with the girdle and its bottom does not, so the
+    loop shears. That hand-off is spread the whole way round it; taken between
+    two neighbouring columns it twists the faces between them inside out. The
+    chest under the armhole rides the chest alone for the same reason.
 - **Each sleeve is painted whole** (`SleeveDecal`): the kit's `sleeve`
   (`SleevePaint`, one base and stripes from the shoulder to the cuff, each
   straight round the arm or peaked, with an optional fill below it,

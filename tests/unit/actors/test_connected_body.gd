@@ -5,6 +5,9 @@ extends GutTest
 # edge shared by exactly two faces — and every vertex's weights well formed, in
 # every tuck it is built for.
 
+# How far under the seam's top the shoulder's top still counts as level.
+const _LEVEL_M: float = 0.03
+
 
 func _edges_used_other_than_twice(mesh: ArrayMesh) -> int:
 	var verts: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
@@ -104,3 +107,28 @@ func test_the_armhole_starts_at_the_shoulders_top() -> void:
 			"the armhole's top on the shoulders' top row")
 	assert_between(SkaterConnectedMesh._BIND_SHOULDER.y, loop_top - 0.1, loop_top,
 			"the bind arm's joint just under it")
+
+
+func test_the_shoulders_top_runs_out_level_over_the_arm() -> void:
+	# Square shoulders: the sleeve leaves the seam's top level, out to the arm's
+	# outside at the joint, before it turns down the arm. Without the cap the
+	# sleeve slopes straight from the seam to the arm and is well under the top
+	# by the time it is that far out.
+	var arrays: Array = SkaterConnectedMesh.shared_mesh(GearModelRegistry.TUCK_NONE) \
+			.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var zones: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	for side: float in [-1.0, 1.0]:
+		var zone: int = SkaterConnectedMesh.zone(SkaterConnectedMesh.sleeve_surface(side))
+		var top: float = -INF
+		for v: int in verts.size():
+			if int(round(zones[v].x)) == zone:
+				top = maxf(top, verts[v].y)
+		var reach: float = 0.0
+		for v: int in verts.size():
+			if int(round(zones[v].x)) == zone and verts[v].y > top - _LEVEL_M:
+				reach = maxf(reach, verts[v].x * side)
+		var joint: Vector3 = SkaterConnectedMesh.bind_arm(side)[0]
+		assert_gt(reach, joint.x * side + SkaterConnectedMesh.BIND_SLEEVE_RADIUS_M * 0.9,
+				"side %d: the shoulder's top reaches the arm's outside while still level" % int(side))
+

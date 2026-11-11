@@ -57,21 +57,21 @@ const TORSO_SIDES: int = 8 * TORSO_PER_EDGE
 # (a quarter of the way round from the back's middle is the +X side's), their
 # loop laid on an ellipse (centre, half sizes across and along the seam)
 # tipped _ARMHOLE_TILT toward the collar, so it faces out and up round the
-# floater the sleeve leaves from.
+# floater the sleeve leaves from. Across, it is no wider than the chest's
+# side: past its corners the body's faces beside the seam lie folded under it
+# and turn inside out as soon as the arm lifts.
 const _ARMHOLE_TOP: int = 2
 const _ARMHOLE_COLUMN: Array[int] = [24, 8]
 const _ARMHOLE_HALF_WIDTH: int = 2
-const _ARMHOLE_CENTRE := Vector3(0.25, 0.105, -0.01)
-const _ARMHOLE_RADII := Vector2(0.11, 0.085)
+const _ARMHOLE_CENTRE := Vector3(0.25, 0.105, -0.005)
+const _ARMHOLE_RADII := Vector2(0.075, 0.085)
 const _ARMHOLE_TILT: float = 0.25
-# How far the seam rides the shoulder's middle, and the chest's columns round it
-# in the ring above and below the armhole (the shrug), column by column.
+# How far the seam rides the shoulder's middle where it is over the arm (under
+# it the sleeve hangs from the chest, SleeveHang), and the chest's columns in
+# the ring above the armhole (the shrug), column by column. The chest under the
+# armhole stays the chest's, where the sleeve hangs from.
 const _SEAM_SHOULDER: float = 0.5
 const _TRAP_SHOULDER: Array[float] = [0.05, 0.1, 0.15, 0.1, 0.05]
-const _FLANK_SHOULDER: Array[float] = [0.05, 0.1, 0.15, 0.1, 0.05]
-# The sleeve's first ring on the arm rather than the shoulder's middle: over
-# the top of the arm, and under it, where it hangs back as armpit cloth does.
-const _FIRST_RING_ARM_SHARE := Vector2(0.55, 0.15)
 
 # The sleeve, out from the seam: rings along the arm, each (s down its segment
 # from the shoulder or the elbow, radius, its share on the elbow's middle), the
@@ -294,11 +294,9 @@ static func _cut_armhole(b: ConnectedSkinBuilder, rings: Array[PackedInt32Array]
 		b.move(hole[i], centre + along * sin(angle) * _ARMHOLE_RADII.y
 				+ Vector3.BACK * cos(angle) * _ARMHOLE_RADII.x)
 		b.reweight(hole[i], [Bind.CHEST, shoulder], [1.0 - _SEAM_SHOULDER, _SEAM_SHOULDER])
-	for edge: Array in [[a - 1, _TRAP_SHOULDER], [a + 3, _FLANK_SHOULDER]]:
-		var ring: PackedInt32Array = rings[edge[0]]
-		var shares: Array[float] = edge[1]
-		for c: int in cols.size():
-			b.reweight(ring[cols[c]], [Bind.CHEST, shoulder], [1.0 - shares[c], shares[c]])
+	for c: int in cols.size():
+		b.reweight(rings[a - 1][cols[c]], [Bind.CHEST, shoulder],
+				[1.0 - _TRAP_SHOULDER[c], _TRAP_SHOULDER[c]])
 	return hole
 
 
@@ -342,18 +340,12 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: int, hole: PackedInt32A
 	var vs := PackedFloat32Array()
 	for r: Vector3 in _UPPER_RINGS:
 		var frame: Transform3D = SkaterConnectedMesh.round_elbow(frames, r.z * 0.5)
-		if rings.is_empty():
-			frame = upper
-			var first: PackedInt32Array = SkaterConnectedMesh.limb_ring(b, upper, r.x, r.y, 0.0,
-					shoulder_bind, upper_bind, _FIRST_RING_ARM_SHARE.x)
-			SkaterConnectedMesh.hang_underside(b, first, shoulder, [shoulder_bind, upper_bind],
-					_FIRST_RING_ARM_SHARE)
-			rings.append(first)
-		else:
-			rings.append(SkaterConnectedMesh.limb_ring(b, frame, r.x - KeeperAnatomy.UPPER_ARM_M,
-					r.y, _ELBOW_PAD_M * r.z, upper_bind, elbow_bind, r.z))
-		axes.append(frame)
+		rings.append(SkaterConnectedMesh.limb_ring(b, frame, r.x - KeeperAnatomy.UPPER_ARM_M,
+				r.y, _ELBOW_PAD_M * r.z, upper_bind, elbow_bind, r.z))
+		axes.append(frame if rings.size() > 1 else upper)
 		vs.append(_upper_v(r.x))
+	var under: PackedFloat32Array = SleeveHang.under_shares(b, rings[0], upper.basis.y)
+	SleeveHang.ride_shoulder(b, rings[0], under, shoulder_bind, upper_bind)
 	rings.append(SkaterConnectedMesh.limb_ring(b, frames[1], 0.0, _ELBOW_RADIUS_M, _ELBOW_PAD_M,
 			elbow_bind, elbow_bind, 1.0))
 	axes.append(frames[1])
@@ -367,12 +359,19 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: int, hole: PackedInt32A
 
 	# Between the seam and the arm's first ring, a ring halfway along the line
 	# joining them, wholly on the shoulder's middle, so the turn between the
-	# chest and the arm bends over two bands, not one.
+	# chest and the arm bends over two bands, not one. Then the sleeve is hung
+	# from the chest between the seam and the elbow, as the skater's is.
 	var seam: PackedInt32Array = b.aligned(hole, rings[0])
 	var between := PackedInt32Array()
 	for m: int in SkaterConnectedMesh.LIMB_SIDES:
 		between.append(b.vertex(b.position(seam[m]).lerp(b.position(rings[0][m]), 0.5),
 				[shoulder_bind], [1.0]))
+	var columns: Array[PackedInt32Array] = [seam, between]
+	columns.append_array(rings.slice(0, _UPPER_RINGS.size() + 1))
+	var elbow_shares := PackedFloat32Array([0.0, 0.0])
+	for r: Vector3 in _UPPER_RINGS:
+		elbow_shares.append(r.z)
+	SleeveHang.hang(b, columns, under, Bind.CHEST, upper_bind, elbow_bind, elbow_shares)
 	var uv: Callable = func(p: Vector3) -> Vector2:
 		return Vector2(_sleeve_u(p, upper, sx),
 				_upper_v(maxf((p - shoulder).dot(upper.basis.y), 0.0)))

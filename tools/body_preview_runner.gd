@@ -4,7 +4,6 @@ extends "res://tools/pose_capture_runner.gd"
 # scripted poses; what it changes is the loop: each pose is built and run, then
 # shot from four sides of the skater.
 
-const PREVIEW_TILE: int = 448
 const PREVIEW_FOV: float = 30.0
 const PREVIEW_DIR: String = "res://.preview/body"
 # Skater-local camera offsets (he faces −Z): front three-quarter, side, back
@@ -173,14 +172,14 @@ func _place_camera() -> void:
 
 
 func _save_pose_sheet() -> void:
-	var sheet := Image.create_empty(ANGLES.size() * PREVIEW_TILE, PREVIEW_TILE, false,
-			Image.FORMAT_RGBA8)
+	# The window's size (tools/body_preview.gd, --tile).
+	var tile: Vector2i = _tiles[0].get_size()
+	var sheet := Image.create_empty(ANGLES.size() * tile.x, tile.y, false, Image.FORMAT_RGBA8)
 	sheet.fill(BACKGROUND)
 	for i: int in _tiles.size():
 		var src: Image = _tiles[i]
 		src.convert(Image.FORMAT_RGBA8)
-		sheet.blit_rect(src, Rect2i(0, 0, PREVIEW_TILE, PREVIEW_TILE),
-				Vector2i(i * PREVIEW_TILE, 0))
+		sheet.blit_rect(src, Rect2i(Vector2i.ZERO, tile), Vector2i(i * tile.x, 0))
 	var path: String = "%s/%s%s.png" % [PREVIEW_DIR,
 			_sheet_prefix(),
 			String(_poses[_pose_index]["name"])]
@@ -209,7 +208,6 @@ func _audit_folds() -> void:
 	var mesh: ArrayMesh = SkaterConnectedMesh.shared_mesh(_skater.gear_style.jersey_tuck)
 	var a: Array = mesh.surface_get_arrays(0)
 	var verts: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-	var normals: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
 	var bones: PackedInt32Array = a[Mesh.ARRAY_BONES]
 	var weights: PackedFloat32Array = a[Mesh.ARRAY_WEIGHTS]
 	var zones: PackedVector2Array = a[Mesh.ARRAY_TEX_UV2]
@@ -237,7 +235,9 @@ func _audit_folds() -> void:
 		var n: Vector3 = (p[2] - p[0]).cross(p[1] - p[0])
 		if n.length_squared() < 1e-12:
 			continue
-		var expected: Vector3 = (turn * normals[t]).normalized()
+		# Its own bind facing: the normal it carries may be its quad's.
+		var bind: Vector3 = (verts[t + 2] - verts[t]).cross(verts[t + 1] - verts[t])
+		var expected: Vector3 = (turn * bind).normalized()
 		if n.normalized().dot(expected) < 0.0:
 			var zone: int = int(round(zones[t].x))
 			flipped[zone] = int(flipped.get(zone, 0)) + 1

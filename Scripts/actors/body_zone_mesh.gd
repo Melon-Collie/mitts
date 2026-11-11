@@ -5,13 +5,15 @@ extends RefCounted
 # that would otherwise each be a draw call in every pass. Every surface added
 # becomes a zone: its index rides in UV2.x. Vertices are copied as they are;
 # a surface without UVs or colours gets zeros and white, which no zone that lacks
-# them reads.
+# them reads, and one without a ConnectedSkinBuilder's facets is marked as having
+# none, so each of its triangles is lit as its own face.
 
 var _verts := PackedVector3Array()
 var _normals := PackedVector3Array()
 var _uvs := PackedVector2Array()
 var _uv2s := PackedVector2Array()
 var _colors := PackedColorArray()
+var _facets := PackedFloat32Array()
 var _bones := PackedInt32Array()
 var _weights := PackedFloat32Array()
 var _indices := PackedInt32Array()
@@ -47,6 +49,12 @@ func add(arrays: Array, zone: int, bone: int = -1,
 	else:
 		for i: int in n:
 			_colors.append(Color.WHITE)
+	var facets: Variant = arrays[Mesh.ARRAY_CUSTOM0]
+	if facets is PackedFloat32Array \
+			and (facets as PackedFloat32Array).size() == n * ConnectedSkinBuilder.FACET_CHANNELS:
+		_facets.append_array(facets as PackedFloat32Array)
+	else:
+		_facets.resize(_facets.size() + n * ConnectedSkinBuilder.FACET_CHANNELS)
 	if bone >= 0:
 		_skinned = true
 		for i: int in n:
@@ -83,12 +91,14 @@ func commit() -> ArrayMesh:
 	arrays[Mesh.ARRAY_TEX_UV] = _uvs
 	arrays[Mesh.ARRAY_TEX_UV2] = _uv2s
 	arrays[Mesh.ARRAY_COLOR] = _colors
+	arrays[Mesh.ARRAY_CUSTOM0] = _facets
 	if _skinned:
 		arrays[Mesh.ARRAY_BONES] = _bones
 		arrays[Mesh.ARRAY_WEIGHTS] = _weights
 	arrays[Mesh.ARRAY_INDEX] = _indices
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {},
+			ConnectedSkinBuilder.FACET_FORMAT)
 	return mesh
 
 
