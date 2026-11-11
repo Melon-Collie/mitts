@@ -477,3 +477,11 @@ here whenever you bump, in the same format.
 #      before confirming a snapshot within the box tolerance. A v97 peer would
 #      read the digest as bits past the blob's end, so mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged.
+# v99: fighting, phase 1. The input record grows 24 -> 25 bytes (a second flag
+#      byte, fight_pressed in bit 0); the lobby settings and game-config RPCs
+#      carry the Fighting toggle; new reliable RPCs notify_fight_challenge,
+#      notify_fight_called and notify_fight_challenge_lapsed shift the RPC
+#      index set; GamePhase gains FIGHT (ordinal 7) on the world-state phase
+#      byte. Replay FORMAT_VERSION unchanged: the recorders store snapshots,
+#      not inputs, and FIGHT is appended so every older file's phases still
+#      read the same.

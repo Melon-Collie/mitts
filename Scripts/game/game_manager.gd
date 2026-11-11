@@ -130,6 +130,13 @@ signal icing_called()
 signal goalie_freeze_called()
 signal puck_frozen_called()
 signal offside_called()
+# Fights (FightTracker), emitted on every peer with the players' peer ids: a
+# challenge made and lapsed, and a fight called (the whistle, or a second pair
+# inside the stoppage). Hosts emit from the tracker's signals, clients from the
+# RPC handlers.
+signal fight_challenged(challenger_peer_id: int, target_peer_id: int)
+signal fight_challenge_lapsed(challenger_peer_id: int)
+signal fight_called(a_peer_id: int, b_peer_id: int)
 # Emitted on every peer when an NHL icing race opens (icing_team_id) or ends
 # (-1, waved_off saying how). Hosts emit from _announce_icing_race; clients
 # from the RPC handler.
@@ -298,6 +305,7 @@ var _xg_query := AIShotOdds.Query.new()
 var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
 var _board_pins: BoardPinTracker = null
+var _fights: FightTracker = null
 var _stick_tie_draw := StickTieDraw.new()
 var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
@@ -549,6 +557,9 @@ func _wire_network_signals() -> void:
 	NetworkManager.goalie_freeze_called_received.connect(_on_goalie_freeze_called_received)
 	NetworkManager.puck_frozen_called_received.connect(puck_frozen_called.emit)
 	NetworkManager.offside_called_received.connect(_on_offside_called_received)
+	NetworkManager.fight_challenge_received.connect(_on_fight_challenge_received)
+	NetworkManager.fight_challenge_lapsed_received.connect(fight_challenge_lapsed.emit)
+	NetworkManager.fight_called_received.connect(_on_fight_called_received)
 	NetworkManager.faceoff_positions_received.connect(_on_faceoff_positions_received)
 	NetworkManager.game_reset_received.connect(on_game_reset)
 	NetworkManager.stats_received.connect(_on_stats_received)
@@ -715,6 +726,7 @@ func _physics_process(delta: float) -> void:
 	_hit_tracker.tick(delta)
 	_board_pins.tick(not _state_machine.is_movement_locked())
 	_stick_ties.tick(not _state_machine.is_movement_locked())
+	_fights.tick(delta, _fights_allowed(), _state_machine.current_phase)
 	_possession_tracker.tick(delta)
 	# Release before _pickup_claim.tick so a claim coming due this frame can still
 	# arm the contest window on the frame it lands.
@@ -921,6 +933,58 @@ func _check_frozen_puck(delta: float) -> void:
 func _strip_pinned_carrier(victim: Skater, pinner: Skater) -> void:
 	if puck != null and puck.carrier == victim:
 		puck.apply_pin_strip(pinner)
+
+
+# Host: whether this match fights at all (FightRules.allowed).
+func _fights_allowed() -> bool:
+	var practice: bool = NetworkManager.is_free_play_mode or NetworkManager.is_drill_mode()
+	return FightRules.allowed(_state_machine.rule_set, _state_machine.fighting_enabled, practice)
+
+
+func _on_fight_challenge_made(challenger: Skater, target: Skater) -> void:
+	var c: int = _registry.resolve_peer_id(challenger)
+	var t: int = _registry.resolve_peer_id(target)
+	_announce_fight_challenge(c, t)
+	NetworkManager.notify_fight_challenge_to_all(c, t)
+
+
+# Every peer: the challenger is seen to call his man out, by both teams — a
+# challenge is no secret — and the HUD prompts the man called out.
+func _announce_fight_challenge(challenger_peer_id: int, target_peer_id: int) -> void:
+	var rec: PlayerRecord = _registry.get_record(challenger_peer_id) if _registry != null else null
+	if rec != null and rec.skater != null:
+		rec.skater.show_ping_bubble(tr(&"BUBBLE_FIGHT_CHALLENGE"))
+	fight_challenged.emit(challenger_peer_id, target_peer_id)
+
+
+func _on_fight_challenge_lapsed(challenger: Skater) -> void:
+	var c: int = _registry.resolve_peer_id(challenger)
+	fight_challenge_lapsed.emit(c)
+	NetworkManager.notify_fight_challenge_lapsed_to_all(c)
+
+
+# Host: both men agreed. The first pair whistles the play dead into the fight's
+# stoppage, its faceoff at the dot nearest the puck; a pair inside the stoppage
+# just joins it.
+func _on_fight_started(a: Skater, b: Skater) -> void:
+	if _state_machine.current_phase != GamePhase.Phase.FIGHT:
+		var at: Vector3 = puck.global_position if puck != null else Vector3.ZERO
+		if not _state_machine.begin_fight(GameRules.nearest_faceoff_dot(Vector2(at.x, at.z))):
+			_fights.clear()
+			return
+		_on_stoppage_flush_stat_trackers(GamePhase.Phase.FIGHT)
+		_phase_coord.handle_phase_entered()
+	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
+	var pa: int = _registry.resolve_peer_id(a)
+	var pb: int = _registry.resolve_peer_id(b)
+	fight_called.emit(pa, pb)
+	NetworkManager.notify_fight_called_to_all(pa, pb)
+
+
+# Host: the last fight is over; play restarts with a faceoff.
+func _on_fights_over() -> void:
+	if _state_machine.end_fight():
+		_phase_coord.handle_phase_entered()
 
 
 # Host: any transition out of live play (whistle prep, goal, period horn,
@@ -1225,6 +1289,7 @@ func on_player_connected(peer_id: int) -> void:
 		"away_color_slot": NetworkManager.pending_away_color_slot,
 		"rule_set": _state_machine.rule_set,
 		"team_size": _state_machine.team_size,
+		"fighting": _state_machine.fighting_enabled,
 	}
 	# Reconnect branch: a peer whose Steam ID matches a live reservation reclaims
 	# its held team/slot/stats instead of going through fresh auto-balance.
@@ -1479,7 +1544,8 @@ func _spawn_world() -> void:
 		var cfg: Dictionary = NetworkManager.pending_game_config
 		_state_machine.apply_config(cfg.num_periods, cfg.period_duration, cfg.ot_enabled, cfg.ot_duration,
 				cfg.get("rule_set", GameRules.DEFAULT_RULE_SET),
-				cfg.get("team_size", GameRules.DEFAULT_TEAM_SIZE))
+				cfg.get("team_size", GameRules.DEFAULT_TEAM_SIZE),
+				cfg.get("fighting", GameRules.FIGHTING_ENABLED))
 		var cfg_id: String = cfg.get("game_id", "")
 		if cfg_id.is_empty() or ReplayFileRecorder.is_valid_game_id(cfg_id):
 			_game_id = cfg_id
@@ -1713,6 +1779,15 @@ func _wire_subsystems() -> void:
 		_board_pins.clear()
 	_board_pins = BoardPinTracker.new()
 	_board_pins.setup(_registry, NetworkManager.local_time, _strip_pinned_carrier)
+	if _fights != null:
+		_fights.clear()
+	_fights = FightTracker.new()
+	_fights.setup(_registry, NetworkManager.local_time,
+			func() -> Skater: return puck.carrier if puck != null else null)
+	_fights.challenge_made.connect(_on_fight_challenge_made)
+	_fights.challenge_lapsed.connect(_on_fight_challenge_lapsed)
+	_fights.fight_started.connect(_on_fight_started)
+	_fights.fights_over.connect(_on_fights_over)
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
 
@@ -4000,6 +4075,15 @@ func _on_goalie_freeze_called_received() -> void:
 	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
 
 
+func _on_fight_challenge_received(challenger_peer_id: int, target_peer_id: int) -> void:
+	_announce_fight_challenge(challenger_peer_id, target_peer_id)
+
+
+func _on_fight_called_received(a_peer_id: int, b_peer_id: int) -> void:
+	fight_called.emit(a_peer_id, b_peer_id)
+	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
+
+
 func _on_offside_called_received() -> void:
 	offside_called.emit()
 	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
@@ -4716,6 +4800,9 @@ func on_scene_exit() -> void:
 	if _board_pins != null:
 		_board_pins.clear()
 	_board_pins = null
+	if _fights != null:
+		_fights.clear()
+	_fights = null
 	_phase_coord = null
 	_swap_coord = null
 	if _debug_overlay:
@@ -5430,6 +5517,19 @@ func is_movement_locked() -> bool:
 	if _state_machine == null:
 		return false
 	return _state_machine.is_movement_locked()
+
+
+# Whether skaters pass through each other (PhaseRules.suspends_contact): read by
+# each skater's collision resolve through the game_state interface.
+func is_contact_suspended() -> bool:
+	if _state_machine == null:
+		return false
+	return PhaseRules.suspends_contact(_state_machine.current_phase)
+
+
+# The fight's stoppage (GamePhase.Phase.FIGHT). Read by the bots, who stand down.
+func is_in_fight() -> bool:
+	return _state_machine != null and _state_machine.current_phase == GamePhase.Phase.FIGHT
 
 
 # True during the FACEOFF_PREP countdown. Read by SkaterController's gait

@@ -17,6 +17,7 @@ func is_ai_controlled() -> bool:
 # forwards to StateBufferManager. We don't keep a separate AI perception
 # buffer — the lag-comp ring is already capturing the same data.
 
+var _game_state_has_fight: bool = false
 var _agent: SkaterAgent = null
 # Cached most-recent snapshot read this tick. Public for debug inspection.
 var perceived_snapshot: WorldSnapshot = null
@@ -93,6 +94,9 @@ var _debug_last_text: String = ""
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	super.setup(assigned_skater, assigned_puck, game_state)
 	_agent = SkaterAgent.new()
+	# Cached so begin_tick asks without a has_method() every tick (test stubs may
+	# not implement it).
+	_game_state_has_fight = game_state.has_method("is_in_fight")
 
 
 # Push the bot's attribute-scaled capabilities into the agent so the AI plans
@@ -207,6 +211,11 @@ func begin_tick(delta: float) -> bool:
 		# at the net. Skip agent input; friction coasts them to a stop.
 		if has_celebration_window():
 			_celebrate(delta)
+		return false
+	if _game_state_has_fight and _game_state.is_in_fight():
+		# The fight's stoppage: the puck is dead and nobody may touch the fighters,
+		# so bots, fighting or not, coast like the celebration's.
+		_stale_pending = true
 		return false
 	# Deliberately NO is_input_blocked() gate here: that flag means the LOCAL
 	# human's menu is open, and bots run only on the host — gating on it froze

@@ -177,7 +177,7 @@ const AA_LABELS: Array[String] = [
 const REBINDABLE_ACTIONS: PackedStringArray = [
 	"move_up", "move_down", "move_left", "move_right", "stance", "brake",
 	"shoot", "quick_pass", "slapshot", "hit", "block", "elevation_up", "elevation_down",
-	"stick_lift", "stick_check", "smart_ping",
+	"stick_lift", "stick_check", "smart_ping", "drop_gloves",
 ]
 
 # Gamepad button rebinds. Only the DISCRETE buttons are remappable — the sticks
@@ -190,7 +190,7 @@ const REBINDABLE_ACTIONS: PackedStringArray = [
 # a rebind applies without a respawn, like the gamepad toggle itself.
 const PAD_REBINDABLE_ACTIONS: PackedStringArray = [
 	"block", "brake", "hit", "stick_lift", "stick_check", "stance", "quick_pass",
-	"elevation_up", "elevation_down", "smart_ping",
+	"elevation_up", "elevation_down", "smart_ping", "drop_gloves",
 ]
 const PAD_DEFAULT_BUTTONS: Dictionary = {
 	"block": JOY_BUTTON_A,
@@ -208,6 +208,7 @@ const PAD_DEFAULT_BUTTONS: Dictionary = {
 	"elevation_up": JOY_BUTTON_DPAD_UP,
 	"elevation_down": JOY_BUTTON_DPAD_DOWN,
 	"smart_ping": JOY_BUTTON_DPAD_LEFT,
+	"drop_gloves": JOY_BUTTON_DPAD_RIGHT,
 }
 
 var player_name: String = "Player"

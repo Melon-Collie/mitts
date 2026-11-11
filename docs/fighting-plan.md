@@ -1,6 +1,8 @@
 # Fighting — design plan
 
-Status: **draft for approval.** Nothing here is built yet.
+Status: **approved; phase 1 (lifecycle) built**, awaiting a local playtest.
+Phases 2–5 are not started. Where phase 1 differs from the text below, the
+"Phase 1 as built" section says how.
 
 Two skaters can fight. Both must agree to it, the referee blows the play
 dead, and the fight is played with the same hands the stick is: the cursor
@@ -13,9 +15,12 @@ faceoff, and both stay on.
 | Question | Answer |
 |---|---|
 | Consent | **Challenge + accept.** One player presses Fight squared up to an opponent nearby; the opponent has a short window to press it back. An unanswered challenge just lapses, with nothing lost. |
-| When, and the whistle | **Any time.** In live play the whistle goes the instant both have agreed; in dead time (a goal celebration, a faceoff set-up) the fight runs before the next faceoff. A faceoff follows every fight. |
+| When, and the whistle | **Any time.** In live play the whistle goes the instant both have agreed; in dead time (a faceoff set-up) the fight runs before the next faceoff. A faceoff follows every fight. The goal celebration is the one exception (see *Phase 1 as built*). |
 | Afterwards | **No penalty.** Both stay on. |
 | Controls | **The cursor drives the fist, and a button grabs.** The fist uses the stick's IK, reach and speed limits; punch power is the fist's speed at contact. Holding a button grabs with the other hand and keeps the grip. A key swaps the hands. |
+| Bots | **Never challenge, and accept every challenge at once**, for now, so a fight can be tested against them. How a bot decides to fight comes later. |
+| Setting | **A lobby toggle, "Fighting: On / Off".** Fights are **never** possible in free play or in the `OFF` ruleset, even if free play ever goes multiplayer. |
+| Stat | **Deferred.** No "Fights" column yet. |
 
 ## 1. Lifecycle (host-authoritative)
 
@@ -57,8 +62,9 @@ NONE ──Fight press, opponent in range──▶ CHALLENGING ──opponent pr
   let go and are more than `DISENGAGE_M` apart for `DISENGAGE_S`, or at
   `FIGHT_MAX_S` (~20 s, the linesmen stepping in). At a period horn or game
   over it is cleared outright, as `BoardPinTracker.clear()` does.
-- **The ruleset**: `NHL` and `ARCADE` whistle it. `OFF` (free play) has no
-  faceoffs; see the open questions.
+- **The ruleset**: `NHL` and `ARCADE` whistle it. `OFF` has no whistles, so
+  it never fights, and neither does free play, the tutorial or a drill,
+  whatever their rule set (`FightRules.allowed`).
 
 ## 2. Gloves and sticks off
 
@@ -172,12 +178,13 @@ the existing rails:
 
 ## 6. Bots and the HUD
 
-- **Bots**: v1 decision pending (open question 1).
+- **Bots**: accept at once and never challenge (the decisions table); how a
+  bot fights once fists exist is phase 5.
 - **HUD**: "⟨name⟩ wants to fight — V to drop the gloves" over the
   challenger, for the challenged player only. On the challenger's own screen
   a draining ring shows the window. A `FIGHT` toast at the whistle. All
   strings go through `locale/translations.csv`.
-- **Input**: a new rebindable `fight` action, default **V**. On a pad, the
+- **Input**: a new rebindable `drop_gloves` action, default **V**. On a pad, the
   right stick already drives the synthesized cursor, so it drives the fist
   with no new code. The default pad bindings are RT grab, RB swap, and D-pad
   up to challenge or accept.
@@ -187,7 +194,7 @@ the existing rails:
 Each phase ends with the suite green, lint clean and a local playtest by you.
 
 1. **Lifecycle.** `FightRules` (pure, GUT-tested), `FightTracker`, the
-   `fight` action and input bit, `fight_role` on the wire, the `FIGHT` phase
+   `drop_gloves` action and input bit, `fight_role` on the wire, the `FIGHT` phase
    with its whistle and faceoff, the HUD prompt and toast. Fighters only
    square up, with sticks still in hand. This proves consent, whistle and
    restart online before any arm work.
@@ -199,16 +206,33 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
    arm).
 4. **Punch contact.** The contact volumes, rattle, the knockdown through
    balance, sounds, VFX and crowd.
-5. **Bots and polish.** Whatever open question 1 decides, the camera framing,
+5. **Bots and polish.** How a bot fights and when it would challenge, the camera framing,
    the tutorial line.
 
-## Open questions
+## Phase 1 as built
 
-1. **Bots**: should they decline every challenge in v1? Or accept, and fight
-   by a simple evaluator (keep the free hand up, grab the punching arm,
-   throw when the arm is free)? And can a bot ever challenge?
-2. **A setting**: should there be a lobby toggle "Fighting: On / Off"? And in
-   `OFF` free play, where nothing is whistled, should a fight just happen in
-   live play, or not be allowed at all?
-3. **A stat**: should a "Fights" column go into `PlayerStats` and Supabase
-   career totals, or wait?
+- **Rules and tracker**: `FightRules` (`Scripts/domain/rules/`) and
+  `FightTracker` (`Scripts/game/`), tested by `test_fight_rules.gd` and
+  `test_fight_tracker.gd`. A press reaches the tracker as
+  `Skater.fight_press_pending`, set by `SkaterController.note_fight_press` on
+  every input the controller applies, including the locked faceoff paths. A
+  fight can start in `PLAYING`, `FACEOFF` and `FACEOFF_PREP`, and a second
+  pair can start inside `FIGHT`.
+- **Not from the goal celebration.** It ends in the goal's replay, and in
+  overtime in the game itself. A fight would have to hold both off, which is
+  phase 5 work if you want it.
+- **Nothing per skater is on the snapshot yet.** The phase byte and three
+  reliable RPCs carry phase 1: `notify_fight_challenge`,
+  `notify_fight_challenge_lapsed` and `notify_fight_called`. `fight_role` and
+  the rest of §5's state arrive with phase 2, which is the first phase whose
+  pose needs them.
+- **Fighters only skate.** With no fists yet, a fight ends when the pair have
+  been apart for `DISENGAGE_S` or at `FIGHT_MAX_S`. Bots coast through the
+  stoppage, fighters included.
+- **The challenge is shown as a bubble** over the challenger ("Let's go!"),
+  seen by both teams, plus toasts. The man called out is told the key to
+  answer with. The squared-up pose is phase 2.
+- **Bindings**: `drop_gloves` is V on the keyboard and D-pad right on a pad (D-pad
+  up is already the loft step), both rebindable.
+- **The Fighting toggle** is on by default (`GameRules.FIGHTING_ENABLED`) and
+  rides the lobby-settings and game-config RPCs.

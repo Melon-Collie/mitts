@@ -626,8 +626,9 @@ func get_team_id() -> int:
 # _resolve_player_collisions iterates it (skipping self) to resolve skater-vs-
 # skater contact. Empty Callable (tutorial dummy / test) → no resolution.
 var _skater_collision_provider: Callable = Callable()
-# `() -> bool`, true while contact is off: the locked phases, whose bodies are
-# frozen or on a scripted glide that crossing another is not a check.
+# `() -> bool`, true while contact is off (PhaseRules.suspends_contact): the
+# locked phases, whose bodies are frozen or on a scripted glide that crossing
+# another is not a check, and a fight's stoppage.
 var contact_suspended_provider: Callable = Callable()
 # Stable, machine-consistent id (the owning peer_id) set by PlayerRegistry on
 # spawn. Used ONLY to break exact head-on ties in the aggressor gate — it must be
@@ -714,6 +715,10 @@ var stick_check_phase: int = 0
 # catches nothing (an airborne puck that reaches it bobbles off), and pokes,
 # lifts and ties nothing.
 var stick_tied: bool = false
+# The fight button was pressed on an input this skater's controller applied
+# since the host's FightTracker last read it (the tracker clears it). Set on
+# every machine and read only by the host's tracker.
+var fight_press_pending: bool = false
 # The stick-check button as this skater's last input held it, stamped by the
 # controller. Read only by the host's StickTieTracker (either player holding keeps
 # a tie); never replicated.

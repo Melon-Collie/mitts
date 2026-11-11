@@ -1,14 +1,15 @@
 class_name InputState
 
-const BYTES_SIZE: int = 24
+const BYTES_SIZE: int = 25
 # Layout: u32 timestamp@0.1ms(0) f32 delta(4) s16 move.x(8) s16 move.y(10)
 #         s16 mwp.x(12) s8 mwp.y(14) s16 mwp.z(15) s16 msp.x(17) s16 msp.y(19)
-#         u16 flags(21) u8 wrister_power_t(23)
+#         u16 flags(21) u8 wrister_power_t(23) u8 flags2(24)
 #         flags: shoot_pressed[0] shoot_held[1] slap_pressed[2] slap_held[3]
 #         stance_held[4] brake[5] elevation_level[6..7] block_held[8]
 #         stick_lift_held[9] stick_lift_pressed[10] quick_pass_pressed[11]
 #         hit_held[12] commit_wrister_power[13] stick_check_held[14]
-#         stick_check_pressed[15] — every bit spent; the next flag grows the record
+#         stick_check_pressed[15]
+#         flags2: fight_pressed[0]; bits 1..7 free
 
 # Highest legal loft level (ShotMechanics.ELEVATION_HIGH = 3). The 2-bit wire
 # field spans exactly 0..3, so decode's clamp to this is belt-and-braces.
@@ -51,6 +52,9 @@ var hit_held: bool = false
 # stick_lift_pressed does — RemoteController carries edges across a drain.
 var stick_check_held: bool = false
 var stick_check_pressed: bool = false
+# Edge: the drop-gloves button (V) pressed THIS tick — a challenge, or the answer to
+# one (FightTracker). Latched in the gatherer like the other presses.
+var fight_pressed: bool = false
 # Committed wrister power fraction (0..1): the controller converts it to the
 # equivalent cursor speed (ShotMechanics.wrister_speed_for_power_t) so a committed
 # shooter drives the SAME pure-mouse power model deterministically. Set by bots at
@@ -110,6 +114,7 @@ func clear_edges() -> void:
 	stick_lift_pressed = false
 	quick_pass_pressed = false
 	stick_check_pressed = false
+	fight_pressed = false
 
 
 # Carries `dropped`'s presses onto this input, for a frame acked without being
@@ -120,6 +125,7 @@ func fold_edges_from(dropped: InputState) -> void:
 	stick_lift_pressed = stick_lift_pressed or dropped.stick_lift_pressed
 	quick_pass_pressed = quick_pass_pressed or dropped.quick_pass_pressed
 	stick_check_pressed = stick_check_pressed or dropped.stick_check_pressed
+	fight_pressed = fight_pressed or dropped.fight_pressed
 
 
 func to_array() -> Array:
@@ -149,6 +155,7 @@ func to_array() -> Array:
 		bot_wrister_power_t,
 		stick_check_held,
 		stick_check_pressed,
+		fight_pressed,
 	]
 
 func to_bytes() -> PackedByteArray:
@@ -195,6 +202,7 @@ func write_bytes(b: PackedByteArray, offset: int) -> void:
 	# ignores the byte. u8 caps the decode at 1.0 by construction, so a forged
 	# payload can't buy a shot above the ceiling.
 	b.encode_u8(offset + 23, roundi(clampf(bot_wrister_power_t, 0.0, 1.0) * 255.0))
+	b.encode_u8(offset + 24, 0x01 if fight_pressed else 0)
 
 
 static func from_bytes(b: PackedByteArray, offset: int = 0) -> InputState:
@@ -230,6 +238,7 @@ static func from_bytes(b: PackedByteArray, offset: int = 0) -> InputState:
 	s.stick_check_held     = (flags & 0x4000) != 0
 	s.stick_check_pressed  = (flags & 0x8000) != 0
 	s.bot_wrister_power_t = float(b.decode_u8(offset + 23)) / 255.0
+	s.fight_pressed = (b.decode_u8(offset + 24) & 0x01) != 0
 	return s
 
 
@@ -263,4 +272,6 @@ static func from_array(data: Array) -> InputState:
 	if data.size() > 24:
 		state.stick_check_held = data[23]
 		state.stick_check_pressed = data[24]
+	if data.size() > 25:
+		state.fight_pressed = data[25]
 	return state

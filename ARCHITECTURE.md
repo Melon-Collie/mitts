@@ -319,6 +319,7 @@ Player-first guarantee: weighted target is clamped so player never exceeds `play
 | `FACEOFF` | Until pickup/touch or 10s timeout | Puck live at the dot, waiting for a player to engage it |
 | `END_OF_PERIOD` | 20s (`INTERMISSION_DURATION`) | Period clock hit zero; skaters skate off to their benches, then the intermission band comes up — with the period's goals looping behind it when there are any (see *Period break presentation*) |
 | `GAME_OVER` | Indefinite | All periods exhausted; movement locked until host resets |
+| `FIGHT` | Until `FightTracker` says the last fight is over | Two players agreed to fight (`docs/fighting-plan.md`): movement allowed, puck pickup-locked where it lies, clock stopped, body contact off (`PhaseRules.suspends_contact`); ends into `FACEOFF_PREP` at the dot `GameStateMachine.begin_fight` chose |
 
 Period clock (`GameRules.PERIOD_DURATION = 240s`, `NUM_PERIODS = 3`) ticks down only during `PLAYING`. When it expires: if periods remain → `END_OF_PERIOD` → `FACEOFF_PREP` (period increments, clock resets); if last period → `GAME_OVER`. `END_OF_PERIOD` and `GAME_OVER` are dead-puck phases.
 
@@ -338,7 +339,7 @@ This replaced an `Area3D.body_entered` sensor that fired on shape-*edge* overlap
 
 ### Dead-Puck Enforcement
 
-The `GameStateMachine` exposes `is_movement_locked()` — true during `GOAL_SCORED`, `FACEOFF_PREP`, `END_OF_PERIOD`, and `GAME_OVER`. `GameManager` re-exposes this as an instance method and is passed into each controller at `setup()` as the `game_state` dependency. Controllers call `_game_state.is_movement_locked()` every frame:
+The `GameStateMachine` exposes `is_movement_locked()` — true during `FACEOFF_PREP`, `END_OF_PERIOD`, and `GAME_OVER` (`PhaseRules.is_movement_locked`; `GOAL_SCORED` is dead-puck but its replay parks the world itself). `GameManager` re-exposes this as an instance method and is passed into each controller at `setup()` as the `game_state` dependency. Controllers call `_game_state.is_movement_locked()` every frame:
 - `LocalController._physics_process`: zeros velocity, drains `_input_history`, skips input gathering and processing
 - `RemoteController._drive_from_input`: still advances `last_processed_sequence` (keeps reconcile bookkeeping current) but zeros velocity and skips `_process_input`
 - `LocalController.reconcile`: returns early during locked phases — `on_faceoff_positions` (reliable RPC) is the authoritative source of faceoff positions

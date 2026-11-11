@@ -1246,7 +1246,9 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	carry_facing_rules.forehand_yield_rad = deg_to_rad(carry_forehand_yield_deg)
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_check_received.connect(_on_body_check_received)
-	if game_state.has_method("is_movement_locked"):
+	if game_state.has_method("is_contact_suspended"):
+		skater.contact_suspended_provider = game_state.is_contact_suspended
+	elif game_state.has_method("is_movement_locked"):
 		skater.contact_suspended_provider = game_state.is_movement_locked
 	_ik.setup(skater, self, _skating)
 	_shot_pose.setup(skater, _sm, _aiming, _ik, self)
@@ -1755,6 +1757,15 @@ func _adopt_stick_check(state: SkaterNetworkState) -> void:
 	skater.stick_check_phase = _stick_check.phase
 
 
+# Hands the fight button's press to the host's FightTracker. Also called by the
+# locked faceoff paths, which skip _process_input, so two men lined up across
+# the dot can drop the gloves. Live inputs only: a replay re-reads presses the
+# tracker already took.
+func note_fight_press(input: InputState) -> void:
+	if input.fight_pressed and not is_replaying:
+		skater.fight_press_pending = true
+
+
 func _process_input(input: InputState, delta: float) -> void:
 	# Stamp movement intent for the cosmetic layers (gait glide / intent
 	# crossovers / brake-gated hockey stop). Local, bot, and host-side client
@@ -1776,6 +1787,7 @@ func _process_input(input: InputState, delta: float) -> void:
 	_elevation_level = input.elevation_level
 	skater.elevation_level = _elevation_level
 	_current_aim_world = input.mouse_world_pos
+	note_fight_press(input)
 	skater.stick_jarred = BodyCheckRules.is_rocked(stagger_timer, _body_check_config())
 	_settle.read(input, has_puck and _sm.get_state() == State.SKATING_WITH_PUCK)
 

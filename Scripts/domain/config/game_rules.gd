@@ -68,6 +68,8 @@ const INTERMISSION_SETTLE: float   = 2.0
 const INTERMISSION_DURATION: float = 20.0
 const OT_ENABLED: bool             = true
 const OT_DURATION: float           = 4.0 * 60.0   # 240 s per OT period
+# The lobby's Fighting toggle, as a new lobby opens (FightRules.allowed).
+const FIGHTING_ENABLED: bool       = true
 
 # ── Rink Geometry ─────────────────────────────────────────────────────────────
 const GOAL_LINE_Z: float = 26.65  # rink_length / 2 - distance_from_end (30 - 3.35)

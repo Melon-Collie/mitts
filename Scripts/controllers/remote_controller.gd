@@ -332,6 +332,10 @@ func _drive_from_input(delta: float) -> void:
 			# NetworkManager's sim clock).
 			NetworkTelemetry.record_input_lead(
 					NetworkManager.sim_time() - input.host_timestamp)
+		if _game_state.is_movement_locked():
+			# _process_input reads it on a live pop; locked, it is read here, so two
+			# men lined up for a faceoff can drop the gloves.
+			note_fight_press(input)
 		if not _game_state.is_movement_locked():
 			_process_input(input, delta)
 		elif not tick_faceoff_approach(delta):

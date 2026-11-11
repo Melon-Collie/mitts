@@ -162,6 +162,9 @@ func _ready() -> void:
 	GameManager.goalie_freeze_called.connect(_on_goalie_freeze_called)
 	GameManager.puck_frozen_called.connect(_on_puck_frozen_called)
 	GameManager.offside_called.connect(_on_offside_called)
+	GameManager.fight_challenged.connect(_on_fight_challenged)
+	GameManager.fight_challenge_lapsed.connect(_on_fight_challenge_lapsed)
+	GameManager.fight_called.connect(_on_fight_called)
 	GameManager.local_player_hit.connect(_on_local_player_hit)
 	# Arrives just before faceoff_prep_announced on the opening faceoff; the
 	# countdown consumes it to lead with the matchup card.
@@ -592,6 +595,12 @@ func _on_phase_changed(new_phase: int) -> void:
 			# No whistle here — refs whistle to stop play, not to start it.
 			_chyron.stop_faceoff_countdown()
 			_chyron.show_hero(tr(&"PHASE_DROP"))
+		GamePhase.Phase.FIGHT:
+			# The whistle may land in a faceoff's countdown, which then waits for
+			# the faceoff after the fight to announce itself again.
+			_chyron.stop_faceoff_countdown()
+			_scorebug.hide_clock_warning()
+			_chyron.show_hero(tr(&"PHASE_FIGHT"))
 		GamePhase.Phase.END_OF_PERIOD:
 			_chyron.stop_faceoff_countdown()
 			_scorebug.hide_clock_warning()
@@ -656,6 +665,38 @@ func _on_goalie_freeze_called() -> void:
 func _on_puck_frozen_called() -> void:
 	if _toast_stack != null:
 		_toast_stack.push(tr(&"TOAST_PUCK_FROZEN"), MenuStyle.BROADCAST_CREAM)
+
+
+# The man called out is told who and how to answer; the challenger, that it
+# went out. Nobody else is told: the bubble over the challenger says it.
+func _on_fight_challenged(challenger_peer_id: int, target_peer_id: int) -> void:
+	if _toast_stack == null:
+		return
+	var local: int = NetworkManager.local_peer_id()
+	if target_peer_id == local:
+		var key: String = ControllerGlyphs.prompt(PlayerPrefs.action_display("drop_gloves"),
+				ControllerGlyphs.joy_label(PlayerPrefs.pad_button("drop_gloves")))
+		_toast_stack.push(tr(&"TOAST_FIGHT_CHALLENGED") % [_peer_name(challenger_peer_id), key],
+				MenuStyle.BROADCAST_CREAM)
+	elif challenger_peer_id == local:
+		_toast_stack.push(tr(&"TOAST_FIGHT_CHALLENGE_SENT") % _peer_name(target_peer_id),
+				MenuStyle.BROADCAST_CREAM)
+
+
+func _on_fight_challenge_lapsed(challenger_peer_id: int) -> void:
+	if _toast_stack != null and challenger_peer_id == NetworkManager.local_peer_id():
+		_toast_stack.push(tr(&"TOAST_FIGHT_NO_ANSWER"), MenuStyle.BROADCAST_CREAM)
+
+
+func _on_fight_called(a_peer_id: int, b_peer_id: int) -> void:
+	if _toast_stack != null:
+		_toast_stack.push(tr(&"TOAST_FIGHT") % [_peer_name(a_peer_id), _peer_name(b_peer_id)],
+				MenuStyle.BROADCAST_CREAM)
+
+
+func _peer_name(peer_id: int) -> String:
+	var rec: PlayerRecord = GameManager.get_players().get(peer_id, null)
+	return rec.player_name if rec != null else ""
 
 
 func _on_offside_called() -> void:
