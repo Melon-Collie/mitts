@@ -237,3 +237,20 @@ func _stroke_out() -> float:
 
 func _stroke_length() -> float:
 	return STROKE_M * (1.0 + LONG_STROKE_SHARE * _turn)
+
+
+# His state on the wire (KeeperWire); the strokes only as which leg is next.
+func wire(w: KeeperWire) -> void:
+	x = w.s16(x, KeeperWire.MM)
+	z = w.s16(z, KeeperWire.MM)
+	velocity = w.v2_16(velocity, KeeperWire.SPEED)
+	_phase = w.s16(_phase, KeeperWire.FRACTION)
+	_strokes = 1 if w.bit(_strokes % 2 == 1) else 0
+	_way = w.v2_16(_way, KeeperWire.MM)
+	_lateral = w.bit(_lateral)
+	_side = w.s16(_side, KeeperWire.MM)
+	_cut_leg = w.s8(_cut_leg)
+	_drive = w.s16(_drive, KeeperWire.MM)
+	_brake = w.s16(_brake, KeeperWire.MM)
+	_turn = w.s16(_turn, KeeperWire.ANGLE)
+	_stroking = w.bit(_stroking)

@@ -29,12 +29,13 @@ static var preview_pants_only: bool = false
 # each shoulder's middle, two thirds of the way from the chest to the upper arm,
 # for the same reason as the elbow's; then each shoulder girdle, the third of
 # the arm's swing the collarbone and the shoulder blade take (the scapulohumeral
-# rhythm), which the armhole and the top of the shoulder ride.
+# rhythm), which the armhole and the top of the shoulder ride; last, the neck's
+# foot, which the rigid parts' neck stands in the collar on (SkaterRigidParts).
 enum Deform {
 	UPPER_L, ELBOW_L, FORE_L, UPPER_R, ELBOW_R, FORE_R, KNEE_L, KNEE_R, SHOULDER_L, SHOULDER_R,
-	GIRDLE_L, GIRDLE_R,
+	GIRDLE_L, GIRDLE_R, NECK_FOOT,
 }
-const DEFORM_COUNT: int = 12
+const DEFORM_COUNT: int = 13
 # The share of the arm's swing off the chest the shoulder's middle turns by,
 # and the girdle's: little with the arm down, rising as it lifts — the
 # collarbone and shoulder blade only come up with an arm raised, and the
@@ -54,18 +55,19 @@ enum Bind {
 
 # Where the scene authors the parts this skin rides, at rest (Scenes/Skater.tscn:
 # UpperBodyMesh, LegL/R, ThighL/R, ShinL/R, SockL/R), bind space.
-const _TORSO_Y_M: float = 0.195
-const _HIP := Vector3(0.13, -0.13, 0.0)
-const _THIGH_DROP_M: float = 0.13
-const _KNEE_DROP_M: float = 0.31
+const _TORSO_Y_M: float = 0.245
+const _HIP := Vector3(0.13, -0.02, 0.0)
+const _THIGH_DROP_M: float = 0.24
+const _KNEE_DROP_M: float = 0.42
 const _SOCK_DROP_M: float = 0.19
 
 # The arms' bind hang, right side (the left mirrors it): from the shoulder
 # marker's rest place (Skater.shoulder_offset, shoulder_height) the upper arm
-# out, forward and 35° under level, the forearm bent on toward the front. The
-# middle of the range the IK asks for — hanging at the sides, reaching for the
-# stick, up over the head for a slapshot — so none of it is far from the bind.
-const _BIND_SHOULDER := Vector3(0.22, 0.40, 0.0)
+# out and forward, about 35° off straight down, the forearm bent on toward the
+# front. The middle of the range the IK asks for — hanging at the sides,
+# reaching for the stick, up over the head for a slapshot — so none of it is
+# far from the bind.
+const _BIND_SHOULDER := Vector3(0.18, 0.45, 0.0)
 const _BIND_UPPER_DIR := Vector3(0.55, -0.85, -0.3)
 const _BIND_FORE_DIR := Vector3(0.15, -0.45, -0.88)
 # Skater.upper_arm_length / forearm_length and the sleeve's radius at their
@@ -82,7 +84,7 @@ const TAIL_COLUMNS: int = _CHEST_SIDES
 const LIMB_SIDES: int = 12
 
 # The jersey above the belt, torso-local (y, radius, rear sway), every ring the
-# rig's own 1.05 : 0.88 section at its own size: rings of one shape make planar
+# rig's own section (SkaterMeshBuilder.TORSO_XZ_SCALE, TORSO_DEPTH) at its own size: rings of one shape make planar
 # quads between them, and a skin shaded flat by its drawn faces shows every quad
 # that is not as a fold. Broad over the pads, in to the waist. Through the
 # waist the rig's own stations take over (`_RIG_STATIONS`, vertex for vertex the
@@ -118,9 +120,9 @@ const _NECK_SCOOP_HALF_ANGLE: float = deg_to_rad(75.0)
 const _UPPER_CHEST_DROP_M: float = 0.035
 const _UPPER_BACK_DROP_M: float = 0.015
 # The collar: a band standing round the neckline, this far in and up from it,
-# painted the kit's collar on the torso texture's top cap; inside it the neck's
-# skin runs down into the V to the neck's foot (torso-local, under the rig's
-# neck where it flares into the traps).
+# painted the kit's collar on the torso texture's top cap; inside it the
+# collar's colour runs down into the V to the neck's foot (torso-local, under
+# the rig's neck), so only the neck's own column shows skin.
 const _COLLAR_INSET_M: float = 0.008
 const _COLLAR_RISE_M: float = 0.016
 const _NECK_FOOT_Y_M: float = 0.265
@@ -133,33 +135,33 @@ const _ARMHOLE_HALF_WIDTH: int = 2
 # from the shoulders' flat top down to under the arm, near upright, so the
 # torso carries the shoulder's top out level from the neck and the sleeve
 # leaves it at the side. A loop (centre, half sizes across and along the seam)
-# tipped `_ARMHOLE_TILT` from facing straight out toward facing up.
-const _ARMHOLE_CENTRE := Vector3(0.215, 0.365, 0.0)
+# tipped `_ARMHOLE_TILT` from facing straight out toward facing up. Its centre
+# is out at the pads' edge and just under the shoulder joint, so the seam's top
+# meets the shoulders' flat top wherever the joint is.
+const _ARMHOLE_CENTRE := Vector3(0.215, _BIND_SHOULDER.y - 0.035, 0.0)
 const _ARMHOLE_RADII := Vector2(0.125, 0.100)   # across (z), along the seam
 const _ARMHOLE_TILT: float = 0.15
-# How far each armhole vertex rides the shoulder girdle, round the loop from the
-# top's back corner (_cut_armhole's order) — all of it, so the loop turns as
-# one ring and the sleeve leaving it cannot fold back over itself — and the
-# chest's vertices round it: the ring above (the trapezius, which takes the
-# shrug) and the one below, column by column.
-const _ARMHOLE_GIRDLE: Array[float] = [
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+# How far the chest's vertices over each armhole ride the shoulder girdle,
+# column by column: the trapezius, which takes the shrug. The armhole itself
+# rides it wholly until the sleeve is hung from it (SleeveHang), and the chest
+# under it stays the chest's, where the sleeve hangs from.
 const _TRAP_GIRDLE: Array[float] = [0.05, 0.1, 0.15, 0.1, 0.05]
-const _FLANK_GIRDLE: Array[float] = [0.1, 0.25, 0.35, 0.25, 0.1]
 
 # The sleeve, out from the armhole's seam: rings along the arm, each (s along
 # its segment, radius, its share on the elbow's middle). The first is joined to
 # the seam. The elbow's turn is spread over ~25 cm of sleeve, eased in and out,
 # each ring built turned by its share (_round_elbow), so the bend is a curve
 # rather than a crease — a cloth sleeve over a pad, not a hinge.
-# The share of the upper arm's first ring, the one joined to the seam, on the
-# arm rather than the shoulder's middle: over the top of the arm, and under it,
-# where it hangs back as armpit cloth does, so an arm raised overhead does not
-# swing it up past the seam and fold the band between them over.
-const _FIRST_RING_ARM_SHARE := Vector2(0.55, 0.15)
-# The share of the seam's lowest point (the armpit) on the shoulder's middle
-# rather than the girdle, easing to none at the seam's middle height.
-const _ARMPIT_SHOULDER: float = 0.5
+# The shoulder's cap: over the top of the arm the ring between the seam and the
+# first ring stands out from the seam's top (this far out, this far down), so
+# the shoulder's top runs on level to the arm's outside and turns down there,
+# as over a shoulder pad, rather than sloping straight from the seam to the
+# arm. `_CAP_OVER` is where up the seam's height (0 its middle, 1 its top) the
+# cap eases in, and `_CAP_GIRDLE` the cap's share on the girdle, which keeps it
+# up where an arm hangs.
+const _CAP_REACH_M := Vector2(0.060, 0.012)
+const _CAP_OVER := Vector2(0.2, 0.8)
+const _CAP_GIRDLE: float = 0.8
 const _UPPER_RINGS: Array[Vector3] = [
 	Vector3(0.12, 0.100, 0.0), Vector3(0.17, 0.091, 0.0), Vector3(0.205, 0.086, 0.08),
 	Vector3(0.24, 0.084, 0.25), Vector3(0.275, 0.084, 0.5), Vector3(0.305, 0.085, 0.8),
@@ -335,8 +337,8 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 	for station: Vector3 in profile:
 		var pts: PackedVector3Array = SkaterJerseyHem.tuck_ring(
 				_lathe_ring(station, _CHEST_SIDES, phase), station.x, station.y, station.z, tuck,
-				phase, SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y,
-				SkaterConnectedPants.TUCK_BLOUSE_M)
+				phase, SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y
+				* SkaterMeshBuilder.torso_depth_at(station.x), SkaterConnectedPants.TUCK_BLOUSE_M)
 		var ids := PackedInt32Array()
 		for j: int in _CHEST_SIDES:
 			var theta: float = TAU * float(j) / float(_CHEST_SIDES) + phase
@@ -359,7 +361,7 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 
 	var torso_zone: int = zone(_UpperSurface.TORSO)
 	for i: int in rings.size() - 1:
-		var v0: float = 0.5 * (y_top - ys[i]) / span
+		var v0: float = maxf(0.5 * (y_top - ys[i]) / span, JerseyDecal.SIDE_TOP_V)
 		var v1: float = 0.5 * (y_top - ys[i + 1]) / span
 		var inside := Vector3(0.0, (ys[i] + ys[i + 1]) * 0.5, 0.0) + lift
 		var n: int = rings[i].size()
@@ -383,7 +385,7 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 		mean_tuck += SkaterJerseyHem.tuck_share(tuck, TAU * float(k) / 36.0) / 36.0
 	var hips: float = lerpf((1.0 + SkaterJerseyHem.CARRY_BACK) * 0.5, 1.0, mean_tuck)
 	var hem: int = b.vertex(hem_centre, [Bind.TORSO, Bind.TAIL], [1.0 - hips, hips])
-	fan(b, rings[rings.size() - 1], hem, Vector2(0.75, 0.75), torso_zone,
+	b.fan(rings[rings.size() - 1], hem, Vector2(0.75, 0.75), torso_zone,
 			Vector3(0.0, hem_y + 0.1, 0.0) + lift)
 	return holes
 
@@ -401,8 +403,8 @@ static func _top_shape(ring: int, theta: float) -> float:
 	return 0.0
 
 
-# The collar band standing round the neckline, then the neck's skin closing the
-# opening inside it.
+# The collar band standing round the neckline, then the collar closing the
+# opening inside it down to the neck.
 static func _build_collar(b: ConnectedSkinBuilder, neckline: PackedInt32Array, lift: Vector3) -> void:
 	var n: int = neckline.size()
 	var axis := Vector3(0.0, 0.0, _CHEST[0].z) + lift
@@ -424,7 +426,7 @@ static func _build_collar(b: ConnectedSkinBuilder, neckline: PackedInt32Array, l
 		b.quad(neckline[k], neckline[k1], lip[k1], lip[k], cap + t0 * 0.24, cap + t1 * 0.24,
 				cap + t1 * 0.20, cap + t0 * 0.20, torso_zone, below)
 	var foot: int = b.vertex(axis + Vector3(0.0, _NECK_FOOT_Y_M, 0.0), [Bind.TORSO], [1.0])
-	fan(b, lip, foot, cap, zone(_UpperSurface.HELMET_SKIN), below)
+	b.fan(lip, foot, cap, torso_zone, below)
 
 
 # The jersey from the collar to the hem as (y, radius, sway), torso-local, its
@@ -482,7 +484,8 @@ static func _rig_station(station: int) -> Vector3:
 static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
 	var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE
 	var s: Vector3 = _rig_station(station)
-	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
+	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE \
+			* Vector2(1.0, SkaterMeshBuilder.torso_depth_at(s.x))
 	var ring: PackedVector3Array = SkaterJerseyHem.tuck_ring(_lathe_ring(s, TAIL_COLUMNS, phase),
 			s.x, s.y, s.z, tuck, phase, xz.x, xz.y, SkaterConnectedPants.TUCK_BLOUSE_M)
 	# Beside a tucked corner the jersey is pulled toward the waistband, taut
@@ -508,9 +511,11 @@ static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
 
 
 # A ring of the rig's section (SkaterMeshBuilder._ring's layout: `sides` + 1
-# points from `phase`, the last repeating the first) at (y, radius, sway).
+# points from `phase`, the last repeating the first) at (y, radius, sway), as
+# deep as the torso is there.
 static func _lathe_ring(station: Vector3, sides: int, phase: float) -> PackedVector3Array:
-	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
+	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE \
+			* Vector2(1.0, SkaterMeshBuilder.torso_depth_at(station.x))
 	var pts := PackedVector3Array()
 	for j: int in sides + 1:
 		var theta: float = TAU * float(j) / float(sides) + phase
@@ -520,7 +525,8 @@ static func _lathe_ring(station: Vector3, sides: int, phase: float) -> PackedVec
 
 
 # The armhole round `column`: the chest vertices round its facets, laid on the
-# tipped loop, and the shoulder round it put partly on the girdle. Returns the loop, from the top's back corner round.
+# tipped loop, and the trapezius over it put partly on the girdle. Returns the
+# loop, from the top's back corner round.
 static func _cut_armhole(b: ConnectedSkinBuilder, rings: Array[PackedInt32Array], column: int,
 		side: float) -> PackedInt32Array:
 	var a: int = _ARMHOLE_TOP
@@ -553,13 +559,10 @@ static func _cut_armhole(b: ConnectedSkinBuilder, rings: Array[PackedInt32Array]
 		var angle: float = offset + step * float(i)
 		b.move(hole[i], centre + along * sin(angle) * _ARMHOLE_RADII.y
 				+ Vector3.BACK * cos(angle) * _ARMHOLE_RADII.x)
-		b.reweight(hole[i], [Bind.TORSO, girdle],
-				[1.0 - _ARMHOLE_GIRDLE[i], _ARMHOLE_GIRDLE[i]])
-	for edge: Array in [[a - 1, _TRAP_GIRDLE], [a + 3, _FLANK_GIRDLE]]:
-		var ring: PackedInt32Array = rings[edge[0]]
-		var shares: Array[float] = edge[1]
-		for c: int in cols.size():
-			b.reweight(ring[cols[c]], [Bind.TORSO, girdle], [1.0 - shares[c], shares[c]])
+		b.reweight(hole[i], [girdle], [1.0])
+	for c: int in cols.size():
+		b.reweight(rings[a - 1][cols[c]], [Bind.TORSO, girdle],
+				[1.0 - _TRAP_GIRDLE[c], _TRAP_GIRDLE[c]])
 	return hole
 
 
@@ -581,26 +584,16 @@ static func _torso_vertex(b: ConnectedSkinBuilder, p: Vector3, rest_y: float, th
 		var bend_y: float = SkaterMeshBuilder.torso_ring(SkaterMeshBuilder.TORSO_BEND_STATION)[0].y
 		var lower: int = 1 if rest_y <= bend_y + 1e-5 else 0
 		return b.vertex(p, [Bind.COLUMN_BASE + column * 2 + lower], [1.0])
-	var t: float = SkaterJerseyHem.tuck_share(tuck, theta) * clampf(
+	var share: float = SkaterJerseyHem.tuck_share(tuck, theta)
+	var t: float = share * clampf(
 			(SkaterJerseyHem.BUNCH_Y_M - rest_y) / (SkaterJerseyHem.BUNCH_Y_M - SkaterJerseyHem.PAD_Y_M),
 			0.0, 1.0)
-	var hips: float = SkaterJerseyHem.hang(rest_y) * lerpf(SkaterJerseyHem.carry(theta), 1.0, t)
+	var hips: float = lerpf(
+			SkaterJerseyHem.hang(rest_y) * lerpf(SkaterJerseyHem.carry(theta), 1.0, t),
+			SkaterJerseyHem.tucked_hang(rest_y), share)
 	if hips <= 0.0:
 		return b.vertex(p, [Bind.TORSO], [1.0])
 	return b.vertex(p, [Bind.TORSO, Bind.TAIL], [1.0 - hips, hips])
-
-
-# A fan from `centre` over a closed ring of vertex ids, cap UVs round `uv_centre`
-# as SkaterMeshBuilder._cap lays them.
-static func fan(b: ConnectedSkinBuilder, ring: PackedInt32Array, centre: int,
-		uv_centre: Vector2, fan_zone: int, inside: Vector3) -> void:
-	var n: int = ring.size()
-	for k: int in n:
-		var t0: float = TAU * float(k) / float(n)
-		var t1: float = TAU * float(k + 1) / float(n)
-		b.tri(centre, ring[k], ring[(k + 1) % n], uv_centre,
-				uv_centre + Vector2(sin(t0), cos(t0)) * 0.24,
-				uv_centre + Vector2(sin(t1), cos(t1)) * 0.24, fan_zone, inside)
 
 
 # One sleeve on `side`, grown from its armhole loop through the elbow to the
@@ -617,61 +610,58 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	var upper: Transform3D = frames[0]
 	var fore: Transform3D = frames[2]
 
-	# The upper arm's first ring is joined straight to the seam, and rides
-	# halfway from the shoulder's middle to the arm so the joint does not pinch.
 	var rings: Array[PackedInt32Array] = []
 	# Each ring's frame (U is laid round its axis) and its place down the
 	# sleeve (V, SleevePaint's fraction of it).
 	var axes: Array[Transform3D] = []
 	var vs := PackedFloat32Array()
 	for r: Vector3 in _UPPER_RINGS:
-		var frame: Transform3D = _round_elbow(frames, r.z * 0.5)
-		if rings.is_empty():
-			var first: PackedInt32Array = _limb_ring(b, upper, r.x, r.y, 0.0, shoulder_bind,
-					upper_bind, _FIRST_RING_ARM_SHARE.x)
-			_hang_underside(b, first, arm[0], [shoulder_bind, upper_bind],
-					_FIRST_RING_ARM_SHARE)
-			rings.append(first)
-		else:
-			rings.append(_limb_ring(b, frame, r.x - BIND_ARM_SEGMENT_M, r.y, _ELBOW_PAD_M * r.z,
-					upper_bind, elbow_bind, r.z))
+		var frame: Transform3D = round_elbow(frames, r.z * 0.5)
+		rings.append(limb_ring(b, frame, r.x - BIND_ARM_SEGMENT_M, r.y, _ELBOW_PAD_M * r.z,
+				upper_bind, elbow_bind, r.z))
 		axes.append(frame)
 		vs.append(SleevePaint.pos_of(r.x))
-	rings.append(_limb_ring(b, frames[1], 0.0, _ELBOW_RADIUS_M, _ELBOW_PAD_M,
+	var under: PackedFloat32Array = SleeveHang.under_shares(b, rings[0], upper.basis.y)
+	SleeveHang.ride_shoulder(b, rings[0], under, shoulder_bind, upper_bind)
+	rings.append(limb_ring(b, frames[1], 0.0, _ELBOW_RADIUS_M, _ELBOW_PAD_M,
 			elbow_bind, elbow_bind, 1.0))
 	axes.append(frames[1])
 	vs.append(SleevePaint.pos_of(BIND_ARM_SEGMENT_M))
 	for r: Vector3 in _FORE_RINGS:
-		var frame: Transform3D = _round_elbow(frames, 1.0 - r.z * 0.5)
-		rings.append(_limb_ring(b, frame, r.x, r.y, _ELBOW_PAD_M * r.z, fore_bind, elbow_bind, r.z))
+		var frame: Transform3D = round_elbow(frames, 1.0 - r.z * 0.5)
+		rings.append(limb_ring(b, frame, r.x, r.y, _ELBOW_PAD_M * r.z, fore_bind, elbow_bind, r.z))
 		axes.append(frame)
 		vs.append(SleevePaint.pos_of(BIND_ARM_SEGMENT_M + r.x))
 
-	# Between the seam and the arm's first ring, a ring on the straight line
-	# joining them: no shape of its own at rest, but riding halfway from the
-	# girdle to the shoulder's middle, so the turn between the chest and the arm
+	# Between the seam and the arm's first ring, a ring riding from the girdle
+	# toward the shoulder's middle, so the turn between the chest and the arm
 	# bends over two bands, not one that stretches flat or turns inside out.
-	var seam: PackedInt32Array = _aligned(b, hole, rings[0])
+	# Under the arm it is on the straight line joining them; over it, the cap.
+	var seam: PackedInt32Array = b.aligned(hole, rings[0])
 	var girdle_bind: int = Bind.GIRDLE_L if left else Bind.GIRDLE_R
 	var between := PackedInt32Array()
+	var cap_reach := Vector3(side * _CAP_REACH_M.x, -_CAP_REACH_M.y, 0.0)
 	for m: int in LIMB_SIDES:
-		between.append(b.vertex(b.position(seam[m]).lerp(b.position(rings[0][m]), 0.5),
-				[girdle_bind, shoulder_bind], [0.5, 0.5]))
-	# The seam's armpit edge goes partly with the shoulder, so a raised arm
-	# lifts it rather than folding the band under the arm over itself.
-	for m: int in LIMB_SIDES:
-		var under: float = smoothstep(0.0, -_ARMHOLE_RADII.y,
-				b.position(seam[m]).y - _ARMHOLE_CENTRE.y)
-		if under > 0.0:
-			b.reweight(seam[m], [girdle_bind, shoulder_bind],
-					[1.0 - _ARMPIT_SHOULDER * under, _ARMPIT_SHOULDER * under])
+		var at_seam: Vector3 = b.position(seam[m])
+		var over: float = smoothstep(_CAP_OVER.x, _CAP_OVER.y,
+				(at_seam.y - _ARMHOLE_CENTRE.y) / _ARMHOLE_RADII.y)
+		var girdle: float = lerpf(0.5, _CAP_GIRDLE, over)
+		between.append(b.vertex(
+				at_seam.lerp(b.position(rings[0][m]), 0.5).lerp(at_seam + cap_reach, over),
+				[girdle_bind, shoulder_bind], [girdle, 1.0 - girdle]))
+	var columns: Array[PackedInt32Array] = [seam, between]
+	columns.append_array(rings.slice(0, _UPPER_RINGS.size() + 1))
+	var elbow_shares := PackedFloat32Array([0.0, 0.0])
+	for r: Vector3 in _UPPER_RINGS:
+		elbow_shares.append(r.z)
+	SleeveHang.hang(b, columns, under, Bind.TORSO, upper_bind, elbow_bind, elbow_shares)
 	# The seam and the ring after it lie across the arm's root: V is how far
 	# each point is down the upper arm, never above the sleeve's top.
 	var uv: Callable = func(p: Vector3) -> Vector2:
-		return Vector2(_sleeve_u(p, upper),
-				SleevePaint.pos_of(maxf((p - arm[0]).dot(upper.basis.y), 0.0)))
-	_join(b, seam, between, sleeve_zone, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
-	_join(b, between, rings[0], sleeve_zone, uv,
+		return Vector2(_sleeve_u(p, upper), maxf(
+				SleevePaint.pos_of((p - arm[0]).dot(upper.basis.y)), SleeveDecal.TOP_V))
+	b.join(seam, between, sleeve_zone, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
+	b.join(between, rings[0], sleeve_zone, uv,
 			(b.centroid(between) + b.centroid(rings[0])) * 0.5)
 	for i: int in rings.size() - 1:
 		var inside: Vector3 = (b.centroid(rings[i]) + b.centroid(rings[i + 1])) * 0.5
@@ -694,10 +684,11 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 
 
 # The elbow's frame turned `f` of the way round its bend from the upper arm (0)
-# to the forearm (1). A ring riding that share of the elbow's bones is built
+# to the forearm (1), over sleeve_frames' three. The keeper's sleeves
+# (KeeperJerseyMesh) are laid with this and the two below too. A ring riding that share of the elbow's bones is built
 # turned that far, so the bind's own bend is the same arc the skin sweeps when
 # posed: a curve at rest, not a corner split over one ring.
-static func _round_elbow(frames: Array[Transform3D], f: float) -> Transform3D:
+static func round_elbow(frames: Array[Transform3D], f: float) -> Transform3D:
 	return Transform3D(frames[0].basis.slerp(frames[2].basis, f), frames[1].origin)
 
 
@@ -721,7 +712,7 @@ static func _sleeve_u(p: Vector3, frame: Transform3D) -> float:
 # A ring round a limb segment `s` down `frame`'s Y, `radius` across, with
 # `bulge` more at its +Z point falling off round it, riding `own` and
 # `elbow_share` of it on `elbow`.
-static func _limb_ring(b: ConnectedSkinBuilder, frame: Transform3D, s: float, radius: float,
+static func limb_ring(b: ConnectedSkinBuilder, frame: Transform3D, s: float, radius: float,
 		bulge: float, own: int, elbow: int, elbow_share: float) -> PackedInt32Array:
 	var binds: Array = [own]
 	var weights: Array = [1.0]
@@ -736,50 +727,3 @@ static func _limb_ring(b: ConnectedSkinBuilder, frame: Transform3D, s: float, ra
 		var r: float = radius + bulge * maxf(cos(phi), 0.0) ** 2
 		ids.append(b.vertex(frame * Vector3(sin(phi) * r, s, cos(phi) * r), binds, weights))
 	return ids
-
-
-# Re-weights `ring` from `shares.x` on its second bind over the top of it to
-# `shares.y` under it — facing down from `joint` in the bind pose.
-static func _hang_underside(b: ConnectedSkinBuilder, ring: PackedInt32Array, joint: Vector3,
-		binds: Array, shares: Vector2) -> void:
-	for id: int in ring:
-		var under: float = smoothstep(0.1, -0.9, (b.position(id) - joint).normalized().y)
-		var share: float = lerpf(shares.x, shares.y, under)
-		b.reweight(id, binds, [1.0 - share, share])
-
-
-# `a_loop` turned and run to match `b_loop` vertex for vertex: each of
-# `b_loop`'s against the one of `a_loop` that turns with it least.
-static func _aligned(b: ConnectedSkinBuilder, a_loop: PackedInt32Array,
-		b_loop: PackedInt32Array) -> PackedInt32Array:
-	var n: int = a_loop.size()
-	var best_cost: float = INF
-	var best_shift: int = 0
-	var best_dir: int = 1
-	for dir: int in [1, -1]:
-		for shift: int in n:
-			var cost: float = 0.0
-			for m: int in n:
-				cost += b.position(a_loop[posmod(shift + dir * m, n)]) \
-						.distance_squared_to(b.position(b_loop[m]))
-			if cost < best_cost:
-				best_cost = cost
-				best_shift = shift
-				best_dir = dir
-	var out := PackedInt32Array()
-	for m: int in n:
-		out.append(a_loop[posmod(best_shift + best_dir * m, n)])
-	return out
-
-
-# Joins two closed loops already run vertex for vertex with quads.
-static func _join(b: ConnectedSkinBuilder, a_loop: PackedInt32Array, b_loop: PackedInt32Array,
-		join_zone: int, uv: Callable, inside: Vector3) -> void:
-	var n: int = a_loop.size()
-	for m: int in n:
-		var a0: int = a_loop[m]
-		var a1: int = a_loop[(m + 1) % n]
-		var b0: int = b_loop[m]
-		var b1: int = b_loop[(m + 1) % n]
-		b.quad(a0, a1, b1, b0, uv.call(b.position(a0)), uv.call(b.position(a1)),
-				uv.call(b.position(b1)), uv.call(b.position(b0)), join_zone, inside, true)

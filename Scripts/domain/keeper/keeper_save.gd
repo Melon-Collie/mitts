@@ -732,3 +732,32 @@ func _speed(h: int) -> float:
 # blade's length from where it is held.
 func _face_rate(h: int) -> float:
 	return _speed(h) / KeeperAnatomy.BLADE_LENGTH_M
+
+
+# The save under way on the wire (KeeperWire); the trials and the shot's path
+# are rebuilt each time a save is chosen, and the speeds are the tier's.
+func wire(w: KeeperWire) -> void:
+	low = w.s8(low)
+	low_side = w.s16(low_side, KeeperWire.MM)
+	hand = w.s8(hand)
+	hand_target = w.v3_16(hand_target, KeeperWire.MM)
+	face_turn = w.s32(face_turn, KeeperWire.ANGLE)
+	covers = w.bit(covers)
+	ready_s = w.s32(ready_s, KeeperWire.MS)
+	impact_s = w.s32(impact_s, KeeperWire.MS)
+	lows_open = w.bit(lows_open)
+	_hand_out = w.bit(_hand_out)
+	_face = w.s32(_face, KeeperWire.ANGLE)
+	_back_face = w.s32(_back_face, KeeperWire.ANGLE)
+	_hand_at = w.v3_16(_hand_at, KeeperWire.MM)
+	_returning = w.bit(_returning)
+	_back = w.s8(_back)
+	_back_at = w.v3_16(_back_at, KeeperWire.MM)
+	_palm = w.v3_16(_palm, KeeperWire.MM)
+	_fingers = w.v3_16(_fingers, KeeperWire.MM)
+	_watched = w.bit(_watched)
+	_lean = w.s16(_lean, KeeperWire.FRACTION)
+	_lean_to = w.s16(_lean_to, KeeperWire.FRACTION)
+	_lean_toward = w.v3_16(_lean_toward, KeeperWire.MM)
+	_poke_to = w.v3_16(_poke_to, KeeperWire.MM)
+	_poke_yaw = w.s32(_poke_yaw, KeeperWire.ANGLE)

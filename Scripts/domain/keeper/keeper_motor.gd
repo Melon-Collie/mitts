@@ -52,6 +52,9 @@ const LEAD_MAX_RAD: float = deg_to_rad(30.0)
 # A goal on his feet that moves this fast he skates to as it moves, however
 # far (KeeperGlide); a still one when the route plans it.
 const MOVING_M_S: float = 0.05
+# Moves asked for and not yet started, as many as the wire carries: a match
+# gives him goals and asks none.
+const WIRE_ASKS: int = 2
 
 var x: float = 0.0
 var z: float = 0.0
@@ -659,3 +662,59 @@ func _pose_mover(p: KeeperPose) -> void:
 # `v` on the ice in his own frame, turned `turn` into the stances' frame.
 static func _turned(v: Vector2, turn: float) -> Vector2:
 	return Vector2(v.x * cos(turn) + v.y * sin(turn), -v.x * sin(turn) + v.y * cos(turn))
+
+
+# His state on the wire (KeeperWire), his movers' with it; the route's movers
+# are these, written once.
+func wire(w: KeeperWire) -> void:
+	x = w.s16(x, KeeperWire.MM)
+	z = w.s16(z, KeeperWire.MM)
+	yaw = w.s32(yaw, KeeperWire.ANGLE)
+	lead = w.s32(lead, KeeperWire.ANGLE)
+	rest = w.s8(rest)
+	refused = w.s8(refused)
+	footwork.wire(w)
+	drop.wire(w)
+	slide.wire(w)
+	post.wire(w)
+	route.wire(w)
+	save_move.wire(w)
+	glide.wire(w)
+	low_ready.wire(w)
+	fall = w.s16(fall, KeeperWire.FRACTION)
+	_wire_queue(w)
+	_goal = w.bit(_goal)
+	_mover = w.s8(_mover)
+	_face = w.s32(_face, KeeperWire.ANGLE)
+	_turn_rate = w.s32(_turn_rate, KeeperWire.ANGLE)
+	_anchor = w.v2_16(_anchor, KeeperWire.MM)
+	_anchor_yaw = w.s32(_anchor_yaw, KeeperWire.ANGLE)
+	_velocity = w.v2_32(_velocity, KeeperWire.SPEED)
+	_spot_velocity = w.v2_32(_spot_velocity, KeeperWire.SPEED)
+	_spot_since = w.s32(_spot_since, KeeperWire.MS)
+	_skate = w.bit(_skate)
+	_landing = w.bit(_landing)
+	_frozen = w.bit(_frozen)
+	_frozen_at = w.v2_16(_frozen_at, KeeperWire.MM)
+	_frozen_yaw = w.s32(_frozen_yaw, KeeperWire.ANGLE)
+
+
+# The queue in WIRE_ASKS slots, the unused ones zero; one past them is dropped.
+func _wire_queue(w: KeeperWire) -> void:
+	var n: int = w.s8(mini(_queue.size(), WIRE_ASKS))
+	if _queue.size() != n:
+		_queue.resize(n)
+	for i: int in WIRE_ASKS:
+		var ask: _Ask = _queue[i] if i < n else null
+		if ask == null and i < n:
+			ask = _Ask.new(Do.NONE, Vector2.ZERO, 0.0, INF)
+			_queue[i] = ask
+		var what: int = w.s8(ask.what if ask != null else Do.NONE)
+		var spot: Vector2 = w.v2_16(ask.spot if ask != null else Vector2.ZERO, KeeperWire.MM)
+		var side: float = w.s32(ask.side if ask != null else 0.0, KeeperWire.ANGLE)
+		var top: float = w.s16(ask.top if ask != null else INF, KeeperWire.SPEED)
+		if ask != null:
+			ask.what = what
+			ask.spot = spot
+			ask.side = side
+			ask.top = top

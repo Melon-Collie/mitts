@@ -229,6 +229,7 @@ FINAL,FINAL,FINAL
 FACEOFF,FACEOFF,SAQUE
 FACEOFF_IN_N,FACEOFF IN %d,SAQUE EN %d
 PHASE_DROP,DROP!,¡YA!
+PHASE_FIGHT,FIGHT!,¡PELEA!
 PHASE_END_OF_PERIOD,END OF PERIOD,FIN DEL PERIODO
 RESULT_HOME_WINS,HOME WINS,GANA EL LOCAL
 RESULT_AWAY_WINS,AWAY WINS,GANA EL VISITANTE
@@ -267,6 +268,12 @@ TAPE_CORSI,Shot attempts (Corsi),Intentos de tiro (Corsi)
 TAPE_FENWICK,Fenwick,Fenwick
 TAPE_XG,Expected goals,Goles esperados
 TOAST_GOALIE_FREEZE,GOALIE FREEZES IT,EL PORTERO LO CONGELA
+TOAST_FIGHT_CHALLENGED,"%s WANTS TO FIGHT · %s TO DROP THE GLOVES","%s QUIERE PELEAR · %s PARA SOLTAR LOS GUANTES"
+TOAST_FIGHT_CHALLENGE_SENT,YOU CALLED OUT %s,DESAFIASTE A %s
+TOAST_FIGHT_NO_ANSWER,NO ANSWER,SIN RESPUESTA
+TOAST_FIGHT,"FIGHT · %s AND %s","PELEA · %s Y %s"
+TOAST_FIGHT_CONTROLS,"AIM TO PUNCH · HOLD %s TO GRAB · %s TO SWAP HANDS","APUNTA PARA GOLPEAR · MANTÉN %s PARA AGARRAR · %s PARA CAMBIAR DE MANO"
+BUBBLE_FIGHT_CHALLENGE,Let's go!,¡Vamos!
 SPECTATING,SPECTATING,ESPECTADOR
 REPORT_BUG,Report Bug,Reportar error
 SPECTATOR_HINT_MOUSE,C: camera  ·  ↑↓: player  ·  RMB drag: look,C: cámara  ·  ↑↓: jugador  ·  Arrastrar clic dcho.: mirar
@@ -338,6 +345,8 @@ COL_BLOCKS,BLK,BLQ
 COL_TOTAL,T,T
 CONTROLS_STICK_LIFT,Stick Lift / Tie,Levantar / trabar palo
 CONTROLS_HIT,Hit / Brace,Cargar / afirmarse
+CONTROLS_FIGHT,Fight,Pelear
+LOBBY_FIGHTING,Fighting,Peleas
 CONTROLS_DEFLECT,Deflect,Desviar
 TOAST_PUCK_FROZEN,PUCK FROZEN ON THE BOARDS,DISCO CONGELADO EN LA BANDA
 OPTIONS_PLAYER_SHADOWS,Player Shadows,Sombras de jugadores
@@ -351,6 +360,12 @@ OPTIONS_TEAM_COLORS_FILE,Team colors,Colores de equipo
 OPTIONS_TEAM_COLORS_FILE_NOTE,Makes a copy of the team colors you can edit in any text editor. Changes apply after a restart and only on your computer — other players see their own colors.,Crea una copia de los colores de equipo que puedes editar con cualquier editor de texto. Los cambios se aplican al reiniciar y solo en tu equipo — los demás jugadores ven sus propios colores.
 OPTIONS_BOTS_FILE,Bot roster,Plantilla de bots
 OPTIONS_BOTS_FILE_NOTE,"Edit AI bot names, numbers and attributes. As host, your roster is used for the whole lobby. Builds over the point-buy budget reset to medium. Changes apply after a restart.","Edita los nombres, números y atributos de los bots. Como anfitrión, tu plantilla se usa en toda la sala. Las configuraciones que superan el presupuesto de puntos vuelven a nivel medio. Los cambios se aplican al reiniciar."
+OPTIONS_CARRIER_RING,Carrier Ring,Anillo del portador
+OPTIONS_CARRIER_RING_NOTE,Thickens the ring of whoever has the puck.,Engrosa el anillo de quien lleva el disco.
+OPTIONS_POSSESSION_PULSE,Possession Pulse,Pulso de posesión
+OPTIONS_POSSESSION_PULSE_NOTE,"Sends a pulse across the ice when the puck changes hands, bigger on a turnover.","Lanza un pulso por el hielo cuando el disco cambia de manos, más grande en una pérdida."
+OPTIONS_LOOSE_PUCK_HALO,Loose Puck Halo,Halo del disco suelto
+OPTIONS_LOOSE_PUCK_HALO_NOTE,Circles the puck while nobody has it.,Rodea el disco mientras nadie lo tiene.
 OPTIONS_IMPACT_NONE,None,Ninguno
 OPTIONS_IMPACT_LOW,Low,Bajo
 OPTIONS_IMPACT_MEDIUM,Medium,Medio

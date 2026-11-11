@@ -34,6 +34,14 @@ var stick_tied: bool = false
 # rewind.
 var pin_role: int = 0
 var pin_strength: float = 0.0
+# Skater.fight_role (FightRules.Role): host-authoritative like the pin's role.
+var fight_role: int = 0
+# What a fighter's holding hand holds and which arm punches
+# (FightHoldRules.Grip / Side): the fighter's own, simulated where he is.
+var fight_grip: int = 0
+var fight_punch_side: int = 0
+# Skater.fight_rattle (FightPunchRules): host-authoritative, seconds.
+var fight_rattle: float = 0.0
 # Skater.is_diving: a dive's down window rides knockdown_timer and recoil_dir;
 # this says it is a dive (its stick still plays, its body blocks low).
 var diving: bool = false
@@ -153,6 +161,10 @@ func to_array() -> Array:
 		pin_strength,
 		diving,
 		slapshot_pinned,
+		fight_role,
+		fight_grip,
+		fight_punch_side,
+		fight_rattle,
 	]
 
 # The stick-play, pin and dive fields, which are discrete: a reader between two
@@ -165,6 +177,10 @@ func copy_stick_play_from(s: SkaterNetworkState) -> void:
 	stick_tied = s.stick_tied
 	pin_role = s.pin_role
 	pin_strength = s.pin_strength
+	fight_role = s.fight_role
+	fight_grip = s.fight_grip
+	fight_punch_side = s.fight_punch_side
+	fight_rattle = s.fight_rattle
 	diving = s.diving
 	slapshot_pinned = s.slapshot_pinned
 
@@ -201,6 +217,10 @@ func copy_from(s: SkaterNetworkState) -> void:
 	stick_tied = s.stick_tied
 	pin_role = s.pin_role
 	pin_strength = s.pin_strength
+	fight_role = s.fight_role
+	fight_grip = s.fight_grip
+	fight_punch_side = s.fight_punch_side
+	fight_rattle = s.fight_rattle
 	diving = s.diving
 	slapshot_pinned = s.slapshot_pinned
 	slapshot_pin_offset = s.slapshot_pin_offset
@@ -260,4 +280,11 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.diving = data[31]
 	if data.size() > 32:
 		state.slapshot_pinned = data[32]
+	if data.size() > 33:
+		state.fight_role = data[33]
+	if data.size() > 35:
+		state.fight_grip = data[34]
+		state.fight_punch_side = data[35]
+	if data.size() > 36:
+		state.fight_rattle = data[36]
 	return state

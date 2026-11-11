@@ -363,6 +363,17 @@ Host upload, per human client and for an all-human lobby (bots cost nothing):
 | 60 Hz (before 90/45) | 57 KB/s | 1.7 Mbps | 4.1 Mbps |
 | 90 Hz | 86 KB/s | 2.5 Mbps | 6.2 Mbps |
 | 120 Hz | 114 KB/s | 3.4 Mbps | 8.2 Mbps |
+| 45 Hz, compressed (v93) | 30 KB/s | 0.9 Mbps | 2.1 Mbps |
+| 45 Hz, delta + compressed (v94) | 16 KB/s | 0.5 Mbps | 1.1 Mbps |
+
+The compressed row is the raw layout above through `WirePacking`'s zstd: 941 B
+to ~656 B at 10 skaters, measured on 3,000 live snapshots of a 10-skater bot
+match (#912), ~20 µs to encode once per broadcast and ~2 µs to decode. The input
+batch below goes through deflate, 291 B to ~119 B (~11 KB/s per client at 90 Hz).
+The delta row sends each client its snapshot XOR the newest one it acked
+(`SnapshotDelta`), then compresses: ~344 B a snapshot on the same capture, with
+10% loss and acks three broadcasts late, every rebuilt snapshot byte-exact.
+Spectators ack through their own 15 Hz message, since they send no input batches.
 
 The other direction is the input batch: 3 B + 12 × 24 B inputs (24 when the
 client measures >10% loss), sent at `INPUT_RATE`: 35 KB/s per client at 120 Hz,

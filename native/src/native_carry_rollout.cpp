@@ -244,7 +244,7 @@ static double turn_rate_step(double prev_rate, double wanted_rate, double max_ac
 	return wanted_rate > from ? MIN(from + reach, wanted_rate) : MAX(from - reach, wanted_rate);
 }
 
-// AICarryRollout._face over FacingRules.solve / reach_edge / turn_round_angle /
+// AICarryRollout._face over FacingRules.solve / reach_edge / turned_toward /
 // yield_on_forehand and
 // BoardPlayRules.board_proximity / board_shield_facing.
 Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vector3 &v,
@@ -300,16 +300,23 @@ Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vec
 			}
 		}
 	}
+	// FacingRules.turned_toward.
 	Vector2 turned;
-	if (behind || Math::abs((double)f.angle_to(target)) >= reach_edge(f, target, fore, back)) {
+	double turn = f.angle_to(target);
+	if (behind || Math::abs(turn) >= reach_edge(f, target, fore, back)) {
 		// FacingRules.turn_round_angle.
-		double turn = f.angle_to(target);
 		if (turn * (double)f.angle_to(cur) < 0.0) {
 			turn -= signd(turn) * Math_TAU;
 		}
-		turned = f.rotated((real_t)(turn * MIN(step, 1.0)));
+	}
+	const double ratio = step < 0.5 ? step / (1.0 - step) : 1.0;
+	if (Math::abs(turn) > Math::acos(-ratio)) {
+		turned = f.rotated((real_t)(signd(turn) * MIN(Math::asin(ratio), Math::abs(turn))));
 	} else {
-		turned = f.lerp(target, (real_t)step).normalized();
+		const Vector2 chord = f.lerp(target, (real_t)step);
+		turned = (double)chord.length_squared() < 0.00000001
+				? f.rotated((real_t)(turn * MIN(step, 1.0)))
+				: chord.normalized();
 	}
 	if (has_puck) {
 		// FacingRules.yield_on_forehand.

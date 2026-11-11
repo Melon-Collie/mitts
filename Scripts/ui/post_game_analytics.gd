@@ -23,7 +23,9 @@ signal closed
 const _CREAM := MenuStyle.BROADCAST_CREAM
 const _DIM := MenuStyle.BROADCAST_DIM
 const _SEP := MenuStyle.BROADCAST_SEP
-const _MUTED := MenuStyle.TEXT_MUTED
+# Labels and notes, not TEXT_MUTED: that tier is under 4.5:1 on the panel, and
+# these are the screen's 11–13 px reading text.
+const _LABEL := MenuStyle.TEXT_DIM
 const _GOLD := MenuStyle.GOLD
 
 # Rink geometry (GameRules mirrors) for the map's coordinate transform.
@@ -93,7 +95,7 @@ func _build_header() -> Control:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 
-	_subtitle = _lbl("", 13, _MUTED)
+	_subtitle = _lbl("", 13, _LABEL)
 	_subtitle.add_theme_font_override("font", MenuStyle.UI_FONT)
 	_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_subtitle)
@@ -249,10 +251,10 @@ func present_history(events: Array[ShotEvent], home_goals: int, away_goals: int,
 		totals[0]["goals"] = home_goals
 	if away_goals >= 0:
 		totals[1]["goals"] = away_goals
-	# The match's real palette when the caller could recover it (the .mreplay
-	# header records both colour slots); the neutral defaults otherwise — never
-	# the CURRENT session's colours, which would paint an old game in a palette
-	# it was never played in.
+	# `colors` are the match's team inks when the caller could recover them (the
+	# .mreplay header records both colour slots); the neutral defaults otherwise —
+	# never the CURRENT session's colours, which would paint an old game in a
+	# palette it was never played in.
 	_render(events, totals, colors if colors.size() == 2 else _team_colors, label)
 	_show()
 
@@ -395,7 +397,7 @@ func _add_tape_row(into: Container, label_text: String, home: float, away: float
 	var home_lbl := _lbl(fmt % home, 16, _team_colors[0] if home_leads else _DIM)
 	home_lbl.custom_minimum_size = Vector2(56, 0)
 	head.add_child(home_lbl)
-	var lbl := _lbl(label_text.to_upper(), 11, _MUTED)
+	var lbl := _lbl(label_text.to_upper(), 11, _LABEL)
 	lbl.add_theme_font_override("font", MenuStyle.UI_FONT)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -429,17 +431,16 @@ func _bar_segment(color: Color, ratio: float, leading: bool) -> Control:
 	return seg
 
 
-# Each team wears its own PRIMARY here, via the same score-stripe rule the
-# scorebug and the box score's period summary use — a team's colour has to be
-# the same on every score surface or the identity channel stops being one. The
-# jersey/* keys are the 3D uniform's colours (and away's is near-white), which
-# read as muddy or invisible in flat UI; see TeamColorRegistry's doc-block.
+# Every team colour here is ink — values, bars and shot dots drawn straight on
+# the panel — so each team wears its primary lifted until it reads on it
+# (TeamColorRegistry.get_score_ink_pair), the hue the scorebug's stripe carries.
 func _resolve_team_colors() -> Array[Color]:
 	var out: Array[Color] = [_team_colors[0], _team_colors[1]]
 	if GameManager.teams.size() > 1 and GameManager.teams[0] != null \
 			and GameManager.teams[1] != null:
-		var pair: Dictionary = TeamColorRegistry.get_score_stripe_pair(
-				GameManager.teams[0].color_slot, GameManager.teams[1].color_slot)
+		var pair: Dictionary = TeamColorRegistry.get_score_ink_pair(
+				GameManager.teams[0].color_slot, GameManager.teams[1].color_slot,
+				MenuStyle.BROADCAST_BG)
 		out[0] = pair.home
 		out[1] = pair.away
 	return out
@@ -468,7 +469,7 @@ func _section_title(title: String, note: String, color: Color = _CREAM) -> Contr
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
 	if not note.is_empty():
-		var n := _lbl(note, 11, _MUTED)
+		var n := _lbl(note, 11, _LABEL)
 		n.add_theme_font_override("font", MenuStyle.UI_FONT)
 		n.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(n)

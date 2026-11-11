@@ -4,6 +4,7 @@
 #include "native_blade_pass.h"
 #include "native_blade_dangle.h"
 #include "native_carry_rollout.h"
+#include "native_carry_space.h"
 #include "native_gif_encoder.h"
 #include "native_hem_flaps.h"
 #include "native_leg_chain.h"
@@ -36,6 +37,7 @@ void initialize_mitts_native_module(ModuleInitializationLevel p_level) {
 	ClassDB::register_class<mitts::NativeHemFlaps>();
 	ClassDB::register_class<mitts::NativeGifEncoder>();
 	ClassDB::register_class<mitts::NativeBladePass>();
+	ClassDB::register_class<mitts::NativeCarrySpace>();
 }
 
 void uninitialize_mitts_native_module(ModuleInitializationLevel p_level) {

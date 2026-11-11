@@ -40,10 +40,17 @@ static func place(leg: Leg, thigh: float, shin: float) -> void:
 	leg.z = -x * sin(leg.yaw) + z2 * cos(leg.yaw)
 
 
+# Past this share of its length a target's distance eases toward the leg's full
+# length rather than clamping at it, so a knee driven straight arrives there
+# rather than stopping dead on it; a target at full length falls ~1.5 mm short.
+const SOFT_REACH: float = 0.993
+
+
 # The joints that put the ankle at (leg.x, leg.y, leg.z) with the leg turned to
-# leg.yaw. Out of reach, the leg points at the target as far as it goes: straight
-# when too far, folded shut when too near. Roll stays inside ±90°, which is
-# every leg the gait poses; the fold is the only one that reaches the point.
+# leg.yaw. Out of reach, the leg points at the target as far as it goes: easing
+# straight when too far (SOFT_REACH), folded shut when too near. Roll stays
+# inside ±90°, which is every leg the gait poses; the fold is the only one that
+# reaches the point.
 static func solve(leg: Leg, thigh: float, shin: float) -> void:
 	var cw: float = cos(leg.yaw)
 	var sw: float = sin(leg.yaw)
@@ -51,7 +58,8 @@ static func solve(leg: Leg, thigh: float, shin: float) -> void:
 	var qy: float = leg.y
 	var qz: float = leg.x * sw + leg.z * cw
 	var d: float = sqrt(qx * qx + qy * qy + qz * qz)
-	var c: float = (d * d - thigh * thigh - shin * shin) / (2.0 * thigh * shin)
+	var r: float = soft_reach(d, thigh + shin)
+	var c: float = (r * r - thigh * thigh - shin * shin) / (2.0 * thigh * shin)
 	leg.knee = -acos(clampf(c, -1.0, 1.0))
 	var vy: float = -thigh - shin * cos(leg.knee)
 	var vz: float = -shin * sin(leg.knee)
@@ -66,3 +74,14 @@ static func solve(leg: Leg, thigh: float, shin: float) -> void:
 	qz *= reach
 	leg.roll = asin(clampf(qx / maxf(-vy, 1e-9), -1.0, 1.0)) if vy < 0.0 else 0.0
 	leg.pitch = wrapf(atan2(qz, qy) - atan2(vz, vy * cos(leg.roll)), -PI, PI)
+
+
+# How far a leg `length` long reaches toward a target `d` away: `d` up to
+# SOFT_REACH of its length, then easing to the full length (tanh, the slope
+# continuous where it starts).
+static func soft_reach(d: float, length: float) -> float:
+	var onset: float = length * SOFT_REACH
+	if d <= onset:
+		return d
+	var span: float = length - onset
+	return onset + span * tanh((d - onset) / span)

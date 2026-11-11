@@ -132,6 +132,27 @@ func test_collar_and_yoke_are_optional_and_parse_null() -> void:
 	assert_eq(named.jersey.collar, Color("#0000FF"))
 
 
+# A yoke is cut off at the armhole's seam unless the kit names it round: the
+# shoulders' caps are the sleeve's, so a round one is carried over them by a
+# stripe at the sleeve's top, under the kit's own sleeve stripes.
+func test_only_a_round_yoke_runs_on_over_the_sleeves_top() -> void:
+	var sleeve := {"base": "#FF0000", "stripes": [{"pos": 0.7, "width": 0.1, "color": "#0000FF"}]}
+	var square: Dictionary = TeamColorRegistry._parse_kit(
+			{"jersey": {"base": "#FF0000", "yoke": "#00FF00"}, "sleeve": sleeve})
+	assert_eq(square.jersey.yoke_shape, SleevePaint.YOKE_SQUARE, "a yoke is square unless named round")
+	assert_eq(square.sleeve.stripes.size(), 1, "and leaves the sleeve as the kit wrote it")
+	var round_yoke: Dictionary = TeamColorRegistry._parse_kit(
+			{"jersey": {"base": "#FF0000", "yoke": "#00FF00", "yoke_shape": "round"},
+			"sleeve": sleeve})
+	assert_eq(round_yoke.sleeve.stripes.size(), 2)
+	assert_eq(round_yoke.sleeve.stripes[0], SleevePaint.yoke_cap(Color("#00FF00")),
+			"painted first, so the kit's own stripes lie over it")
+	assert_eq(round_yoke.sleeve.stripes[1].color, Color("#0000FF"))
+	var no_yoke: Dictionary = TeamColorRegistry._parse_kit(
+			{"jersey": {"base": "#FF0000", "yoke_shape": "round"}, "sleeve": sleeve})
+	assert_eq(no_yoke.sleeve.stripes.size(), 1, "a shape with no yoke to shape adds nothing")
+
+
 # A lettering stroke is optional; a kit that omits one parses transparent, which
 # every lettering painter reads as unbordered.
 func test_lettering_strokes_are_optional_and_parse_transparent() -> void:
@@ -170,8 +191,7 @@ func test_hardcoded_fallback_mirrors_the_bundled_first_slots() -> void:
 			assert_eq(kit.text.color, bundled.text.color, label + " lettering")
 			for region: String in ["jersey", "pants", "socks"]:
 				assert_eq(kit[region].base, bundled[region].base, "%s %s" % [label, region])
-			for part: String in ["upper", "lower"]:
-				assert_eq(kit.arms[part].base, bundled.arms[part].base, "%s arms.%s" % [label, part])
+			assert_eq(kit.sleeve.base, bundled.sleeve.base, label + " sleeve")
 
 
 # Every shipped kit dresses its goalie in white pads; a user file may change
@@ -212,3 +232,53 @@ func test_pads_in_the_primary_are_trimmed_in_the_secondary() -> void:
 func test_contrast_ratio_spans_one_to_twenty_one() -> void:
 	assert_almost_eq(TeamColorRegistry.contrast_ratio(Color.WHITE, Color.WHITE), 1.0, 0.001)
 	assert_almost_eq(TeamColorRegistry.contrast_ratio(Color.BLACK, Color.WHITE), 21.0, 0.01)
+
+
+# ── Team colour as ink on a surface ──────────────────────────────────────────
+# Properties of the rule, not of any one palette: every team's ink reads on the
+# dark panel, one that already reads is left alone, and lifting keeps the hue.
+
+const _PANEL: Color = MenuStyle.BROADCAST_BG
+
+
+func test_every_teams_ink_reads_on_the_panel() -> void:
+	for slot: int in TeamColorRegistry.get_all_slots():
+		var pair: Dictionary = TeamColorRegistry.get_score_ink_pair(slot, slot, _PANEL)
+		assert_gte(TeamColorRegistry.contrast_ratio(pair.home, _PANEL),
+				TeamColorRegistry.INK_MIN_CONTRAST - 0.01,
+				TeamColorRegistry.get_preset_name(slot))
+
+
+func test_a_primary_that_already_reads_is_its_own_ink() -> void:
+	for slot: int in TeamColorRegistry.get_all_slots():
+		var primary: Color = TeamColorRegistry.get_preset(slot).primary
+		if TeamColorRegistry.contrast_ratio(primary, _PANEL) < TeamColorRegistry.INK_MIN_CONTRAST:
+			continue
+		var pair: Dictionary = TeamColorRegistry.get_score_ink_pair(slot, slot, _PANEL)
+		assert_eq(pair.home, primary, TeamColorRegistry.get_preset_name(slot))
+
+
+func test_lifting_keeps_the_hue_and_only_goes_as_far_as_it_must() -> void:
+	var navy := Color("#1E2A5A")
+	var ink: Color = TeamColorRegistry.readable_on(navy, _PANEL)
+	assert_almost_eq(ink.ok_hsl_h, navy.ok_hsl_h, 0.01, "same hue")
+	assert_gt(ink.ok_hsl_l, navy.ok_hsl_l, "lightened on a dark surface")
+	assert_almost_eq(TeamColorRegistry.contrast_ratio(ink, _PANEL),
+			TeamColorRegistry.INK_MIN_CONTRAST, 0.05, "no lighter than it needs")
+
+
+func test_on_a_light_surface_ink_darkens() -> void:
+	var pale := Color("#F5D028")
+	var ink: Color = TeamColorRegistry.readable_on(pale, Color.WHITE)
+	assert_lt(ink.ok_hsl_l, pale.ok_hsl_l)
+	assert_gte(TeamColorRegistry.contrast_ratio(ink, Color.WHITE),
+			TeamColorRegistry.INK_MIN_CONTRAST - 0.01)
+
+
+# A near-black primary lifts to a grey, which reads as the UI's own neutral text;
+# its secondary carries the team instead.
+func test_a_hueless_primary_inks_in_its_secondary() -> void:
+	var preset: Dictionary = {"primary": Color("#161618"), "secondary": Color("#5E2457")}
+	var ink: Color = TeamColorRegistry._ink_for(preset, _PANEL)
+	assert_almost_eq(ink.ok_hsl_h, (preset.secondary as Color).ok_hsl_h, 0.01)
+	assert_gte(ink.s, TeamColorRegistry._INK_MIN_SATURATION)

@@ -188,6 +188,11 @@ class SimSkater:
 	# (see step()).
 	var wrister_hold: Vector3 = Vector3.ZERO
 	var wrister_active: bool = false
+	# The blade's contact off the body as the charge starts: the pin the release
+	# loads from (SkaterController._solve_wrister_load's wrister_origin, latched
+	# on entering WRISTER_AIM), never the blade's contact after it, which swings
+	# with the torso's wind-up.
+	var wrister_pin: Vector3 = Vector3.ZERO
 	# ≥ 0 marks a scripted puppet container (no agent); the gap it holds.
 	var puppet_hold_gap: float = -1.0
 	var puppet_depth_floor_z: float = 0.0
@@ -281,8 +286,8 @@ var _carrier_belief := CarrierBelief.new()
 var _reaction_delay_s: float = -1.0
 # Each net's keeper x last tick, for the velocity a live keeper publishes.
 var _keeper_x: Dictionary = {}
-# Loose-puck board bounce restitution (the harness's coarse boards — flight
-# fidelity is still not the point; containment is).
+# An airborne puck's bounce off the glass (coarse: it drops there, and only
+# containment is the point). A sliding puck runs the host's own step.
 const BOARD_RESTITUTION: float = 0.5
 
 # ── Outcome telemetry (scenario assertions read these) ──────────────────────
@@ -297,7 +302,9 @@ var carry_ticks: Dictionary = {}
 # unchanged). When set, called once per team per tick as
 # `goalie_provider.call(team_id: int, puck_pos: Vector3) -> Variant`; a Vector3
 # return overwrites that net's keeper position in the snapshot (a real
-# GoalieController the test owns and ticks), anything else keeps the static one.
+# GoalieController the test owns and ticks), a GoalieNetworkState replaces the
+# whole replicated keeper (his stance, facing and velocity too), anything else
+# keeps the static one.
 var goalie_provider: Callable = Callable()
 
 
@@ -537,6 +544,16 @@ func step() -> void:
 				rec["pass_peer"] = c.agent._carrier.debug_pass_peer_id
 				rec["pass_score"] = c.agent._carrier.debug_pass_score
 				rec["carry_score"] = c.agent._carrier.debug_carry_score
+				var read: Vector4 = c.agent._carrier._pass.debug_completion
+				rec["pass_kept"] = read.x * read.y * (1.0 - read.z) * read.w if read.x >= 0.0 \
+						else -1.0
+				rec["pass_release_clean"] = read.x
+				rec["pass_lane"] = read.y
+				rec["pass_miss"] = read.z
+				rec["pass_reception"] = read.w
+				rec["pass_spot"] = c.agent._carrier._pass.debug_spot
+				rec["pass_puck"] = puck_pos
+				rec["since_pick_ticks"] = c.agent._carrier._ticks_since_pick
 			releases.append(rec)
 			_release_grace[c.peer_id] = ticks + RELEASE_GRACE_TICKS
 			_release(c)
@@ -633,24 +650,13 @@ func step() -> void:
 			puck_vel *= _airborne_keep
 			_airborne_keep = LANDING_SPEED_KEEP
 	else:
-		var speed: float = Vector2(puck_vel.x, puck_vel.z).length()
-		if speed > 0.0:
-			var drop: float = GameRules.PUCK_ICE_DECEL_M_S2 * DT
-			var scale: float = maxf(speed - drop, 0.0) / speed
-			puck_vel *= scale
-		puck_pos += puck_vel * DT
-		# Boards: clamp to the rink and reflect the outward component (the
-		# same analytic backstop the real Puck runs). Without this a dumped
-		# or rimmed puck sailed out of the world and every loose-puck
-		# scenario beyond a few metres was unwinnable by construction —
-		# and rims can't wrap corners a harness doesn't have.
-		var clamped: Vector2 = GameRules.clamp_to_rink_inner(
-				Vector2(puck_pos.x, puck_pos.z))
-		if clamped.x != puck_pos.x or clamped.y != puck_pos.z:
-			var outward := Vector2(puck_pos.x - clamped.x, puck_pos.z - clamped.y)
-			puck_vel = PuckCollisionRules.board_rescue_velocity(
-					puck_vel, outward, BOARD_RESTITUTION)
-			puck_pos = Vector3(clamped.x, puck_pos.y, clamped.y)
+		# The sliding puck's step the host drives the real one with
+		# (PuckAuthorityRules): ice friction, and the boards' rigid-wall
+		# restitution and friction round the rounded corners, so a rim runs
+		# the path the rim search and the chase election walk.
+		var stepped: Transform3D = AITrajectory.step_puck(puck_pos, puck_vel, DT)
+		puck_pos = stepped.origin
+		puck_vel = stepped.basis.x
 		for s: SimSkater in skaters:
 			if not _can_play(s) or not PuckInteractionRules.check_pickup(
 					prev_puck, puck_pos, s.prev_blade, s.blade, PICKUP_RADIUS):
@@ -658,10 +664,11 @@ func step() -> void:
 			var rel: Vector3 = puck_vel - s.vel
 			rel.y = 0.0
 			var face: Vector3 = _face_normal(s, rel)
+			var offset: float = _path_offset(s, rel)
 			var catch_load: float = PuckReceptionRules.reception_load(
 					Vector3(puck_vel.x, 0.0, puck_vel.z), Vector3(s.vel.x, 0.0, s.vel.z),
-					face, DEFLECT_MIN_REL_SPEED, RECEIVE_ALIGNMENT_BONUS)
-			if not _receives(s, face):
+					offset, DEFLECT_MIN_REL_SPEED, RECEIVE_ALIGNMENT_BONUS)
+			if not _receives(s, offset):
 				# Too fast to hold: it comes off the face (Puck.apply_blade_deflect).
 				puck_vel = PuckCollisionRules.deflect_velocity(puck_vel,
 						_face_normal(s, puck_vel), AIFeedReception.DEFLECT_NORMAL_RESTITUTION,
@@ -673,13 +680,8 @@ func step() -> void:
 				deflects += 1
 				loose_released_by = -1
 				break
-			var axis: Vector3 = PuckReceptionRules.blade_axis(s.blade, _hand(s),
-					Vector3(s.facing.x, 0.0, s.facing.y))
-			var bobble_at: float = PuckReceptionRules.bobble_load_at(
-					PuckReceptionRules.blade_contact_offset(puck_pos, rel, s.blade, axis,
-							GameRules.DEFAULT_BLADE_LENGTH_M * 0.5),
-					BOBBLE_LOAD, BOBBLE_EDGE_SHARE)
-			if catch_load >= bobble_at:
+			if catch_load >= PuckReceptionRules.bobble_load_at(
+					offset, BOBBLE_LOAD, BOBBLE_EDGE_SHARE):
 				var out: Vector3 = PuckCollisionRules.bobble_velocity(
 						rel, face, AIFeedReception.DEFLECT_NORMAL_RESTITUTION,
 						AIFeedReception.DEFLECT_NORMAL_RESTITUTION_MIN,
@@ -866,6 +868,7 @@ func _place_blade(s: SimSkater) -> void:
 	if in_charge and not s.wrister_active:
 		s.wrister_active = true
 		s.wrister_hold = s.arm.heel - s.pos
+		s.wrister_pin = s.blade - s.pos
 	var held: bool = s.wrister_active
 	s.wrister_active = in_charge
 	var cursor: Vector3 = s.input.mouse_world_pos
@@ -933,14 +936,7 @@ func _turn(s: SimSkater) -> void:
 					Vector2(s.pos.x, s.pos.z), _caps.board_shield_probe), _caps.board_shield_max_rad)
 		var drag: float = _caps.facing_drag_speed_braking if s.input.brake \
 				else _caps.facing_drag_speed
-		if absf(s.facing.angle_to(cursor_dir)) >= FacingRules.reach_edge(
-				_facing_cfg, s.facing, cursor_dir, lefty) \
-				or absf(s.facing.angle_to(target)) >= FacingRules.reach_edge(
-						_facing_cfg, s.facing, target, lefty):
-			turned = s.facing.rotated(FacingRules.turn_round_angle(s.facing, target,
-					cursor_dir) * minf(drag * DT, 1.0))
-		else:
-			turned = s.facing.lerp(target, drag * DT).normalized()
+		turned = FacingRules.turned_toward(_facing_cfg, s.facing, target, cursor_dir, lefty, drag * DT)
 		if carrying:
 			turned = FacingRules.yield_on_forehand(turned, cursor_dir, lefty, _carry_facing_cfg)
 	else:
@@ -1116,9 +1112,16 @@ func _face_normal(s: SimSkater, toward: Vector3) -> Vector3:
 			Vector3(s.facing.x, 0.0, s.facing.y))
 
 
-func _receives(s: SimSkater, face: Vector3) -> bool:
+# PuckController.path_offset_for: how far off the puck's path in `s`'s frame
+# (`rel`) his blade's middle sits.
+func _path_offset(s: SimSkater, rel: Vector3) -> float:
+	return PuckReceptionRules.path_offset(puck_pos, rel, s.blade,
+			GameRules.DEFAULT_BLADE_LENGTH_M * 0.5, PICKUP_RADIUS)
+
+
+func _receives(s: SimSkater, offset: float) -> bool:
 	return PuckReceptionRules.should_receive(Vector3(puck_vel.x, 0.0, puck_vel.z),
-			Vector3(s.vel.x, 0.0, s.vel.z), face, PICKUP_MAX_REL_SPEED,
+			Vector3(s.vel.x, 0.0, s.vel.z), offset, PICKUP_MAX_REL_SPEED,
 			DEFLECT_MIN_REL_SPEED, RECEIVE_ALIGNMENT_BONUS)
 
 
@@ -1130,7 +1133,7 @@ func _contesting(s: SimSkater, prev_puck: Vector3) -> SimSkater:
 			continue
 		var rel: Vector3 = puck_vel - o.vel
 		rel.y = 0.0
-		if _receives(o, _face_normal(o, rel)):
+		if _receives(o, _path_offset(o, rel)):
 			return o
 	return null
 
@@ -1217,7 +1220,7 @@ func _release(c: SimSkater) -> void:
 		var aim: Vector3 = ShotMechanics.wrister_aim_dir(c.input.bot_wrister_aim_dir,
 				c.input.mouse_world_pos, c.pos)
 		var to_local: Basis = Basis(Vector3.UP, atan2(-c.facing.x, -c.facing.y)).inverse()
-		var pin: Vector3 = c.blade - c.pos
+		var pin: Vector3 = c.wrister_pin
 		WristerLoad.solve(_load, to_local * Vector3(pin.x, 0.0, pin.z), to_local * aim,
 				lefty, kit.wrister_load)
 		result = ShotMechanics.release_wrister(c.pos, c.input.mouse_world_pos, c.blade,
@@ -1374,6 +1377,9 @@ func _build_snapshot() -> WorldSnapshot:
 		# keeper for this net with the live controller's tracked position.
 		if goalie_provider.is_valid():
 			var real: Variant = goalie_provider.call(tid, puck_pos)
+			if real is GoalieNetworkState:
+				snap.goalie_states[tid] = real
+				continue
 			if real is Vector3:
 				g.position_x = real.x
 				g.position_z = real.z

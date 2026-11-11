@@ -20,7 +20,7 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 # How far across from his body a carrier gets the puck either side: the live
 # skater's furthest pull on average (test_keeper_reads_the_carriers_reach.gd).
-const CARRIER_REACH_M: float = 1.2
+const CARRIER_REACH_M: float = 1.33
 # The longest read any tier has, kept at the physics tick.
 const MOST_S: float = 0.6
 const TICK_HZ: float = _PhysicsConstants.PHYSICS_TICK
@@ -218,3 +218,27 @@ static func _lane_open(from: Vector2, to: Vector2, defenders: PackedVector2Array
 		if d.distance_to(from + lane * t) <= LANE_REACH_M:
 			return false
 	return true
+
+
+# His read and the history it is read from, on the wire (KeeperWire): places
+# anywhere on the rink in 32 bits. The receivers and the pass's meeting are read
+# afresh each time, and the reads' delays are the tier's.
+func wire(w: KeeperWire) -> void:
+	puck = w.v2_32(puck, KeeperWire.MM)
+	motion = w.v2_16(motion, KeeperWire.SPEED)
+	loose = w.bit(loose)
+	theirs = w.bit(theirs)
+	carrier = w.v2_32(carrier, KeeperWire.MM)
+	winding_up = w.bit(winding_up)
+	watched_s = w.s32(watched_s, KeeperWire.MS)
+	eyes = w.v2_16(eyes, KeeperWire.MM)
+	w.v2s_32(_at, KeeperWire.MM)
+	w.v2s_16(_moving, KeeperWire.SPEED)
+	w.v2s_32(_bodies, KeeperWire.MM)
+	w.flags(_winding)
+	w.flags(_loose)
+	w.flags(_theirs)
+	w.flags(_hidden)
+	_gaze = w.s32(_gaze, KeeperWire.ANGLE)
+	_head = w.s8(_head)
+	_count = w.s8(_count)

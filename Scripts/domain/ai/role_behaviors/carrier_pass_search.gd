@@ -16,12 +16,6 @@ const PING_PASS_EV_MULT: float = 3.0
 # one ~20 m, so a pass softens across the distances the NHL ones do.
 const PASS_LEAD_MAX_S: float = 1.0
 
-# A rim is fired as soft as the race allows: any launch reaching the receiver at
-# least this share as surely as the best one may be picked, and the softest of
-# those is. Doctrine, not a measurement — a soft rim is easier to stop, and one
-# that gets by him dies sooner (under NHL rules, short of an icing).
-const RIM_SOFT_SHARE: float = 0.9
-
 # Developing-feed hold: how far ahead (s) a skating teammate's spot is projected
 # when valuing the pass he is CREATING (see developing_feed_value) — the spot he
 # is getting open at. 1.2 s ≈ a finisher's next two strides at a zone entry,
@@ -36,6 +30,8 @@ const OUTLET_DEVELOP_WINDOW_S: float = 1.2
 const OUTLET_DEVELOP_MIN_SPEED_M_S: float = 1.0
 
 var _field: AICarrierField
+# The rim launches' ranking per receiver (AICarrierRimSearch).
+var _rim: AICarrierRimSearch
 
 # ── Result of search() ───────────────────────────────────────────────────────
 # The best feed: its receiver (0 when none), EV, whether it is the saucer
@@ -49,32 +45,49 @@ var best_rim_pace: float = 0.0
 # The straight feed's pace, as its AIPuckLane.PASS_PACE_FRACS step on the pace
 # scale (1.0 for a rim or no feed): what the commit fires it at.
 var best_pace_frac: float = 1.0
+# Where the best feed leaves from (AIShotHolds.pass_from, world XZ off the
+# body; ZERO: no feed), the share of pace its pocket carries, and the odds the
+# puck is kept through the pull and the charge.
+var best_hold_offset: Vector3 = Vector3.ZERO
+var best_hold_cap: float = 1.0
+var best_hold_keep: float = 1.0
+# The completion read of the search's highest-EV pass, for instruments (nothing
+# decides on it): not poked at the release, the lane, the execution miss, kept on
+# reception (kept = x · y · (1 − z) · w; x < 0: none priced), its origin, spot and pace.
+var debug_completion := Vector4(-1.0, 0.0, 0.0, 0.0)
+var debug_spot: Vector3 = Vector3.INF
+var debug_origin_pace := Vector4.ZERO
+var _debug_best_ev: float = -INF
 
 
 # ── Scratch ──────────────────────────────────────────────────────────────────
-# The best launch _rim_launch_for found, and its path reads.
-var _rim_k: int = -1
-var _rim_t: float = 0.0
-var _rim_lane: float = 0.0
-var _rim_miss: float = 0.0
-# Per-launch reads for one receiver (index-matched to AIRimPass' scratch, -1 =
-# not a candidate), so the softest near-best launch can be picked after the scan.
-var _rim_sure_by_k: PackedFloat64Array = PackedFloat64Array()
-var _rim_t_by_k: PackedFloat64Array = PackedFloat64Array()
-var _rim_lane_by_k: PackedFloat64Array = PackedFloat64Array()
-var _rim_miss_by_k: PackedFloat64Array = PackedFloat64Array()
 # Opponents projected to a feed's arrival (and a developing feed's flight).
 var _proj_buf: Array[Vector3] = []
 # Lane of the last FLAT _pass_variant_ev (0.0 when the variant filtered out
 # before its lane solve). The saucer gate reads it — see search.
 var _last_flat_variant_lane: float = 0.0
+# The receiver being searched, as _release_lane reads him.
+var _hold_ctx: RoleContext = null
+var _hold_receiver: Vector3 = Vector3.ZERO
+var _hold_speed: float = 0.0
+var _hold_saucer_speed: float = 0.0
+var _hold_puck_off: Vector2 = Vector2.ZERO
+var _release_lane_fn: Callable = Callable()
 
 
 func _init(field: AICarrierField) -> void:
 	_field = field
+	_rim = AICarrierRimSearch.new(field)
+	_release_lane_fn = _release_lane
 
 
 # Searches the best pass this eval into the best_* result fields.
+#
+# Every feed is priced from where the press fires it (AIShotHolds.pass_from: a
+# pocket, or the puck where it sits when it already carries the pace): the lead
+# and lanes from the release the pull and the wind-up carry him to, the pull's
+# wait before it, and the odds the puck is still on the blade when it goes
+# (AIShotHolds.keep_for), as the shot's holds are.
 #
 # Each receiver is scored as up to two straight variants competing on EV
 # (_pass_variant_ev): the flat feed at the best of its paces
@@ -83,7 +96,6 @@ func _init(field: AICarrierField) -> void:
 # paying SAUCER_EXTRA_MISS_PROB for its landing. Rim
 # launches are ranked per receiver too, and only the eval's single best rim is
 # priced through the full _pass_ev, after the loop.
-#
 # Filtered here: out-of-play receivers, and, for an OZ carrier, receivers
 # outside the zone. The lead-dependent filters live in _pass_variant_ev, the
 # lane hard-zeros in _pass_ev. Behind-the-back receivers are NOT skipped: only
@@ -93,6 +105,8 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		teammate_ids: Array[int]) -> void:
 	var snapshot: WorldSnapshot = ctx.snapshot
 	var self_pos: Vector3 = ctx.self_pos
+	_debug_best_ev = -INF
+	debug_completion.x = -1.0
 	var best_pass_peer: int = 0
 	var best_pass_score: float = 0.0
 	var best_pass_saucer: bool = false
@@ -103,6 +117,16 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 	# out of it (the carry-side valve is in AICarrierCarrySearch).
 	var carrier_in_oz: bool = AICarrierField.zone_taken(ctx)
 	var pass_origin: Vector3 = AICarrierField.pass_origin(ctx)
+	var holds: AIShotHolds = _field.holds
+	holds.configure_from(ctx)
+	var puck_off := Vector2.ZERO
+	if snapshot.puck_state != null:
+		puck_off = Vector2(snapshot.puck_state.position.x - self_pos.x,
+				snapshot.puck_state.position.z - self_pos.z)
+	var body_vel := Vector2(ctx.self_velocity.x, ctx.self_velocity.z)
+	var best_hold := Vector3.ZERO
+	var best_cap: float = 1.0
+	var best_keep: float = 1.0
 	var best_pass_rim_dir := Vector3.ZERO
 	var best_pass_rim_pace: float = 0.0
 	# Rim launches are receiver-independent: searched once per eval, and only
@@ -127,21 +151,43 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 				and ctx.team_brain.is_one_timer_ready(peer_id))
 		# Score at the speed the commit will actually fire: the same
 		# receiver-relative launch solve as the INTENT_PASS block in
-		# _pick_commit_phase, capped at what this bot's load can carry
-		# (pass_launch_cap). Any other pace mis-places the lead and gives the
-		# defenders the wrong flight time to close.
-		var dist: float = pass_origin.distance_to(receiver_state.position)
+		# _pick_commit_phase, capped at what this bot's load can carry from the
+		# pocket (best_hold_cap). Any other pace mis-places the lead and gives
+		# the defenders the wrong flight time to close.
 		var to_recv: Vector3 = receiver_state.position - pass_origin
 		to_recv.y = 0.0
 		var scored_pass_dir: Vector3 = to_recv.normalized() \
 				if to_recv.length_squared() > 0.0001 else Vector3.ZERO
-		var launch_cap: float = _field.pass_launch_cap(ctx, scored_pass_dir, self_facing_xz)
-		var receiver_accel: Vector3 = ctx.acceleration_by_peer.get(peer_id, Vector3.ZERO)
+		var receiver_caps: AISkaterCaps = ctx.caps_by_peer.get(peer_id)
+		# Released from the candidate pocket that carries the feed's hardest pace
+		# kept best (AIShotHolds.solve_pass_kept).
+		var full_need: float = AIPuckLane.pass_launch_speed(
+				pass_origin.distance_to(receiver_state.position), ctx.self_wrister_shot_speed,
+				ctx.pass_speed_scale, receiver_state.velocity, scored_pass_dir) \
+				/ maxf(ctx.self_wrister_shot_speed, 0.001)
+		_hold_ctx = ctx
+		_hold_receiver = receiver_state.position
+		_hold_speed = full_need * ctx.self_wrister_shot_speed
+		_hold_saucer_speed = minf(_hold_speed, AIPuckLane.saucer_max_launch_speed(
+				pass_origin.distance_to(receiver_state.position) - receiver_gate_m(receiver_caps)))
+		_hold_puck_off = puck_off
+		holds.solve_pass_kept(Vector2(scored_pass_dir.x, scored_pass_dir.z), puck_off, body_vel,
+				self_facing_xz, full_need, self_pos, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
+				_field.opponents, _field.opponent_vels, _field.opponent_caps, _release_lane_fn)
+		var launch_cap: float = ctx.self_wrister_shot_speed * holds.pocket_result.power_share
+		# Paces are solved from the full pace's release; a softer one may leave
+		# sooner, from where the puck sits.
+		var full_pull: float = holds.pass_pull_s
+		var hold_origin: Vector3 = AICarrierField.pass_origin(ctx, full_pull,
+				holds.pass_from - puck_off)
+		var dist: float = hold_origin.distance_to(receiver_state.position)
+		var keep_at: Vector2 = holds.pass_keep_at
+		var keep_pull: float = holds.pass_keep_pull
+		var keep: float = holds.pass_keep
 		# Receiver's heading turn rate — the commitment read; 0 for a
 		# commitment-blind tier.
 		var receiver_omega: float = ctx.heading_omega_by_peer.get(peer_id, 0.0) \
 				if ctx.reads_receiver_commitment else 0.0
-		var receiver_caps: AISkaterCaps = ctx.caps_by_peer.get(peer_id)
 		var receiver_top_speed: float = receiver_caps.max_speed if receiver_caps != null \
 				else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 		# Exact prune floor for this receiver: the running best, divided by any
@@ -158,6 +204,10 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var flat_lane: float = 0.0
 		var full_speed: float = 0.0
 		var full_lane: float = 0.0
+		var win_origin: Vector3 = hold_origin
+		var win_pull: float = full_pull
+		var win_keep: float = 1.0
+		var win_hold := Vector3(holds.pass_from.x, 0.0, holds.pass_from.y)
 		var prev_speed: float = -1.0
 		var prev_hold: float = INF
 		var fracs: Array[float] = AIPuckLane.PASS_PACE_FRACS
@@ -172,19 +222,28 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			# line, before the lead solve) — and only if its flight fits the lead
 			# horizon even with him skating flat out at the passer.
 			var hold: float = 0.0 if receiver_is_one_timer else AIFeedReception.reception_hold_s(
-					AIFeedReception.arrival_closing_speed(pass_origin, receiver_state.position,
+					AIFeedReception.arrival_closing_speed(hold_origin, receiver_state.position,
 							speed, receiver_state.velocity))
 			if frac < 1.0 and (hold >= prev_hold
 					or dist > (speed + receiver_top_speed) * PASS_LEAD_MAX_S):
 				continue
 			prev_speed = speed
 			prev_hold = hold
+			var pull: float = holds.pass_wait(speed / maxf(ctx.self_wrister_shot_speed, 0.001))
+			var from: Vector2 = holds.pass_from
+			if pull != keep_pull or from != keep_at:
+				keep_pull = pull
+				keep_at = from
+				keep = holds.keep_for(from, pull, self_pos, body_vel,
+						self_facing_xz, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
+						_field.opponents, _field.opponent_vels, _field.opponent_caps)
+			var origin: Vector3 = AICarrierField.pass_origin(ctx, pull, from - puck_off)
 			_last_flat_variant_lane = 0.0
 			var s_pace: float = _pass_variant_ev(
-					ctx, receiver_state, receiver_accel, receiver_omega, receiver_caps,
-					pass_origin, speed, false, receiver_is_one_timer,
+					ctx, receiver_state, receiver_omega, receiver_caps,
+					origin, speed, false, receiver_is_one_timer,
 					self_facing_xz, our_goalie, carrier_in_oz, maxf(prune_floor, s),
-					frac < 1.0)
+					frac < 1.0, pull, keep)
 			if frac == 1.0:
 				full_speed = speed
 				full_lane = _last_flat_variant_lane
@@ -193,6 +252,10 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 				pass_speed = speed
 				pass_frac = frac
 				flat_lane = _last_flat_variant_lane
+				win_origin = origin
+				win_pull = pull
+				win_keep = keep
+				win_hold = Vector3(from.x, 0.0, from.y)
 		if s <= 0.0:
 			pass_speed = full_speed
 			pass_frac = 1.0
@@ -203,7 +266,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		# wrister floor no legal saucer exists (the physical minimum saucer
 		# distance, ~6.5 m).
 		var saucer_speed: float = minf(
-				pass_speed, AIPuckLane.saucer_max_launch_speed(dist))
+				pass_speed, AIPuckLane.saucer_max_launch_speed(dist - receiver_gate_m(receiver_caps)))
 		# Saucer competes only when the FLAT feed is contested
 		# (SAUCER_SKIP_WHEN_LANE_CLEAR), read off the flat variant's solved lane so
 		# a clear-lane receiver skips the second solve. A flat variant filtered
@@ -212,32 +275,31 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		if saucer_speed >= AIPuckLane.SOFTEST_FEED_M_S \
 				and _last_flat_variant_lane < AIPuckLane.SAUCER_SKIP_WHEN_LANE_CLEAR:
 			var s_saucer: float = _pass_variant_ev(
-					ctx, receiver_state, receiver_accel, receiver_omega, receiver_caps,
-					pass_origin, saucer_speed, true, receiver_is_one_timer,
-					self_facing_xz, our_goalie, carrier_in_oz, maxf(prune_floor, s))
+					ctx, receiver_state, receiver_omega, receiver_caps,
+					win_origin, saucer_speed, true, receiver_is_one_timer,
+					self_facing_xz, our_goalie, carrier_in_oz, maxf(prune_floor, s),
+					false, win_pull, win_keep)
 			if s_saucer > s:
 				s = s_saucer
 				use_saucer = true
 		# Like the saucer, the rim competes only when the flat feed is contested:
 		# with the lane clear there is nothing for the boards to carry it past.
-		# Its candidate is only RANKED here (see _rim_launch_for); the one best
-		# rim of the eval is priced after the loop.
 		if rim_count != 0 \
 				and _last_flat_variant_lane < AIPuckLane.SAUCER_SKIP_WHEN_LANE_CLEAR:
 			if rim_count < 0:
 				rim_count = AIRimPass.build(pass_origin, ctx.self_wrister_shot_speed,
 						ctx.defending_goal_pos.z, _field.opponents,
 						_field.opponent_vels, _field.opponent_caps)
-			var rank: float = _rim_launch_for(ctx, receiver_state, receiver_omega,
+			var rank: float = _rim.launch_for(ctx, receiver_state, receiver_omega,
 					receiver_caps, carrier_in_oz) \
 					* _field.receiver_value_at(receiver_state.position)
 			if rank > rim_rank:
 				rim_rank = rank
 				rim_peer = peer_id
-				rim_k = _rim_k
-				rim_t = _rim_t
-				rim_lane = _rim_lane
-				rim_miss = _rim_miss
+				rim_k = _rim.pick_k
+				rim_t = _rim.pick_t
+				rim_lane = _rim.pick_lane
+				rim_miss = _rim.pick_miss
 		# Smart-ping PASS_TO_ME / IM_OPEN (see PING_PASS_EV_MULT).
 		if peer_id == ctx.ping_pass_target_peer and s > 0.0:
 			s *= PING_PASS_EV_MULT
@@ -246,6 +308,9 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			best_pass_peer = peer_id
 			best_pass_saucer = use_saucer
 			best_pass_frac = pass_frac
+			best_hold = win_hold
+			best_cap = launch_cap / maxf(ctx.self_wrister_shot_speed, 0.001)
+			best_keep = win_keep
 	if rim_peer != -1:
 		var rim_state: SkaterNetworkState = snapshot.skater_states[rim_peer]
 		var rim_caps: AISkaterCaps = ctx.caps_by_peer.get(rim_peer)
@@ -255,12 +320,28 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var rotation_time: float = _facing_rotation_time(self_facing_xz,
 				ctx.self_pos, ctx.self_pos + AIRimPass.dirs[rim_k],
 				ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
+		# Released from its own pocket, as the press locks it: its wait and its
+		# keep. The path is the one walked from the puck where it is.
+		var rim_dir: Vector3 = AIRimPass.dirs[rim_k]
+		holds.solve_pass_kept(Vector2(rim_dir.x, rim_dir.z), puck_off, body_vel, self_facing_xz,
+				AIRimPass.paces[rim_k] / maxf(ctx.self_wrister_shot_speed, 0.001), self_pos,
+				AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, _field.opponents, _field.opponent_vels,
+				_field.opponent_caps)
+		var rim_pull: float = holds.pass_pull_s
+		var rim_from: Vector2 = holds.pass_from
+		var rim_keep: float = holds.pass_keep \
+				if rim_pull == holds.pass_keep_pull and rim_from == holds.pass_keep_at \
+				else holds.keep_for(rim_from, rim_pull, self_pos, body_vel,
+						self_facing_xz, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
+						_field.opponents, _field.opponent_vels, _field.opponent_caps)
 		var s_rim: float = _pass_ev(ctx, AIRimPass.meet_point(rim_k, rim_t),
 				AIRimPass.paces[rim_k], rim_t,
 				rim_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
-				rim_t + rotation_time, our_goalie, rim_caps, rim_lane, rim_miss,
+				rim_t + maxf(rotation_time, rim_pull), our_goalie, rim_caps, rim_lane, rim_miss,
 				rim_state.velocity, floor_ev,
-				AIRimPass.dirs[rim_k], AIRimPass.opp_meet[rim_k])
+				rim_dir, AIRimPass.opp_meet[rim_k], 0.0,
+				ctx.icing_enforced and _rim.ices(ctx, pass_origin, rim_k),
+				pass_origin, rim_keep)
 		if rim_peer == ctx.ping_pass_target_peer and s_rim > 0.0:
 			s_rim *= PING_PASS_EV_MULT
 		if s_rim > best_pass_score:
@@ -270,91 +351,47 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			best_pass_frac = 1.0
 			best_pass_rim_dir = AIRimPass.dirs[rim_k]
 			best_pass_rim_pace = AIRimPass.paces[rim_k]
+			best_hold = Vector3(rim_from.x, 0.0, rim_from.y)
+			best_cap = holds.pocket_result.power_share
+			best_keep = rim_keep
 	best_peer = best_pass_peer
 	best_score = best_pass_score
 	best_is_saucer = best_pass_saucer
 	best_rim_dir = best_pass_rim_dir
 	best_rim_pace = best_pass_rim_pace
 	best_pace_frac = best_pass_frac
+	best_hold_offset = best_hold if best_pass_peer != 0 else Vector3.ZERO
+	best_hold_cap = best_cap
+	best_hold_keep = best_keep
+	_debug_best_ev = INF   # the latch is this search's: a developing feed's read never moves it
 
 
-# How surely and soon a RIM reaches `receiver_state` (completion × the delay
-# discount, 0.0 when none does) — the softest launch within RIM_SOFT_SHARE of the
-# surest — with that launch's path reads (meet time on the walked path, the race
-# against the soonest opponent as the lane, the passer's aim error over the path
-# length) left in _rim_k / _rim_t / _rim_lane / _rim_miss.
-#
-# A RANK, not a price: search weighs it by the receiver's cached spot
-# value and pays the full _pass_ev only for the eval's single best rim. Launches
-# that reach one receiver meet him within a stride of each other, so his value
-# cannot reorder them.
-#
-# Zone rules follow the straight feed's: a carrier in the zone keeps the puck in
-# it up to the meet, and one outside it does not rim the puck into it (the
-# receiver would be offside).
-func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
-		receiver_omega: float, receiver_caps: AISkaterCaps,
-		carrier_in_oz: bool) -> float:
-	var speed: float = receiver_caps.max_speed if receiver_caps != null \
-			else AIArrival.SKATER_REF_SPEED_M_S
-	var catch_radius: float = receiver_caps.handle_reach if receiver_caps != null \
-			else AIBotMechanics.EVADE_CARRY_HANDLE_M
-	var receiver_speed: float = Vector2(
-			receiver_state.velocity.x, receiver_state.velocity.z).length()
-	if _rim_sure_by_k.size() != AIRimPass.MAX_LAUNCHES:
-		_rim_sure_by_k.resize(AIRimPass.MAX_LAUNCHES)
-		_rim_t_by_k.resize(AIRimPass.MAX_LAUNCHES)
-		_rim_lane_by_k.resize(AIRimPass.MAX_LAUNCHES)
-		_rim_miss_by_k.resize(AIRimPass.MAX_LAUNCHES)
-	var best_sure: float = 0.0
-	for k: int in AIRimPass.count:
-		_rim_sure_by_k[k] = -1.0
-		var t: float = AIRimPass.meet_time(k, receiver_state.position,
-				receiver_state.velocity, speed)
-		if t == INF:
-			continue
-		if not AIRimPass.catchable(k, t, receiver_state.velocity):
-			continue
-		if carrier_in_oz:
-			if not AIRimPass.stays_in_zone(k, t, ctx.attacking_goal_pos,
-					AICarrierField.OZ_RECEIVE_LINE_BUFFER_M):
-				continue
-		elif AIActionScoring.in_offensive_zone(
-				AIRimPass.meet_point(k, t), ctx.attacking_goal_pos):
-			continue
-		var miss_prob: float = AIPuckLane.pass_miss_prob(
-				AIRimPass.path_length(k, t), ctx.self_pass_aim_error_rad,
-				catch_radius, AIPuckLane.receiver_heading_uncertainty_m(
-						receiver_speed, receiver_omega, t))
-		var sure: float = (1.0 - miss_prob) * AIActionScoring.delay_discount(t)
-		# Exact prune before the opponent race (the costly read): the lane is at
-		# most 1, so a launch that cannot reach the soft band unraced cannot raced.
-		if sure < best_sure * RIM_SOFT_SHARE:
-			continue
-		var lane: float = AIRimPass.race_completion(k, t)
-		sure *= lane
-		_rim_sure_by_k[k] = sure
-		_rim_t_by_k[k] = t
-		_rim_lane_by_k[k] = lane
-		_rim_miss_by_k[k] = miss_prob
-		best_sure = maxf(best_sure, sure)
-	if best_sure <= 0.0:
+# The share of a full-pace feed to the receiver being searched that gets by the
+# defence from a release at `off` (world XZ off the body) after the blade's
+# `pull_s`: flat, or saucered where the search would try one. 0 where _pass_ev
+# hard-zeros the release (through a cage, across our slot).
+func _release_lane(off: Vector2, pull_s: float) -> float:
+	var origin: Vector3 = AICarrierField.pass_origin(_hold_ctx, pull_s, off - _hold_puck_off)
+	if AINetObstacle.pass_lane_blocked_by_net(origin, _hold_receiver) \
+			or AINetObstacle.pass_crosses_own_slot(origin, _hold_receiver,
+					_hold_ctx.own_goal_dir * GameRules.GOAL_LINE_Z):
 		return 0.0
-	# Fire it as soft as the race allows: among the launches nearly as sure as the
-	# best, the softest — easier to stop, and a missed one dies sooner.
-	var pick: int = -1
-	for k: int in AIRimPass.count:
-		var sure_k: float = _rim_sure_by_k[k]
-		if sure_k < best_sure * RIM_SOFT_SHARE:
-			continue
-		if pick == -1 or AIRimPass.paces[k] < AIRimPass.paces[pick] \
-				or (AIRimPass.paces[k] == AIRimPass.paces[pick] and sure_k > _rim_sure_by_k[pick]):
-			pick = k
-	_rim_k = pick
-	_rim_t = _rim_t_by_k[pick]
-	_rim_lane = _rim_lane_by_k[pick]
-	_rim_miss = _rim_miss_by_k[pick]
-	return _rim_sure_by_k[pick]
+	var flat: float = AIPuckLane.lane_clear(origin, _hold_receiver, _field.opponents_release,
+			_hold_speed, _field.opponent_vels, _field.opponent_caps, true,
+			_field.opponent_blades_release)
+	if flat >= AIPuckLane.SAUCER_SKIP_WHEN_LANE_CLEAR \
+			or _hold_saucer_speed < AIPuckLane.SOFTEST_FEED_M_S:
+		return flat
+	return maxf(flat, AIPuckLane.lane_clear_saucer(origin, _hold_receiver,
+			_field.opponents_release, _hold_saucer_speed, _field.opponent_vels,
+			_field.opponent_caps, _field.opponent_blades_release))
+
+
+# How far out from his body `caps`' receiver takes a feed: where a saucer has to
+# be down and settled by, so its runway is measured to it, not to his body.
+static func receiver_gate_m(caps: AISkaterCaps) -> float:
+	return AIBotMechanics.reception_gate_reach(caps.blade_span if caps != null
+			else GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLADE_LENGTH_M)
 
 
 # EV of ONE pass variant (flat, or saucer at a possibly-reduced launch
@@ -364,30 +401,34 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 #   - Lead past our own goal line (own-goal risk).
 #   - Carrier in OZ → lead must sit AICarrierField.OZ_RECEIVE_LINE_BUFFER_M inside the line.
 #   - Carrier outside with a delayed offside up → lead must stay outside.
-#   - Saucer only: the lead must leave the flip landing runway (airborne carry
-#     + SAUCER_LANDING_RUN_M — a closing receiver can shrink the solved lead
+#   - Saucer only: the lead must leave the flip landing runway before his gate
+#     (airborne carry + SAUCER_LANDING_RUN_M + receiver_gate_m — a closing
+#     receiver can shrink the solved lead
 #     under what the current distance allowed), the flat lane must be contested
 #     (SAUCER_SKIP_WHEN_LANE_CLEAR), and the loft must clear MORE of the lane
 #     than staying flat.
 #   - A softer pace (`soft`) whose flight outruns PASS_LEAD_MAX_S: its lead is
 #     the horizon's, not the meet's, so it is not priced at all.
 #
+# `pass_origin` is the release after the pull to the pocket, `pull_s` the wait
+# before the wind-up and `keep` the odds the puck is still on the blade then.
+#
 # A one-timer-ready receiver who can set for the feed takes it on his tape and
 # fires on contact (no wrister windup), so the goalie only gets the pass flight
 # to react; nor does he settle the catch. One who cannot set catches it.
 func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
-		receiver_accel: Vector3, receiver_omega: float, receiver_caps: AISkaterCaps,
+		receiver_omega: float, receiver_caps: AISkaterCaps,
 		pass_origin: Vector3, pass_speed: float, saucer: bool,
 		receiver_is_one_timer: bool, self_facing_xz: Vector2,
 		our_goalie: Vector3, carrier_in_oz: bool,
-		useless_below: float = -INF, soft: bool = false) -> float:
+		useless_below: float = -INF, soft: bool = false, pull_s: float = 0.0,
+		keep: float = 1.0) -> float:
 	# Intercept-aware lead, shared with the state machine's firing aim; flight_t
-	# is the SOLVED time. The receiver's real build bounds how far he is led. He
-	# skates on through the windup, so the lead is solved from the release, where
-	# the state machine aims it and pass_origin throws it.
-	var lead: Array = AIPassLead.lead(
-			pass_origin, receiver_state, receiver_accel, pass_speed,
-			PASS_LEAD_MAX_S, receiver_caps, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)
+	# is the SOLVED time. He skates on through the pull and the windup, so the
+	# lead is solved from the release, where the state machine aims it and
+	# pass_origin throws it.
+	var lead: Array = AIPassLead.lead(pass_origin, receiver_state, pass_speed, PASS_LEAD_MAX_S,
+			AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s)
 	var receiver: Vector3 = lead[0]
 	var flight_t: float = lead[1]
 	# Fed on his tape only when he can set for it; otherwise he catches it.
@@ -425,7 +466,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	if saucer:
 		# Small tolerance: a speed sitting exactly on the receivability
 		# bound round-trips through the kinematics to the exact distance.
-		if pass_origin.distance_to(receiver) \
+		if pass_origin.distance_to(receiver) - receiver_gate_m(receiver_caps) \
 				< AIPuckLane.saucer_airborne_distance_m(pass_speed) \
 				+ AIPuckLane.SAUCER_LANDING_RUN_M - 0.01:
 			return 0.0
@@ -437,7 +478,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			return 0.0
 		lane = AIPuckLane.lane_clear_saucer(
 				pass_origin, receiver, _field.opponents_release, pass_speed,
-				_field.opponent_vels, _field.opponent_caps)
+				_field.opponent_vels, _field.opponent_caps, _field.opponent_blades_release)
 		if lane <= lane_flat:
 			return 0.0
 		miss_prob += AIPuckLane.SAUCER_EXTRA_MISS_PROB
@@ -457,9 +498,9 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			self_facing_xz, ctx.self_pos, receiver,
 			ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
 	return _pass_ev(ctx, receiver, pass_speed, flight_t,
-			receiver_release_t, flight_t + rotation_time, our_goalie,
+			receiver_release_t, flight_t + maxf(rotation_time, pull_s), our_goalie,
 			receiver_caps, lane, miss_prob, receiver_state.velocity, useless_below,
-			Vector3.ZERO, Vector3.INF, closing)
+			Vector3.ZERO, Vector3.INF, closing, false, pass_origin, keep)
 
 
 # Expected value of firing a pass from our current position to
@@ -468,24 +509,19 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 # creating" and "the pass I can fire now" are priced identically — the hold
 # self-terminates the instant the real pass matches it (fire wins ties).
 #
-# Benefit = P(complete) × the receiver's value at the spot, decayed by
-# `delay_s` (flight + any facing rotation). Cost = the opponent's value at each
-# loss mode's location (release poke, lane interception, execution miss,
-# reception strip), so a low-upside backpass deep in our own end loses to
-# skating: its miss mode surrenders the ice in front of our net.
-#
 # `lane` < 0 has the flat lane computed here; `miss_prob` is this variant's
 # execution-miss probability. The goalie is predicted at `receiver_release_t`
 # (flight + the receiver's wrister charge, or flight alone for a one-timer —
 # the caller decides), so a cross-seam feed is scored against a keeper caught
 # mid-slide. The receiver shoots at his own build's speed and loft when
 # `receiver_caps` is given, the league default otherwise. A rim passes
-# `rim_dir` and the point its path is lost at (`rim_loss_point`). `closing` is
+# `rim_dir` and the point its path is lost at (`rim_loss_point`), or `rim_iced`
+# when what gets by our receiver ices instead (AICarrierRimSearch.ices). `closing` is
 # the feed's speed in the receiver's frame as it reaches him (0 for a one-timer
-# or a rim: no reception to price). By its odds it is caught, and he settles
-# (AIFeedReception.receiver_settle_s) with the puck on his stick for the defence to
-# poke at, or it bobbles, and lies loose until he regathers it
-# (AIFeedReception.bobble_regather_s) — his only if he wins that race.
+# or a rim: no reception to price). `origin` is where it leaves the blade (INF:
+# AICarrierField.pass_origin, the puck where it is) and `keep` the odds it is
+# still on the blade when it goes (AIShotHolds.keep_for), a loss there priced
+# as a poke at the release.
 func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		flight_t: float, receiver_release_t: float, delay_s: float,
 		our_goalie: Vector3, receiver_caps: AISkaterCaps = null,
@@ -495,12 +531,16 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		useless_below: float = -INF,
 		rim_dir: Vector3 = Vector3.ZERO,
 		rim_loss_point: Vector3 = Vector3.INF,
-		closing: float = 0.0) -> float:
+		closing: float = 0.0,
+		rim_iced: bool = false,
+		origin: Vector3 = Vector3.INF,
+		keep: float = 1.0) -> float:
 	var self_pos: Vector3 = ctx.self_pos
 	# The pass flies from the PUCK, not the body: behind the net the two differ
 	# by up to a stick's reach. The lane and its loss points are the puck's;
 	# self_pos stays the body reference for the release and recovery terms.
-	var origin: Vector3 = AICarrierField.pass_origin(ctx)
+	if not origin.is_finite():
+		origin = AICarrierField.pass_origin(ctx)
 	# Hard zeros: net-blocker (segment crosses a net body) and own-DZ
 	# slot crossing (intercepted = goal-against). A rim's path is not this
 	# segment — AIRimPass checked each of its legs instead.
@@ -525,7 +565,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	var release_clean: float = AIPuckLane.release_contest_clean(
 			AIPuckLane.release_point_toward(self_pos,
 					self_pos + rim_dir if is_rim else receiver_spot),
-			_field.opponents, _field.opponent_caps)
+			_field.opponents, _field.opponent_caps) * keep
 	_field.project_opponents(flight_t, _proj_buf)
 	# The receiver's shot off this feed, the keeper square on the passer as it
 	# leaves (the goalie's own answer to the flight, AIShotValue.feed). A
@@ -575,9 +615,11 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	var benefit: float = receiver_value * release_clean * clean_lane * (
 			(1.0 - p_bobble) * catch_safety * AIActionScoring.delay_discount(delay_s + settle_s)
 			+ p_bobble * bobble_won * bobble_decay)
-	# CEILING PRUNE (exact): every turnover cost below can only LOWER this EV,
-	# so the benefit is a hard upper bound.
-	if benefit <= useless_below:
+	# CEILING PRUNE (exact): the turnovers below pay the passer at most the
+	# opponent's least possession (AIPossessionValue.LEAST_VALUE) over the loss
+	# modes' share, so that on top of the benefit bounds the EV.
+	if benefit - AIPossessionValue.LEAST_VALUE \
+			* (1.0 - release_clean * clean_lane * reception_kept) <= useless_below:
 		return 0.0
 	# No separate "escape" bonus for a pressured carrier: the pressure is
 	# already priced by the carry/hold alternatives' own strip cost.
@@ -590,10 +632,15 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 					origin, receiver_spot, _field.opponents_release, pass_speed,
 					_field.opponent_vels, _field.opponent_caps,
 					_field.opponent_blades_release)
-	cost += _field.turnover_cost(loss_point,
-			release_clean * (1.0 - lane))
-	cost += _field.turnover_cost(AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
-			release_clean * lane * miss_prob)
+	if rim_iced:
+		# Beaten to it or missed, it ices: a faceoff at our dot, no counter-rush.
+		cost += _field.turnover_cost(AIIcingRead.faceoff_spot(ctx.team_id, origin.x),
+				AIIcingRead.FACEOFF_LOSS_SHARE * release_clean * (1.0 - clean_lane))
+	else:
+		cost += _field.turnover_cost(loss_point,
+				release_clean * (1.0 - lane))
+		cost += _field.turnover_cost(AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
+				release_clean * lane * miss_prob)
 	# Lost on reception: the puck dies AT the receiver, in whatever traffic he was
 	# about to catch it in.
 	cost += _field.turnover_cost(receiver_spot,
@@ -601,10 +648,16 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
 	# it hands over — the carrier stays at self_pos through a pass, so his
 	# own recovery race starts from here (plan §6).
-	cost += _field.counter_exposure_cost(ctx, loss_point, 1.0 - lane,
-			self_pos, our_goalie)
+	if not rim_iced:
+		cost += _field.counter_exposure_cost(ctx, loss_point, 1.0 - lane,
+				self_pos, our_goalie)
 	cost += _field.counter_exposure_cost(ctx, receiver_spot,
 			clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
+	if benefit - cost > _debug_best_ev:
+		_debug_best_ev = benefit - cost
+		debug_completion = Vector4(release_clean, lane, miss_prob, reception_kept)
+		debug_spot = receiver_spot
+		debug_origin_pace = Vector4(origin.x, origin.y, origin.z, pass_speed)
 	return benefit - cost
 
 
@@ -644,9 +697,7 @@ func _facing_rotation_time(self_facing_xz: Vector2, self_pos: Vector3,
 #     for the weak from-the-top shot.
 #
 #   - Breakout OUTLET (BREAKOUT_STRONG / OUTLET / BREAKOUT_D2): an outlet
-#     skating its route toward open ice — see _developing_outlet_feed. This is
-#     why a pressured own-zone carrier protects the puck and skates instead of
-#     forcing a low-value backpass.
+#     skating its route toward open ice — see _developing_outlet_feed.
 func developing_feed_value(ctx: RoleContext) -> float:
 	if not ctx.holds_for_developing_feeds:
 		return 0.0

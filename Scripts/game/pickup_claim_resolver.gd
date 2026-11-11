@@ -13,7 +13,7 @@ extends RefCounted
 # (LagCompRewind.clamp_client_blade) so a modified client can't teleport its blade.
 #
 # Flow:
-#   receive_claim(peer_id, host_ts, interp_delay, client_blade_curr/prev, top_hand)
+#   receive_claim(peer_id, host_ts, interp_delay, client_blade_curr/prev)
 #     → reject if puck locked, claim stale, skater missing/ghost, on cooldown
 #     → rewind puck to LagCompRewind.puck_view_time and the claimant's body to
 #       self_view_time(host_ts) — since the clock unification these are the SAME
@@ -210,8 +210,7 @@ func arbitrate_present_grab(grabber: Skater, grabber_peer_id: int,
 # the loose-puck rewind reads the claim stamp itself (puck_view_time) and the
 # blade rewind is self-view — nothing in a pickup claim renders remote-view.
 func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
-		input_lead_ms: float, client_blade_curr: Vector3, client_blade_prev: Vector3,
-		client_top_hand: Vector3) -> void:
+		input_lead_ms: float, client_blade_curr: Vector3, client_blade_prev: Vector3) -> void:
 	if not _puck_getter.is_valid() or not _puck_controller_getter.is_valid():
 		return
 	var puck: Puck = _puck_getter.call() as Puck
@@ -303,13 +302,11 @@ func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
 	var self_catch: Vector3 = _claimant.catch_up()
 	var blade_curr: Vector3 = _claimant.reach_clamp(client_blade_curr, skater_snap.position)
 	var blade_prev: Vector3 = _claimant.reach_clamp(client_blade_prev, skater_prev_snap.position)
-	var top_hand: Vector3 = _claimant.reach_clamp(client_top_hand, skater_snap.position)
 	# The two bounds are split rather than clamp_blade'd because the divergence
 	# telemetry below measures BETWEEN them.
 	var pre_continuity_blade: Vector3 = blade_curr
 	blade_curr = _claimant.continuity_clamp(blade_curr, skater_snap.blade_contact_world)
 	blade_prev = _claimant.continuity_clamp(blade_prev, skater_prev_snap.blade_contact_world)
-	top_hand = _claimant.continuity_clamp(top_hand, skater_snap.top_hand_world)
 	# Rewind fidelity, measured directly rather than inferred from the miss rate:
 	# how far the client's blade sat from the host's OWN reconstruction of it, and
 	# whether the clamp had to pull it. Recorded for EVERY claim reaching the
@@ -347,39 +344,36 @@ func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
 	# Catch vs deflect — run the SAME decision the present-time path uses
 	# (PuckController._check_interactions → PuckReceptionRules.should_receive),
 	# but against the rewound snapshot. Without it the claim path granted a
-	# pickup on blade overlap ALONE, so a remote player reaching for a too-fast /
-	# poorly-angled puck caught it magnetically where a local player would have
+	# pickup on blade overlap ALONE, so a remote player reaching for a too-fast
+	# puck off its line caught it magnetically where a local player would have
 	# deflected it. Puck velocity is stored on the snapshot; the receiver's velocity
 	# (for the relative-frame decision) is the server-authoritative body kinematics
-	# from the rewound skater snapshot, while the blade/hand world points (for the
-	# face normal) are the client-sent, reach-clamped aim above — so the verdict
-	# judges the same closing speed and stick angle the claimant saw at send time.
+	# from the rewound skater snapshot, while the blade point (for its distance off
+	# the puck's path) is the client-sent, reach-clamped aim above — so the verdict
+	# judges the same closing speed and blade placement the claimant saw at send time.
 	var puck_vel: Vector3 = puck_snap.puck_state.velocity
 	var relative_vel: Vector3 = puck_vel - skater_snap.velocity
-	var face_normal: Vector3 = PuckReceptionRules.blade_face_normal(
-			blade_curr, top_hand, relative_vel,
-			Vector3(skater_snap.facing.x, 0.0, skater_snap.facing.y))
+	var offset: float = pc.path_offset_for(record.skater, puck_pos, relative_vel, blade_curr)
 	var deflect_min: float = puck.deflect_min_speed * record.skater.reception_ceiling_mult
 	var align_bonus: float = puck.alignment_receive_bonus * record.skater.reception_ceiling_mult
 	if not PuckReceptionRules.should_receive(
-			puck_vel, skater_snap.velocity, face_normal,
+			puck_vel, skater_snap.velocity, offset,
 			puck.pickup_max_speed, deflect_min, align_bonus):
 		# Deflect verdict: redirect the puck instead of granting possession. Not a
 		# contested action (no carrier change), so it fires immediately rather than
 		# arming the contest window. Counts as a claim outcome (geometry hit, but the
-		# rewound speed/angle said tip-not-catch) so the host row separates "missed
-		# the puck" from "reached it but it wasn't catchable".
+		# rewound speed/placement said tip-not-catch) so the host row separates
+		# "missed the puck" from "reached it but it wasn't catchable".
 		NetworkTelemetry.record_pickup_claim_deflect()
 		pc.apply_lag_comp_deflect(record.skater)
 		NetworkManager.send_pickup_claim_nack(peer_id)
 		return
 	var catch_load: float = PuckReceptionRules.reception_load(
-			puck_vel, skater_snap.velocity, face_normal, deflect_min, align_bonus)
+			puck_vel, skater_snap.velocity, offset, deflect_min, align_bonus)
 	# Nearly held: the bobble verdict, read off the claim's own blade like the
 	# catch's, fires at once like the deflect's (no possession to contest).
-	var bobble_at: float = pc.bobble_load_for(record.skater, puck_pos, relative_vel,
-			blade_curr, top_hand)
-	if catch_load >= bobble_at:
+	if catch_load >= PuckReceptionRules.bobble_load_at(
+			offset, puck.bobble_load, puck.bobble_edge_share):
 		NetworkTelemetry.record_pickup_claim_deflect()
 		pc.apply_lag_comp_bobble(record.skater)
 		NetworkManager.send_pickup_claim_nack(peer_id)

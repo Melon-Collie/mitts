@@ -4,7 +4,8 @@ extends Node
 # hand at a fixed DT as tools/gait_strip_runner.gd drives one. The cursor sits
 # `r` metres out at an angle from up-ice (+ toward the forehand: the default
 # skater shoots left, so facing up-ice his forehand is world −X) that turns at
-# `rate` °/s once the skater has settled, and walks out from it at `dr` m/s.
+# `rate` °/s once the skater has settled, and walks out from it at `dr` m/s;
+# `swing` degrees either side of it at `swing_hz`, a dangle.
 #
 # `hold` pins the facing up-ice every tick, so the sweep walks the blade round
 # the body instead of the body round the cursor: the arms' whole range at one
@@ -15,7 +16,6 @@ extends Node
 # with the body), and overhead from behind where he started.
 
 const DT: float = 1.0 / 120.0
-const TILE: int = 256
 const VIEWS: int = 4
 const SHEET_COLS: int = 12
 const OUT_DIR: String = "user://arm_sweep"
@@ -65,6 +65,23 @@ const SCENARIOS: Array[Dictionary] = [
 		"puck": true, "skate": true, "trace": true},
 	{"name": "skate_backhand", "r": 2.0, "a0": 0.0, "rate": -45.0, "frames": 12, "step": 40,
 		"puck": true, "skate": true, "trace": true},
+	# Held where tests/instruments/actors/test_carry_clipping.gd finds the shaft
+	# in the body: skating with the puck behind on the forehand and in close on
+	# the backhand, and pulled in tight standing.
+	{"name": "clip_skate_forehand_behind", "r": 1.1, "a0": 140.0, "rate": 0.0, "frames": 4,
+		"step": 40, "puck": true, "skate": true},
+	{"name": "clip_skate_backhand_close", "r": 0.8, "a0": -90.0, "rate": 0.0, "frames": 4,
+		"step": 40, "puck": true, "skate": true},
+	{"name": "clip_stand_tight", "r": 0.5, "a0": -150.0, "rate": 60.0, "frames": 6, "step": 75,
+		"puck": true, "hold": true},
+	# A dangle across his front, a frame every 1/30 s over a stroke and a half:
+	# standing, in tight, and skating.
+	{"name": "dangle", "r": 1.25, "a0": 5.0, "rate": 0.0, "swing": 28.0, "swing_hz": 1.8,
+		"frames": 24, "step": 4, "puck": true, "hold": true},
+	{"name": "dangle_tight", "r": 0.9, "a0": 5.0, "rate": 0.0, "swing": 40.0, "swing_hz": 1.8,
+		"frames": 24, "step": 4, "puck": true, "hold": true},
+	{"name": "skate_dangle", "r": 1.6, "a0": 5.0, "rate": 0.0, "swing": 22.0, "swing_hz": 1.8,
+		"frames": 24, "step": 4, "puck": true, "skate": true},
 ]
 
 
@@ -78,6 +95,9 @@ class StubGameState extends Node:
 	func is_faceoff_prep() -> bool:
 		return false
 
+
+# Each view's size in pixels, square (tools/arm_sweep.gd's --tile).
+var tile: int = 256
 
 var _scenarios: Array[Dictionary] = []
 var _index: int = -1
@@ -210,7 +230,8 @@ func _build_actor() -> void:
 func _cursor_angle() -> float:
 	var s: Dictionary = _scenario()
 	var t: float = maxf(float(_tick - _settle_ticks()), 0.0) * DT
-	return deg_to_rad(float(s["a0"]) + float(s["rate"]) * t)
+	return deg_to_rad(float(s["a0"]) + float(s["rate"]) * t
+			+ float(s.get("swing", 0.0)) * sin(TAU * float(s.get("swing_hz", 0.0)) * t))
 
 
 func _cursor() -> Vector3:
@@ -318,6 +339,100 @@ func _report() -> void:
 			_frame, _off_facing(_cursor()), _skater.upper_body.rotation_degrees.y,
 			_skater.lower_body.rotation_degrees.y, top.x, top.y, bottom.x, bottom.y,
 			top_grip.x, top_grip.y, bottom_grip.x, bottom_grip.y])
+	var ub_inv: Basis = _skater.drawn_upper_body().basis.inverse()
+	var body: Skeleton3D = _skater._arms._skeleton
+	_report_hold()
+	var top_back: Vector3 = ub_inv * body.get_bone_global_pose(
+			SkaterMeshBuilder.UpperBone.TOP_HAND).basis.z.normalized()
+	var bottom_back: Vector3 = ub_inv * body.get_bone_global_pose(
+			SkaterMeshBuilder.UpperBone.BOTTOM_HAND).basis.z.normalized()
+	var drawn_off: Vector3 = _skater.drawn_top_hand() - _skater.top_hand.position
+	var clear_off: Vector3 = _controller._ik._clear_offset
+	print("  f%02d   of it, the shaft's clearance %+.2f up %+.2f ahead" % [
+			_frame, clear_off.y, -clear_off.z])
+	print("  f%02d top hand drawn %+.2f m up %+.2f m ahead of its marker | elbow ahead of its hand: top %+.2f m bottom %+.2f m | back of glove (fwd, out, up): top %+.1f %+.1f %+.1f bottom %+.1f %+.1f %+.1f" % [
+			_frame, drawn_off.y, -drawn_off.z, _elbow_ahead(SkaterMeshBuilder.UpperBone.TOP_FOREARM,
+					SkaterMeshBuilder.UpperBone.TOP_HAND),
+			_elbow_ahead(SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,
+					SkaterMeshBuilder.UpperBone.BOTTOM_HAND),
+			-top_back.z, top_back.x * signf(_skater.shoulder.position.x), top_back.y,
+			-bottom_back.z, bottom_back.x * signf(_skater.bottom_shoulder.position.x),
+			bottom_back.y])
+
+
+# The stick as held: how high each drawn hand and the shoulder over the top one
+# ride off the ice, where the top hand and its elbow sit off that shoulder
+# across the chest, how far apart the hands are, how steeply the shaft stands,
+# and how bent each elbow is (0° a straight arm).
+func _report_hold() -> void:
+	var body: Skeleton3D = _skater._arms._skeleton
+	var to_world: Transform3D = body.global_transform
+	var top: Vector3 = to_world * body.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TOP_HAND).origin
+	var bottom: Vector3 = to_world * body.get_bone_global_pose(
+			SkaterMeshBuilder.UpperBone.BOTTOM_HAND).origin
+	var upper: Transform3D = body.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM)
+	var shoulder: Vector3 = to_world * (upper.origin + upper.basis.z * 0.5)
+	var hips: Vector3 = to_world * body.get_bone_global_pose(SkaterBodySkeleton.HIPS_BONE).origin
+	var chest: Basis = Basis(Vector3.UP, _skater.global_rotation.y + _skater.upper_body.rotation.y)
+	var off: Vector3 = chest.inverse() * (top - shoulder)
+	var blade: Vector3 = _skater.upper_body_to_global(_skater.drawn_blade().origin)
+	var shaft: Vector3 = top - blade
+	var elbow: Vector3 = chest.inverse() * (to_world * (upper.origin - upper.basis.z * 0.5) - shoulder)
+	print("  f%02d top elbow %.2f m below its shoulder, %+.2f out %+.2f behind | blade's face leans %+3.0f° over the puck, drawn %+3.0f° round off the marker's" % [
+			_frame, -elbow.y, elbow.x * signf(_skater.shoulder.position.x), elbow.z,
+			_face_lean(), _blade_yaw_off_marker()])
+	print("  f%02d hold: top hand %.2f m up, %+.2f ahead %+.2f out of its shoulder (%.2f up, hips %.2f) | hands %.2f apart, bottom %.2f up | shaft %2.0f° | elbows bent top %3.0f° bottom %3.0f°" % [
+			_frame, top.y, -off.z, off.x * signf(_skater.shoulder.position.x), shoulder.y, hips.y,
+			top.distance_to(bottom), bottom.y,
+			rad_to_deg(asin(clampf(shaft.y / maxf(shaft.length(), 0.001), -1.0, 1.0))),
+			_elbow_bend(SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM,
+					SkaterMeshBuilder.UpperBone.TOP_FOREARM),
+			_elbow_bend(SkaterMeshBuilder.UpperBone.BOTTOM_UPPER_ARM,
+					SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM)])
+
+
+# How far the drawn blade's top edge leans toward the carried puck off
+# upright (degrees, negative away from it): the cup a stroke's wrist roll lays
+# over it.
+func _face_lean() -> float:
+	var mesh: MeshInstance3D = _skater._blade_mesh_instance
+	if mesh == null or not bool(_scenario()["puck"]):
+		return 0.0
+	var xf: Transform3D = mesh.global_transform
+	var to_puck: Vector3 = _puck.global_position - xf * Vector3(0.0, 0.0, -_skater.blade_length * 0.5)
+	to_puck.y = 0.0
+	if to_puck.length() < 0.001:
+		return 0.0
+	var top: Vector3 = xf.basis.y.normalized()
+	return rad_to_deg(asin(clampf(top.dot(to_puck.normalized()), -1.0, 1.0)))
+
+
+# How far round (degrees, about up) the drawn blade's heel→toe line lies off
+# the Blade marker's, which the hold's drawn hand turns it by.
+func _blade_yaw_off_marker() -> float:
+	var mesh: MeshInstance3D = _skater._blade_mesh_instance
+	if mesh == null:
+		return 0.0
+	var drawn: Vector3 = -mesh.global_transform.basis.z
+	var marker: Vector3 = -_skater.blade.global_transform.basis.z
+	return rad_to_deg(Vector2(marker.x, marker.z).angle_to(Vector2(drawn.x, drawn.z)))
+
+
+func _elbow_bend(upper: int, forearm: int) -> float:
+	var body: Skeleton3D = _skater._arms._skeleton
+	return rad_to_deg(body.get_bone_global_pose(upper).basis.z.angle_to(
+			body.get_bone_global_pose(forearm).basis.z))
+
+
+# How far the elbow sits ahead of its hand along the chest's facing (m,
+# UpperBody's frame as drawn).
+func _elbow_ahead(forearm: int, hand: int) -> float:
+	var body: Skeleton3D = _skater._arms._skeleton
+	var ub_inv: Transform3D = _skater.drawn_upper_body().affine_inverse()
+	var fore: Transform3D = body.get_bone_global_pose(forearm)
+	var elbow: Vector3 = ub_inv * (fore.origin + fore.basis.z * 0.5)
+	var fist: Vector3 = ub_inv * body.get_bone_global_pose(hand).origin
+	return fist.z - elbow.z
 
 
 func _place_camera(view: int) -> void:
@@ -369,13 +484,13 @@ func _save_sheet() -> void:
 	var frames: int = _images.size() / VIEWS
 	var cols: int = mini(frames, SHEET_COLS)
 	var rows: int = ceili(float(frames) / float(cols))
-	var sheet := Image.create(TILE * cols, TILE * VIEWS * rows, false, Image.FORMAT_RGBA8)
+	var sheet := Image.create(tile * cols, tile * VIEWS * rows, false, Image.FORMAT_RGBA8)
 	for i: int in _images.size():
 		var img: Image = _images[i]
 		img.convert(Image.FORMAT_RGBA8)
 		var f: int = i / VIEWS
-		sheet.blit_rect(img, Rect2i(0, 0, TILE, TILE),
-				Vector2i((f % cols) * TILE, ((f / cols) * VIEWS + i % VIEWS) * TILE))
+		sheet.blit_rect(img, Rect2i(0, 0, tile, tile),
+				Vector2i((f % cols) * tile, ((f / cols) * VIEWS + i % VIEWS) * tile))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	var path: String = "%s/%s.png" % [OUT_DIR, String(_scenario()["name"])]
 	sheet.save_png(path)

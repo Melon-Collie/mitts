@@ -5,27 +5,28 @@ extends RefCounted
 # view and each shadow map that holds it: the skin (SkaterConnectedMesh) with
 # the rigid parts (SkaterRigidParts) appended. The skin's binds come first;
 # after them the rigid parts bind to their own bones at identity, upper then
-# legs, so a rigid vertex is its bone's pose alone, as on its own mesh; last,
-# the skate upper's feet, which read it from the SKATE bone's frame.
+# legs, so a rigid vertex is its bone's pose alone, as on its own mesh; then
+# the skate upper's feet, which read it from the SKATE bone's frame; last, the
+# neck's foot.
 
 static var _cache: Dictionary = {}
 static var _skin: Skin = null
 
 
 # One per GearModelRegistry TUCK_* option, as the skin is; per pair of gloves:
-# `top_right`, the top hand is his right (SkaterRigidParts); and per TONGUE_*
-# option, as the skates' uppers are.
+# `top_right`, the top hand is his right (SkaterRigidParts), and `bare`, the
+# gloves are off for a fight; and per TONGUE_* option, as the skates' uppers are.
 static func shared_mesh(tuck: int, top_right: bool = true,
-		tongue: int = GearModelRegistry.TONGUE_TUCKED) -> ArrayMesh:
+		tongue: int = GearModelRegistry.TONGUE_TUCKED, bare: bool = false) -> ArrayMesh:
 	var skin_mesh: ArrayMesh = SkaterConnectedMesh.shared_mesh(tuck)
 	if SkaterConnectedMesh.preview_pants_only:
 		return skin_mesh
 	var legs: ArrayMesh = SkaterRigidParts.leg_body_mesh(tongue)
-	var key: String = "%d/%d/%d" % [skin_mesh.get_instance_id(), 1 if top_right else 0,
-			legs.get_instance_id()]
+	var key: String = "%d/%d/%d/%d" % [skin_mesh.get_instance_id(), 1 if top_right else 0,
+			legs.get_instance_id(), 1 if bare else 0]
 	var built: ArrayMesh = _cache.get(key)
 	if built == null:
-		built = _build(skin_mesh, top_right, legs)
+		built = _build(skin_mesh, top_right, legs, bare)
 		_cache[key] = built
 	return built
 
@@ -41,6 +42,9 @@ static func shared_skin() -> Skin:
 		var foot_from_skate: Transform3D = SkateUpperMesh.SKATE_FROM_FOOT.affine_inverse()
 		for foot: int in [SkaterMeshBuilder.LegBone.FOOT_L, SkaterMeshBuilder.LegBone.FOOT_R]:
 			_skin.add_bind(SkaterBodySkeleton.LEG_BONE_OFFSET + foot, foot_from_skate)
+		# SkaterRigidParts.NECK_FOOT_BIND.
+		_skin.add_bind(SkaterBodySkeleton.deform_bone(SkaterConnectedMesh.Deform.NECK_FOOT),
+				Transform3D.IDENTITY)
 	return _skin
 
 
@@ -49,7 +53,8 @@ static func upper_bind_base() -> int:
 	return SkaterConnectedMesh.shared_skin().get_bind_count()
 
 
-static func _build(skin_mesh: ArrayMesh, top_right: bool, legs: ArrayMesh) -> ArrayMesh:
+static func _build(skin_mesh: ArrayMesh, top_right: bool, legs: ArrayMesh,
+		bare: bool) -> ArrayMesh:
 	var out: Array = []
 	out.resize(Mesh.ARRAY_MAX)
 	for a: int in [Mesh.ARRAY_VERTEX, Mesh.ARRAY_NORMAL]:
@@ -57,16 +62,18 @@ static func _build(skin_mesh: ArrayMesh, top_right: bool, legs: ArrayMesh) -> Ar
 	for a: int in [Mesh.ARRAY_TEX_UV, Mesh.ARRAY_TEX_UV2]:
 		out[a] = PackedVector2Array()
 	out[Mesh.ARRAY_COLOR] = PackedColorArray()
+	out[Mesh.ARRAY_CUSTOM0] = PackedFloat32Array()
 	out[Mesh.ARRAY_BONES] = PackedInt32Array()
 	out[Mesh.ARRAY_WEIGHTS] = PackedFloat32Array()
 	out[Mesh.ARRAY_INDEX] = PackedInt32Array()
 	var upper: int = upper_bind_base()
 	_append(out, skin_mesh.surface_get_arrays(0), 0)
-	_append(out, SkaterRigidParts.upper_body_mesh(top_right).surface_get_arrays(0), upper)
+	_append(out, SkaterRigidParts.upper_body_mesh(top_right, bare).surface_get_arrays(0), upper)
 	_append(out, legs.surface_get_arrays(0),
 			upper + SkaterMeshBuilder.UPPER_BONE_COUNT)
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out, [], {},
+			ConnectedSkinBuilder.FACET_FORMAT)
 	return mesh
 
 
@@ -87,9 +94,10 @@ static func _append(out: Array, src: Array, bind_offset: int) -> void:
 	var colors: PackedColorArray = out[Mesh.ARRAY_COLOR]
 	colors.append_array(src[Mesh.ARRAY_COLOR])
 	out[Mesh.ARRAY_COLOR] = colors
-	var weights: PackedFloat32Array = out[Mesh.ARRAY_WEIGHTS]
-	weights.append_array(src[Mesh.ARRAY_WEIGHTS])
-	out[Mesh.ARRAY_WEIGHTS] = weights
+	for a: int in [Mesh.ARRAY_WEIGHTS, Mesh.ARRAY_CUSTOM0]:
+		var floats: PackedFloat32Array = out[a]
+		floats.append_array(src[a])
+		out[a] = floats
 	var bones: PackedInt32Array = out[Mesh.ARRAY_BONES]
 	var src_bones: PackedInt32Array = src[Mesh.ARRAY_BONES]
 	for b: int in src_bones:

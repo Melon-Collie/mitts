@@ -145,10 +145,10 @@ func test_carrier_not_pushed_backwards_by_defender_on_the_line() -> void:
 
 
 func test_carrier_ignores_defender_outside_swept_reach() -> void:
-	# A defender well outside his momentum-reach (stationary, ~3.6 m off) is no
+	# A defender well outside his momentum-reach (stationary, ~3.8 m off) is no
 	# threat to the puck this horizon — zero repel, pure anchor pull.
 	var anchor := Vector3(0, 0, 8)
-	var opps: Array[Vector3] = [Vector3(3.6, 0, 0)]
+	var opps: Array[Vector3] = [Vector3(3.8, 0, 0)]
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	var v := _carrier_move(Vector3.ZERO, anchor, opps, vels)
 	assert_almost_eq(v.x, 0.0, 0.01, "out of reach → no repel at all")
@@ -416,6 +416,19 @@ func test_the_advance_cap_keeps_the_lateral_ride() -> void:
 	var held := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH + Vector3(4.0, 0, 0),
 			FLOOR_RADIUS, 0.0)
 	assert_gt(held.x, 0.1, "he still tracks the carrier across the ice")
+
+
+func test_a_negative_cap_is_a_least_retreat() -> void:
+	# The step-up's closing term asks for up-ice speed; a carrier gaining on him
+	# forbids it, and the route retreats at least at the cap's pace instead.
+	var held := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, FLOOR_RADIUS, -1.0)
+	assert_gt(held.y, 0.1, "he keeps retreating")
+
+
+func test_the_floor_outranks_a_least_retreat() -> void:
+	var self_pos := FLOOR_NET - Vector3(0, 0, 6.7)
+	var held := _ride_move(self_pos, self_pos - Vector3(0, 0, 5.7), RUSH, FLOOR_RADIUS, -5.0)
+	assert_lt(held.y, 0.001, "no net-ward thrust inside the floor, whatever the cap asks")
 
 
 func test_the_advance_cap_is_read_only_with_a_floor() -> void:

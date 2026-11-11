@@ -3,6 +3,7 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/math.hpp>
 
+#include <algorithm>
 #include <cmath>
 
 using namespace godot;
@@ -69,6 +70,14 @@ void NativeShotOdds::set_bandwidths(double p_offset, double p_velocity, double p
 	post_seal_stance = p_post_seal_stance;
 }
 
+void NativeShotOdds::set_aims(const PackedFloat32Array &p_aim_odds, int64_t p_aims_per_cell,
+		const PackedByteArray &p_kind) {
+	copy_out(p_aim_odds, aim_odds);
+	aims_per_cell = p_aims_per_cell;
+	copy_out(p_kind, kind);
+	blend.resize(aims_per_cell);
+}
+
 // AIShotOdds._bracket.
 int NativeShotOdds::bracket(const std::vector<double> &grid, double v) {
 	for (int i = (int)grid.size() - 2; i >= 0; i--) {
@@ -92,7 +101,7 @@ void NativeShotOdds::push(int cell, double w) {
 // AIShotOdds._weigh_spot.
 double NativeShotOdds::weigh_spot(int spot, double spot_weight, bool p_is_feed,
 		bool p_one_timer, int64_t p_stance, double a, double b, double p_depth,
-		double p_square, int64_t p_in_seal_zone) {
+		double p_square, int64_t p_in_seal_zone, int64_t p_kinds) {
 	const double ha = p_is_feed ? travel_bw : offset_bw;
 	const double hb = p_is_feed ? flight_bw : velocity_bw;
 	const bool has_depth = !std::isnan(p_depth);
@@ -113,7 +122,8 @@ double NativeShotOdds::weigh_spot(int spot, double spot_weight, bool p_is_feed,
 			ca = travel[c];
 			cb = flight[c];
 		} else {
-			if (is_shot_sample[c] == 0 || stance[c] != p_stance) {
+			if (is_shot_sample[c] == 0 || stance[c] != p_stance
+					|| ((p_kinds >> kind[c]) & 1) == 0) {
 				continue;
 			}
 			if (p_stance == post_seal_stance && in_seal_zone[c] != p_in_seal_zone) {
@@ -162,7 +172,7 @@ double NativeShotOdds::weigh_spot(int spot, double spot_weight, bool p_is_feed,
 // AIShotOdds._weigh, then ._weighted_odds.
 double NativeShotOdds::weigh(double local_x, double local_y, bool p_is_feed, bool p_one_timer,
 		int64_t p_stance, double a, double b, double p_depth, double p_square, bool set_query,
-		int64_t p_in_seal_zone) {
+		int64_t p_in_seal_zone, int64_t p_kinds) {
 	q_count = 0;
 	const int nx = (int)spot_x.size();
 	const int xi = bracket(spot_x, local_x);
@@ -184,7 +194,7 @@ double NativeShotOdds::weigh(double local_x, double local_y, bool p_is_feed, boo
 			}
 		} else {
 			total += weigh_spot(spot, w, p_is_feed, p_one_timer, p_stance, a, b, p_depth,
-					p_square, p_in_seal_zone);
+					p_square, p_in_seal_zone, p_kinds);
 		}
 	}
 	if (total <= 0.0) {
@@ -198,6 +208,24 @@ double NativeShotOdds::weigh(double local_x, double local_y, bool p_is_feed, boo
 		v += (double)normalised * (double)odds[q_cells[j]];
 	}
 	return MIN(v, 1.0);
+}
+
+// AIShotOdds._blend_best (the caller has seen the weighed odds above zero): each
+// aim summed over the cells and stored as float, as the GDScript's packed blend.
+double NativeShotOdds::blend_best() {
+	std::fill(blend.begin(), blend.end(), 0.0f);
+	for (int64_t j = 0; j < q_count; j++) {
+		const double w = q_weights[j];
+		const float *cell = aim_odds.data() + (int64_t)q_cells[j] * aims_per_cell;
+		for (int64_t i = 0; i < aims_per_cell; i++) {
+			blend[i] = (float)((double)blend[i] + w * (double)cell[i]);
+		}
+	}
+	double best = 0.0;
+	for (int64_t i = 0; i < aims_per_cell; i++) {
+		best = MAX(best, (double)blend[i]);
+	}
+	return MIN(best, 1.0);
 }
 
 PackedInt32Array NativeShotOdds::get_cells() const {
@@ -231,10 +259,13 @@ void NativeShotOdds::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_bandwidths", "offset", "velocity", "depth", "square",
 								 "travel", "flight", "min_weight", "post_seal_stance"),
 			&NativeShotOdds::set_bandwidths);
+	ClassDB::bind_method(D_METHOD("set_aims", "aim_odds", "aims_per_cell", "kind"),
+			&NativeShotOdds::set_aims);
 	ClassDB::bind_method(D_METHOD("weigh", "local_x", "local_y", "is_feed", "one_timer",
 								 "stance", "a", "b", "depth", "square", "set_query",
-								 "in_seal_zone"),
+								 "in_seal_zone", "kinds"),
 			&NativeShotOdds::weigh);
+	ClassDB::bind_method(D_METHOD("blend_best"), &NativeShotOdds::blend_best);
 	ClassDB::bind_method(D_METHOD("get_count"), &NativeShotOdds::get_count);
 	ClassDB::bind_method(D_METHOD("get_cells"), &NativeShotOdds::get_cells);
 	ClassDB::bind_method(D_METHOD("get_weights"), &NativeShotOdds::get_weights);

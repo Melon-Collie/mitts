@@ -51,14 +51,26 @@ const _BLADE_TOE_DRAG_ROLL_DEG: float = 20.0         # axial twist (handedness-s
 # forehand hook, so the cradle cups instead of rolling (grammar table in the
 # push-model plan).
 const _BLADE_CRADLE_CUP_DEG: float = 8.0             # axial twist (handedness-signed)
+# The face a stroke pushes with is rolled over the puck: the top hand's wrist
+# turns the whole stick, the forehand face closed over a puck on the forehand
+# and the backhand face over one on the backhand, through flat as the blade
+# hops over between them. About the hosel line, 16° leans the face ~12° and
+# curls the toe ~6 cm round the puck. On a spring (rad/s), the carry seat's
+# ease with it.
+const _BLADE_STROKE_CUP_DEG: float = 16.0
+const _STROKE_CUP_OMEGA: float = 18.0
+# Through a wrister's finish the wrists roll over: the face that pushed the
+# shot turns down over where the puck was and the toe comes round to the
+# target. About the hosel line, like the cup it carries on from.
+const _BLADE_FINISH_ROLL_DEG: float = 55.0
 
 # Shoulder anchor offset from body center. The shoulder (top-hand anchor)
 # sits on the OPPOSITE side of the body from the blade: a left-handed shooter
 # (blade on −X) has the top hand on the right shoulder (+X), and vice versa.
-# Just inside the torso's shoulder line (x extent ~0.23), where the skin's
-# sleeve leaves the armhole (SkaterConnectedMesh is bound with its arm rooted
-# here, which test_skater_scene_mirrors.gd holds).
-var shoulder_offset: float = 0.22
+# The joint, 0.36 m apart (a 6'1" man's), ~5 cm inside the shoulder pads'
+# line (x extent ~0.23), under the skin's armhole (SkaterConnectedMesh is bound
+# with its arm rooted here, which test_skater_scene_mirrors.gd holds).
+var shoulder_offset: float = 0.18
 # Shoulder Y in upper-body-local space, where the skin's sleeve is bound, so
 # the drawn arm hangs from the visible shoulder. Vertical drop from shoulder to
 # hand at rest = shoulder_height − hand_rest_y (mesh-native 0.40 − (−0.10) =
@@ -68,7 +80,7 @@ var shoulder_offset: float = 0.22
 # hand can never be placed beyond the arm's length — raising this shrinks
 # flat-footed reach; the directional reach lean (SkaterPoseCoordinator) buys
 # it back by tilting the whole frame toward the target.
-var shoulder_height: float = 0.40
+var shoulder_height: float = 0.45
 # Blade length (heel to toe). The Blade Marker3D represents the heel (where
 # the shaft meets the blade); the blade mesh extends forward by this distance.
 # The puck plays at the contact point, which is blade_length * 0.5 forward
@@ -95,13 +107,13 @@ var blade_face_twist_deg: float = 7.0
 # its flat heel cap.
 var blade_hosel_length: float = 0.085
 # The stick's built-in lie: the shaft↔ice angle at which the blade sits flat.
-# Derived from the rest pose (hand ~0.87 m above the heel over a
-# sqrt(1.30² − 0.87²) ≈ 0.97 m horizontal run → atan ≈ 42°, i.e. about a
-# real lie 5.5). A shaft off this angle pitches the rigid blade by the
-# difference (_apply_blade_tilt).
-var blade_lie_deg: float = 42.0
+# Derived from the rest pose at the base build (hand 0.96 m above the heel over
+# a sqrt(1.40² − 0.96²) ≈ 1.02 m run → atan ≈ 43.3°, about a real lie 5). A
+# shaft off this angle pitches the rigid blade by the difference
+# (_apply_blade_tilt).
+var blade_lie_deg: float = 43.3
 # Reception ceiling lean from the blade-curve gear (attributes v4): the
-# reception decision sites scale the puck's league deflect ceiling + squared
+# reception decision sites scale the puck's league deflect ceiling + on-the-line
 # bonus by this — a flatter pattern soaks a harder feed. Set by
 # SkaterController.apply_attributes; never touches pickup_max_speed (the
 # always-catches floor stays build-independent, which keeps the client's
@@ -279,11 +291,14 @@ var shoulder_reach_m: float = 0.06
 # The share of its full length an arm works at before the girdle gives: a
 # reaching arm keeps ~28° of elbow bend rather than locking straight.
 var arm_working_extension: float = 0.97
-# Pole direction for the elbow (upper-body local). Mostly down with a real
-# outward flare (+X is away from the body; the sign flips per side in
-# update_arm_mesh) and a touch backward — a hockey top-hand elbow rides out
-# and slightly behind the chest line, not pinned against the ribs.
-var arm_pole_local: Vector3 = Vector3(0.55, -1.0, 0.1)
+# Pole direction for the elbow (upper-body local). Mostly down, flared out
+# (+X is away from the body; the sign flips per side in update_arm_mesh) and
+# back: an arm bent over a stick held off the hip hangs its elbow beside and
+# behind the ribs, and the steer (SkaterArmPoses.steer_turn) takes it out
+# further only where the jersey is in the way. With more flare a hand held
+# under its shoulder wings the elbow out level with it; a raised arm takes
+# more of its own (SkaterArmRig._raised_pole).
+var arm_pole_local: Vector3 = Vector3(0.4, -1.0, 0.2)
 # Base size of the arm bone meshes (diameter). scale.z is set per tick to the
 # bone's actual length; X/Y control arm thickness. A loose jersey sleeve, not a
 # bare arm — see SkaterMeshBuilder.SLEEVE_RADIUS_M.
@@ -419,6 +434,9 @@ var body_block_height: float = 0.7
 # runs at render rate, so the node lookup is resolved once in
 # _rebuild_blade_mesh rather than per frame.
 var _blade_mesh_instance: MeshInstance3D = null
+# Whether the stick (shaft, knob, blade) was last drawn: hidden while the gloves
+# are off (gloves_off).
+var _stick_shown: bool = true
 # Where the blade mesh was last drawn, in UpperBody's frame: a frame that skips
 # the mesh pass holds it there (_hold_blade_mesh).
 var _blade_drawn: Transform3D = Transform3D.IDENTITY
@@ -431,6 +449,10 @@ var _swing_anchor_up: Vector3 = Vector3.UP
 var _swing_basis: Basis = Basis.IDENTITY
 var _swing_up: Vector3 = Vector3.UP
 var _swing_weight: float = 0.0
+# The render frame's delta, as _process was handed it: the mesh pass's eases
+# step by it rather than the engine's own, which is not the frame being drawn
+# when the pass is driven by hand.
+var _frame_dt: float = 0.0
 var _swing_from_slap: bool = false
 # The params it was built from, read by the carry seat (_seat_on_puck).
 var _blade_params: StickBladeMeshBuilder.Params = null
@@ -600,6 +622,10 @@ var _drawn_tick: int = -1
 # render concerns: run once per rendered frame here, visibility-gated, like the
 # stick/arm mesh rebuild below. Empty Callable = no hook (safe default).
 var render_pose_update: Callable = Callable()
+# Its tick-rate sibling: the controller's eases that every live tick steps once
+# whichever path drove the body (play, a locked phase, a remote's
+# interpolation), and a reconcile's replay never does. Takes the tick's delta.
+var tick_pose_update: Callable = Callable()
 # Resolves the skater's current team_id by deferring to the registry. Set by
 # PlayerRegistry on spawn so the goalie / VFX / other Skater-holding code can
 # query team affiliation without growing a cached field that has to be
@@ -622,8 +648,9 @@ func get_team_id() -> int:
 # _resolve_player_collisions iterates it (skipping self) to resolve skater-vs-
 # skater contact. Empty Callable (tutorial dummy / test) → no resolution.
 var _skater_collision_provider: Callable = Callable()
-# `() -> bool`, true while contact is off: the locked phases, whose bodies are
-# frozen or on a scripted glide that crossing another is not a check.
+# `() -> bool`, true while contact is off (PhaseRules.suspends_contact): the
+# locked phases, whose bodies are frozen or on a scripted glide that crossing
+# another is not a check, and a fight's stoppage.
 var contact_suspended_provider: Callable = Callable()
 # Stable, machine-consistent id (the owning peer_id) set by PlayerRegistry on
 # spawn. Used ONLY to break exact head-on ties in the aggressor gate — it must be
@@ -710,6 +737,21 @@ var stick_check_phase: int = 0
 # catches nothing (an airborne puck that reaches it bobbles off), and pokes,
 # lifts and ties nothing.
 var stick_tied: bool = false
+# The fight button was pressed on an input this skater's controller applied
+# since the host's FightTracker last read it (the tracker clears it). Set on
+# every machine and read only by the host's tracker.
+var fight_press_pending: bool = false
+# In a fight or calling one (FightRules.Role; FightTracker, host-only writer;
+# replicated). FIGHTING draws the stick and gloves off and the hands up.
+var fight_role: int = FightRules.Role.NONE
+# A fighter's hands (FightHoldRules.Grip / Side; replicated): what the holding
+# hand holds and which arm punches. Written by his own controller where he is
+# simulated; a remote takes them off the wire.
+var fight_grip: int = FightHoldRules.Grip.NONE
+var fight_punch_side: int = FightHoldRules.Side.TOP
+# How rattled a fighter is by the punches he has taken (FightPunchRules),
+# seconds; the host's alone, replicated and adopted every broadcast.
+var fight_rattle: float = 0.0
 # The stick-check button as this skater's last input held it, stamped by the
 # controller. Read only by the host's StickTieTracker (either player holding keeps
 # a tie); never replicated.
@@ -726,10 +768,10 @@ var pin_strength: float = 0.0
 var is_diving: bool = false
 var dive_laid_out: bool = false
 var dive_layout: Vector2 = Vector2(0.0, -1.0)
-# Deliberate-deflect intent: a human holding the deflect button (stick_lift, Q)
-# WITHOUT the puck — "redirect this, don't catch it." Set each tick by the
-# controller (SkaterController._wants_deflect) and read host-side by PuckController's
-# loose-puck gate. Recomputed from replayed inputs, so never replicated; bots never set it.
+# Deliberate-deflect intent: holding the deflect button (stick_lift, Q) WITHOUT
+# the puck — "redirect this, don't catch it." Set each tick by the controller
+# (SkaterController._wants_deflect) and read host-side by PuckController's
+# loose-puck gate. Recomputed from replayed inputs, so never replicated.
 var deflect_intent: bool = false
 # Share of blade_lift_height a deflect's press read the puck at (DeflectReachRules).
 var deflect_lift_share: float = 0.0
@@ -835,6 +877,23 @@ var _carry_side_smoothed: float = 0.0
 # positional read in get_toe_drag_factor) and the backhand heel cradle.
 var _toe_drag_gesture: float = 0.0
 var _heel_cradle: float = 0.0
+# The stroke's cup (−1..1 by the face on the puck, _BLADE_STROKE_CUP_DEG at
+# either end) and its rate; the blade's whole roll and the cup's share of it
+# (radians) as last dressed, and the roll a swing started from (stick_roll).
+var _stroke_cup: float = 0.0
+var _stroke_cup_rate: float = 0.0
+# The finish's roll over (0..1, set_finish_roll) and the face it rolls, by the
+# cup's sign.
+var _finish_roll: float = 0.0
+var _finish_roll_side: float = 0.0
+var _stick_roll: float = 0.0
+var _stick_cup: float = 0.0
+var _swing_anchor_roll: float = 0.0
+# The carry seat's slide (_seat_on_puck) eased on and off with the carry, and
+# the slide it last rested at, which a dropped puck's seat fades from.
+var _seat_blend: float = 0.0
+var _seat_rate: float = 0.0
+var _seat_last := Vector3.ZERO
 # Remaining phase (1→0) of the current transit hop; see
 # get_carry_transit_factor.
 var _transit_hop: float = 0.0
@@ -923,6 +982,8 @@ var _arms: SkaterArmRig
 var _spine: SkaterSpineRig
 var _stick: SkaterStickRig
 var _connected: SkaterConnectedRig = SkaterConnectedRig.new()
+var _dropped_gear := SkaterDroppedGear.new()
+var _body_skeleton: Skeleton3D = null
 var _draw: SkaterDrawTracker = SkaterDrawTracker.new()
 var _uniform: SkaterUniformCoordinator
 var _hud: SkaterHUDCoordinator
@@ -981,6 +1042,8 @@ func _ready() -> void:
 	# the space both gameplay frames are positioned in.
 	var body: Skeleton3D = SkaterBodySkeleton.new_body_skeleton()
 	mesh_root.add_child(body)
+	_body_skeleton = body
+	_dropped_gear.setup(self)
 
 	_legs = SkaterLegRig.new()
 	_legs.setup(self)
@@ -1017,6 +1080,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_frame_dt = delta
 	# Cosmetic mesh pass at render rate. The stick and arm meshes are pure
 	# write-only functions of the marker positions (top_hand, blade, shoulder,
 	# bottom_hand) the physics-rate controllers and interpolators maintain, so one
@@ -1034,6 +1098,7 @@ func _process(delta: float) -> void:
 	# a node written here is the previous frame's pose, so a frame that ran two
 	# ticks drew them a tick behind the marker the blade hangs from.
 	if is_visible_in_tree():
+		_show_stick(not gloves_off())
 		# The mesh is posed when the camera sees him and his animation LOD is
 		# due; any other frame is off camera to the rig, which still runs the
 		# gait for the part of it that is not mesh.
@@ -1056,6 +1121,7 @@ func _process(delta: float) -> void:
 			_hold_blade_mesh()
 		if _on_camera:
 			_connected.update()
+		_dropped_gear.update(delta)
 		if _on_camera or not seen:
 			_anim_lod.consumed()
 	# World HUD (ring, name, chevrons, beacon) at RENDER rate: ~10 top_level node
@@ -1101,6 +1167,8 @@ func _physics_process(delta: float) -> void:
 	_prev_blade_world_pos = blade_world_pos
 	if _draw.is_tracking():
 		_draw.update(delta, blade_world_velocity)
+	if tick_pose_update.is_valid():
+		tick_pose_update.call(delta)
 	# Backstop: never let a NaN/Inf velocity or position reach the transform write —
 	# it poisons every downstream reader (camera, IK, the wire state) irrecoverably.
 	# This should never fire; when it does it logs the offending state so the
@@ -1128,10 +1196,7 @@ func _physics_process(delta: float) -> void:
 	clamp_body_to_net()
 	clamp_body_to_goalies()
 	_update_blade_elevation(delta)
-	_forced_lift_timer = maxf(_forced_lift_timer - delta, 0.0)
-	_stick_check_cooldown = maxf(_stick_check_cooldown - delta, 0.0)
-	_update_blade_lift(delta)
-	_update_commit_stance(delta)
+	step_tick_state(delta)
 	_update_carry_contact(delta)
 	_latch_press_read()
 	# Position + velocity are now fully settled for this tick (integration,
@@ -1497,6 +1562,10 @@ func _apply_blade_tilt() -> void:
 			- get_toe_drag_factor() * _BLADE_TOE_DRAG_ROLL_DEG \
 			- _heel_cradle * _BLADE_CRADLE_CUP_DEG \
 			- _reception_give_blend * reception_cup_deg) * blade_side_sign)
+	var cup: float = _stroke_cup * deg_to_rad(_BLADE_STROKE_CUP_DEG)
+	twist += cup + _finish_roll_side * _finish_roll * deg_to_rad(_BLADE_FINISH_ROLL_DEG)
+	_stick_roll = twist
+	_stick_cup = cup
 	# Mesh-only slides (never the marker):
 	#   X — wrister-address slide along the face-normal axis, addressing the
 	#   hand the release will fire as. Marker local +X IS the face normal
@@ -1536,7 +1605,16 @@ func _apply_blade_tilt() -> void:
 	heel += _seat_on_puck(Vector3(address_x, 0.0, 0.0), hand, twist, marker_global, up)
 	var rot: Basis = _rigid_blade_basis(hand - heel, twist)
 	heel = _toe_on_ice(heel, rot, hand, twist, marker_global.origin.y, up)
-	rot = _swing_rigid(_rigid_blade_basis(hand - heel, twist), marker.basis, hand - heel)
+	rot = _swing_rigid(_rigid_blade_basis(hand - heel, twist), marker.basis, hand - heel, cup)
+	# The swing's blade is the anchor's, turned, not one solved to the ice: a
+	# toe that would go under it lifts the heel, and the blade turns with the
+	# shaft that leaves.
+	var under: float = minf(marker_global.origin.y
+			+ (heel + rot * Vector3(0.0, 0.0, -blade_length)).dot(up), 0.0) * _swing_weight
+	if under < 0.0:
+		var shaft: Vector3 = (hand - heel).normalized()
+		heel -= up * under
+		rot = Basis(Quaternion(shaft, (hand - heel).normalized())) * rot
 	var keep_scale: Vector3 = _blade_mesh_instance.transform.basis.get_scale()
 	_blade_mesh_instance.transform = Transform3D(rot.scaled(keep_scale), heel)
 	_blade_drawn = marker * _blade_mesh_instance.transform
@@ -1555,26 +1633,30 @@ func _apply_blade_tilt() -> void:
 # SWING_RELEASE_S. In the shoulders' frame, which the arms swing the stick in:
 # the body turning carries the stick with it, and only a roll in the hands
 # would spin it. The anchor is the dressed
-# blade whenever no swing is on, so the swing starts where the carry was. Read
+# blade whenever no swing is on, so the swing starts where the carry was, less
+# a stroke's cup (`cup`, radians about the hosel line), which is laid back on
+# as it stands: the wrists let it go through the wind-up, and the blade comes
+# through contact without it. Read
 # from replicated state alone, so every machine draws the same swing.
 const SWING_RELEASE_S: float = 0.15
 
 
-func _swing_rigid(rot: Basis, marker_basis: Basis, to_hand: Vector3) -> Basis:
+func _swing_rigid(rot: Basis, marker_basis: Basis, to_hand: Vector3, cup: float) -> Basis:
 	var to_hips: Basis = marker_basis.orthonormalized()
 	var hosel: Vector3 = (to_hips * to_hand).normalized()
 	var dressed: Basis = (to_hips * rot).orthonormalized()
 	var swinging: bool = _slap_swinging()
 	if not swinging and _swing_weight <= 0.0:
-		_swing_anchor_basis = dressed
+		_swing_anchor_basis = dressed.rotated(hosel, -cup)
+		_swing_anchor_roll = _stick_roll - cup
 		_swing_anchor_hosel = hosel
 		_swing_anchor_up = upper_body.global_transform.basis.inverse() * Vector3.UP
 		return rot
 	var arc := Quaternion(_swing_anchor_hosel, hosel)
-	_swing_basis = (Basis(arc) * _swing_anchor_basis).orthonormalized()
+	_swing_basis = (Basis(arc) * _swing_anchor_basis).rotated(hosel, cup).orthonormalized()
 	_swing_up = arc * _swing_anchor_up
 	_swing_weight = 1.0 if swinging \
-			else move_toward(_swing_weight, 0.0, get_process_delta_time() / SWING_RELEASE_S)
+			else move_toward(_swing_weight, 0.0, _frame_dt / SWING_RELEASE_S)
 	var q: Quaternion = dressed.get_rotation_quaternion().slerp(
 			_swing_basis.get_rotation_quaternion(), _swing_weight)
 	return to_hips.inverse() * Basis(q)
@@ -1603,7 +1685,15 @@ func shaft_roll_up(dir: Vector3) -> Vector3:
 	var roll_up: Vector3 = world_up.lerp(_swing_up, _swing_weight)
 	if absf(dir.dot(roll_up.normalized())) > 0.999:
 		return Vector3.FORWARD
-	return roll_up
+	return roll_up.rotated(dir.normalized(), -stick_roll())
+
+
+# How far the wrists have rolled the stick about its shaft, as the blade's face
+# is dressed (radians about the heel→hand line): the shaft's faces and the top
+# fist turn by it too. A slapshot's swing carries its own roll, and only a
+# stroke's cup, on its way off, is laid on that.
+func stick_roll() -> float:
+	return lerpf(_stick_roll, _swing_anchor_roll + _stick_cup, _swing_weight)
 
 
 # The blade mesh hangs from the Blade marker, which the tick moves whether or
@@ -1634,13 +1724,16 @@ func _toe_on_ice(heel: Vector3, rot: Basis, hand: Vector3, twist: float, marker_
 # offset beside it, which is where a flat, square blade touches; the shaft's
 # pitch, a toe stood on the ice and the wrist roll all move the face from
 # there, and a heel up off the ice leaves only the toe to hold the puck. Faded
-# by the side factor, so a face change slides through it. Mesh only, like
-# every slide here: the puck stays on the cursor.
+# by the side factor, so a face change slides through it, and eased on and off
+# with the carry (_seat_blend), a dropped puck's from where it last rested.
+# Mesh only, like every slide here: the puck stays on the cursor.
 func _seat_on_puck(rest_heel: Vector3, hand: Vector3, twist: float,
 		marker_global: Transform3D, up: Vector3) -> Vector3:
 	var address_weight: float = absf(_address_factor)
-	if address_weight <= 0.0 or _blade_params == null or _slapshot_pin_active \
-			or not SkaterStateMachine.state_has_puck(current_shot_state):
+	if _blade_params == null or not _seated():
+		return _seat_last * _seat_blend
+	if address_weight <= 0.0:
+		_seat_last = Vector3.ZERO
 		return Vector3.ZERO
 	var p: StickBladeMeshBuilder.Params = _blade_params
 	var rot: Basis = _rigid_blade_basis(hand - rest_heel, twist)
@@ -1675,7 +1768,13 @@ func _seat_on_puck(rest_heel: Vector3, hand: Vector3, twist: float,
 	var lever: float = 1.0 + (to_seat - up * to_seat.dot(up)).length() \
 			/ maxf((to_hand - up * to_hand.dot(up)).length(), 0.05)
 	slide -= across * (slide.dot(across) * (1.0 - 1.0 / lever))
-	return slide.limit_length(_SEAT_MAX_SLIDE_M) * address_weight
+	_seat_last = slide.limit_length(_SEAT_MAX_SLIDE_M) * address_weight
+	return _seat_last * _seat_blend
+
+
+# Whether the blade has a carried puck to rest against.
+func _seated() -> bool:
+	return not _slapshot_pin_active and SkaterStateMachine.state_has_puck(current_shot_state)
 
 
 # The blade's orientation with its hosel laid along `to_hand` (heel → top hand,
@@ -1698,7 +1797,7 @@ func set_tie_draw_offset(world_offset: Vector3) -> void:
 # The tie's draw slide in the Blade marker's frame, which the mesh hangs in.
 func _tie_draw_local() -> Vector3:
 	_tie_draw_offset = _tie_draw_offset.move_toward(_tie_draw_target,
-			_TIE_DRAW_EASE_M_S * get_process_delta_time())
+			_TIE_DRAW_EASE_M_S * _frame_dt)
 	if _tie_draw_offset == Vector3.ZERO:
 		return Vector3.ZERO
 	return blade.global_transform.basis.inverse() * _tie_draw_offset
@@ -1936,6 +2035,35 @@ func grip_choke() -> float:
 # Forcibly pop this skater's blade up for `duration` seconds (opponent stick
 # lift). Takes the max with any in-flight timer so a fresh hook never shortens
 # an existing one. Host-side only; clients receive the resolved blade_up.
+# The per-tick state this skater steps itself that its controller's next tick
+# reads: the stick-check timers (a forced lift decides stick_taken) and the
+# blade-lift and check-commit eases (the check lead moves the loaded blade, and
+# the twist follows it). LocalController's reconcile replay steps it too, from
+# the values its prediction history recorded at the ack (adopt_tick_state).
+func step_tick_state(delta: float) -> void:
+	_forced_lift_timer = maxf(_forced_lift_timer - delta, 0.0)
+	_stick_check_cooldown = maxf(_stick_check_cooldown - delta, 0.0)
+	_update_blade_lift(delta)
+	_update_commit_stance(delta)
+
+
+func forced_lift_remaining() -> float:
+	return _forced_lift_timer
+
+
+func stick_check_cooldown_remaining() -> float:
+	return _stick_check_cooldown
+
+
+func adopt_tick_state(forced_lift_s: float, stick_check_cooldown_s: float,
+		blade_lift_blend: float, commit_lift_blend: float, check_lead: float) -> void:
+	_forced_lift_timer = forced_lift_s
+	_stick_check_cooldown = stick_check_cooldown_s
+	_blade_lift_blend = blade_lift_blend
+	_commit_lift_blend = commit_lift_blend
+	_check_lead = check_lead
+
+
 func force_blade_lift(duration: float) -> void:
 	_forced_lift_timer = maxf(_forced_lift_timer, duration)
 
@@ -2027,6 +2155,20 @@ func set_ankle_flatten(left: float, right: float, level_l: float = 0.0,
 
 func set_leg_contact(plant_l: float, plant_r: float, dt: float) -> void:
 	_legs.set_contact(plant_l, plant_r, maxf(dt, _anim_lod.span))
+
+
+# How far the wrists have rolled the stick over through a finish, 0..1.
+# Published by the gait, which derives the finish on every peer
+# (GaitShotLayer.wrist_roll). The face is the one that pushed the shot, taken
+# as the roll starts.
+func set_finish_roll(share: float) -> void:
+	if share == _finish_roll:
+		return
+	if _finish_roll <= 0.0:
+		_finish_roll_side = signf(_address_factor) if _address_factor != 0.0 \
+				else signf(_stroke_cup)
+	_finish_roll = share
+	_blade_tilt_dirty = true
 
 
 # How far into his faceoff address this centre is, 0..1 (zero for everyone
@@ -2297,6 +2439,23 @@ func get_carry_transit_factor() -> float:
 	return sin(PI * _transit_hop)
 
 
+# The two carry-contact values the controller's next tick reads (the side factor
+# places the blade marker, the hop lifts it). _update_carry_contact advances them
+# on the physics tick, which a reconcile replay does not run, so the replay plays
+# back the values each live tick left (LocalController, PredictedState).
+func carry_read_side() -> float:
+	return _carry_side_smoothed
+
+
+func carry_read_hop() -> float:
+	return _transit_hop
+
+
+func adopt_carry_read(side_smoothed: float, hop: float) -> void:
+	_carry_side_smoothed = side_smoothed
+	_transit_hop = hop
+
+
 # Push the wrister's live aim line onto the skater — called every WRISTER_AIM
 # tick by SkaterController._apply_wrister_aim_blade with _wrister_aim_dir's
 # answer (origin→cursor for humans, the committed direction for bots). The
@@ -2493,16 +2652,36 @@ func _update_carry_contact(delta: float) -> void:
 			if current_shot_state == SkaterStateMachine.State.WRISTER_AIM else 0.0
 	var new_aim_seat: float = move_toward(
 			_aim_seat_blend, aim_seat_target, carry_gesture_ease * delta)
+	# The cup follows the face the blade is drawn on, on a spring: the wrists
+	# roll the stick over, from rest and to rest, at a pickup as in a stroke.
+	var cupping: bool = current_shot_state == SkaterStateMachine.State.SKATING_WITH_PUCK \
+			or current_shot_state == SkaterStateMachine.State.WRISTER_AIM
+	var seat_to: float = 1.0 if _seated() else 0.0
+	var new_seat: float = clampf(EaseRules.critical_x(_seat_blend, _seat_rate, seat_to,
+			_STROKE_CUP_OMEGA, delta), 0.0, 1.0)
+	_seat_rate = EaseRules.critical_v(_seat_blend, _seat_rate, seat_to, _STROKE_CUP_OMEGA,
+			delta) if new_seat > 0.0 and new_seat < 1.0 else 0.0
+	var cup_to: float = _address_factor if cupping else 0.0
+	# Off twice as fast as on: a slapshot's set-up is short, and its swing
+	# starts from a blade the wrists have squared.
+	var cup_omega: float = _STROKE_CUP_OMEGA * (1.0 if cupping else 2.0)
+	var new_cup: float = EaseRules.critical_x(_stroke_cup, _stroke_cup_rate, cup_to,
+			cup_omega, delta)
+	_stroke_cup_rate = EaseRules.critical_v(_stroke_cup, _stroke_cup_rate, cup_to,
+			cup_omega, delta)
 	if new_drag != _toe_drag_gesture or new_cradle != _heel_cradle \
 			or new_stroke != _stroke_toe_blend or new_catch != _catch_heel_blend \
 			or new_give != _reception_give_blend or new_aim_seat != _aim_seat_blend \
-			or new_gap != _free_gap_blend:
+			or new_gap != _free_gap_blend or new_cup != _stroke_cup \
+			or new_seat != _seat_blend:
 		# The gesture factors tilt/slide the blade mesh without moving any
 		# marker, so the render-rate rig pass can't see the change — same
 		# escape as _update_blade_elevation.
 		_blade_tilt_dirty = true
 	_toe_drag_gesture = new_drag
 	_heel_cradle = new_cradle
+	_stroke_cup = new_cup
+	_seat_blend = new_seat
 	_stroke_toe_blend = new_stroke
 	_catch_heel_blend = new_catch
 	_reception_give_blend = new_give
@@ -2888,6 +3067,21 @@ func set_hand_pump(offset: Vector3) -> void:
 	_hand_pump = offset
 
 
+# The drawn body a stick is held out of, in the skeleton's space: how far
+# `point` is outside the jersey (m, negative inside), each leg's hip, knee and
+# ankle (SkaterLegRig.drawn_joints), and the legs' girth (SkaterLegRig.girth).
+func torso_clearance(point: Vector3) -> float:
+	return _arms.torso_clearance(point)
+
+
+func drawn_leg_joints(out: PackedVector3Array) -> void:
+	_legs.drawn_joints(out)
+
+
+func leg_girth() -> Vector2:
+	return _legs.girth()
+
+
 # ── Bottom Hand ───────────────────────────────────────────────────────────────
 # Where a shoulder marker sits on the visible trunk, in UpperBody's frame
 # (SkaterArmRig.visible_shoulder).
@@ -3085,6 +3279,43 @@ func update_arm_mesh(delta: float = -1.0) -> void:
 # (upper-body space) — the offset a hand on the stick rides.
 func stick_bow_offset(point: Vector3) -> Vector3:
 	return _stick.bow_offset(point)
+
+
+# The gloves and stick are on the ice (a fight): drawn bare-handed, the stick
+# hidden.
+func gloves_off() -> bool:
+	return fight_role == FightRules.Role.FIGHTING
+
+
+# What SkaterDroppedGear copies the dropped stick and gloves from.
+func blade_mesh_instance() -> MeshInstance3D:
+	return _blade_mesh_instance
+
+
+func body_skeleton() -> Skeleton3D:
+	return _body_skeleton
+
+
+func body_material() -> Material:
+	return _paint.material
+
+
+# Which hand's glove the top one is: a left shot's top hand is his right.
+func is_top_hand_right() -> bool:
+	return shoulder.position.x >= 0.0
+
+
+# Hidden, it is written every frame: a paint pass can rebuild the knob, which
+# comes back visible.
+func _show_stick(shown: bool) -> void:
+	if shown and _stick_shown:
+		return
+	_stick_shown = shown
+	stick_mesh.visible = shown
+	if stick_knob_mesh != null:
+		stick_knob_mesh.visible = shown
+	if _blade_mesh_instance != null:
+		_blade_mesh_instance.visible = shown
 
 
 func stick_grip_axis(point: Vector3) -> Vector3:

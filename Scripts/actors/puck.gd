@@ -1,6 +1,10 @@
 class_name Puck
 extends Node3D
 
+# The live puck's group — how the ice's cue field finds it without a reference
+# handed down from the orchestrator (the replay viewer spawns its own).
+const GROUP: StringName = &"puck"
+
 signal puck_released()
 # `checker` is the defender who took the puck (poke / stick-lift / body-check),
 # or null when no skater caused it (a goalie poke — no skater takeaway credit).
@@ -21,19 +25,20 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 @export var ice_height: float = GameRules.PUCK_COLLISION_HALF_HEIGHT  # disc bottom rests on y=0
 @export var pickup_max_speed: float = 8.0
 # Catch ceiling in the RECEIVER'S frame (puck velocity − skater velocity): 22 ≈
-# 49 mph closing catches at any blade angle, and alignment_receive_bonus lifts
-# it to 30 for a squared blade. Calibrated to real reception, not to game pass
-# speeds — force math on PuckReceptionRules.should_receive.
+# 49 mph closing catches with the blade at the rim of its reach, and
+# alignment_receive_bonus lifts it to 30 with the blade on the puck's line
+# (PuckReceptionRules.path_offset). Calibrated to real reception, not to game
+# pass speeds — force math on PuckReceptionRules.should_receive.
 @export var deflect_min_speed: float = 22.0
 # A catch whose reception load is above settle_clean_load leaves the receiver
 # settling — no on-puck action — for up to settle_max_s at the ceiling. 0.30 is
-# clean to ~12 m/s on a poorly angled blade (docs/stick-settling-plan.md).
+# clean to ~12 m/s at the rim, ~16 on the line (docs/stick-settling-plan.md).
 var settle_clean_load: float = 0.30
 var settle_max_s: float = 0.40
-# Past bobble_load (less bobble_edge_share of it at the toe or heel —
+# Past bobble_load (less bobble_edge_share of it at the rim of the reach —
 # PuckReceptionRules.bobble_load_at) the catch fails softly instead
-# (apply_reception_bobble). 0.67 is ~18 m/s on a poorly angled blade at the
-# middle, ~14 at the toe — the spread of the NHL failed-reception means
+# (apply_reception_bobble). 0.67 is ~24.6 m/s with the blade on the puck's line,
+# ~14 at the rim — the NHL failed-reception means (13–22) fall between
 # (docs/stick-settling-plan.md).
 var bobble_load: float = 0.67
 var bobble_edge_share: float = 0.4
@@ -71,14 +76,25 @@ var bobble_lift_max_speed: float = 1.9
 @export var deflect_tangential_retain: float = 0.85       # glancing slide is largely kept (a redirect keeps pace)
 @export var deflect_speed_ref: float = 30.0               # speed (m/s) at which restitution bottoms out
 @export var deflect_cooldown: float = 0.3
+# The most a deliberate tip turns the puck, with the blade held square beside
+# the body (PuckCollisionRules.tip_turn): about the most a real redirect takes.
+var deflect_max_turn_deg: float = 25.0
 # Signed per-loft-level redirect for a deliberate deflect, expressed as a fixed
 # VERTICAL LAUNCH SPEED (m/s) — the SAME loft model shots use (ShotMechanics.loft_y),
 # not a fixed angle. Fixed-angle ties the tip's apex to the incoming puck's pace
 # (apex ∝ pace²), so a hard tip sails over the net; a fixed launch speed gives a
 # CONSISTENT apex regardless of pace, and the redirect keeps its horizontal pace
 # minus what's carved into the lift (energy-conserving, like a lofted shot).
-# The loft level picks which one (PuckCollisionRules.deflect_loft_speed).
-@export var deflect_up_loft_speed: float = 3.8     # tip up and in (apex ≈ 0.74 m)
+# The loft level picks which one (PuckCollisionRules.deflect_loft_speed). The
+# three up-tips are sized to put a tip off the ice 5 m from the goal line (a man
+# 4 m out, his blade a metre ahead of him), at the ~23 m/s a typical tip keeps of
+# a point shot, on the shot ladder's targets at the goal line: over the
+# butterfly pad (0.41 m), the armpit (0.70 m), upstairs (0.99 m).
+# Farther or slower tips arrive higher, a puck met in the air higher still, so a
+# HIGH tip from the top of the slot can clear the bar.
+@export var deflect_low_loft_speed: float = 2.9
+@export var deflect_mid_loft_speed: float = 4.2
+@export var deflect_high_loft_speed: float = 5.5
 @export var deflect_down_loft_speed: float = 3.5   # drive an airborne puck down to the ice
 # A deflect whose resulting speed lands below this reads as a BOBBLE — the blade
 # smothered the puck (knocked it down) rather than redirecting it. The deflector
@@ -206,13 +222,17 @@ func set_team_resolver(resolver: Callable) -> void:
 	_team_resolver = resolver
 
 # The skater this peer draws carrying the puck (null while loose) — the host's
-# carrier, or a client's pin. Only the cosmetic spin reads it; unset, it is
-# `carrier`.
+# carrier, or a client's pin. Only cosmetics read it (the spin, the on-ice
+# cues, the minimap); unset, it is `carrier`.
 var _carrier_view: Callable = Callable()
 var _spin: PuckSpinRig = null
 
 func set_carrier_view(view: Callable) -> void:
 	_carrier_view = view
+
+func drawn_carrier() -> Skater:
+	var holder: Variant = _carrier_view.call() if _carrier_view.is_valid() else carrier
+	return holder as Skater if is_instance_valid(holder) else null
 
 # _init (not _ready) so a bare Puck.new() in tests has a working queue without
 # entering the tree.
@@ -334,8 +354,7 @@ var _contact_latch_goalie: bool = false
 #
 # puck_stripped / puck_released stay synchronous: their listeners read call-scoped
 # transient state on the same stack (PuckController.stick_lift_forced_seconds, the
-# queued release velocity read by the dump-release check, the goalie reaction
-# back-date consumed by _on_puck_released).
+# queued release velocity read by the dump-release check).
 #
 # Preallocated parallel arrays (allocation-free per tick); each slot carries the
 # event type, up to two object refs and one float payload (current events use only
@@ -372,6 +391,7 @@ func set_goalie_provider(provider: Callable) -> void:
 	_goalie_provider = provider
 
 func _ready() -> void:
+	add_to_group(GROUP)
 	process_physics_priority = 1  # Run after Skater's integration so blade world pos is current
 	_native_step = NativePuckStepFactory.make_configured()
 
@@ -529,9 +549,7 @@ func remove_skater_cooldown(skater: Skater) -> void:
 
 # ── Physics ───────────────────────────────────────────────────────────────────
 func apply_blade_deflect(skater: Skater) -> void:
-	# Reflect off the blade face — angle depends on how the player has angled
-	# their stick, not just where the puck contacted.
-	var contact_normal: Vector3 = skater.get_blade_face_normal(linear_velocity)
+	var contact_normal: Vector3 = _tip_face(skater)
 
 	var new_vel: Vector3 = PuckCollisionRules.deflect_velocity(
 			linear_velocity, contact_normal,
@@ -547,7 +565,8 @@ func apply_blade_deflect(skater: Skater) -> void:
 	# lift there — a smothered puck shouldn't pop off the ice.
 	var loft_vy: float = PuckCollisionRules.deflect_loft_speed(
 			skater.elevation_level,
-			deflect_up_loft_speed, deflect_down_loft_speed, is_airborne())
+			deflect_low_loft_speed, deflect_mid_loft_speed, deflect_high_loft_speed,
+			deflect_down_loft_speed, is_airborne())
 	var horiz_speed: float = new_vel.length()
 	if not is_zero_approx(loft_vy) and horiz_speed > 0.001:
 		# loft_y gives the Y/XZ ratio that yields launch speed |loft_vy| at this
@@ -560,6 +579,20 @@ func apply_blade_deflect(skater: Skater) -> void:
 	var is_bobble: bool = new_vel.length() < bobble_speed_threshold
 	_set_cooldown(skater, bobble_cooldown if is_bobble else deflect_cooldown)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
+
+# The face the puck comes off. A deliberate tip (Q) presents the face that turns
+# it toward the side the blade is held on (PuckCollisionRules.tip_turn); any
+# other touch takes the face square across the shaft.
+func _tip_face(skater: Skater) -> Vector3:
+	if not skater.deflect_intent:
+		return skater.get_blade_face_normal(linear_velocity)
+	var turn: float = PuckCollisionRules.tip_turn(linear_velocity,
+			skater.get_blade_contact_global() - skater.global_position,
+			deg_to_rad(deflect_max_turn_deg))
+	return PuckCollisionRules.aimed_face_normal(linear_velocity, turn,
+			deflect_normal_restitution, deflect_normal_restitution_min,
+			deflect_tangential_retain, deflect_speed_ref)
+
 
 # A catch the hands nearly held (PuckReceptionRules.bobble_load_at): the face
 # takes the impact in the RECEIVER'S frame and the puck leaves mostly off its
@@ -1129,8 +1162,8 @@ func _physics_process(delta: float) -> void:
 func _step_spin(delta: float) -> void:
 	if _spin == null:
 		return
-	var holder: Variant = _carrier_view.call() if _carrier_view.is_valid() else carrier
-	var carrier_pos: Vector3 = (holder as Node3D).global_position if is_instance_valid(holder) else Vector3.INF
+	var holder: Skater = drawn_carrier()
+	var carrier_pos: Vector3 = holder.global_position if holder != null else Vector3.INF
 	var pos: Vector3 = global_position
 	_spin.step(delta, pos, is_airborne(), pos.y - ice_height, carrier_pos)
 

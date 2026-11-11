@@ -25,6 +25,12 @@ class StubGameState extends Node:
 		return false
 
 
+# The least of a sleeve vertex's weight the forearm's bind holds for it to
+# count as the forearm's sleeve: with the elbow bent past a right angle on a
+# short arm, the upper sleeve's hanging underside comes level with the cuff
+# beside it, and is not sleeve the glove is over.
+const FOREARM_WEIGHT_MIN: float = 0.5
+
 var _skater: Skater = null
 var _controller: SkaterController = null
 
@@ -89,12 +95,14 @@ static func _inside_section(p: Vector3, size: Vector2) -> bool:
 	return true
 
 
-# The sleeve on the arm whose upper arm is `upper`, skinned as drawn, skeleton
-# space.
+# The forearm's sleeve on the arm whose upper arm is `upper`, skinned as drawn,
+# skeleton space.
 func _skinned_sleeve(body: Skeleton3D, upper: int) -> PackedVector3Array:
-	var shoulder: Vector3 = body.get_bone_pose(upper) * Vector3(0.0, 0.0, 0.5)
+	# By the shoulder's marker: the bone's own side swaps under a hard twist.
+	var marker: Node3D = _skater.shoulder if upper == UpperBone.TOP_UPPER_ARM \
+			else _skater.bottom_shoulder
 	var zone: int = SkaterConnectedMesh.zone(SkaterConnectedMesh.sleeve_surface(
-			signf(shoulder.x)))
+			signf(marker.position.x)))
 	var skin: Skin = SkaterConnectedMesh.shared_skin()
 	var xforms: Array[Transform3D] = []
 	for i: int in skin.get_bind_count():
@@ -110,10 +118,15 @@ func _skinned_sleeve(body: Skeleton3D, upper: int) -> PackedVector3Array:
 		if roundi(zones[v].x) != zone:
 			continue
 		var p := Vector3.ZERO
+		var forearm: float = 0.0
 		for k: int in 4:
+			var bind: int = bones[v * 4 + k]
 			if weights[v * 4 + k] > 0.0:
-				p += (xforms[bones[v * 4 + k]] * verts[v]) * weights[v * 4 + k]
-		out.append(p)
+				p += (xforms[bind] * verts[v]) * weights[v * 4 + k]
+				if bind == SkaterConnectedMesh.Bind.FORE_L or bind == SkaterConnectedMesh.Bind.FORE_R:
+					forearm += weights[v * 4 + k]
+		if forearm >= FOREARM_WEIGHT_MIN:
+			out.append(p)
 	return out
 
 

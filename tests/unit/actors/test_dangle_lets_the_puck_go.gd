@@ -9,6 +9,10 @@ extends GutTest
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
+# The drawn mid-blade's slack off the marker's standoff: a carry's shaft is
+# steeper than the stick's lie, so the drawn blade rides its heel and its
+# middle swings ~1.6 cm off the face; a release opens half carry_free_gap.
+const HEEL_RIDE_SLACK_M: float = 0.018
 
 
 class GameStateStub:
@@ -140,7 +144,7 @@ func test_a_slow_carry_keeps_the_blade_on_the_puck() -> void:
 	var sk: Skater = c.skater
 	for s: Sample in _dangle(c, 0.25, 0.4, 2.5):
 		assert_false(s.release_hop, "a slow sweep never releases")
-		assert_lt(s.mesh_standoff, sk.carry_blade_offset + 0.01,
+		assert_lt(s.mesh_standoff, sk.carry_blade_offset + HEEL_RIDE_SLACK_M,
 				"a slow sweep keeps the blade on the puck")
 
 
@@ -181,6 +185,9 @@ func test_a_tight_dangle_still_changes_face() -> void:
 func test_a_face_change_says_why() -> void:
 	var causes: Array[int] = []
 	var hard: SkaterController = _make_carrier()
+	# Settled first: the stick's first ticks out of the scene's rest pose are
+	# not a stroke of the dangle.
+	_dangle(hard, 0.0, 1.0, 0.0)
 	hard.skater.carry_face_changed.connect(
 			func(cause: int, _speed: float, _travel_m: float) -> void: causes.append(cause))
 	var hard_samples: Array[Sample] = _dangle(hard, 0.35, 2.0, 2.0)

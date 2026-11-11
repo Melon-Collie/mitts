@@ -39,11 +39,27 @@ func ping_pass_target(_peer_id: int) -> int:
 func ping_chase_peer() -> int:
 	return -1
 
+# The 5v5 role that owns the carrier while he comes at our net at pace
+# (AIRoleSlots.carrier_owner): a zone role in DZONE, BACK_STRONG or BACK_MID in
+# TRANS_DEFENSE. NONE: the area that holds the puck owns it
+# (AIZoneCoverage.pressure_slot), or BACK_STRONG does (AIRoleSlots.owns_back_line_carrier).
+func pressure_slot_override() -> int:
+	return AIRoleSlots.Slot.NONE
+
 func get_team_size() -> int:
 	return GameRules.DEFAULT_TEAM_SIZE
 
 # Whether the match calls icing (the NHL rule set).
 func icing_enforced() -> bool:
+	return false
+
+# Whether a keeper's cover is whistled for a faceoff (GameRules.whistles_a_cover).
+func covers_whistled() -> bool:
+	return false
+
+# Whether we have the numbers on their defence: their own rush read of our
+# attack (AIRushRead from their side) has them short.
+func numbers_up() -> bool:
 	return false
 
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:

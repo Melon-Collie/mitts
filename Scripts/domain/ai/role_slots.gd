@@ -230,10 +230,20 @@ static func assign(
 			# Which marker ends up net-front vs. weak-side is decided by
 			# TeamBrain's threat partition (which man each is assigned), not a
 			# fixed slot split.
-			_assign_one_then_remainder(
-					snapshot, teammates, fixed_peers, prev_assignments, result,
-					Slot.PRESSURE, puck_pos,
-					Slot.MARK, caps_by_peer)
+			var owner: int = carrier_owner(snapshot, team_id, own_goal_z,
+					team_id_by_peer, teammates, caps_by_peer,
+					prev_holder(prev_assignments, Slot.PRESSURE))
+			if owner != -1:
+				result[owner] = Slot.PRESSURE
+				fixed_peers[owner] = true
+				for pid: int in teammates:
+					if not fixed_peers.has(pid):
+						result[pid] = Slot.MARK
+			else:
+				_assign_one_then_remainder(
+						snapshot, teammates, fixed_peers, prev_assignments, result,
+						Slot.PRESSURE, puck_pos,
+						Slot.MARK, caps_by_peer)
 
 		AIPossessionState.State.TRANS_DEFENSE:
 			# The 1-2, filled from the back: the two posts of our line first, so
@@ -292,6 +302,108 @@ static func assign(
 
 
 # ── Assignment helpers ──────────────────────────────────────────────────────
+
+# The body that owns an opposing carrier coming at our net at pace (closing at
+# AIRoleRushD.GAP_UP_CLOSING_M_S or more): of `peers` goal-side of him down his
+# line to our net, the one whose stick gets onto that line farthest from our net
+# (AIDefensiveVerbs.cut_off_m, exact), `prev_owner` taking HYSTERESIS_PENALTY_M. A
+# body behind such a carrier is soonest to where the puck is only because the
+# carrier is past him, and never catches him; and raced to where the puck is,
+# the D riding him back pays a reversal his line never asks of him. -1 when no
+# carrier comes at pace or none of `peers` is goal-side: the plain race stands.
+static func carrier_owner(snapshot: WorldSnapshot, team_id: int, own_goal_z: float,
+		team_id_by_peer: Dictionary, peers: Array, caps_by_peer: Dictionary,
+		prev_owner: int) -> int:
+	if snapshot == null or snapshot.puck_state == null:
+		return -1
+	var carrier: int = snapshot.puck_state.carrier_peer_id
+	if carrier == -1 or team_id_by_peer.get(carrier, team_id) == team_id \
+			or not snapshot.skater_states.has(carrier):
+		return -1
+	var cs: SkaterNetworkState = snapshot.skater_states[carrier]
+	var to_net := Vector3(-cs.position.x, 0.0, own_goal_z - cs.position.z)
+	var dist: float = to_net.length()
+	if dist < 0.001:
+		return -1
+	var dir: Vector3 = to_net / dist
+	if cs.velocity.x * dir.x + cs.velocity.z * dir.z < AIRoleRushD.GAP_UP_CLOSING_M_S:
+		return -1
+	var finish: float = maxf(dist - AIRoleRushD.RETREAT_FINISH_M, 0.0)
+	var his_caps: AISkaterCaps = caps_by_peer.get(carrier)
+	var best_pid: int = -1
+	var best: float = INF
+	var best_off_line: float = INF
+	for pid: int in peers:
+		var s: SkaterNetworkState = snapshot.skater_states.get(pid)
+		var rel: Vector3 = s.position - cs.position if s != null else Vector3.ZERO
+		if s == null or rel.x * dir.x + rel.z * dir.z <= 0.0:
+			continue
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
+		var m: float = AIDefensiveVerbs.cut_off_m(s.position, s.velocity,
+				caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S,
+				caps.max_accel if caps != null else AIArrival.SHED_ACCEL_DEFAULT_M_S2,
+				caps.max_blade_reach if caps != null else AIBotMechanics.BLADE_REACH_M,
+				cs.position, cs.velocity, dir, finish, his_caps, true)
+		if pid != prev_owner:
+			m += HYSTERESIS_PENALTY_M
+		# A tie (two men on him at once, or none short of the crease) goes to the
+		# man in his lane.
+		var off_line: float = absf(rel.x * dir.z - rel.z * dir.x)
+		if m < best or (m == best and (off_line < best_off_line
+				or (off_line == best_off_line and pid < best_pid))):
+			best = m
+			best_off_line = off_line
+			best_pid = pid
+	return best_pid
+
+
+static func is_back_line_d(slot: int) -> bool:
+	return slot == Slot.BACK_STRONG or slot == Slot.BACK_MID
+
+
+# Whether `slot` is the back-line D who owns the carrier: carrier_owner's pick
+# while one comes at our net at pace (TeamStrategyView.pressure_slot_override),
+# BACK_STRONG otherwise. `view` may be null (no brain).
+static func owns_back_line_carrier(view: TeamStrategyView, slot: int) -> bool:
+	if not is_back_line_d(slot):
+		return false
+	var owner: int = view.pressure_slot_override() if view != null else Slot.NONE
+	if not is_back_line_d(owner):
+		owner = Slot.BACK_STRONG
+	return slot == owner
+
+
+# Of `peers` goal-side of a carrier at `carrier_pos`, the one whose lane his
+# skating takes him into: nearest across the ice to `lead` (where he is going,
+# AIRushRead's lead), `prev_owner` taking HYSTERESIS_PENALTY_M. The D-to-D switch
+# for a carrier who is not coming at our net: he is the D's on the side he
+# picks, and the other slides behind. -1 when none of `peers` is goal-side.
+static func lane_owner(snapshot: WorldSnapshot, own_goal_z: float, peers: Array,
+		carrier_pos: Vector3, lead: Vector3, prev_owner: int) -> int:
+	var own_dir: float = signf(own_goal_z)
+	var best_pid: int = -1
+	var best: float = INF
+	for pid: int in peers:
+		var s: SkaterNetworkState = snapshot.skater_states.get(pid)
+		if s == null or own_dir * s.position.z <= own_dir * carrier_pos.z:
+			continue
+		var m: float = absf(s.position.x - lead.x)
+		if pid != prev_owner:
+			m += HYSTERESIS_PENALTY_M
+		if m < best or (m == best and pid < best_pid):
+			best = m
+			best_pid = pid
+	return best_pid
+
+
+# Last tick's holder of `slot`'s continuity class (_hysteresis_class), or -1.
+static func prev_holder(prev_assignments: Dictionary, slot: int) -> int:
+	var cls: int = _hysteresis_class(slot)
+	for pid: int in prev_assignments:
+		if _hysteresis_class(prev_assignments[pid]) == cls:
+			return pid
+	return -1
+
 
 # The peer that would ARRIVE at `target_pos` soonest, excluding already-fixed
 # peers, with hysteresis; ties break on the lower peer id. -1 if no eligible

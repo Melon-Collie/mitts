@@ -524,3 +524,51 @@ func test_trans_od_back_post_never_goes_to_a_man_behind_the_carrier() -> void:
 			_positions())
 	assert_true(_slot_of(a, AIRoleSlots.Slot.BACK_STRONG) in [4, 5],
 			"BACK_STRONG stays with a D, got peer %d" % _slot_of(a, AIRoleSlots.Slot.BACK_STRONG))
+
+
+func test_trans_od_back_post_stays_with_the_d_riding_the_carrier_back() -> void:
+	# The carrier crosses our line with both D riding him back a step behind in
+	# depth (inside a stick: level, not beaten), the back posts riding
+	# with him so nobody is deeper than them, and the C 7 m up the ice flying
+	# back. Nobody makes BACK_STRONG's deadline; a D level with the carrier is
+	# with him, and the C is soonest to the post only because the carrier is past
+	# him. (Read off test_five_on_five_set_shape's v7.0/z24/c6, mirrored: #899.)
+	var skaters: Array = [
+		[1, 0, Vector3(2.7, 0, 0.0), Vector3(0.8, 0, 8.8)],      # C, behind the play
+		[2, 0, Vector3(-0.5, 0, 0.9), Vector3(-5.1, 0, 8.1)],
+		[3, 0, Vector3(0.0, 0, -2.7), Vector3(1.2, 0, 9.9)],
+		[4, 0, Vector3(0.0, 0, 7.1), Vector3(0.7, 0, 7.4)],      # LD, a step behind
+		[5, 0, Vector3(-2.1, 0, 6.9), Vector3(0.3, 0, 7.1)],     # RD, a step behind
+		[10, 1, Vector3(4.2, 0, 7.4), Vector3(-0.4, 0, 8.8)],    # the carrier, at our line
+	]
+	var prev: Dictionary = {1: AIRoleSlots.Slot.NZ_F1, 2: AIRoleSlots.Slot.BACK_WEAK,
+			3: AIRoleSlots.Slot.NZ_MID, 4: AIRoleSlots.Slot.BACK_STRONG,
+			5: AIRoleSlots.Slot.BACK_MID}
+	var a: Dictionary = AIRoleSlots5.assign(_make_snapshot(skaters, 10), TEAM_ID, OUR_NET_Z,
+			AIPossessionState.State.TRANS_DEFENSE, _resolver(skaters), prev, 1.0, {},
+			_positions())
+	assert_true(_slot_of(a, AIRoleSlots.Slot.BACK_STRONG) in [4, 5],
+			"BACK_STRONG stays with a D, got peer %d" % _slot_of(a, AIRoleSlots.Slot.BACK_STRONG))
+	assert_false(_slot_of(a, AIRoleSlots.Slot.NZ_F1) in [4, 5],
+			"no D is sent up the ice as the first forechecker, got %s" % str(a))
+
+
+func test_trans_od_a_man_more_than_a_stick_behind_the_carrier_is_behind_him() -> void:
+	# The same entry with the C 3.7 m behind the carrier, flying in: past a stick
+	# back he is behind the play, however fast, and the post is the D's.
+	var skaters: Array = [
+		[1, 0, Vector3(2.1, 0, 3.7), Vector3(-0.9, 0, 9.2)],     # C, 3.7 m behind
+		[2, 0, Vector3(-0.5, 0, 0.9), Vector3(-5.1, 0, 8.1)],
+		[3, 0, Vector3(0.0, 0, -2.7), Vector3(1.2, 0, 9.9)],
+		[4, 0, Vector3(0.0, 0, 7.1), Vector3(0.7, 0, 7.4)],
+		[5, 0, Vector3(-2.1, 0, 6.9), Vector3(0.3, 0, 7.1)],
+		[10, 1, Vector3(4.2, 0, 7.4), Vector3(-0.4, 0, 8.8)],
+	]
+	var prev: Dictionary = {1: AIRoleSlots.Slot.NZ_F1, 2: AIRoleSlots.Slot.BACK_WEAK,
+			3: AIRoleSlots.Slot.NZ_MID, 4: AIRoleSlots.Slot.BACK_STRONG,
+			5: AIRoleSlots.Slot.BACK_MID}
+	var a: Dictionary = AIRoleSlots5.assign(_make_snapshot(skaters, 10), TEAM_ID, OUR_NET_Z,
+			AIPossessionState.State.TRANS_DEFENSE, _resolver(skaters), prev, 1.0, {},
+			_positions())
+	assert_true(_slot_of(a, AIRoleSlots.Slot.BACK_STRONG) in [4, 5],
+			"BACK_STRONG stays with a D, got peer %d" % _slot_of(a, AIRoleSlots.Slot.BACK_STRONG))

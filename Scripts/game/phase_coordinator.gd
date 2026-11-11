@@ -192,6 +192,12 @@ func handle_phase_entered() -> void:
 			# GameManager._on_remote_phase_changed).
 			# This is where the replay cinematic actually kicks in.
 			start_goal_replay()
+		GamePhase.Phase.FIGHT:
+			# The whistle is dead play: the carrier loses the puck where it lies
+			# and nobody plays it until the faceoff after the fight.
+			_puck_drop_requester.call()
+			if puck != null:
+				puck.pickup_locked = true
 		GamePhase.Phase.END_OF_PERIOD:
 			_puck_drop_requester.call()
 			if puck != null:

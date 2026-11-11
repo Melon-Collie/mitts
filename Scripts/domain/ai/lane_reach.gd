@@ -23,7 +23,7 @@ const SAMPLES: int = 8
 # The stretch read runs from arc `u0`, which the puck reaches at `t0`, to
 # `line_len` at `eff_speed` — a saucer's landed run is the stretch after its
 # touch-down. `read_delay` is when he starts skating to it, from the release
-# (AIPuckLane.LANE_WINDUP_READ_DELAY_S: on the windup, before it).
+# (AIPuckLane.LANE_REACTION_DELAY_S).
 static func block(fx: float, fz: float, dirx: float, dirz: float,
 		line_len: float, eff_speed: float, px: float, pz: float,
 		vx: float, vz: float, reach: float, vmax: float, accel: float,

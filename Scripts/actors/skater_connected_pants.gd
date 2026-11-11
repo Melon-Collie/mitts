@@ -12,15 +12,15 @@ extends RefCounted
 # them the hips widen over the hip joints to the seat, and the last ring is the
 # crotch, where the legs split.
 const _PANTS: Array[Vector4] = [
-	Vector4(0.056, 0.184, 0.0, 0.006),
-	Vector4(0.050, 0.186, 0.0, 0.006),
-	Vector4(0.030, 0.187, 0.0, 0.007),
-	Vector4(0.000, 0.190, 0.0, 0.010),
-	Vector4(-0.040, 0.214, 0.176, 0.013),
-	Vector4(-0.080, 0.240, 0.183, 0.020),
-	Vector4(-0.120, 0.258, 0.188, 0.028),   # the seat, over the hip joints
-	Vector4(-0.160, 0.266, 0.184, 0.022),
-	Vector4(-0.200, 0.268, 0.176, 0.012),   # the crotch
+	Vector4(0.106, 0.184, 0.0, 0.006),
+	Vector4(0.100, 0.186, 0.0, 0.006),
+	Vector4(0.080, 0.187, 0.0, 0.007),
+	Vector4(0.050, 0.190, 0.0, 0.010),
+	Vector4(0.010, 0.214, 0.176, 0.013),
+	Vector4(-0.030, 0.240, 0.183, 0.020),   # over the hip joints
+	Vector4(-0.070, 0.258, 0.188, 0.028),   # the seat
+	Vector4(-0.110, 0.266, 0.184, 0.022),
+	Vector4(-0.150, 0.268, 0.176, 0.012),   # the crotch
 ]
 const _PANTS_ROUND: int = 4
 # Where the jersey is tucked in, the pants' padded top stands up as a rim: the
@@ -36,7 +36,9 @@ const _RIM_FLARE_M: float = 0.035
 const TUCK_BLOUSE_M: float = 0.030
 # How far tucked a column is before the rim under it starts to flare.
 const _RIM_FLARE_FROM: float = 0.6
-const _LOOSE_TOP_INSET_M: float = 0.015
+# Drawn in under a loose jersey (_stand_rim): the centre's fold over the dot
+# swings the jersey's back forward onto it by ~5 cm.
+const _LOOSE_TOP_INSET_M: float = 0.025
 # The kidney pads, each side of the spine under the belt: how far each ring
 # stands out at their middles, 45° off the back, easing to none at the spine
 # and the hips. They stand only where the jersey is tucked, as the rim does:
@@ -50,17 +52,20 @@ const _THIGH_SHARE: Array[Vector2] = [
 	Vector2(0.0, 0.1), Vector2(0.0, 0.3), Vector2(0.0, 0.5), Vector2(0.35, 0.35),
 ]
 # The thigh as the tail collides with it, a capsule in its LEG bone's frame
-# from the hip pivot down to the pants' hem: round its axis far enough to hold
-# the pants' front at the crotch, which rides the thigh up into the tail in a
-# crouch.
-const COLLIDER_THIGH_LENGTH_M: float = 0.26
+# from the top of the thigh's swell, where the hip joint was before the leg
+# began at the joint, down to the pants' hem: round its axis far enough to
+# hold the pants' front at the crotch, which rides the thigh up into the tail
+# in a crouch. Up to the hip joint itself it would fill the tail's whole
+# length.
+const COLLIDER_THIGH_FROM_M: float = 0.11
+const COLLIDER_THIGH_LENGTH_M: float = 0.375
 const COLLIDER_THIGH_RADIUS_M: float = 0.18
 const _SIDES: int = 16
 const _FRONT: int = 8   # the front centre of a ring, which runs from the back centre
 # The inseam, front to back, at the bottom of the crotch's V: each on the pelvis
 # and both thighs.
 const _INSEAM: Array[Vector3] = [
-	Vector3(0.0, -0.250, -0.060), Vector3(0.0, -0.262, 0.005), Vector3(0.0, -0.250, 0.070),
+	Vector3(0.0, -0.200, -0.060), Vector3(0.0, -0.212, 0.005), Vector3(0.0, -0.200, 0.070),
 ]
 
 # Each leg below the crotch, bind space: (y, radius, its swell to the outside,
@@ -156,7 +161,7 @@ static func build(b: ConnectedSkinBuilder, tuck: int) -> void:
 					_pants_uv(side, b.position(ids[1])), _pants_uv(side, b.position(ids[2])),
 					_pants_uv(side, b.position(ids[3])), zone, inside, true)
 	var waist: int = b.vertex(Vector3(0.0, _PANTS[0].x, _PANTS[0].w), [bind_pelvis], [1.0])
-	SkaterConnectedMesh.fan(b, rings[0], waist, Vector2(0.25, 0.75),
+	b.fan(rings[0], waist, Vector2(0.25, 0.75),
 			SkaterConnectedMesh.zone(SkaterMeshBuilder.UpperSurface.PELVIS),
 			Vector3(0.0, _PANTS[0].x - 0.1, 0.0))
 

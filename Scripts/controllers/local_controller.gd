@@ -133,7 +133,7 @@ func get_current_input() -> InputState:
 
 # Fills `out` with the newest `frames` inputs, oldest first — the redundant
 # trailing window the batch send ships for loss resilience. Fills a caller-owned
-# Array rather than returning `_input_history.slice(start)`: this runs 120x/s and
+# Array rather than returning `_input_history.slice(start)`: this runs 90x/s and
 # the slice was a fresh Array every batch.
 func fill_input_batch(out: Array[InputState], frames: int = 12) -> void:
 	out.clear()
@@ -146,6 +146,24 @@ func fill_input_batch(out: Array[InputState], frames: int = 12) -> void:
 # Used by WorldStateCodec during goal replay to reposition the local skater the
 # same way RemoteController does, bypassing reconcile which is a no-op during
 # dead-puck phases anyway. Mirrors RemoteController._apply_state_to_skater.
+# This skater as predicted for the input stamped at or last before host time
+# `at` (the instant the host applies it), null before the history's start; the
+# newest past its end. Read, never kept: the entry is the history's own.
+func predicted_at(at: float) -> PredictedState:
+	var n: int = _prediction_history.size()
+	if n == 0 or _prediction_history[0].host_timestamp > at + PredictedState.TS_MATCH_EPSILON:
+		return null
+	var lo: int = 0
+	var hi: int = n - 1
+	while lo < hi:
+		var mid: int = (lo + hi + 1) >> 1
+		if _prediction_history[mid].host_timestamp <= at + PredictedState.TS_MATCH_EPSILON:
+			lo = mid
+		else:
+			hi = mid - 1
+	return _prediction_history[lo]
+
+
 func apply_network_state(state: SkaterNetworkState, _host_ts: float) -> void:
 	if skater == null:
 		return
@@ -223,8 +241,7 @@ func _step_tick(delta: float) -> void:
 			prep_input.stick_lift_held = false
 			_current_input = prep_input
 			_input_history.append(_current_input)
-			var prep_rtt_cap: int = clampi(int(NetworkManager.get_latest_rtt_ms() / 1000.0 * float(Constants.PHYSICS_TICK)) * 2, Constants.PHYSICS_TICK / 5, Constants.PHYSICS_TICK * 2)
-			if _input_history.size() > prep_rtt_cap:
+			if _input_history.size() > input_history_cap(NetworkManager.get_latest_rtt_ms()):
 				_input_history.pop_front()
 			apply_blade_aim_only(_current_input, delta)
 			# Snapshot the frozen prep frame too, so a broadcast that acks a
@@ -256,10 +273,7 @@ func _step_tick(delta: float) -> void:
 	_shuffle_steps.shape(input, skater.velocity, shuffle_step_distance, stop_decel)
 	_current_input = input
 	_input_history.append(_current_input)
-	# Cap scales with RTT so sustained high-loss can't grow the buffer unboundedly:
-	# 2× RTT worth of frames (min 0.2 s, max 2 s of ticks) covers the in-flight window.
-	var rtt_cap: int = clampi(int(NetworkManager.get_latest_rtt_ms() / 1000.0 * float(Constants.PHYSICS_TICK)) * 2, Constants.PHYSICS_TICK / 5, Constants.PHYSICS_TICK * 2)
-	if _input_history.size() > rtt_cap:
+	if _input_history.size() > input_history_cap(NetworkManager.get_latest_rtt_ms()):
 		_input_history.pop_front()
 	_process_input(_current_input, _current_input.delta)
 	# Snapshot is deferred to skater.post_move_integrated (post integration) so
@@ -320,15 +334,14 @@ func _step_tick(delta: float) -> void:
 				# stale-view rewind makes a legit grab miss. Poke / stick-lift / hit
 				# claims report the same adapted delay for the same reason.
 				# Send the blade geometry WE reached with (client-authoritative aim):
-				# curr + one-tick-prior blade for the host's swept test, plus the
-				# top-hand grip for the reception face-normal. The host reach-clamps
-				# them to our server-authoritative body. blade_pos_for_claim is this
-				# frame's blade contact; get_prev_blade_contact_global is last tick's.
+				# curr + one-tick-prior blade for the host's swept test and its
+				# catch read. The host reach-clamps them to our server-authoritative
+				# body. blade_pos_for_claim is this frame's blade contact;
+				# get_prev_blade_contact_global is last tick's.
 				NetworkManager.send_pickup_claim(
 					NetworkManager.estimated_host_time(),
 					NetworkManager.get_interpolation_delay() * 1000.0,
-					blade_pos_for_claim, skater.get_prev_blade_contact_global(),
-					skater.upper_body_to_global(skater.get_top_hand_position()))
+					blade_pos_for_claim, skater.get_prev_blade_contact_global())
 				# Optimistic visual-only attach for uncontested pickups: pins the
 				# puck to our blade immediately so the grab feels instant, rolling
 				# back if the host doesn't confirm. Idempotent + self-gating, so
@@ -351,7 +364,9 @@ func _step_tick(delta: float) -> void:
 			var carrier_pid: int = view_carrier_pid
 			var in_poke_range: bool = false
 			var is_lift: bool = false
-			if carrier_team != _team_id and carrier_team != -1:
+			# Committed to a body check, the stick is off the ice: the host refuses
+			# both, so send neither.
+			if carrier_team != _team_id and carrier_team != -1 and not skater.hit_committed:
 				if skater.stick_check_phase == StickCheckRules.Phase.HOOK:
 					# Hooking — under the carrier's shaft for a stick lift.
 					is_lift = true
@@ -390,6 +405,17 @@ func _step_tick(delta: float) -> void:
 			_was_in_pickup_range = false
 			_was_in_poke_range = false
 
+# Inputs kept for replay. The unacked window is the round trip plus the stamp's
+# margin, the wait for the next broadcast and the host queue's slip before a
+# drain (~rtt + 0.12 s at worst); an input that falls off the front is silently
+# missing from the replay, which then lands short and reconciles again. Capped
+# so a link that stops acking can't grow it without bound.
+static func input_history_cap(rtt_ms: float) -> int:
+	var window_s: float = 2.0 * maxf(rtt_ms, 0.0) / 1000.0 + 0.2
+	return clampi(ceili(window_s * float(Constants.PHYSICS_TICK)),
+			Constants.PHYSICS_TICK / 5, Constants.PHYSICS_TICK * 2)
+
+
 func _append_prediction_snapshot() -> void:
 	# Appended on every gathered input — including frozen
 	# FACEOFF_PREP frames (position locked, velocity zero) — so a broadcast that
@@ -402,6 +428,11 @@ func _append_prediction_snapshot() -> void:
 	snap.facing = _pose.facing
 	snap.shot_state = _sm.get_state() as int
 	_pose.record_twist(snap)
+	snap.record_tick_state(skater)
+	snap.carry_side_smoothed = skater.carry_read_side()
+	snap.carry_hop = skater.carry_read_hop()
+	snap.hold_ease = _ik.hold.state()
+	snap.blade_dangle_vel = _ik.blade_dangle_velocity()
 	_prediction_history.append(snap)
 	if _prediction_history.size() > _PREDICTION_HISTORY_CAP:
 		_prediction_history.pop_front()
@@ -440,7 +471,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# through the 0.1ms wire grid while local stamps are full-precision f64,
 	# so without it the exact acked input could survive the trim (grid value
 	# a hair below the local stamp) and be double-applied on replay. Epsilon
-	# (1ms) is far below the 4.17ms input spacing, so it can never trim an
+	# (1ms) is far below the 11.1 ms input spacing, so it can never trim an
 	# unacked input. find_at below uses the pure ack (its own epsilon match
 	# handles the grid error symmetrically).
 	var ack_ts: float = server_state.last_processed_host_timestamp
@@ -531,6 +562,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_follow_through_is_slapper: bool = _sm.follow_through_is_slapper
 	var pre_follow_through_total: float = _sm.follow_through_duration_total
 	var pre_follow_through_power: float = _sm.follow_through_power
+	var pre_follow_through_loft: float = _sm.follow_through_loft
 	# shot_dir feeds the follow-through pose (blade sweep target + torso
 	# uncoil). Replay can overwrite it with a re-derived direction, or zero it
 	# outright when the replayed window walks the timer through
@@ -579,9 +611,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# tick recomputes it — otherwise the local player's stick-flex pose reads a
 	# stale charge for one frame after a reconcile (cosmetic; completes the set).
 	var pre_shot_charge: float = skater.shot_charge
-	# The settle queue notes and releases presses as the replay walks the
-	# deadline, the live inputs having already done so.
-	var pre_settle_queued: SkaterSettleGate.Press = _settle.queued
+	_settle.save()
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
 	# Body-check stagger is deterministic from the host baseline + tick decay,
@@ -620,10 +650,15 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# The host's frame yaw at the ack, with the tracked angle and twist spring
 	# rebuilt under it — the replay's first tick reads the blade in this frame.
 	_pose.adopt_wire_twist(server_state.upper_body_rotation_y, predicted)
-	# Drop the IK blade smoother's baseline so it re-seeds deterministically from
-	# the first replayed input's ROM-clamped target — the live smoothed value
-	# would otherwise bias the replay's first tick.
-	_ik.reset_blade_smoothing()
+	# The blade smoother starts where the host's blade was at the ack, moving as
+	# this client's was then. A carrier's blade is speed-capped and trails the
+	# cursor, so restarting it on the first input's target snapped it onto the
+	# cursor, and the twist that follows it went up to 0.2 rad off the live one.
+	if predicted != null:
+		_ik.seed_blade_smoothing(skater.upper_body_to_global(server_state.blade_position),
+				predicted.blade_dangle_vel)
+	else:
+		_ik.reset_blade_smoothing()
 	# Replay under the ACK-TIME baseline: the host evolved these same inputs
 	# starting from server_state.shot_state, so seed the state machine there
 	# rather than replaying under the LIVE state (which post-dates the whole
@@ -634,12 +669,26 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# the live state is restored below and server authority is then applied
 	# through the in-flight guards, exactly as before.
 	_sm.set_state(server_state.shot_state as SkaterStateMachine.State)
+	# The stick-check timers and the blade eases as they stood after the acked
+	# input; the replay steps them forward from there. Without a match they keep
+	# their live values and are not stepped, which would advance them twice.
+	if predicted != null:
+		predicted.adopt_tick_state(skater)
+	# The carry contact is played back rather than stepped (see the loop), and
+	# its live values come back after the replay.
+	var live_carry_side: float = skater.carry_read_side()
+	var live_carry_hop: float = skater.carry_read_hop()
+	var live_hold_ease: Vector2 = _ik.hold.state()
+	var carry_from: PredictedState = predicted
 	is_replaying = true
 	# Walk the (already ack-trimmed, chronological) prediction history alongside
 	# the replayed inputs so each entry can be RE-RECORDED from the corrected
 	# trajectory below — see the re-record comment inside the loop.
 	var replay_hist_i: int = 0
 	for input in _input_history:
+		if carry_from != null:
+			skater.adopt_carry_read(carry_from.carry_side_smoothed, carry_from.carry_hop)
+			_ik.hold.adopt(carry_from.hold_ease)
 		_process_input(input, input.delta)
 		skater.global_position += skater.velocity * input.delta
 		# Re-resolve skater-vs-skater body checks against where the host actually had
@@ -663,6 +712,8 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		skater.clamp_body_to_net()
 		# And the goalie footprint, for the same reason.
 		skater.clamp_body_to_goalies()
+		if predicted != null:
+			skater.step_tick_state(input.delta)
 		# Re-record this input's prediction from the corrected trajectory: the
 		# pre-correction snapshots sit on the trajectory the replay just
 		# abandoned, so leaving them re-trips the threshold on every subsequent
@@ -683,15 +734,21 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			replay_snap.facing = _pose.facing
 			replay_snap.shot_state = _sm.get_state() as int
 			_pose.record_twist(replay_snap)
+			replay_snap.record_tick_state(skater)
 			replay_snap.was_replay_rerecorded = true
+			carry_from = replay_snap
 			replay_hist_i += 1
 	is_replaying = false
+	skater.adopt_carry_read(live_carry_side, live_carry_hop)
+	_ik.hold.adopt(live_hold_ease)
+	var replayed_state: State = _sm.get_state()
 	# Restore shot-state fields that replay must not transition past.
 	_sm.set_state(pre_state)
 	_sm.follow_through_timer = pre_follow_through_timer
 	_sm.follow_through_is_slapper = pre_follow_through_is_slapper
 	_sm.follow_through_duration_total = pre_follow_through_total
 	_sm.follow_through_power = pre_follow_through_power
+	_sm.follow_through_loft = pre_follow_through_loft
 	_sm.aim_finish(pre_shot_dir, pre_finish_facing_dir, pre_finish_stick_dir)
 	_aiming.one_timer_window_timer = pre_one_timer_window_timer
 	_aiming.one_timer_retention_timer = pre_one_timer_retention_timer
@@ -710,62 +767,12 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_aiming.wrister_origin_world = pre_charge_origin_world
 	_aiming.wrister_origin_skater_pos = pre_charge_origin_skater_pos
 	skater.shot_charge = pre_shot_charge
-	_settle.queued = pre_settle_queued
-	# Server authority on shot state — but never revert past a release transition.
-	# If the client is in FOLLOW_THROUGH and the server is still in an aim state,
-	# the host just hasn't processed the release input yet; the reliable RPC already
-	# fired it. Reverting would loop the follow-through animation every reconcile cycle.
-	var apply_server_shot_state: bool = server_state.shot_state != pre_state
-	if apply_server_shot_state and pre_state == SkaterStateMachine.State.FOLLOW_THROUGH:
-		var server_still_aiming: bool = \
-				server_state.shot_state == SkaterStateMachine.State.WRISTER_AIM or \
-				server_state.shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK or \
-				server_state.shot_state == SkaterStateMachine.State.ONE_TIMER_RETENTION
-		if server_still_aiming:
-			apply_server_shot_state = false
-	# The one-timer's committed hold is CLIENT-OWNED outright — the server never
-	# overrides it in either direction. Safe as a blanket (every other guard here
-	# enumerates) because the hold SELF-TERMINATES within one_timer_retention_time,
-	# so a wrong local state survives a fraction of a second at worst. Both
-	# directions are wrong to apply: a lagged pre-release state re-arms a wind-up
-	# the player already released, and a server FOLLOW_THROUGH skips the client's
-	# own release so it never seeds its shot prediction. Real progressions are
-	# unaffected — a stoppage cancels the swing through teleport_to ->
-	# _cancel_active_charge, which does not route through here.
-	if apply_server_shot_state and pre_state == SkaterStateMachine.State.ONE_TIMER_RETENTION:
-		apply_server_shot_state = false
-	# Symmetric guard for the reverse direction: don't revert from an aiming state
-	# back to skating when we have the puck. The server hasn't processed the shoot
-	# input yet (it's still in-flight or queued); letting the server override here
-	# ejects the client from WRISTER_AIM every reconcile cycle, so shoot_pressed
-	# never re-fires and the release has no puck to dispatch.
-	if apply_server_shot_state and has_puck:
-		var client_aiming: bool = \
-				pre_state == SkaterStateMachine.State.WRISTER_AIM or \
-				pre_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK
-		var server_skating: bool = \
-				server_state.shot_state == SkaterStateMachine.State.SKATING_WITH_PUCK or \
-				server_state.shot_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK
-		if client_aiming and server_skating:
-			apply_server_shot_state = false
-	# Same protection for the puckless one-timer wind-up, which has no puck so the
-	# has_puck guard above never covers it: the server's lagged
-	# SKATING_WITHOUT_PUCK (slap press not processed there yet) ejects the wind-up,
-	# and the held RMB can't re-fire the rising-edge entry — the aim arrow strands
-	# on screen with no reticle. Real progressions still apply: the puck arriving
-	# flips the server to SLAPPER_CHARGE_WITH_PUCK, a release to FOLLOW_THROUGH.
-	if apply_server_shot_state \
-			and pre_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITHOUT_PUCK \
-			and server_state.shot_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK:
-		apply_server_shot_state = false
-	# A slapshot called off is the client's to have called: through the recovery
-	# that follows (the puck held at its pin, the settle lock running) the host's
-	# lagged wind-up must not re-arm it — the button is already up, so it would
-	# release a zero-charge slapshot. Bounded by the recovery, like the hold above.
-	if apply_server_shot_state and pre_state == SkaterStateMachine.State.SKATING_WITH_PUCK \
-			and skater.is_slapshot_pinning() \
-			and server_state.shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK:
-		apply_server_shot_state = false
+	_settle.restore()
+	# Server authority on shot state, judged against where the replay landed
+	# (ShotStateAuthority holds the in-flight guards).
+	var apply_server_shot_state: bool = ShotStateAuthority.server_applies(
+			server_state.shot_state as SkaterStateMachine.State, pre_state, replayed_state,
+			has_puck, skater.is_slapshot_pinning())
 	if apply_server_shot_state:
 		_sm.set_state(server_state.shot_state as SkaterStateMachine.State)
 	# Wrister charge is a local control input (the player's precision sweep), not a
@@ -822,7 +829,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			# During the celebration the raised-stick pose owns the hands;
 			# re-IKing to the mouse here would pop the blade down for a frame
 			# on every reconcile. Skip — the next real tick re-applies it.
-			if not is_celebrating():
+			if is_fighting():
+				lay_fight_hands()
+			elif not is_celebrating():
 				_ik.apply_blade_from_mouse(_current_input, 0.0)
 	_apply_down_pose()
 	var blade_reconcile_delta: float = skater.get_blade_contact_global().distance_to(pre_reconcile_blade)
@@ -975,6 +984,32 @@ func _find_press_partner(host_ts: float, out: PressPartner) -> bool:
 	out.posture = SkaterMovementRules.posture_of(best["stance"], best["hit"])
 	out.stagger = best["stagger"]
 	return true
+
+
+# A client reads the man it fights where the press reads its partner: in the
+# snapshot sampled at the input's stamp, never the drawn node.
+func _read_fight_partner(host_ts: float) -> void:
+	if _is_host or not _historical_others_provider.is_valid():
+		super._read_fight_partner(host_ts)
+		return
+	_fight_partner = null
+	if not is_fighting():
+		return
+	var team: int = skater.get_team_id()
+	var best_d2: float = INF
+	var others: Array = _historical_others_provider.call(skater, host_ts)
+	for rec: Dictionary in others:
+		var other: Skater = rec["skater"]
+		if other == null or other == skater or other.fight_role != FightRules.Role.FIGHTING \
+				or other.get_team_id() == team:
+			continue
+		var pos: Vector3 = rec["position"]
+		var d2: float = pos.distance_squared_to(skater.global_position)
+		if d2 < best_d2:
+			best_d2 = d2
+			_fight_partner = other
+			_fight_partner_pos = pos
+			_fight_partner_vel = rec["velocity"]
 
 
 func _press_candidate_near() -> bool:

@@ -11,6 +11,7 @@ extends TeamStrategyView
 #   threat_assignments       — defender peer → the opponent it covers.
 #   threat_shoot_base_by_opp — opp peer → shoot-threat base for MARK's fallback.
 #   rush_read                — the shared transition-defence read.
+#   their_rush_read          — the same read from their side, of our rush.
 #   coverage_downgraded      — instrumentation only.
 #   one-timer readiness and the live ping directives, through the query methods.
 # build_view freezes the agents' reads into a TeamBrainView; AICoordinator
@@ -69,6 +70,11 @@ var rush_read := AIRushRead.new()
 # Last tick's recovery classification, threaded back in for the enter/hold
 # hysteresis on the recovery race (see AIRushRead.TRACK_ENTER_MARGIN_S).
 var _prev_recovery: Dictionary[int, int] = {}
+# The same read from their side: their bodies racing back on our rush, so its
+# `numbers` is whether we have the numbers on them (numbers_up).
+var their_rush_read := AIRushRead.new()
+var _their_prev_recovery: Dictionary[int, int] = {}
+var _no_bot_peers: Dictionary = {}
 
 # Sticky possession for loose-puck handling.
 var _last_carrier_team: int = -1
@@ -90,16 +96,24 @@ var _coverage_unready_ticks: int = 0
 # Nothing reads it back into a decision.
 var coverage_downgraded: bool = false
 # Their puck in their zone: whether we are forechecking it (AIForecheckRead) —
-# last tick's answer, for the read's hysteresis — and the race margin it read.
+# last tick's answer, for the read's hysteresis — and the two margins it read.
 var _forechecking: bool = false
 var forecheck_margin_s: float = -INF
+var forecheck_depth_margin_s: float = -INF
+# 5v5: the role, and its holder, that owns a carrier coming at our net at pace
+# (AIRoleSlots.carrier_owner) — in DZONE a zone role, in TRANS_DEFENSE one of
+# the back-line D; NONE / -1 when the area rule (DZONE) or BACK_STRONG
+# (TRANS_DEFENSE) stands.
+var _pressure_slot_override: int = AIRoleSlots.Slot.NONE
+var _pressure_owner_peer: int = -1
+var _zone_peers: Array[int] = []
 # Where the puck was last carried, read every batch so a release is placed to
 # within one; INF until it has been.
 var _last_carry_pos: Vector3 = Vector3.INF
-# Who carries the puck (-1 nobody) and how long he has (s), read every batch for
-# the forecheck read's carrier_held_s.
+# Who carries the puck (-1 nobody) and how long he has had it with nobody of
+# ours on him (s), read every batch for the forecheck read's carrier_free_s.
 var _held_by: int = -1
-var _held_s: float = 0.0
+var _free_s: float = 0.0
 # The release the dump-in read last classified (WorldSnapshot
 # .loose_puck_released_by), and whether it is our dump-in.
 var _seen_release_by: int = -1
@@ -152,9 +166,12 @@ func tick(delta: float, snapshot: WorldSnapshot) -> void:
 		var carrier: int = snapshot.puck_state.carrier_peer_id
 		if carrier != _held_by:
 			_held_by = carrier
-			_held_s = 0.0
+			_free_s = 0.0
+		elif AIForecheckRead.carrier_pressured(snapshot, team_id, _team_id_by_peer,
+				_caps_by_peer):
+			_free_s = 0.0
 		else:
-			_held_s += delta
+			_free_s += delta
 		if carrier != -1:
 			_last_carry_pos = snapshot.puck_state.position
 	_accumulator += delta
@@ -202,6 +219,12 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 	rush_read.fill(snapshot, team_id, _own_goal_z, _team_id_by_peer,
 			_caps_by_peer, _prev_recovery, rule_set != GameRules.RuleSet.OFF,
 			_bot_peers, _last_carrier_team)
+	_their_prev_recovery.clear()
+	for pid: int in their_rush_read.recovery_by_peer:
+		_their_prev_recovery[pid] = their_rush_read.recovery_by_peer[pid]
+	their_rush_read.fill(snapshot, 1 - team_id, -_own_goal_z, _team_id_by_peer,
+			_caps_by_peer, _their_prev_recovery, rule_set != GameRules.RuleSet.OFF,
+			_no_bot_peers, _last_carrier_team)
 
 	# Coverage readiness: hold the rush/recovery shape until the backcheck is
 	# home (Scripts/domain/ai/CLAUDE.md → "DZONE is a shape, not a location").
@@ -237,16 +260,22 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 			or (state == AIPossessionState.State.NEUTRAL
 					and AIPossessionState.in_their_zone(snapshot, _own_goal_z))
 	forecheck_margin_s = -INF
+	forecheck_depth_margin_s = -INF
 	if their_deep_puck or _dumping_in:
 		forecheck_margin_s = AIForecheckRead.pressure_margin_s(snapshot, team_id,
 				_own_goal_z, _team_id_by_peer, _caps_by_peer, _position_by_peer,
-				team_size >= 5, _held_s)
+				team_size >= 5, _free_s)
+		if _forechecking:
+			forecheck_depth_margin_s = AIForecheckRead.depth_margin_s(snapshot, team_id,
+					_own_goal_z, _team_id_by_peer, _caps_by_peer, _position_by_peer,
+					team_size >= 5, _free_s)
 	# A dump-in first played outside their zone is no forecheck: the possession
 	# table's shape stands.
 	if not their_deep_puck and forecheck_margin_s == -INF:
 		_forechecking = false
 	else:
-		_forechecking = AIForecheckRead.can_forecheck(forecheck_margin_s, _forechecking)
+		_forechecking = AIForecheckRead.can_forecheck(forecheck_margin_s, _forechecking,
+				forecheck_depth_margin_s)
 		state = AIPossessionState.State.FORECHECK if _forechecking \
 				else AIPossessionState.State.TRANS_DEFENSE
 
@@ -280,6 +309,7 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 	# given them a slot.
 	for excluded_pid: int in _excluded_peers:
 		slot_assignments.erase(excluded_pid)
+	_elect_zone_carrier_owner(snapshot, prev_assignments)
 
 	# Excluded peers are already absent from slot_assignments, so they are never
 	# picked as defenders here.
@@ -294,6 +324,58 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 	if snapshot != null and snapshot.puck_state != null:
 		ping_carrier = snapshot.puck_state.carrier_peer_id
 	ping_directives.apply_overrides(slot_assignments, threat_assignments, ping_carrier)
+
+
+# 5v5: which role owns a carrier coming at our net at pace — the soonest
+# goal-side holder (AIRoleSlots.carrier_owner), the D who rode him in keeping
+# him across the line (last tick's owner, else BACK_STRONG's holder, takes the
+# hysteresis). In DZONE any zone role, the area rule standing while none is
+# elected; in TRANS_DEFENSE either back-line D, so a carrier up the middle is the
+# D in front of him, not the strong D across from him
+# (AIRoleSlots.owns_back_line_carrier), and kept by whoever had him.
+func _elect_zone_carrier_owner(snapshot: WorldSnapshot, prev_assignments: Dictionary) -> void:
+	var prev_owner: int = _pressure_owner_peer if _pressure_owner_peer != -1 \
+			else AIRoleSlots.prev_holder(prev_assignments, AIRoleSlots.Slot.PRESSURE)
+	_pressure_slot_override = AIRoleSlots.Slot.NONE
+	_pressure_owner_peer = -1
+	if team_size < 5:
+		return
+	_zone_peers.clear()
+	for pid: int in slot_assignments:
+		var slot: int = slot_assignments[pid]
+		if (state == AIPossessionState.State.DZONE and AIRoleSlots5.is_zone_slot(slot)) \
+				or (state == AIPossessionState.State.TRANS_DEFENSE
+						and AIRoleSlots.is_back_line_d(slot)):
+			_zone_peers.append(pid)
+	if _zone_peers.is_empty():
+		return
+	_pressure_owner_peer = AIRoleSlots.carrier_owner(snapshot, team_id, _own_goal_z,
+			_team_id_by_peer, _zone_peers, _caps_by_peer, prev_owner)
+	# On the back line, with no carrier coming at pace, he is the D's whose lane
+	# he is skating into (AIRoleSlots.lane_owner); with the puck in flight, the
+	# D who had him keeps him. Never BACK_STRONG's label: the posts mirror
+	# whenever the strong side flips, and a carrier drifting through the middle
+	# would turn the man already on him away and send his partner across.
+	if _pressure_owner_peer == -1 and state == AIPossessionState.State.TRANS_DEFENSE:
+		_pressure_owner_peer = _back_line_lane_owner(snapshot, prev_owner)
+	if _pressure_owner_peer != -1:
+		_pressure_slot_override = slot_assignments[_pressure_owner_peer]
+
+
+func _back_line_lane_owner(snapshot: WorldSnapshot, prev_owner: int) -> int:
+	var carrier: int = snapshot.puck_state.carrier_peer_id \
+			if snapshot != null and snapshot.puck_state != null else -1
+	if carrier == -1 or _team_id_by_peer.get(carrier, team_id) == team_id:
+		return prev_owner if _zone_peers.has(prev_owner) else -1
+	var i: int = rush_read.attackers.find(carrier)
+	if i == -1 or not snapshot.skater_states.has(carrier):
+		return prev_owner if _zone_peers.has(prev_owner) else -1
+	return AIRoleSlots.lane_owner(snapshot, _own_goal_z, _zone_peers,
+			snapshot.skater_states[carrier].position, rush_read.attacker_leads[i], prev_owner)
+
+
+func pressure_slot_override() -> int:
+	return _pressure_slot_override
 
 
 # The man-on-threat partition for the current tick. DZONE and TRANS_DEFENSE
@@ -345,21 +427,27 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 	# The defenders are every body whose job is a man: MARK and, in 5v5 D-zone
 	# coverage, the four zone roles not on the puck. A zone role's area enters as
 	# ELIGIBILITY (Scripts/domain/ai/CLAUDE.md → "Covering a man is one behavior").
-	var pressure_slot: int = AIZoneCoverage.pressure_owner(
-			_strong_x, _own_goal_z, snapshot.puck_state.position)
+	var pressure_slot: int = AIZoneCoverage.pressure_slot(self, _strong_x, _own_goal_z,
+			snapshot.puck_state.position)
 	var defenders: Array[int] = []
 	var defender_pos: Dictionary = {}
 	var defender_vel: Dictionary = {}
 	var defender_caps: Dictionary = {}
 	var eligible_men: Dictionary = {}
 	var zone_slot_by_def: Dictionary = {}
+	# With the puck loose and one of ours elected to race it, he is on the puck
+	# and the area that holds it covers a man like the rest.
+	var chaser: int = snapshot.closest_to_puck_by_team.get(team_id, -1) \
+			if carrier_pid == -1 else -1
 	for pid: int in slot_assignments:
 		var slot: int = slot_assignments[pid]
 		var is_zone: bool = AIRoleSlots5.is_zone_slot(slot)
 		if slot != AIRoleSlots.Slot.MARK and not is_zone:
 			continue
+		if pid == chaser:
+			continue
 		# The area that owns the puck is pressuring it, not covering a man.
-		if is_zone and slot == pressure_slot:
+		if is_zone and slot == pressure_slot and chaser == -1:
 			continue
 		if not snapshot.skater_states.has(pid):
 			continue
@@ -389,6 +477,9 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 		if pid == carrier_pid:
 			continue
 		var mp: Vector3 = snapshot.skater_states[pid].position
+		if state == AIPossessionState.State.DZONE \
+				and not AIZoneCoverage.in_coverage_ice(_own_goal_z, mp):
+			continue
 		men.append(pid)
 		man_pos[pid] = mp
 		# Area eligibility, built as the men are collected. The incumbent gets a
@@ -554,6 +645,15 @@ func icing_enforced() -> bool:
 	return rule_set == GameRules.RuleSet.NHL
 
 
+func covers_whistled() -> bool:
+	return GameRules.whistles_a_cover(rule_set)
+
+
+func numbers_up() -> bool:
+	return their_rush_read.is_live \
+			and their_rush_read.numbers != AIRushRead.Numbers.EVEN_OR_UP
+
+
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:
 	return threat_shoot_base_by_opp
 
@@ -581,7 +681,10 @@ func build_view() -> void:
 	v.carrier_lane_val = _carrier_lane
 	v.team_size_val = team_size
 	v.icing_enforced_val = icing_enforced()
+	v.covers_whistled_val = covers_whistled()
+	v.numbers_up_val = numbers_up()
 	v.ping_chase_peer_val = ping_directives.chase_peer()
+	v.pressure_slot_override_val = _pressure_slot_override
 	_freeze_int_dict(slot_assignments, v.slot_by_peer)
 	_freeze_int_dict(threat_assignments, v.assigned_threat_by_peer)
 	_freeze_int_dict(_position_by_peer, v.position_by_peer)

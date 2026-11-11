@@ -130,6 +130,16 @@ signal icing_called()
 signal goalie_freeze_called()
 signal puck_frozen_called()
 signal offside_called()
+# Fights (FightTracker), emitted on every peer with the players' peer ids: a
+# challenge made and lapsed, and a fight called (the whistle, or a second pair
+# inside the stoppage). Hosts emit from the tracker's signals, clients from the
+# RPC handlers.
+signal fight_challenged(challenger_peer_id: int, target_peer_id: int)
+signal fight_challenge_lapsed(challenger_peer_id: int)
+signal fight_called(a_peer_id: int, b_peer_id: int)
+# A punch landed on `victim_peer_id` (FightPunchJudge), on every peer:
+# `intensity` 0..1 how hard (FightPunchRules.intensity).
+signal punch_landed(victim_peer_id: int, intensity: float)
 # Emitted on every peer when an NHL icing race opens (icing_team_id) or ends
 # (-1, waved_off saying how). Hosts emit from _announce_icing_race; clients
 # from the RPC handler.
@@ -301,6 +311,21 @@ var _xg_query := AIShotOdds.Query.new()
 var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
 var _board_pins: BoardPinTracker = null
+var _fights: FightTracker = null
+# Host: every bot's grudge (FightGrudges), kept across stoppages, cleared for
+# each new match and rematch.
+var _grudges := FightGrudges.new()
+var _punches: FightPunchJudge = null
+# A punch's smack is the check's thud played short and bright: a fist on a face
+# is a smaller, sharper sound than a body on a body, and lighter than a check.
+const _PUNCH_VOL_MIN_DB: float = -16.0
+const _PUNCH_VOL_MAX_DB: float = -4.0
+const _PUNCH_PITCH_LIGHT: float = 1.5
+const _PUNCH_PITCH_HEAVY: float = 1.2
+# A punch's burst and knockback lead, as a share of a check's of the same
+# intensity.
+const _PUNCH_BURST_SHARE: float = 0.5
+var _fighters_scratch: Array[Skater] = []
 var _stick_tie_draw := StickTieDraw.new()
 var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
@@ -499,6 +524,7 @@ func _ready() -> void:
 	print("[native] hot-path kernels: %s" % NativeKernels.summary())
 	NativeCarryRolloutFactory.install()
 	NativeShotOddsFactory.install()
+	NativeCarrySpaceFactory.install()
 	AIShotOdds.prepare()
 	# Make Manrope the engine-wide fallback font so every Control that
 	# doesn't set its own font picks it up automatically — saves us from
@@ -532,6 +558,7 @@ func _ready() -> void:
 
 func _wire_network_signals() -> void:
 	NetworkManager.set_world_state_provider(get_world_state)
+	NetworkManager.set_keeper_wire_provider(_append_keeper_wire)
 	NetworkManager.host_ready.connect(on_host_started)
 	NetworkManager.feat_received.connect(_on_feat_received)
 	NetworkManager.client_connected.connect(on_connected_to_server)
@@ -539,6 +566,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.peer_joined.connect(on_player_connected)
 	NetworkManager.peer_disconnected.connect(on_player_disconnected)
 	NetworkManager.world_state_received.connect(_on_world_state_received)
+	NetworkManager.keeper_wire_received.connect(_on_keeper_wire_received)
 	NetworkManager.slot_assigned.connect(on_slot_assigned)
 	NetworkManager.remote_skater_spawn_requested.connect(spawn_remote_skater)
 	NetworkManager.existing_players_synced.connect(sync_existing_players)
@@ -553,6 +581,10 @@ func _wire_network_signals() -> void:
 	NetworkManager.goalie_freeze_called_received.connect(_on_goalie_freeze_called_received)
 	NetworkManager.puck_frozen_called_received.connect(puck_frozen_called.emit)
 	NetworkManager.offside_called_received.connect(_on_offside_called_received)
+	NetworkManager.fight_challenge_received.connect(_on_fight_challenge_received)
+	NetworkManager.fight_challenge_lapsed_received.connect(fight_challenge_lapsed.emit)
+	NetworkManager.fight_called_received.connect(_on_fight_called_received)
+	NetworkManager.punch_landed_received.connect(_play_punch)
 	NetworkManager.faceoff_positions_received.connect(_on_faceoff_positions_received)
 	NetworkManager.game_reset_received.connect(on_game_reset)
 	NetworkManager.stats_received.connect(_on_stats_received)
@@ -579,6 +611,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.input_batch_received.connect(_on_input_batch_received)
 	NetworkManager.spectator_demoted_received.connect(_on_spectator_demoted_received)
 	NetworkManager.skip_replay_request_received.connect(_on_remote_skip_replay_request)
+	NetworkManager.rematch_vote_requested.connect(_on_rematch_vote_requested)
 	NetworkManager.skip_replay_vote_updated.connect(_on_remote_skip_replay_vote)
 	NetworkManager.replay_event_received.connect(_on_replay_event_received)
 	NetworkManager.replay_mode_changed.connect(_on_remote_replay_mode_changed)
@@ -719,6 +752,12 @@ func _physics_process(delta: float) -> void:
 	_hit_tracker.tick(delta)
 	_board_pins.tick(not _state_machine.is_movement_locked())
 	_stick_ties.tick(not _state_machine.is_movement_locked())
+	_fights.tick(delta, _fights_allowed(), _state_machine.current_phase)
+	_fighters_scratch.clear()
+	for s: Skater in _registry.skaters():
+		if s.fight_role == FightRules.Role.FIGHTING:
+			_fighters_scratch.append(s)
+	_punches.tick(_fighters_scratch, delta)
 	_possession_tracker.tick(delta)
 	# Release before _pickup_claim.tick so a claim coming due this frame can still
 	# arm the contest window on the frame it lands.
@@ -927,6 +966,126 @@ func _strip_pinned_carrier(victim: Skater, pinner: Skater) -> void:
 		puck.apply_pin_strip(pinner)
 
 
+# Host: whether this match fights at all (FightRules.allowed).
+func _fights_allowed() -> bool:
+	var practice: bool = NetworkManager.is_free_play_mode or NetworkManager.is_drill_mode()
+	return FightRules.allowed(_state_machine.rule_set, _state_machine.fighting_enabled, practice)
+
+
+func _on_fight_challenge_made(challenger: Skater, target: Skater) -> void:
+	var c: int = _registry.resolve_peer_id(challenger)
+	var t: int = _registry.resolve_peer_id(target)
+	_announce_fight_challenge(c, t)
+	NetworkManager.notify_fight_challenge_to_all(c, t)
+
+
+# Every peer: the challenger is seen to call his man out, by both teams — a
+# challenge is no secret — and the HUD prompts the man called out.
+func _announce_fight_challenge(challenger_peer_id: int, target_peer_id: int) -> void:
+	var rec: PlayerRecord = _registry.get_record(challenger_peer_id) if _registry != null else null
+	if rec != null and rec.skater != null:
+		rec.skater.show_ping_bubble(tr(&"BUBBLE_FIGHT_CHALLENGE"))
+	fight_challenged.emit(challenger_peer_id, target_peer_id)
+
+
+func _on_fight_challenge_lapsed(challenger: Skater) -> void:
+	var c: int = _registry.resolve_peer_id(challenger)
+	fight_challenge_lapsed.emit(c)
+	NetworkManager.notify_fight_challenge_lapsed_to_all(c)
+
+
+# A hunter leaves his team's shape while he goes after the man; the others cover.
+func _on_hunt_started(hunter: Skater, _target: Skater) -> void:
+	_set_hunter_in_shape(hunter, false)
+
+
+func _on_hunt_ended(hunter: Skater) -> void:
+	_set_hunter_in_shape(hunter, true)
+
+
+func _set_hunter_in_shape(hunter: Skater, in_shape: bool) -> void:
+	var team: int = _registry.team_id_by_skater.get(hunter, -1)
+	if _ai_coordinator == null or team < 0 or team >= team_brains.size():
+		return
+	var pid: int = _registry.resolve_peer_id(hunter)
+	if in_shape:
+		_ai_coordinator.queue_include_skater(team, pid)
+	else:
+		_ai_coordinator.queue_exclude_skater(team, pid)
+
+
+# The peer id of the man this bot is hunting to fight, or -1 (AIController).
+func fight_hunt_target_peer(hunter: Skater) -> int:
+	if _fights == null or _registry == null:
+		return -1
+	var target: Skater = _fights.hunt_target_of(hunter)
+	return _registry.resolve_peer_id(target) if target != null else -1
+
+
+# Host: both men agreed. The first pair whistles the play dead into the fight's
+# stoppage, its faceoff at the dot nearest the puck; a pair inside the stoppage
+# just joins it.
+func _on_fight_started(a: Skater, b: Skater) -> void:
+	if _state_machine.current_phase != GamePhase.Phase.FIGHT:
+		var at: Vector3 = puck.global_position if puck != null else Vector3.ZERO
+		if not _state_machine.begin_fight(GameRules.nearest_faceoff_dot(Vector2(at.x, at.z))):
+			_fights.clear()
+			return
+		_on_stoppage_flush_stat_trackers(GamePhase.Phase.FIGHT)
+		_phase_coord.handle_phase_entered()
+	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
+	var pa: int = _registry.resolve_peer_id(a)
+	var pb: int = _registry.resolve_peer_id(b)
+	fight_called.emit(pa, pb)
+	NetworkManager.notify_fight_called_to_all(pa, pb)
+
+
+# Host: a punch landed (FightPunchJudge). The victim takes it (Δv along the
+# punch, flat on the ice, rattle, reel, maybe the knockdown), and every peer
+# hears and sees it land.
+func _on_punch_landed(attacker: Skater, victim: Skater, hit: int, speed: float,
+		toward: Vector3) -> void:
+	var flat := Vector3(toward.x, 0.0, toward.z)
+	if flat.length_squared() < 1e-6:
+		flat = victim.global_position - attacker.global_position
+		flat.y = 0.0
+	flat = flat.normalized()
+	var victim_peer: int = _registry.resolve_peer_id(victim)
+	var rec: PlayerRecord = _registry.get_record(victim_peer)
+	if rec != null and rec.controller != null:
+		rec.controller.absorb_punch(flat * FightPunchRules.impulse_dv(speed,
+				victim.weight * FightPunchRules.NEUTRAL_MASS_KG), hit, speed)
+	var t: float = FightPunchRules.intensity(hit, speed)
+	_play_punch(victim_peer, t, flat.x, flat.z)
+	NetworkManager.notify_punch_landed_to_all(victim_peer, t, flat.x, flat.z)
+
+
+# Every peer: the smack of a punch on `victim_peer_id`'s head or body, harder
+# and duller the harder it lands, with the check's burst and, on a client's
+# remote victim, the check's knockback lead.
+func _play_punch(victim_peer_id: int, intensity: float, dir_x: float, dir_z: float) -> void:
+	var rec: PlayerRecord = _registry.get_record(victim_peer_id) if _registry != null else null
+	if rec == null or rec.skater == null:
+		return
+	var dir := Vector3(dir_x, 0.0, dir_z)
+	SoundManager.play_world(SoundManager.Sound.BODY_CHECK, FightPunchJudge.head_center(rec.skater),
+			lerpf(_PUNCH_VOL_MIN_DB, _PUNCH_VOL_MAX_DB, intensity), 0.06,
+			lerpf(_PUNCH_PITCH_LIGHT, _PUNCH_PITCH_HEAVY, intensity))
+	var vfx: SkaterVFX = rec.skater.get_node_or_null("VFX") as SkaterVFX
+	if vfx != null:
+		vfx.fire_impact_burst(rec.skater, intensity * _PUNCH_BURST_SHARE, dir)
+	var rc: RemoteController = rec.controller as RemoteController
+	if rc != null:
+		rc.start_knockback_lead(dir, intensity * _PUNCH_BURST_SHARE)
+	punch_landed.emit(victim_peer_id, intensity)
+
+
+# Host: the last fight is over; play restarts with a faceoff.
+func _on_fights_over() -> void:
+	if _state_machine.end_fight():
+		_phase_coord.handle_phase_entered()
+
+
 # Host: any transition out of live play (whistle prep, goal, period horn,
 # game over) is a stoppage for stat attribution — resolve a still-pending
 # draw via the last-toucher fallback and clear the assist chain, pending hits
@@ -1105,9 +1264,10 @@ func _apply_ghost_state(delta: float) -> void:
 			# A skater who ghosts (icing, etc.) while carrying must lose the puck —
 			# set_ghost only severs collision/interaction layers, so without this a
 			# ghosted carrier would keep the puck pinned to their blade and skate it
-			# around untouchable. Drop it loose so play continues.
+			# around untouchable. Drop it loose so play continues, and tell a human
+			# carrier: CARRIER_CHANGED(-1) alone leaves his own client's local pin.
 			if new_ghost and puck.carrier == r.skater:
-				puck.drop()
+				_drop_puck_if_carried()
 			if new_ghost != _last_ghost_state.get(peer_id, false):
 				_last_ghost_state[peer_id] = new_ghost
 				NetworkManager.send_ghost_state_to_all(peer_id, new_ghost)
@@ -1230,6 +1390,7 @@ func on_player_connected(peer_id: int) -> void:
 		"away_color_slot": NetworkManager.pending_away_color_slot,
 		"rule_set": _state_machine.rule_set,
 		"team_size": _state_machine.team_size,
+		"fighting": _state_machine.fighting_enabled,
 	}
 	# Reconnect branch: a peer whose Steam ID matches a live reservation reclaims
 	# its held team/slot/stats instead of going through fresh auto-balance.
@@ -1416,8 +1577,8 @@ func sync_existing_players(player_data: Array) -> void:
 		NetworkManager.set_peer_skin_tone(peer_id, skin_tone)
 		var gear_style: int = int(entry[17]) if entry.size() > 17 else GearStyleConfig.DEFAULT_CODE
 		NetworkManager.set_peer_gear_style(peer_id, gear_style)
-		NetworkManager.set_peer_title(peer_id,
-				String(entry[18]) if entry.size() > 18 and entry[18] is String else "")
+		NetworkManager.set_peer_title(peer_id, String(entry[ROSTER_TITLE])
+				if entry.size() > ROSTER_TITLE and entry[ROSTER_TITLE] is String else "")
 		var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_slot, team_id)
 		_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 		_registry.spawn(peer_id, team_slot, teams[team_id],
@@ -1425,6 +1586,12 @@ func sync_existing_players(player_data: Array) -> void:
 				colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 				colors.secondary, colors.text, colors.text_outline,
 				is_left, p_name, false, p_number, attrs)
+	# A puck already carried when we joined: install the carrier view the events
+	# before our world existed could not, unless an event since has.
+	var roster_carrier: int = roster_carrier_peer_id(player_data)
+	if roster_carrier != -1 and puck_controller != null \
+			and puck_controller.get_client_carrier_peer_id() == -1:
+		_on_remote_carrier_changed(roster_carrier)
 	# Client / spectator: registry is now populated with all players the host
 	# knew about at the moment we joined. Open the replay file so subsequent
 	# world-state broadcasts get recorded. Idempotent — short-circuits if a
@@ -1480,7 +1647,8 @@ func _spawn_world() -> void:
 		var cfg: Dictionary = NetworkManager.pending_game_config
 		_state_machine.apply_config(cfg.num_periods, cfg.period_duration, cfg.ot_enabled, cfg.ot_duration,
 				cfg.get("rule_set", GameRules.DEFAULT_RULE_SET),
-				cfg.get("team_size", GameRules.DEFAULT_TEAM_SIZE))
+				cfg.get("team_size", GameRules.DEFAULT_TEAM_SIZE),
+				cfg.get("fighting", GameRules.FIGHTING_ENABLED))
 		var cfg_id: String = cfg.get("game_id", "")
 		if cfg_id.is_empty() or ReplayFileRecorder.is_valid_game_id(cfg_id):
 			_game_id = cfg_id
@@ -1616,6 +1784,10 @@ func _wire_subsystems() -> void:
 		# NHL and ARCADE whistle a defensive-zone faceoff; OFF lets the
 		# controller's own hold-and-release play it out.
 		gc.puck_covered.connect(_on_goalie_covered_puck)
+		# A client draws each goalie predicted on the render clock, against its
+		# own world (#903, Scripts/networking/CLAUDE.md).
+		if not NetworkManager.is_host and puck_controller != null and gc is KeeperController:
+			(gc as KeeperController).predict_in(GameKeeperWorld.new(puck_controller, _registry))
 	_roster_announcer = RosterAnnouncer.new(_registry.player_added, _registry.player_removed, is_spectator_peer)
 	_roster_announcer.announced.connect(roster_announced.emit)
 	_registry.player_added.connect(_on_registry_player_added)
@@ -1710,6 +1882,23 @@ func _wire_subsystems() -> void:
 		_board_pins.clear()
 	_board_pins = BoardPinTracker.new()
 	_board_pins.setup(_registry, NetworkManager.local_time, _strip_pinned_carrier)
+	if _fights != null:
+		_fights.clear()
+	_grudges.clear()
+	_fights = FightTracker.new()
+	_fights.setup(_registry, NetworkManager.local_time,
+			func() -> Skater: return puck.carrier if puck != null else null, _grudges)
+	_fights.challenge_made.connect(_on_fight_challenge_made)
+	_fights.challenge_lapsed.connect(_on_fight_challenge_lapsed)
+	_fights.fight_started.connect(_on_fight_started)
+	_fights.fights_over.connect(_on_fights_over)
+	_fights.hunt_started.connect(_on_hunt_started)
+	_fights.hunt_ended.connect(_on_hunt_ended)
+	if _punches != null:
+		_punches.clear()
+	_punches = FightPunchJudge.new()
+	_punches.setup(_fights.partner_of, NetworkManager.local_time)
+	_punches.punch_landed.connect(_on_punch_landed)
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
 
@@ -2647,6 +2836,12 @@ func _on_remote_skip_replay_request(peer_id: int) -> void:
 	_register_skip_vote(peer_id)
 
 
+func _on_rematch_vote_requested(peer_id: int, vote: int) -> void:
+	if RematchVoteRules.accepts_remote_vote(vote,
+			_live_phase() == GamePhase.Phase.GAME_OVER, is_spectator_peer(peer_id)):
+		NetworkManager.relay_rematch_vote(peer_id, vote)
+
+
 # Host-only: add the vote to the window tally, broadcast it, and end the
 # window at unanimity. Late votes (window closed before the RPC landed) are
 # dropped silently — broadcasting (0, total) would reset client HUDs that are
@@ -3263,14 +3458,14 @@ func _on_pickup_claim_rejected() -> void:
 
 
 func _on_pickup_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float,
-		input_lead_ms: float, blade_curr: Vector3, blade_prev: Vector3, top_hand: Vector3) -> void:
+		input_lead_ms: float, blade_curr: Vector3, blade_prev: Vector3) -> void:
 	if not NetworkManager.is_host:
 		return
 	_deferred_claims.submit(
 			LagCompRewind.self_view_time(host_timestamp, input_lead_ms),
 			_state_buffer_manager.newest_host_timestamp(),
 			_pickup_claim.receive_claim,
-			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, blade_curr, blade_prev, top_hand])
+			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, blade_curr, blade_prev])
 
 
 func _on_poke_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float,
@@ -3635,11 +3830,8 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 		if puck_controller != null:
 			puck_controller.notify_local_release(direction, power, skater)
 		return
-	# Host's own one-timer: shooter is local, so its sim and its puck view share
-	# a clock and there is nothing to rewind. interp_delay_ms = 0 short-circuits
-	# the goalie rewind branch entirely.
 	NetworkManager.send_shot_to_all(puck.get_puck_position(), true, power)
-	_host_release_one_timer(direction, power, skater, 0.0, 0.0)
+	_host_release_one_timer(direction, power, skater)
 
 
 # Host-authoritative remote ONE-TIMER, the possession-less sibling of
@@ -3669,9 +3861,8 @@ func _on_remote_derived_one_timer(direction: Vector3, power: float,
 			skater.is_ghost, puck.is_on_cooldown(skater)):
 		return
 	# The instant the SHOOTER perceived this release at: they applied the input
-	# one lead before the host replays it. Everything lag-comp'd off this swing
-	# (the staleness check, the goalie's reaction back-date and position rewind)
-	# is anchored there rather than at the host's own tick.
+	# one lead before the host replays it. The staleness check is anchored there
+	# rather than at the host's own tick.
 	var shooter_view_ts: float = record.controller.last_processed_host_timestamp \
 			- NetworkManager.peer_input_lead_s(shooter_peer_id)
 	# Somebody else played the puck after this shooter committed, so the loose
@@ -3695,13 +3886,7 @@ func _on_remote_derived_one_timer(direction: Vector3, power: float,
 			{"is_slapper": true, "team": skater.get_team_id()})
 	# Fan the cue out to the other clients (the shooter already played it locally).
 	NetworkManager.send_shot_to_all(shot_pos, true, power, shooter_peer_id)
-	# Same interp-delay approximation _on_remote_derived_release uses — the
-	# shooter's render delay reconstructed from the ping the host already
-	# measures, so nothing extra rides the wire.
-	var rtt_ms: float = float(NetworkManager.get_peer_ping_ms(shooter_peer_id))
-	var interp_delay_ms: float = clampf(
-			rtt_ms * 0.5 + 1000.0 / float(Constants.STATE_RATE), 16.0, 200.0)
-	_host_release_one_timer(direction, power, skater, shooter_view_ts, interp_delay_ms)
+	_host_release_one_timer(direction, power, skater)
 
 
 # The host's world-state buffer, sampled as a loose-puck view. Leaves `out`
@@ -3718,14 +3903,12 @@ func _sample_puck_at(host_time: float, out: SkaterController.PuckView) -> void:
 	out.velocity = snap.puck_state.velocity
 
 
-# `host_timestamp` is the instant the SHOOTER perceived the release at (0.0 for
-# the host's own player / a bot — no rewind), `interp_delay_ms` their render
-# delay; both drive the goalie lag comp only. The fire point is always the host's
-# own blade: puck.release() snaps to the carrier's blade contact, and the host
-# reaches this on the same sim tick the shooter did, so its blade already IS the
-# release pose.
-func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
-		host_timestamp: float, interp_delay_ms: float) -> void:
+# The fire point is always the host's own blade: puck.release() snaps to the
+# carrier's blade contact, and the host reaches this on the same sim tick the
+# shooter did, so its blade already IS the release pose. Nothing rewinds the
+# goalie: the one on this tick is the one the shooter drew
+# (Scripts/networking/CLAUDE.md, shot lag compensation).
+func _host_release_one_timer(direction: Vector3, power: float, skater: Skater) -> void:
 	# A one-timer is a possession-less engagement — if it fires during FACEOFF it
 	# makes the puck live, so end the faceoff or the resulting goal is voided (P2-2).
 	_phase_coord.on_puck_touched_live()
@@ -3738,54 +3921,21 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
 	_shot_tracker.on_shot_started(pid, true)  # one-timer tag → One-Timer achievement
 	_shot_tracker.note_release_style(skater.elevation_level, false)
 	_loose_puck_released_by = pid
-	# Lag-comp the goalie reaction trigger (see _fire_remote_shot). clamp_back_date
-	# also zeroes the host's own path (host_timestamp = 0 → stale → 0); without it
-	# `now - 0` back-dates the goalie by the whole session.
-	var release_back_date: float = ShotReleaseRules.clamp_back_date(
-			NetworkManager.estimated_host_time(), host_timestamp)
-	for gc: GoalieController in goalie_controllers:
-		gc.set_pending_reaction_back_date(release_back_date)
-	var saved_goalie_positions: Array[Vector3] = []
-	var saved_goalie_rotations: Array[float] = []
-	if _state_buffer_manager != null and _state_buffer_manager.is_ready() and interp_delay_ms > 0.0 \
-			and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
-		# Goalie was REMOTE-view from the shooter — clients render the goalie
-		# from buffered host snapshots at host_time - interp_delay, so the
-		# shooter saw the goalie at that earlier moment. Rewound to that snapshot
-		# for the release, so the shot's xG is read against the goalie the
-		# shooter saw. See LagCompRewind.
-		# Anti-cheat: delay bounded against the shooter's measured link first.
-		interp_delay_ms = LagCompRewind.plausible_interp_delay_ms(
-				interp_delay_ms, float(NetworkManager.get_peer_ping_ms(pid)))
-		var rewind_time: float = LagCompRewind.remote_view_time(host_timestamp, interp_delay_ms)
-		var snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
-		for gc: GoalieController in goalie_controllers:
-			saved_goalie_positions.append(gc.goalie.global_position)
-			saved_goalie_rotations.append(gc.goalie.get_goalie_rotation_y())
-			var gs: GoalieNetworkState = snap.goalie_states.get(gc.team_id)
-			if gs != null:
-				gc.goalie.set_goalie_position(gs.position_x, gs.position_z)
-				gc.goalie.set_goalie_rotation_y(gs.rotation_y)
 	puck.set_carrier(skater)
 	puck.release(direction, power)
 	_note_shot_trajectory()
-	if not saved_goalie_positions.is_empty():
-		for i: int in goalie_controllers.size():
-			goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
-			goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
 
 
 # Fires a remote human's authoritative shot on the host. Called only from
 # _on_remote_derived_release (the input-stream release) — there is no shot RPC.
-# Every parameter is host-derived; rtt/interp_delay drive the goalie lag-comp
-# rewind. The carrier guard and the sanitize/clamp calls stay as defense-in-depth
-# even though nothing here is client-supplied.
+# Every parameter is host-derived. The carrier guard and the sanitize/clamp
+# calls stay as defense-in-depth even though nothing here is client-supplied.
 #
 # The fire POINT is not a parameter: puck.release() seats the puck itself, and it
 # is the only code that knows a slapper's puck sits on its ice pin rather than at
 # the blade lifted over the shoulder. Never reposition the puck after release() —
 # see the note there.
-func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int, host_timestamp: float, rtt_ms: float, interp_delay_ms: float) -> void:
+func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int) -> void:
 	# Sender must be the current carrier on the host.
 	# A `puck.carrier == null` here means a different code path already released the
 	# puck; ignore the duplicate. The shot sound stays below the validation.
@@ -3796,11 +3946,10 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 			return
 		if _registry.resolve_peer_id(puck.carrier) != shooter_peer_id:
 			return
-	# Clamp every client-supplied parameter before it touches the sim
-	# (ShotReleaseRules): direction normalized + elevation-capped, power capped
-	# to the shooter's attribute-scaled maximum, rtt capped against the host's
-	# own ping measurement (an unclamped rtt forward-teleports the puck tens of
-	# meters via the release advance below).
+	# Defense in depth — nothing here is client-supplied, but every parameter is
+	# bounded before it touches the sim (ShotReleaseRules): direction normalized
+	# and elevation-capped, power capped to the shooter's attribute-scaled
+	# maximum.
 	if NetworkManager.is_host:
 		direction = ShotReleaseRules.sanitize_direction(direction)
 		if direction == Vector3.ZERO:
@@ -3815,8 +3964,6 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 				max_power = ShotReleaseRules.release_power_bound(max_power,
 						shooter.skater.velocity)
 			power = ShotReleaseRules.clamp_power(power, max_power)
-		rtt_ms = ShotReleaseRules.clamp_rtt_ms(
-				rtt_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
 	var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
 	var shot_pos: Vector3 = puck.get_puck_position() if puck != null else Vector3.ZERO
 	SoundManager.play_world(sound, shot_pos, SoundManagerScript.shot_volume_db(power), 0.04)
@@ -3828,50 +3975,17 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 		NetworkManager.send_shot_to_all(shot_pos, is_slapper, power, shooter_peer_id)
 	if NetworkManager.is_host:
 		_start_pending_shot_from_carrier()
-		# Lag-comp the goalie reaction trigger: back-date the reaction timers to
-		# the instant the shooter perceived the release (now - host_timestamp) so
-		# the goalie gets the same effective reaction window they did. Off the
-		# input stream that gap is one input lead. Clamped so a stale stamp (or
-		# the pre-warmup zero stamp) earns no back-date.
-		var release_back_date: float = ShotReleaseRules.clamp_back_date(
-				NetworkManager.estimated_host_time(), host_timestamp)
-		for gc: GoalieController in goalie_controllers:
-			gc.set_pending_reaction_back_date(release_back_date)
-		var saved_goalie_positions: Array[Vector3] = []
-		var saved_goalie_rotations: Array[float] = []
-		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and NetworkManager.is_real_peer(shooter_peer_id) and rtt_ms > 0.0 \
-				and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
-			# Goalie is REMOTE-view from the shooter — the shooter saw the goalie at
-			# host_time - interp_delay (the buffered render path); rewound to that
-			# snapshot for the release, so the shot's xG is read against him.
-			# Anti-cheat: delay bounded against the shooter's measured link first.
-			interp_delay_ms = LagCompRewind.plausible_interp_delay_ms(
-					interp_delay_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
-			var rewind_time: float = LagCompRewind.remote_view_time(host_timestamp, interp_delay_ms)
-			var snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
-			for gc: GoalieController in goalie_controllers:
-				saved_goalie_positions.append(gc.goalie.global_position)
-				saved_goalie_rotations.append(gc.goalie.get_goalie_rotation_y())
-				var gs: GoalieNetworkState = snap.goalie_states.get(gc.team_id)
-				if gs != null:
-					gc.goalie.set_goalie_position(gs.position_x, gs.position_z)
-					gc.goalie.set_goalie_rotation_y(gs.rotation_y)
 		puck.release(direction, power)
 		_note_shot_trajectory()
-		if not saved_goalie_positions.is_empty():
-			for i: int in goalie_controllers.size():
-				goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
-				goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
 		return
 	puck.release(direction, power)
 
 
 # Host-authoritative remote shot. The host's RemoteController reached the shooter's
 # release input and computed its OWN dir/power via _release_wrister, emitting
-# puck_release_requested. Fire the authoritative puck from that — host-derived
-# params, the release input's host_timestamp, and an rtt-derived interp_delay for
-# the goalie rewind. This is the only path that fires a remote human's shot (no
-# shot RPC).
+# puck_release_requested. Fire the authoritative puck from that, on the tick the
+# host replays the release input — host-derived params only. This is the only
+# path that fires a remote human's shot (no shot RPC).
 func _on_remote_derived_release(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int) -> void:
 	if not NetworkManager.is_host:
 		return
@@ -3882,25 +3996,7 @@ func _on_remote_derived_release(direction: Vector3, power: float, is_slapper: bo
 		return
 	if _registry.resolve_peer_id(puck.carrier) != shooter_peer_id:
 		return
-	# Timestamp: the instant the SHOOTER perceived the release at, which is one
-	# input lead before the tick the host replays it on — the client applies an
-	# input immediately and stamps it a lead ahead, and the host holds it until
-	# that stamp comes round. Never anchor at the host's own tick: the goalie's
-	# back-date then comes out ~0 and its rewind stops a lead short of what the
-	# shooter rendered. Same anchor as the one-timer path.
-	var release_ts: float = record.controller.last_processed_host_timestamp \
-			- NetworkManager.peer_input_lead_s(shooter_peer_id)
-	var rtt_ms: float = float(NetworkManager.get_peer_ping_ms(shooter_peer_id))
-	# Approximate the shooter's interpolation delay from the rtt the host already
-	# measures plus one broadcast interval — the two dominant terms of the client's
-	# get_target_interpolation_delay. The dropped term is the client's adaptive jitter
-	# cushion (small except on jittery links); for beatable goalies it's close enough,
-	# and it keeps the host-derived release purely input-driven (nothing extra on the
-	# wire). Bounds mirror _compute_target_interpolation_delay's clamp.
-	var interp_delay_ms: float = clampf(
-			rtt_ms * 0.5 + 1000.0 / float(Constants.STATE_RATE), 16.0, 200.0)
-	_fire_remote_shot(
-			direction, power, is_slapper, shooter_peer_id, release_ts, rtt_ms, interp_delay_ms)
+	_fire_remote_shot(direction, power, is_slapper, shooter_peer_id)
 
 
 func _start_pending_shot_from_carrier() -> void:
@@ -3999,7 +4095,7 @@ func _note_shot_trajectory() -> void:
 		var xg: float = AIActionScoring.expected_goals(
 				pos, Vector3(0.0, 0.0, directed_line_z),
 				_defending_goalie_pos(directed_line_z), _shot_release_spread(),
-				AIShotOdds.Stance.UPRIGHT, _xg_query)
+				AIShotOdds.Stance.UPRIGHT, _xg_query, _shot_tracker.release_history())
 		_shot_tracker.note_xg(xg)
 
 
@@ -4146,6 +4242,15 @@ func _on_goalie_freeze_called_received() -> void:
 	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
 
 
+func _on_fight_challenge_received(challenger_peer_id: int, target_peer_id: int) -> void:
+	_announce_fight_challenge(challenger_peer_id, target_peer_id)
+
+
+func _on_fight_called_received(a_peer_id: int, b_peer_id: int) -> void:
+	fight_called.emit(a_peer_id, b_peer_id)
+	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
+
+
 func _on_offside_called_received() -> void:
 	offside_called.emit()
 	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
@@ -4171,6 +4276,14 @@ func _on_input_batch_received(peer_id: int, inputs: Array[InputState]) -> void:
 
 
 # ── World state & stats RPC forwarding ───────────────────────────────────────
+func _append_keeper_wire(body: PackedByteArray) -> void:
+	KeeperWireTail.append(body, goalie_controllers)
+
+
+func _on_keeper_wire_received(tail: PackedByteArray, host_ts: float, seq: int) -> void:
+	KeeperWireTail.dispatch(tail, goalie_controllers, host_ts, seq)
+
+
 func _on_world_state_received(data: PackedByteArray) -> void:
 	if _codec != null:
 		_codec.decode_world_state(data)  # updates _state_machine.current_phase
@@ -4220,7 +4333,7 @@ func _on_clock_updated_externally(t: float) -> void:
 
 
 func _observe_telemetry() -> void:
-	var skater_buf: int = 0
+	var skater_buf: int = -1
 	var extrapolating: bool = false
 	if _registry != null:
 		for peer_id: int in _registry.all():
@@ -4232,12 +4345,12 @@ func _observe_telemetry() -> void:
 				continue
 			var rc := r.controller as RemoteController
 			if rc != null:
-				skater_buf = rc.get_buffer_depth()
+				skater_buf = NetworkTelemetry.shallowest_depth(skater_buf, rc.get_buffer_depth())
 				extrapolating = extrapolating or rc.is_extrapolating
 	var puck_buf: int = puck_controller.get_buffer_depth() if puck_controller != null else 0
-	var goalie_buf: int = 0
+	var goalie_buf: int = -1
 	for gc: GoalieController in goalie_controllers:
-		goalie_buf = gc.get_buffer_depth()
+		goalie_buf = NetworkTelemetry.shallowest_depth(goalie_buf, gc.get_buffer_depth())
 		extrapolating = extrapolating or gc.is_extrapolating
 	if puck_controller != null:
 		extrapolating = extrapolating or puck_controller.is_extrapolating
@@ -4355,6 +4468,7 @@ func _on_hit_landed(hitter_peer_id: int, victim: Skater, impulse_magnitude: floa
 # still gets the impact).
 func _on_impact_landed(hitter_peer_id: int, victim_peer_id: int,
 		force: float, hit_dir: Vector3) -> void:
+	_fights.note_check(hitter_peer_id, victim_peer_id, force)
 	NetworkManager.send_body_check_to_all(hitter_peer_id, victim_peer_id, force, hit_dir)
 	_on_body_check_landed(hitter_peer_id, victim_peer_id, force, hit_dir)
 
@@ -4851,6 +4965,12 @@ func on_scene_exit() -> void:
 	if _board_pins != null:
 		_board_pins.clear()
 	_board_pins = null
+	if _fights != null:
+		_fights.clear()
+	_fights = null
+	if _punches != null:
+		_punches.clear()
+	_punches = null
 	_phase_coord = null
 	_swap_coord = null
 	if _debug_overlay:
@@ -4964,6 +5084,7 @@ func _apply_reset() -> void:
 		_turnover_tracker.reset()
 	if _possession_tracker != null:
 		_possession_tracker.reset()
+	_grudges.clear()
 	stats_updated.emit()
 	# A rematch is a fresh match for ranking purposes: re-derive the two-human
 	# latch from who's actually still here.
@@ -5496,6 +5617,7 @@ func _apply_bot_carrier_reaction_delay(snap: WorldSnapshot, delta: float) -> voi
 
 func _collect_existing_player_data() -> Array[Array]:
 	var existing: Array[Array] = []
+	var carrier: Skater = puck.get_carrier() if puck != null else null
 	for peer_id: int in _registry.all():
 		var r: PlayerRecord = _registry.get_record(peer_id)
 		var attrs: PlayerAttributes = r.attributes if r.attributes != null else PlayerAttributes.neutral()
@@ -5504,8 +5626,23 @@ func _collect_existing_player_data() -> Array[Array]:
 				r.is_left_handed, r.player_name, r.jersey_number,
 				attrs.height, attrs.weight, attrs.profile,
 				attrs.curve, attrs.flex, attrs.length,
-				r.tape_code, r.skin_tone, r.gear_style_code, r.title_id])
+				r.tape_code, r.skin_tone, r.gear_style_code, r.title_id,
+				carrier != null and r.skater == carrier])
 	return existing
+
+
+# The roster entry's carrier flag: a joiner's only word of who holds the puck,
+# since carrier events outlive the snapshot block by a second at most and the
+# carrier view is never read off world state. -1 when nobody carries.
+const ROSTER_CARRIES_PUCK: int = 19
+# The roster entry's Titles id, "" for none.
+const ROSTER_TITLE: int = 18
+
+static func roster_carrier_peer_id(player_data: Array) -> int:
+	for entry: Array in player_data:
+		if entry.size() > ROSTER_CARRIES_PUCK and bool(entry[ROSTER_CARRIES_PUCK]):
+			return int(entry[0])
+	return -1
 
 
 # ── Getters passed as Callables to collaborators ─────────────────────────────
@@ -5557,6 +5694,50 @@ func is_movement_locked() -> bool:
 	if _state_machine == null:
 		return false
 	return _state_machine.is_movement_locked()
+
+
+# Whether skaters pass through each other (PhaseRules.suspends_contact): read by
+# each skater's collision resolve through the game_state interface.
+func is_contact_suspended() -> bool:
+	if _state_machine == null:
+		return false
+	return PhaseRules.suspends_contact(_state_machine.current_phase)
+
+
+# The fight's stoppage (GamePhase.Phase.FIGHT). Read by the bots, who stand down.
+func is_in_fight() -> bool:
+	return _state_machine != null and _state_machine.current_phase == GamePhase.Phase.FIGHT
+
+
+# Every peer: the middle of the fight nearest `near` (each fighter and the
+# nearest fighter of the other team, from the replicated roles), on the ice;
+# Vector3.INF with no one fighting. The fight camera centres on it.
+func fight_focus(near: Vector3) -> Vector3:
+	if _registry == null:
+		return Vector3.INF
+	var best := Vector3.INF
+	var best_d2: float = INF
+	for a: Skater in _registry.skaters():
+		if a.fight_role != FightRules.Role.FIGHTING:
+			continue
+		var partner: Skater = null
+		var partner_d2: float = INF
+		for b: Skater in _registry.skaters():
+			if b == a or b.fight_role != FightRules.Role.FIGHTING or b.get_team_id() == a.get_team_id():
+				continue
+			var d2: float = a.global_position.distance_squared_to(b.global_position)
+			if d2 < partner_d2:
+				partner_d2 = d2
+				partner = b
+		if partner == null:
+			continue
+		var mid: Vector3 = (a.global_position + partner.global_position) * 0.5
+		mid.y = 0.0
+		var d: float = mid.distance_squared_to(Vector3(near.x, 0.0, near.z))
+		if d < best_d2:
+			best_d2 = d
+			best = mid
+	return best
 
 
 # True during the FACEOFF_PREP countdown. Read by SkaterController's gait

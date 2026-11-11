@@ -73,6 +73,7 @@ class NativeHemFlaps : public godot::RefCounted {
 	int32_t bone_thigh[2] = { -1, -1 };
 	// (y, radius, rear sway) per pants station, top down, end to end.
 	std::vector<double> pelvis_profile;
+	double thigh_from = 0.0;
 	double thigh_length = 0.26;
 	double thigh_radius_m = 0.152;
 	double pelvis_xs = 1.05;

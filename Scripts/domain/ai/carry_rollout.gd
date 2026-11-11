@@ -148,6 +148,29 @@ func reach_short_of_net(move: int, max_abs_z: float) -> int:
 	return SAMPLES
 
 
+# The most a strip of the puck carried along `move` from `from`, over its first
+# `reach` samples, can pay the side attacking `goal` that loses it
+# (AIPossessionFloor.most_lost): every leg's, the puck riding within the blade's
+# lead (AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M) of the body.
+func lost_ceiling(move: int, from: Vector3, reach: int, goal: Vector3) -> float:
+	var lead: float = AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
+	var up: float = signf(goal.z)
+	var most_up: float = from.z * up
+	var near: float = INF
+	var prev: Vector3 = from
+	for k: int in reach:
+		var p: Vector3 = sample(move, k)
+		most_up = maxf(most_up, p.z * up)
+		near = minf(near, minf(_net_dist(prev, goal), _net_dist(p, goal))
+				- 0.5 * Vector2(p.x - prev.x, p.z - prev.z).length())
+		prev = p
+	return AIPossessionFloor.most_lost(most_up + lead, minf(near, _net_dist(from, goal)) - lead)
+
+
+static func _net_dist(p: Vector3, goal: Vector3) -> float:
+	return Vector2(p.x - goal.x, p.z - goal.z).length()
+
+
 # Where `move` is `reach` samples in (its end, at SAMPLES).
 func reach_pos(move: int, reach: int) -> Vector3:
 	return end_pos[move] if reach == SAMPLES else sample(move, reach - 1)
@@ -252,25 +275,20 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, turn_rate: float
 
 # SkaterPoseCoordinator.apply_facing for a cursor held along `cur`: the facing
 # rule's target (a carrier's pivoting at its carry stop, turned along the boards
-# for one on them), a chord lerp toward it, or turned by angle on the cursor's
-# side through a turn round, a carrier's yielding to a cursor round its forehand
-# — where the turn asks to be, before its wind-up.
+# for one on them), the tick's turn toward it (FacingRules.turned_toward), a
+# carrier's yielding to a cursor round its forehand — where the turn asks to
+# be, before its wind-up.
 func _face(f: Vector2, cur: Vector2, v: Vector3, p: Vector3, braking: bool, stance: bool,
 		step: float, caps: AISkaterCaps, has_puck: bool, shield: bool) -> Vector2:
 	var rules: FacingRules.Config = caps.facing_rules
 	var lefty: bool = caps.is_left_handed
 	FacingRules.solve(_facing_out, f, cur, Vector2(v.x, v.z), braking, stance, lefty,
 			caps.carry_facing_rules if has_puck else rules)
-	var behind: bool = absf(f.angle_to(cur)) >= FacingRules.reach_edge(rules, f, cur, lefty)
 	var target: Vector2 = _facing_out.target
 	if shield:
 		target = BoardPlayRules.board_shield_facing(target, BoardPlayRules.board_proximity(
 				Vector2(p.x, p.z), caps.board_shield_probe), caps.board_shield_max_rad)
-	var turned: Vector2
-	if behind or absf(f.angle_to(target)) >= FacingRules.reach_edge(rules, f, target, lefty):
-		turned = f.rotated(FacingRules.turn_round_angle(f, target, cur) * minf(step, 1.0))
-	else:
-		turned = f.lerp(target, step).normalized()
+	var turned: Vector2 = FacingRules.turned_toward(rules, f, target, cur, lefty, step)
 	if has_puck:
 		turned = FacingRules.yield_on_forehand(turned, cur, lefty, caps.carry_facing_rules)
 	return turned

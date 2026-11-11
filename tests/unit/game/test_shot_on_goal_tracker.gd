@@ -1047,3 +1047,53 @@ func test_last_assist_ids_name_the_credited_players_primary_first() -> void:
 	tracker.on_pickup(12)
 	tracker.credit_assists(12)
 	assert_eq(tracker.last_assist_ids(), [11, 10] as Array[int])
+
+
+# ── The play the keeper saw (the xG stat's history) ──────────────────────────
+
+func test_a_shot_off_a_pass_reads_its_side_until_the_keeper_resets() -> void:
+	_add_player(10, 0)
+	_add_player(11, 0)
+	var reset: float = AIGoalieModel.goalie_reset_s()
+	tracker.on_pickup(10)
+	tracker.tick(reset * 0.5)
+	tracker.on_shot_started(10)
+	tracker.note_shot_origin(Vector3(3.0, 0.0, -20.0))
+	assert_eq(tracker.release_history(), AIShotOdds.History.CARRIED,
+			"a puck nobody passed him: the keeper watched him have it")
+	tracker.on_pickup(11)
+	tracker.tick(reset * 0.5)
+	tracker.on_shot_started(11)
+	tracker.note_shot_origin(Vector3(-4.0, 0.0, -22.0))
+	assert_eq(tracker.release_history(), AIShotOdds.History.FED_ACROSS,
+			"10's pass from x 3 to x -4 crossed the royal road")
+	tracker.on_pickup(10)
+	tracker.tick(reset * 0.5)
+	tracker.on_shot_started(10)
+	tracker.note_shot_origin(Vector3(-6.0, 0.0, -23.0))
+	assert_eq(tracker.release_history(), AIShotOdds.History.FED_SAME,
+			"11's pass from x -4 to x -6 stayed on his side")
+	tracker.on_pickup(10)
+	tracker.tick(reset + 0.1)
+	tracker.on_shot_started(10)
+	assert_eq(tracker.release_history(), AIShotOdds.History.CARRIED,
+			"held past the keeper's reset, he has tracked the carry")
+
+
+func test_one_timers_and_tips_read_as_fed() -> void:
+	_add_player(10, 0)
+	_add_player(11, 0)
+	tracker.on_pickup(10)
+	tracker.tick(5.0)
+	tracker.on_shot_started(10)
+	tracker.note_shot_origin(Vector3(5.0, 0.0, -21.0))
+	tracker.on_shot_started(11, true)
+	tracker.note_shot_origin(Vector3(-3.0, 0.0, -22.0))
+	assert_eq(tracker.release_history(), AIShotOdds.History.FED_ACROSS,
+			"a one-timer off a feed across the royal road")
+	tracker.on_pickup(10)
+	tracker.tick(5.0)
+	tracker.on_shot_started(10)
+	tracker.on_deflection(11)
+	assert_eq(tracker.release_history(), AIShotOdds.History.FED,
+			"a tip comes off a keeper set on the shot")

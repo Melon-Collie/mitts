@@ -45,11 +45,6 @@ var prev_held_forward_stand: bool = false
 # `get(pid, -1)`. A Dictionary rather than a resolver Callable because roles
 # iterate skaters at dispatch rate, where Callable.call overhead shows.
 var team_id_by_peer: Dictionary = {}
-# Smoothed per-peer linear acceleration (m/s², world XZ) — the host's shared
-# AIAccelerationTracker cache, or the state machine's local fallback. Leads a
-# receiver along `pos + vel·t + ½·a·t²`. Missing entry = ZERO.
-var acceleration_by_peer: Dictionary = {}
-
 # Smoothed per-peer heading turn rate (rad/s, signed) — the passer's
 # receiver-commitment read (AIPuckLane.pass_miss_prob). Missing entry = 0.
 var heading_omega_by_peer: Dictionary = {}
@@ -78,6 +73,9 @@ var self_body_check_transfer: float = 0.65
 var self_stagger_timer: float = 0.0
 # Seconds left settling a hard catch: no release can start until it ends.
 var self_settle_s: float = 0.0
+# Where the teammate whose release the puck reached this bot on stood when it
+# was seen loose off him: the pass it was fed. INF: it did not come by a pass.
+var fed_from: Vector3 = Vector3.INF
 # Lever-scaled carry-handle reach, m — how tight a seam best_evade_point threads.
 var self_handle_reach: float = 0.9
 # Stick + blade reach, m — the "one stick length" unit of the gap ladder.
@@ -147,9 +145,10 @@ var ping_pass_target_peer: int = -1
 # its wall-clock durations stretch with the tier.
 var dispatch_period_ticks: int = 1
 
-# Last dispatch's target_position, or Vector3.INF on the first dispatch and
-# across a slot change (no role inherits another's target). The incumbent for
-# argmax switch-hysteresis (AIStationSearch.append_incumbent / incumbent_bonus).
+# Last dispatch's target_position, ridden on at its target_velocity since, or
+# Vector3.INF on the first dispatch and across a slot change (no role inherits
+# another's target). The incumbent for argmax switch-hysteresis
+# (AIStationSearch.append_incumbent / incumbent_bonus).
 var prev_role_target: Vector3 = Vector3.INF
 
 # NHL delayed offside: a teammate owes a tag-up, so the carrier keeps its
@@ -159,6 +158,14 @@ var zone_entry_blocked: bool = false
 # The match calls icing (NHL): a dump from our half that crosses their goal line
 # untouched is priced as one (AICarrierDumpSearch).
 var icing_enforced: bool = false
+
+# Their keeper's cover of a loose puck is whistled for a faceoff in his zone
+# (GameRules.whistles_a_cover): a dump he covers is priced as one.
+var covers_whistled: bool = false
+
+# We have the numbers on their defence (TeamStrategyView.numbers_up): the
+# carrier does not dump it in.
+var numbers_up: bool = false
 
 # ── 5v5 position identity ────────────────────────────────────────────────────
 # Latched match team size (TeamBrain.team_size). Gates the 5v5-only reads.

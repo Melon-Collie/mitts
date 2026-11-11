@@ -105,38 +105,84 @@ func test_hold_when_no_puck_state() -> void:
 
 # ─── TIP: fast ground shot ────────────────────────────────────────────────
 
-func test_tip_shifts_anchor_onto_puck_path_and_aims_at_goal() -> void:
-	# Fast ground shot from a teammate at (4, 0, -15) heading to opp
-	# net (-Z direction). Finisher (peer 1) is at (-2, 0, -22) — back
-	# door. Puck at (4, 0, -15) with vel (-3, 0, -15) — speed ≈ 15 m/s,
-	# heading toward our offensive goal at -Z. Path crosses our z (-22)
-	# at t ≈ 0.467 s, x ≈ 4 + (-3)(0.467) ≈ 2.6.
-	var teammate_pos := Vector3(4.0, 0.0, -15.0)
+# Where the tip the decision sets up sends the puck: the turn the body→blade
+# bearing asks of PuckCollisionRules.tip_turn — the puck's own physics — applied
+# to its line at the blade, carried to the goal line.
+func _tipped_x_at_goal(d: RoleDecision, puck_vel: Vector3) -> float:
+	var turn: float = PuckCollisionRules.tip_turn(puck_vel,
+			d.aim_world_pos - d.target_position, AIRoleFinisher.TIP_MAX_TURN_RAD)
+	var out: Vector2 = Vector2(puck_vel.x, puck_vel.z).normalized().rotated(turn)
+	return d.aim_world_pos.x + out.x * (OPP_NET_Z - d.aim_world_pos.z) / out.y
+
+
+# The blade on the path at the tip point, the body a blade's ring back of it.
+func _assert_blade_on_the_path(d: RoleDecision, tip_x: float) -> void:
+	assert_true(d.has_aim_override)
+	assert_almost_eq(d.aim_world_pos.x, tip_x, 0.05, "the blade waits on the path")
+	assert_almost_eq(d.aim_world_pos.z, -22.0, 0.001)
+	assert_almost_eq(Vector2(d.aim_world_pos.x - d.target_position.x,
+			d.aim_world_pos.z - d.target_position.z).length(),
+			AIRoleFinisher.TIP_BLADE_OUT_M, 0.001, "the body a ring back of it")
+
+
+func test_tip_puts_the_blade_on_the_path_and_turns_it_at_the_middle() -> void:
+	# Fast ground shot on net from a teammate at (2.3, 0, -15). Finisher
+	# (peer 1) is at (-2, 0, -22) — back door. Puck vel (-3, 0, -15) —
+	# speed ≈ 15 m/s, heading toward our offensive goal at -Z, crossing its
+	# line at x ≈ 0. Path crosses our z (-22) at t ≈ 0.467 s,
+	# x ≈ 2.3 + (-3)(0.467) ≈ 0.9.
+	var teammate_pos := Vector3(2.3, 0.0, -15.0)
+	var vel := Vector3(-3.0, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
-			teammate_pos, Vector3(-3.0, 0.0, -15.0),
+			teammate_pos, vel,
 			[
 				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, false),  # not elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	# Target shifted to puck path at our z-plane.
-	assert_almost_eq(d.target_position.x, 2.6, 0.1)
-	assert_almost_eq(d.target_position.z, -22.0, 0.001)
-	# Aim override toward opp net.
-	assert_true(d.has_aim_override)
-	assert_almost_eq(d.aim_world_pos.z, OPP_NET_Z, 0.001)
-	assert_almost_eq(d.aim_world_pos.x, 0.0, 0.001)
+	_assert_blade_on_the_path(d, 0.9)
+	assert_almost_eq(_tipped_x_at_goal(d, vel), 0.0, 0.02,
+			"the tip goes at the middle of the net")
+
+
+func test_a_wide_shot_a_tip_can_bring_back_is_tipped_in() -> void:
+	# The same line from 1.7 m further right crosses the goal line ~0.8 m
+	# outside the mouth: under a tip's turn from the blade, so it is tipped,
+	# and as far as a tip turns it lands inside the mouth.
+	var vel := Vector3(-3.0, 0.0, -15.0)
+	var ctx: RoleContext = _make_ctx(
+			Vector3(-2.0, 0.0, -22.0),
+			Vector3(4.0, 0.0, -15.0), vel)
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	_assert_blade_on_the_path(d, 2.6)
+	assert_true(d.deflect)
+	assert_lt(absf(_tipped_x_at_goal(d, vel)), GameRules.NET_ENTRY_HALF_WIDTH,
+			"the tip puts it on net")
+
+
+func test_a_shot_wider_than_a_tip_turns_is_not_tipped() -> void:
+	# From (8, -15) nearly straight down the ice it crosses the goal line ~7 m
+	# wide: no tip turns it back, and the same line is a teammate's pass, so the
+	# finisher holds his station rather than stepping in to redirect it.
+	var anchor := Vector3(-2.0, 0.0, -22.0)
+	var ctx: RoleContext = _make_ctx(
+			anchor,
+			Vector3(8.0, 0.0, -15.0), Vector3(-1.0, 0.0, -15.0))
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_false(d.has_aim_override, "no tip off a puck no tip brings back")
+	assert_false(d.deflect)
+	assert_eq(d.target_position, anchor)
 
 
 # ─── TIP + LIFT: elevated shot ────────────────────────────────────────────
 
-func test_lift_and_tip_when_shooter_is_elevated() -> void:
+func test_an_elevated_shot_is_tipped_down() -> void:
 	# Same geometry as the TIP test but the shooting teammate has
-	# is_elevated = true. Finisher should still move ONTO the path and aim
-	# at net (a tip), and additionally raise its blade so it can reach the
-	# airborne puck — not step out of the way.
-	var teammate_pos := Vector3(4.0, 0.0, -15.0)
+	# is_elevated = true. Finisher still sets up the same tip, holding the
+	# deflect — whose press takes the blade up to the airborne puck — and tips
+	# it down, off the plane the keeper read.
+	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
 			teammate_pos, Vector3(-3.0, 0.0, -15.0),
@@ -145,19 +191,15 @@ func test_lift_and_tip_when_shooter_is_elevated() -> void:
 				_make_skater(2, TEAM_ID, teammate_pos, true),  # elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	# Target moves onto the puck path (same as the ground tip), x ≈ 2.6.
-	assert_almost_eq(d.target_position.x, 2.6, 0.1)
-	assert_almost_eq(d.target_position.z, -22.0, 0.001)
-	# Aim override toward opp net, and the blade is lifted to reach the air.
-	assert_true(d.has_aim_override)
-	assert_almost_eq(d.aim_world_pos.z, OPP_NET_Z, 0.001)
-	assert_true(d.lift_blade, "elevated incoming shot → lift to tip it")
+	_assert_blade_on_the_path(d, 0.9)
+	assert_true(d.deflect, "an incoming shot is tipped, not caught")
+	assert_false(d.deflect_up, "a raised shot is tipped down")
 
 
-func test_ground_tip_does_not_lift_blade() -> void:
-	# A fast GROUND shot is tipped with the blade down — lifting would
-	# make the grounded blade unable to touch the on-ice puck.
-	var teammate_pos := Vector3(4.0, 0.0, -15.0)
+func test_a_ground_shot_is_tipped_up() -> void:
+	# A fast GROUND shot is deflected too — the press keeps the blade on the
+	# ice for a puck met there — and tipped up.
+	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
 			teammate_pos, Vector3(-3.0, 0.0, -15.0),
@@ -166,7 +208,25 @@ func test_ground_tip_does_not_lift_blade() -> void:
 				_make_skater(2, TEAM_ID, teammate_pos, false),  # NOT elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	assert_false(d.lift_blade, "a ground shot is tipped with a grounded blade")
+	assert_true(d.deflect, "an incoming shot is tipped, not caught")
+	assert_true(d.deflect_up, "a shot on the ice is tipped up")
+
+
+func test_the_deflect_waits_for_the_press_to_read_the_shot() -> void:
+	# The same ground shot from twice as far: it reaches our z-plane past the
+	# press's read horizon, so the finisher sets up the tip without the
+	# deflect yet — held from there, the press would read nothing.
+	var teammate_pos := Vector3(5.1, 0.0, -1.0)
+	var ctx: RoleContext = _make_ctx(
+			Vector3(-2.0, 0.0, -22.0),
+			teammate_pos, Vector3(-3.0, 0.0, -15.0),
+			[
+				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(2, TEAM_ID, teammate_pos, false),
+			])
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_true(d.has_aim_override, "still a tip: the blade to the path")
+	assert_false(d.deflect, "too early to press")
 
 
 # ─── HOLD: puck won't reach our z-plane ───────────────────────────────────
@@ -341,7 +401,7 @@ func test_finisher_stages_the_open_backdoor() -> void:
 const TIP_CARRIER := Vector3(6.0, 0.0, -9.0)
 
 
-func _dead_offices_target() -> Vector3:
+func _dead_offices_ctx() -> RoleContext:
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -21.0),
 			TIP_CARRIER, Vector3.ZERO,
@@ -355,20 +415,36 @@ func _dead_offices_target() -> Vector3:
 	ctx.snapshot.puck_state.carrier_peer_id = 2
 	ctx.strong_x = 1.0
 	_add_opp_goalie(ctx, TIP_CARRIER, 0.4)
-	return AIRoleFinisher.decide(ctx).target_position
+	return ctx
 
 
-func test_finisher_parks_the_tip_station_when_offices_die_and_goalie_sits_deep() -> void:
-	# Every one-timer feed is dead, so the staging argmax takes the TIP/SCREEN
-	# station: ON the carrier→net shot line at crease-edge depth, where the body
-	# screens the goalie and the blade tips the point blast (tip_ev). With the
-	# same crowd but a CHALLENGING goalie the tip through him is worthless and
-	# the finisher stays at a feed office — the station is a read, not a post.
-	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+func _dead_offices_target() -> Vector3:
+	return AIRoleFinisher.decide(_dead_offices_ctx()).target_position
+
+
+func test_finisher_stages_for_a_tip_when_offices_die_and_goalie_sits_deep() -> void:
+	# Every one-timer feed is dead, so the staging argmax stages for the tip of
+	# the point blast (tip_ev): where he stands is worth its tip, not its feed,
+	# and no less a tip than the TIP/SCREEN station on the carrier→net line at
+	# crease-edge depth. Which spot wins is the shot field's read.
+	var ctx: RoleContext = _dead_offices_ctx()
+	var target: Vector3 = AIRoleFinisher.decide(ctx).target_position
+	var goal: Vector3 = ctx.attacking_goal_pos
 	var to_c: Vector3 = TIP_CARRIER - goal
+	to_c.y = 0.0
 	var station: Vector3 = goal + to_c * (AIRoleFinisher.TIP_STATION_DIST_M / to_c.length())
-	var target: Vector3 = _dead_offices_target()
-	assert_lt(target.distance_to(station), 0.5, "parks the shot-line tip post; got %s" % target)
+	var goalie: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
+	var opps: Array[Vector3] = ctx.scratch_opp_positions
+	AIRoleReads.collect_opponents(ctx, opps, ctx.scratch_opp_states)
+	var release: Vector3 = AIPuckLane.release_point_toward(TIP_CARRIER, goal)
+	var tip := func(at: Vector3) -> float:
+		return AIActionScoring.tip_ev(release, at, goal, goalie, opps,
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, ctx.scratch_opp_caps, ctx.caps_by_peer.get(ctx.peer_id))
+	var feed: float = AIActionScoring.score_pass_value(TIP_CARRIER, target, goal, goalie, opps,
+			AIPuckLane.expected_pass_speed(TIP_CARRIER, target), ctx.scratch_opp_caps, true)
+	assert_gt(tip.call(target), feed, "staged for the tip, not a feed; got %s" % target)
+	assert_gte(tip.call(target), tip.call(station) - 1e-6,
+			"no worse a tip than the shot-line post; got %s" % target)
 
 
 func test_finisher_stays_off_a_covered_feed_lane() -> void:
@@ -452,7 +528,7 @@ func test_reactive_fires_on_loose_shots_and_defers_while_the_puck_reads_held() -
 	# must run positioning too: the reactive not-ready decision used to tear
 	# down one-timer readiness on every feed. Reactive TIP fires the tick the
 	# fast on-net puck reads loose.
-	var teammate_pos := Vector3(4.0, 0.0, -15.0)
+	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
 			teammate_pos, Vector3(-3.0, 0.0, -15.0),  # fast ground shot
@@ -468,7 +544,7 @@ func test_reactive_fires_on_loose_shots_and_defers_while_the_puck_reads_held() -
 	var loose: RoleDecision = AIRoleFinisher.decide(ctx)
 	assert_true(loose.has_aim_override,
 			"reactive TIP fires once the fast on-net puck reads loose")
-	assert_almost_eq(loose.aim_world_pos.z, OPP_NET_Z, 0.001)
+	assert_true(loose.deflect)
 
 
 func test_finisher_staging_snapshot() -> void:

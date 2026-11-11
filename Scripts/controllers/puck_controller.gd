@@ -115,6 +115,7 @@ var _goalie_provider: Callable = Callable()
 # ── Phase-3/4b loose-puck prediction scratch (client only; see _predict_loose) ──
 var _predict_frame_scratch: PuckGeometryCollision.Result = null
 var _predict_tick_result: PuckAuthorityRules.TickResult = null
+var _whole_tick := PuckAuthorityRules.TickResult.new()
 var _predict_obstacle_scratch: SweptDiscOBB.Result = null
 var _predict_obstacle_result: PuckObstacleCollision.Result = null
 # NativePuckStep (null = extension absent, GDScript step). Same factory as the
@@ -388,11 +389,12 @@ func _track_loose_velocity(delta: float) -> void:
 # ── Lag Compensation ─────────────────────────────────────────────────────────
 # Called by GameManager after validating a client pickup claim against the
 # state buffer. Re-checks carrier == null so a concurrent _check_interactions
-# detection (which needs no validation) is never double-applied.
+# detection (which needs no validation) is never double-applied, and the lock so
+# a claim resolving after a goal or a goalie's cover can't take the puck back.
 # `catch_load` is the claim's reception load, judged on the rewound contact like its
 # catch verdict; scripted grants pass 0 (no settle).
 func apply_lag_comp_pickup(skater: Skater, catch_load: float = 0.0) -> void:
-	if not is_instance_valid(skater) or puck.carrier != null:
+	if not is_instance_valid(skater) or puck.carrier != null or puck.pickup_locked:
 		return
 	_grant_catch(skater, puck.get_puck_velocity() - skater.velocity, catch_load)
 
@@ -418,7 +420,8 @@ func _cushion_from_rendered(skater: Skater, hold_s: float) -> void:
 		return
 	var relative_vel: Vector3 = rendered_loose_velocity - skater.velocity
 	var catch_load: float = PuckReceptionRules.reception_load(rendered_loose_velocity,
-			skater.velocity, skater.get_blade_face_normal(relative_vel),
+			skater.velocity, path_offset_for(skater, puck.get_puck_position(), relative_vel,
+					skater.get_blade_contact_global()),
 			puck.deflect_min_speed * skater.reception_ceiling_mult,
 			puck.alignment_receive_bonus * skater.reception_ceiling_mult)
 	if hold_s < 0.0:
@@ -458,18 +461,15 @@ func stage_scripted(pos: Vector3) -> void:
 	_prev_puck_pos = puck.get_puck_position()
 
 
-# The reception load past which `skater`'s catch of a puck at `puck_pos`, coming
-# at `relative_velocity` in his frame, bobbles: by where its path meets the
-# blade between `blade_mid` and the shaft's `top_hand`. The claim resolver
-# passes the claim's own blade, so both verdicts read one blade.
-func bobble_load_for(skater: Skater, puck_pos: Vector3, relative_velocity: Vector3,
-		blade_mid: Vector3, top_hand: Vector3) -> float:
-	var axis: Vector3 = PuckReceptionRules.blade_axis(blade_mid, top_hand,
-			-skater.global_transform.basis.z)
-	return PuckReceptionRules.bobble_load_at(
-			PuckReceptionRules.blade_contact_offset(puck_pos, relative_velocity,
-					blade_mid, axis, skater.blade_length * 0.5),
-			puck.bobble_load, puck.bobble_edge_share)
+# How far off the path of a puck at `puck_pos`, coming at `relative_velocity` in
+# `skater`'s frame, his blade's middle `blade_mid` sits
+# (PuckReceptionRules.path_offset) — what his catch, its load and its bobble line
+# are read off. The claim resolver passes the claim's own blade, so every
+# verdict reads one blade.
+func path_offset_for(skater: Skater, puck_pos: Vector3, relative_velocity: Vector3,
+		blade_mid: Vector3) -> float:
+	return PuckReceptionRules.path_offset(puck_pos, relative_velocity, blade_mid,
+			skater.blade_length * 0.5, PICKUP_RADIUS)
 
 
 # Lag-comp counterpart for the bobble verdict: idempotent as the deflect's
@@ -618,7 +618,7 @@ func _contest_blade_velocity(skater: Skater, raw_blade_vel: Vector3) -> Vector3:
 # other half of a contest. Returns the first such skater (excluding `first`), or
 # null. Same eligibility gauntlet as the main pickup loop, minus the deflect
 # branches: a blade that would only tip the puck (lifted / deflect intent /
-# too-fast-or-poorly-angled) isn't corralling, so it isn't a possession contest.
+# too fast for how near the line it is) isn't corralling, so it isn't a possession contest.
 # Host present-time only, and only invoked at the rare instant a pickup is about
 # to be granted, so it adds no per-tick cost on the common no-pickup path.
 func _find_contesting_corraller(first: Skater, skaters: Array, puck_curr: Vector3,
@@ -644,13 +644,11 @@ func _find_contesting_corraller(first: Skater, skaters: Array, puck_curr: Vector
 				blade_prev, blade_curr, PICKUP_RADIUS):
 			continue
 		var puck_vel: Vector3 = puck.get_puck_velocity()
-		# Face normal opposes the approach in the RECEIVER'S frame — same
-		# relative velocity the receive decision judges (see should_receive).
-		var relative_vel: Vector3 = puck_vel - skater.velocity
-		var blade_face_normal: Vector3 = skater.get_blade_face_normal(relative_vel)
-		# Deflect ceiling + squared bonus lean with the RECEIVER's blade curve
+		var offset: float = path_offset_for(skater, puck_curr, puck_vel - skater.velocity,
+				blade_curr)
+		# Deflect ceiling + on-the-line bonus lean with the RECEIVER's blade curve
 		# (Skater.reception_ceiling_mult); the always-catches floor does not.
-		if PuckReceptionRules.should_receive(puck_vel, skater.velocity, blade_face_normal,
+		if PuckReceptionRules.should_receive(puck_vel, skater.velocity, offset,
 				puck.pickup_max_speed,
 				puck.deflect_min_speed * skater.reception_ceiling_mult,
 				puck.alignment_receive_bonus * skater.reception_ceiling_mult):
@@ -781,25 +779,24 @@ func _check_interactions() -> void:
 					puck.apply_blade_deflect(skater)
 					break
 				var puck_vel: Vector3 = puck.get_puck_velocity()
-				# Face normal opposes the approach in the RECEIVER'S frame — the
-				# same relative velocity the receive decision judges.
+				# Judged in the RECEIVER'S frame, by how near his blade is to the
+				# puck's path there.
 				var relative_vel: Vector3 = puck_vel - skater.velocity
-				var blade_face_normal: Vector3 = skater.get_blade_face_normal(relative_vel)
+				var offset: float = path_offset_for(skater, puck_curr, relative_vel, blade_curr)
 				if PuckReceptionRules.should_receive(
 						puck_vel,
 						skater.velocity,
-						blade_face_normal,
+						offset,
 						puck.pickup_max_speed,
 						puck.deflect_min_speed * skater.reception_ceiling_mult,
 						puck.alignment_receive_bonus * skater.reception_ceiling_mult):
 					var catch_load: float = PuckReceptionRules.reception_load(
-							puck_vel, skater.velocity, blade_face_normal,
+							puck_vel, skater.velocity, offset,
 							puck.deflect_min_speed * skater.reception_ceiling_mult,
 							puck.alignment_receive_bonus * skater.reception_ceiling_mult)
 					# Nearly held: it bobbles by his stick, nobody's yet.
-					var bobble_at: float = bobble_load_for(skater, puck_curr, relative_vel,
-							skater.get_blade_contact_global(), skater.top_hand.global_position)
-					if catch_load >= bobble_at:
+					if catch_load >= PuckReceptionRules.bobble_load_at(
+							offset, puck.bobble_load, puck.bobble_edge_share):
 						puck.apply_reception_bobble(skater)
 						break
 					# If a second blade would ALSO corral this same tick (a faceoff
@@ -1186,7 +1183,8 @@ func apply_state(state: PuckNetworkState, host_ts: float) -> void:
 	# refill freeze), and a live release seed watches the buffer for the host's
 	# confirming loose snapshot (the seed → snapshot handover in _predict_loose),
 	# so buffering during the seed is what makes the handover possible.
-	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
+	if BufferedStateInterpolator.intake(_state_buffer, host_ts, state) \
+			!= BufferedStateInterpolator.Intake.APPEND:
 		return
 	# Once the buffer is full, the evicted front entry becomes the new back one
 	# rather than being dropped for a fresh allocation — so the wrapper churn
@@ -1270,18 +1268,23 @@ func _predict_loose(delta: float) -> bool:
 	if _state_buffer.is_empty():
 		return false
 	var source: BufferedPuckState = _state_buffer.back()
-	# Staleness is measured against host-present, not the render instant.
+	# Staleness is measured against host-present, not the render instant. A
+	# snapshot newer than host-present is fresh, not bad data: whenever the
+	# clock's error exceeds the one-way trip (a LAN or same-machine session) it
+	# lands "from the future", and the fallback would draw the puck a whole
+	# interpolation delay back for that packet. Only a clock still warming up
+	# makes a negative age meaningless.
 	var age: float = NetworkManager.estimated_host_time() - source.timestamp
-	if age < 0.0 or age > Constants.PUCK_PREDICT_MAX_S:
-		if age > Constants.PUCK_PREDICT_MAX_S:
-			NetworkTelemetry.record_puck_predict_fallback()
+	if age < 0.0 and not NetworkManager.is_clock_ready():
+		return false
+	if age > Constants.PUCK_PREDICT_MAX_S:
+		NetworkTelemetry.record_puck_predict_fallback()
 		return false
 	# A dead puck at rest in the air is the faceoff puck in the linesman's hand,
 	# not a ballistic one — predicting it would drop it between every snapshot.
-	var held: bool = puck.pickup_locked and source.state.velocity.is_zero_approx() \
-			and source.state.position.y > puck.ice_height + GameRules.PUCK_AIRBORNE_HEIGHT_M
+	var held: bool = is_held_for_faceoff(source.state)
 	_run_prediction(source.state.position, source.state.velocity,
-			0.0 if held else render_t - source.timestamp)
+			0.0 if held else maxf(render_t - source.timestamp, 0.0))
 	is_extrapolating = false  # prediction is the mode, not a buffer underrun
 	if NetworkTelemetry.instance:
 		NetworkTelemetry.instance.puck_mode = "predicted_hold" if _sim_stopped else "predicted"
@@ -1376,42 +1379,11 @@ func _run_prediction(start_pos: Vector3, start_vel: Vector3, age: float) -> void
 	for _t in ticks:
 		var tick_prev: Vector3 = pos
 		var tick_vel_in: Vector3 = vel
-		var tick_post: bool = false
-		var tick_net: bool = false
-		if _native_step != null:
-			# The whole sub-stepped tick crosses the boundary once — the shape
-			# the per-frame re-predict multiplies (age ticks x up to 16 substeps).
-			_native_step.clear_touched()
-			_native_step.step_tick(pos, vel, dt, radius,
-					puck.max_speed, puck.ice_height, puck.max_height)
-			pos = _native_step.get_position()
-			vel = _native_step.get_velocity()
-			tick_post = _native_step.get_touched_post()
-			tick_net = _native_step.get_touched_net()
-		else:
-			var substeps: int = PuckAuthorityRules.frame_substeps(pos.z, vel.length(), dt)
-			var sub_dt: float = dt / float(substeps)
-			for _sub in substeps:
-				_predict_tick_result.touched_post = false
-				_predict_tick_result.touched_net = false
-				PuckAuthorityRules.step_frame_substep(pos, vel, sub_dt, radius,
-						puck.max_speed, puck.ice_height, puck.max_height,
-						_predict_frame_scratch, _predict_tick_result)
-				pos = _predict_tick_result.position
-				vel = _predict_tick_result.velocity
-				if _predict_tick_result.touched_post:
-					tick_post = true
-				if _predict_tick_result.touched_net:
-					tick_net = true
-		# Drill obstacles, over the whole tick segment. At TICK granularity rather
-		# than the GDScript branch's sub-steps because the native branch above
-		# resolves the entire tick inside C++ and leaves no sub-step seam to hook
-		# — and the test is swept either way, so a hard shot can't tunnel. The
-		# host interleaves the same resolve per sub-step (Puck._drive_analytic);
-		# the two agree on any single-contact segment, which is every drill case.
-		_resolve_predicted_obstacles(tick_prev, pos, vel)
-		pos = _predict_obstacle_result.position
-		vel = _predict_obstacle_result.velocity
+		_step_whole_tick(pos, vel, dt, _whole_tick)
+		pos = _whole_tick.position
+		vel = _whole_tick.velocity
+		var tick_post: bool = _whole_tick.touched_post
+		var tick_net: bool = _whole_tick.touched_net
 		if tick_post and not span_post:
 			span_post = true
 			if not _pred_cue_post_prev:
@@ -1507,6 +1479,87 @@ func _run_prediction(start_pos: Vector3, start_vel: Vector3, age: float) -> void
 	_sim_pos = pos
 	_sim_vel = vel
 	_sim_stopped = stopped
+
+
+# One whole host tick of a loose puck from (`pos`, `vel`) on the shared solver,
+# drill obstacles included, into `out` (its touched flags this tick's). No
+# goalie and no cues: the caller holds the goalie stop and fires the cues.
+func _step_whole_tick(pos: Vector3, vel: Vector3, dt: float, out: PuckAuthorityRules.TickResult) -> void:
+	var tick_prev: Vector3 = pos
+	var radius: float = GameRules.PUCK_COLLISION_RADIUS
+	out.touched_post = false
+	out.touched_net = false
+	if _native_step != null:
+		# The whole sub-stepped tick crosses the boundary once — the shape
+		# the per-frame re-predict multiplies (age ticks x up to 16 substeps).
+		_native_step.clear_touched()
+		_native_step.step_tick(pos, vel, dt, radius,
+				puck.max_speed, puck.ice_height, puck.max_height)
+		pos = _native_step.get_position()
+		vel = _native_step.get_velocity()
+		out.touched_post = _native_step.get_touched_post()
+		out.touched_net = _native_step.get_touched_net()
+	else:
+		var substeps: int = PuckAuthorityRules.frame_substeps(pos.z, vel.length(), dt)
+		var sub_dt: float = dt / float(substeps)
+		for _sub in substeps:
+			_predict_tick_result.touched_post = false
+			_predict_tick_result.touched_net = false
+			PuckAuthorityRules.step_frame_substep(pos, vel, sub_dt, radius,
+					puck.max_speed, puck.ice_height, puck.max_height,
+					_predict_frame_scratch, _predict_tick_result)
+			pos = _predict_tick_result.position
+			vel = _predict_tick_result.velocity
+			if _predict_tick_result.touched_post:
+				out.touched_post = true
+			if _predict_tick_result.touched_net:
+				out.touched_net = true
+	# Drill obstacles, over the whole tick segment. At TICK granularity rather
+	# than the GDScript branch's sub-steps because the native branch above
+	# resolves the entire tick inside C++ and leaves no sub-step seam to hook
+	# — and the test is swept either way, so a hard shot can't tunnel. The
+	# host interleaves the same resolve per sub-step (Puck._drive_analytic);
+	# the two agree on any single-contact segment, which is every drill case.
+	_resolve_predicted_obstacles(tick_prev, pos, vel)
+	out.position = _predict_obstacle_result.position
+	out.velocity = _predict_obstacle_result.velocity
+
+
+# A client's loose puck as a predicted keeper's shadow world steps it
+# (GameKeeperWorld): one whole host tick from (`pos`, `vel`) into `out`, as the
+# re-predict steps it.
+func step_loose_tick(pos: Vector3, vel: Vector3, out: PuckAuthorityRules.TickResult) -> void:
+	_step_whole_tick(pos, vel, Constants.TICK_DURATION, out)
+
+
+# Where a client last knew the puck loose, for a predicted keeper's shadow world
+# at host time `at`: this client's own release seed once `at` reaches its
+# instant, else the newest snapshot, into `out` (position, velocity, and
+# carrier_peer_id -1 for a seed). Returns that origin's host time, -INF with
+# none, INF while `at` is before this client's own release seed's instant (the
+# shooter still carries it).
+func loose_origin(at: float, out: PuckNetworkState) -> float:
+	if _release_seed_active:
+		if at < _release_seed_stamp:
+			return INF
+		out.position = _release_seed_pos
+		out.velocity = _release_seed_vel
+		out.carrier_peer_id = -1
+		return _release_seed_stamp
+	if _state_buffer.is_empty():
+		return -INF
+	var newest: BufferedPuckState = _state_buffer.back()
+	out.position = newest.state.position
+	out.velocity = newest.state.velocity
+	out.carrier_peer_id = newest.state.carrier_peer_id
+	return newest.timestamp
+
+
+# Whether the puck is dead in the linesman's hand: a faceoff puck held in the
+# air, which no step drops.
+func is_held_for_faceoff(state: PuckNetworkState) -> bool:
+	return puck.pickup_locked and state.velocity.is_zero_approx() \
+			and state.position.y > puck.ice_height + GameRules.PUCK_AIRBORNE_HEIGHT_M
 
 
 # Prediction-quality metric: the pre-damp error the smoother is about to

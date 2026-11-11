@@ -83,6 +83,8 @@ var recovery_by_peer: Dictionary[int, int] = {}
 # opposing carrier, or the loose puck) and who is tracking back on it.
 var _rush_origin: Vector3 = Vector3.ZERO
 var _tracking: Array[int] = []
+var _scratch_beaten_d: Array[float] = []
+var _scratch_man_d: Array[float] = []
 
 # True once fill() has run against a real snapshot. Consumers must distinguish
 # "no attackers, because nobody is a threat" from "no attackers, because nobody
@@ -91,6 +93,9 @@ var _tracking: Array[int] = []
 # disable every last-man bound in the game.
 var is_live: bool = false
 var numbers: int = Numbers.EVEN_OR_UP
+# Our bodies counted back against `attackers`: the ones not BEATEN, plus, with the
+# rush in our zone, beaten ones goal-side of a man (_goal_side_of_a_man).
+var back_count: int = 0
 # ETA of the nearest tracking peer onto the carrier's hip: a backchecker within
 # ~1-2 s lets the D tighten the gap and stand up (docs/5v5-ai-plan.md). INF = no
 # backpressure, the conservative default.
@@ -185,14 +190,14 @@ func fill(snapshot: WorldSnapshot, team_id: int, own_goal_z: float,
 		return
 	_fill_recovery(snapshot, team_id, team_id_by_peer, caps_by_peer,
 			our_net, axis_len, prev_recovery)
-	_fill_numbers()
+	var in_our_dz: bool = own_dir * _rush_origin.z > GameRules.BLUE_LINE_Z
+	_fill_numbers(snapshot, our_net, in_our_dz)
 	_fill_backpressure(snapshot, caps_by_peer)
 	coverage_ready = _coverage_ready(snapshot, team_id, team_id_by_peer,
 			own_dir, bot_peers)
 
 	# In our own zone the attack is on regardless of an instantaneous stall (a
 	# cycle is not a regroup). Outside it, closing speed is the honest read.
-	var in_our_dz: bool = own_dir * _rush_origin.z > GameRules.BLUE_LINE_Z
 	mode = Mode.RUSH if (in_our_dz or closing > REGROUP_CLOSING_M_S) else Mode.REGROUP
 
 
@@ -288,20 +293,55 @@ func _fill_recovery(snapshot: WorldSnapshot, team_id: int,
 			recovery_by_peer[pid] = Recovery.BEATEN
 
 
-func _fill_numbers() -> void:
+func _fill_numbers(snapshot: WorldSnapshot, our_net: Vector3, in_our_dz: bool) -> void:
 	# A beaten body is not a defender for counting purposes — he still sprints
 	# home (that's tracking mode), he just can't be relied on to be there.
-	var home: int = 0
+	back_count = 0
 	for pid: int in recovery_by_peer:
 		if recovery_by_peer[pid] != Recovery.BEATEN:
-			home += 1
-	var deficit: int = attackers.size() - home
+			back_count += 1
+	if in_our_dz:
+		back_count += _goal_side_of_a_man(snapshot, our_net)
+	var deficit: int = attackers.size() - back_count
 	if deficit <= 0:
 		numbers = Numbers.EVEN_OR_UP
 	elif deficit == 1:
 		numbers = Numbers.DOWN_ONE
 	else:
 		numbers = Numbers.DOWN_TWO_PLUS
+
+
+# With the rush already in our zone, the race to the house gate stops being a
+# finish line: once the carrier is inside it, the gate lies past him toward the
+# boards, and a coverer up at the half-wall or the circle tops can never make it
+# in the window. What makes him back is that he is between a man and our net, so
+# a BEATEN body counts once he is radially nearer our net than one attacker
+# (velocity-led) that no other beaten body has already claimed. The carrier is
+# not a man to be goal-side of here: that is the INSIDE test. Distances only, so
+# the greedy pairing of both sorted ascending is the maximum matching.
+func _goal_side_of_a_man(snapshot: WorldSnapshot, our_net: Vector3) -> int:
+	_scratch_beaten_d.clear()
+	for pid: int in recovery_by_peer:
+		if recovery_by_peer[pid] == Recovery.BEATEN and snapshot.skater_states.has(pid):
+			_scratch_beaten_d.append(_xz_dist(snapshot.skater_states[pid].position, our_net))
+	if _scratch_beaten_d.is_empty():
+		return 0
+	_scratch_man_d.clear()
+	for i: int in attackers.size():
+		if attackers[i] != carrier_peer:
+			_scratch_man_d.append(_xz_dist(attacker_leads[i], our_net))
+	_scratch_beaten_d.sort()
+	_scratch_man_d.sort()
+	var matched: int = 0
+	var m: int = 0
+	for d: float in _scratch_beaten_d:
+		while m < _scratch_man_d.size() and _scratch_man_d[m] <= d:
+			m += 1
+		if m >= _scratch_man_d.size():
+			break
+		matched += 1
+		m += 1
+	return matched
 
 
 # Nearest peer coming from BEHIND the rush onto the carrier's hip. A body already
@@ -403,6 +443,13 @@ func _lead(pos: Vector3, vel: Vector3) -> Vector3:
 	return Vector3(pos.x + dx, 0.0, pos.z + dz)
 
 
+# The man down on a rush who is its only defender back, goal-side of it: the
+# one who plays the pass rather than the carrier, our goalie taking the shooter.
+func is_lone_defender(peer_id: int) -> bool:
+	return is_live and numbers != Numbers.EVEN_OR_UP and back_count == 1 \
+			and recovery_by_peer.get(peer_id, Recovery.BEATEN) == Recovery.INSIDE
+
+
 func copy_from(other: AIRushRead) -> void:
 	mode = other.mode
 	is_live = other.is_live
@@ -411,6 +458,7 @@ func copy_from(other: AIRushRead) -> void:
 	carrier_peer = other.carrier_peer
 	rush_eta_s = other.rush_eta_s
 	numbers = other.numbers
+	back_count = other.back_count
 	backpressure_s = other.backpressure_s
 	coverage_ready = other.coverage_ready
 	attackers.clear()
@@ -461,5 +509,6 @@ func _reset() -> void:
 	_rush_origin = Vector3.ZERO
 	_tracking.clear()
 	numbers = Numbers.EVEN_OR_UP
+	back_count = 0
 	backpressure_s = INF
 	coverage_ready = false

@@ -278,6 +278,9 @@ bool NativeBladePass::configure(const Dictionary &t) {
 	reach_purpose_lookahead_s = read(t, "reach_purpose_lookahead_s", ok);
 	reach_purpose_near_m = read(t, "reach_purpose_near_m", ok);
 	reach_purpose_far_m = read(t, "reach_purpose_far_m", ok);
+	reach_intent_near_m = read(t, "reach_intent_near_m", ok);
+	reach_intent_far_m = read(t, "reach_intent_far_m", ok);
+	rom_backhand_angle_empty = read(t, "rom_backhand_angle_empty", ok);
 	hit_commit_hand_local_x = read(t, "hit_commit_hand_local_x", ok);
 	hit_commit_hand_local_y = read(t, "hit_commit_hand_local_y", ok);
 	hit_commit_hand_local_z = read(t, "hit_commit_hand_local_z", ok);
@@ -295,6 +298,7 @@ bool NativeBladePass::configure(const Dictionary &t) {
 	const double bh_reach = read(t, "rom_backhand_reach_max", ok);
 	if (ok && top.is_valid()) {
 		top->set_rom_forehand_angle_max(fh_angle);
+		rom_backhand_angle_carry = bh_angle;
 		top->set_rom_backhand_angle_max(bh_angle);
 		top->set_rom_forward_reach_max(rom_forward_reach_max);
 		top->set_rom_forehand_reach_max(fh_reach);
@@ -302,6 +306,29 @@ bool NativeBladePass::configure(const Dictionary &t) {
 		top->set_hand_forward_none(forward_none);
 		top->set_hand_forward_full(forward_full);
 	}
+	return ok;
+}
+
+bool NativeBladePass::configure_hold(const Dictionary &t) {
+	bool ok = true;
+	hold_lie = read(t, "lie", ok);
+	hold_home_out = read(t, "home_out", ok);
+	hold_home_ahead = read(t, "home_ahead", ok);
+	hold_reach_ahead = read(t, "reach_ahead", ok);
+	hold_reach_out = read(t, "reach_out", ok);
+	hold_reach_across = read(t, "reach_across", ok);
+	hold_draw = read(t, "draw", ok);
+	hold_draw_out = read(t, "draw_out", ok);
+	hold_draw_back = read(t, "draw_back", ok);
+	hold_draw_share = read(t, "draw_share", ok);
+	hold_low_share = read(t, "low_share", ok);
+	hold_edge_band = read(t, "edge_band", ok);
+	hold_rest_band = read(t, "rest_band", ok);
+	hold_draw_from_lo = read(t, "draw_from_lo", ok);
+	hold_draw_from_hi = read(t, "draw_from_hi", ok);
+	hold_reaching_from = read(t, "reaching_from", ok);
+	hold_reaching_to = read(t, "reaching_to", ok);
+	hold_reach_band = read(t, "reach_band", ok);
 	return ok;
 }
 
@@ -340,6 +367,10 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 	const Vector3 rot = v[V_UB_ROTATION];
 	tilt = Basis::from_euler(Vector3(rot.x, 0.0, rot.z));
 	top->set_hand_forward(s[S_HAND_FORWARD]);
+	// SkaterIKCoordinator._ik_config: a cursor placed near him swings an empty
+	// stick further back.
+	top->set_rom_backhand_angle_max(lerpd(rom_backhand_angle_carry, rom_backhand_angle_empty,
+			s[S_REACH_BEHIND]));
 	trunk_shoulder = shoulder_in_frame(v[V_SHOULDER]);
 	place_arm_shoulder();
 	bottom_trunk_shoulder = shoulder_in_frame(v[V_BOTTOM_SHOULDER]);
@@ -361,13 +392,12 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 		target_blade_world.y = 0.0;
 		out_last_target = target_blade_world;
 	} else if (hold_blade) {
-		target_blade_world = ub_xf.xform(v[V_BLADE_MARKER]);
-		target_blade_world.y = 0.0;
+		Vector3 marker = ub_xf.xform(v[V_BLADE_MARKER]);
+		marker.y = 0.0;
+		target_blade_world = dangle->carried_to(skater_pos, marker);
 		out_last_target = target_blade_world;
 	} else {
-		if (has_puck) {
-			mouse_world = held_out(mouse_world);
-		}
+		mouse_world = held_out(mouse_world);
 		Vector3 shoulder_world = ub_xf.xform(arm_shoulder);
 		shoulder_world.y = 0.0;
 		if ((double)(mouse_world - shoulder_world).length() < 0.01) {
@@ -375,11 +405,21 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 			return;
 		}
 		const Vector3 mouse_local = ub_inv.xform(mouse_world);
-		Vector2 target_xz = blade_target_for(Vector2(mouse_local.x, mouse_local.z));
+		const Vector2 cursor_xz(mouse_local.x, mouse_local.z);
+		Vector2 target_xz = blade_target_along(cursor_xz,
+				cursor_xz - Vector2(v[V_SHOULDER].x, v[V_SHOULDER].z));
 		const double target_reach = board_reach_limit(target_xz, shoulder_world);
-		reach_purpose = purpose(skater_pos);
+		reach_purpose = purpose(skater_pos, mouse_world);
 		Vector3 r_hand;
 		Vector3 r_blade;
+		if (has_puck) {
+			// A carrier's, laid again along the held shaft where the first
+			// target landed.
+			solve_top_hand(target_xz, target_reach, true, r_hand, r_blade);
+			const Vector3 held = held_hand(r_hand, r_blade, s[S_LAY_FOLD], 1.0);
+			target_xz = blade_target_along(cursor_xz,
+					Vector2(r_blade.x - held.x, r_blade.z - held.z));
+		}
 		solve_top_hand(target_xz, target_reach, true, r_hand, r_blade);
 		if (has_puck) {
 			solve_top_hand(Vector2(r_blade.x, r_blade.z), target_reach, true, r_hand, r_blade);
@@ -399,7 +439,8 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 	const double commit_t = s[S_COMMIT_BLEND];
 	Vector3 blade;
 	solve_top_hand(capped_xz, board_reach_limit(capped_xz, ub_xf.xform(arm_shoulder)), false,
-			hand, blade);
+			reach_hand, blade);
+	hand = held_hand(reach_hand, blade, s[S_READY_FOLD], s[S_GRIP]);
 	if (commit_t > 0.0) {
 		commit_hand_pose(hand, blade, commit_t);
 	}
@@ -478,8 +519,9 @@ void NativeBladePass::resume(bool p_has_puck) {
 // fold, then the chest's over the stick.
 void NativeBladePass::place_arm_shoulder() {
 	const double fold = Math::deg_to_rad(faceoff_center_lean_deg) * s[S_ADDRESS];
-	arm_shoulder = folded(fold < 0.001 ? trunk_shoulder
-									   : Basis::from_euler(Vector3(-fold, 0.0, 0.0)).xform(trunk_shoulder));
+	unfolded_shoulder = fold < 0.001 ? trunk_shoulder
+									 : Basis::from_euler(Vector3(-fold, 0.0, 0.0)).xform(trunk_shoulder);
+	arm_shoulder = folded(unfolded_shoulder, s[S_CHEST_FOLD]);
 }
 
 void NativeBladePass::release(const Vector3 &dir, double power) {
@@ -516,19 +558,22 @@ void NativeBladePass::finish() {
 		}
 	}
 	out_hand = hand;
+	out_reach_hand = reach_hand;
 	out_blade = wall_clamped;
 }
 
-// SkaterIKCoordinator._arm_for_clamped_blade, onto hand and wall_clamped.
+// SkaterIKCoordinator._arm_for_clamped_blade, onto reach_hand and wall_clamped,
+// and the hand held on that stick.
 void NativeBladePass::arm_for_clamped_blade() {
 	const Vector3 clamped_level = tilt.xform(wall_clamped);
-	hand = tilt.transposed().xform(hand_for_clamped_blade(
+	reach_hand = tilt.transposed().xform(hand_for_clamped_blade(
 			tilt.xform(arm_shoulder),
 			Vector2(clamped_level.x, clamped_level.z),
 			clamped_level.y,
 			level_config(tilt.xform(trunk_shoulder).y, blade_y_local, INFINITY)));
-	enforce_rigid_stick(arm_shoulder, hand, wall_clamped,
+	enforce_rigid_stick(arm_shoulder, reach_hand, wall_clamped,
 			ik_config(wall_clamped.y, INFINITY));
+	hand = held_hand(reach_hand, wall_clamped, s[S_READY_FOLD], s[S_GRIP]);
 }
 
 // ── The body ───────────────────────────────────────────────────────────────────
@@ -589,13 +634,12 @@ double NativeBladePass::lean_corrected_y(double x, double z) const {
 	return numerator / (cp * cr);
 }
 
-// SkaterIKCoordinator._blade_target_for.
-Vector2 NativeBladePass::blade_target_for(const Vector2 &cursor_xz) const {
-	const Vector2 to_target = cursor_xz - Vector2(v[V_SHOULDER].x, v[V_SHOULDER].z);
-	if ((double)to_target.length() <= 0.001) {
+// SkaterIKCoordinator._blade_target_along.
+Vector2 NativeBladePass::blade_target_along(const Vector2 &cursor_xz, const Vector2 &shaft) const {
+	if ((double)shaft.length() <= 0.001) {
 		return cursor_xz;
 	}
-	const Vector2 stick_dir = to_target.normalized();
+	const Vector2 stick_dir = shaft.normalized();
 	Vector2 target = cursor_xz - stick_dir * (real_t)(s[S_BLADE_LENGTH] * 0.5);
 	if (has_puck) {
 		target += Vector2(-stick_dir.y, stick_dir.x) * (real_t)s[S_FOREHAND_FACTOR]
@@ -604,12 +648,12 @@ Vector2 NativeBladePass::blade_target_for(const Vector2 &cursor_xz) const {
 	return target;
 }
 
-// SkaterIKCoordinator._held_out through CarryPostureRules.held_out: a carrier's
-// cursor no closer than the floor off his centre, across the ice in the
-// facing's frame.
+// SkaterIKCoordinator._held_out through CarryPostureRules.held_out: the cursor
+// no closer than the floor off his centre, across the ice in the facing's
+// frame.
 Vector3 NativeBladePass::held_out(const Vector3 &cursor_world) const {
 	const Vector3 local = skater_xf.affine_inverse().xform(cursor_world);
-	const double min_out = s[S_CARRY_FLOOR];
+	const double min_out = s[S_REACH_FLOOR];
 	Vector2 held(local.x, local.z);
 	const double out = held.length();
 	if (out < min_out) {
@@ -620,13 +664,157 @@ Vector3 NativeBladePass::held_out(const Vector3 &cursor_world) const {
 	return world;
 }
 
-// CarryPostureRules.folded_shoulder by the chest's fold over the stick.
-Vector3 NativeBladePass::folded(const Vector3 &marker) const {
-	const double fold = s[S_CHEST_FOLD];
+// CarryPostureRules.folded_shoulder.
+Vector3 NativeBladePass::folded(const Vector3 &marker, double fold) const {
 	if (fold < 0.00001) {
 		return marker;
 	}
 	return Basis(Vector3(1.0, 0.0, 0.0), -fold).xform(marker);
+}
+
+// SkaterIKCoordinator._held_hand.
+Vector3 NativeBladePass::held_hand(const Vector3 &p_reach_hand, const Vector3 &blade_local,
+		double fold, double grip) const {
+	const double share = s[S_HOLD_SHARE] * grip;
+	const bool chest_folded = s[S_CHEST_FOLD] > 0.0;
+	if (share <= 0.0 && !chest_folded) {
+		return p_reach_hand;
+	}
+	const Vector3 blade = tilt.xform(blade_local);
+	const Vector3 reached = tilt.xform(p_reach_hand);
+	const double length = reached.distance_to(blade);
+	if (length < 0.01) {
+		return p_reach_hand;
+	}
+	Vector3 free = reached;
+	if (chest_folded) {
+		// SkaterIKCoordinator._free_hand.
+		free = hand_for_clamped_blade(tilt.xform(unfolded_shoulder), Vector2(blade.x, blade.z),
+				blade.y, level_config(tilt.xform(trunk_shoulder).y, blade_y_local, INFINITY));
+		const Vector3 stick = free - blade;
+		const double span = stick.length();
+		if (span > 0.0001) {
+			free = blade + stick * (real_t)(length / span);
+		}
+	}
+	if (share <= 0.0) {
+		return tilt.transposed().xform(free);
+	}
+	const Vector3 shoulder = tilt.xform(folded(trunk_shoulder, fold));
+	const double arm = s[S_BOTTOM_REACH];
+	Vector3 held = hold_top_hand(shoulder, blade, length, sgn(v[V_SHOULDER].x));
+	held = hold_reaching(held, reached, blade, shoulder, length + arm * hold_reaching_from,
+			length + arm * hold_reaching_to);
+	held = hold_within_reach(held, blade, shoulder, arm, hold_reach_band);
+	if (share < 1.0) {
+		held = blade + ((free - blade) / (real_t)length).slerp((held - blade) / (real_t)length,
+							   (real_t)share)
+						* (real_t)length;
+	}
+	return tilt.transposed().xform(held);
+}
+
+// ── StickHoldRules ─────────────────────────────────────────────────────────────
+// The GDScript (Scripts/domain/rules/stick_hold_rules.gd) is the reference.
+
+namespace {
+
+// StickHoldRules.eased_in.
+double eased_in(double x, double band) {
+	if (x >= band) {
+		return x;
+	}
+	if (x <= -band) {
+		return 0.0;
+	}
+	return (x + band) * (x + band) / (4.0 * band);
+}
+
+// StickHoldRules.soft_cap.
+double soft_cap(double x, double cap, double band) {
+	const double b = MIN(band, cap * 0.5);
+	if (b <= 0.0) {
+		return MIN(x, MAX(cap, 0.0));
+	}
+	if (x <= cap - b) {
+		return x;
+	}
+	const double over = MIN(x - (cap - b), 2.0 * b);
+	return cap - b + over - over * over / (4.0 * b);
+}
+
+} // namespace
+
+double NativeBladePass::hold_reach(const Vector2 &dir, double own_side) const {
+	const double lateral = (double)dir.x * own_side >= 0.0 ? hold_reach_out : hold_reach_across;
+	const double fore = hold_reach_ahead;
+	const double denom = Math::sqrt(fore * fore * (double)dir.x * (double)dir.x
+			+ lateral * lateral * (double)dir.y * (double)dir.y);
+	return denom > 0.000001 ? fore * lateral / denom : 0.0;
+}
+
+Vector3 NativeBladePass::hold_top_hand(const Vector3 &shoulder, const Vector3 &blade,
+		double length, double own_side) const {
+	const Vector2 pivot((double)shoulder.x + own_side * hold_home_out,
+			(double)shoulder.z - hold_home_ahead);
+	const Vector2 blade_xz(blade.x, blade.z);
+	const Vector2 to_blade = blade_xz - pivot;
+	const double r = to_blade.length();
+	const Vector2 dir = r > 0.0001 ? to_blade / (real_t)r : Vector2(0.0, -1.0);
+	const double rest_span = length * Math::cos(hold_lie);
+	const double past = eased_in(r - rest_span, hold_rest_band);
+	const double short_by = eased_in(rest_span - r, hold_rest_band);
+	Vector2 at = pivot;
+	if (past > 0.0) {
+		const double travel = soft_cap(past, hold_reach(dir, own_side), hold_edge_band);
+		const double widest = length * Math::sqrt(1.0 - hold_low_share * hold_low_share);
+		at += dir * (real_t)(travel + eased_in(r - widest - travel, hold_edge_band));
+	}
+	if (short_by > 0.0) {
+		const Vector2 way = Vector2(own_side * hold_draw_out, hold_draw_back).normalized();
+		const double near_m = rest_span - short_by;
+		const double against = -(double)(dir * (real_t)near_m).dot(way);
+		const double needed = -against + Math::sqrt(MAX(
+				against * against + rest_span * rest_span - near_m * near_m, 0.0));
+		const double most = hold_draw * smoothstepd(hold_draw_from_lo, hold_draw_from_hi,
+				against / rest_span);
+		at += way * (real_t)soft_cap(needed * hold_draw_share, most, hold_edge_band);
+	}
+	const double span = at.distance_to(blade_xz);
+	return Vector3(at.x, (double)blade.y + Math::sqrt(MAX(length * length - span * span, 0.0)), at.y);
+}
+
+Vector3 NativeBladePass::hold_reaching(const Vector3 &p_hand, const Vector3 &reaching_hand,
+		const Vector3 &blade, const Vector3 &shoulder, double from, double to) const {
+	const double share = smoothstepd(from, to, shoulder.distance_to(blade));
+	const Vector3 stick = p_hand - blade;
+	const Vector3 reached = reaching_hand - blade;
+	const double length = stick.length();
+	if (share <= 0.0 || length < 0.0001 || (double)reached.length_squared() < 0.00000001) {
+		return p_hand;
+	}
+	return blade + (stick / (real_t)length).slerp(reached.normalized(), (real_t)share) * (real_t)length;
+}
+
+Vector3 NativeBladePass::hold_within_reach(const Vector3 &p_hand, const Vector3 &blade,
+		const Vector3 &shoulder, double arm, double band) const {
+	const Vector3 stick = p_hand - blade;
+	const Vector3 to_shoulder = shoulder - blade;
+	const double length = stick.length();
+	const double away = to_shoulder.length();
+	if (length < 0.0001 || away < 0.0001) {
+		return p_hand;
+	}
+	const Vector3 from = stick / (real_t)length;
+	const Vector3 toward = to_shoulder / (real_t)away;
+	const double widest = Math::acos(CLAMP(
+			(length * length + away * away - arm * arm) / (2.0 * length * away), -1.0, 1.0));
+	const double off = from.angle_to(toward);
+	const double held = soft_cap(off, widest, band);
+	if (off - held < 0.000001) {
+		return p_hand;
+	}
+	return blade + from.slerp(toward, (real_t)((off - held) / off)) * (real_t)length;
 }
 
 // SkaterIKCoordinator._board_reach_limit.
@@ -653,7 +841,7 @@ double NativeBladePass::board_reach_limit(const Vector2 &target_xz, const Vector
 }
 
 // SkaterIKCoordinator._reach_purpose through ReachPurposeRules.purpose.
-double NativeBladePass::purpose(const Vector3 &skater_pos) const {
+double NativeBladePass::purpose(const Vector3 &skater_pos, const Vector3 &cursor_world) const {
 	if (s[S_HAS_PUCK_NODE] == 0.0 || has_puck) {
 		return 1.0;
 	}
@@ -667,7 +855,11 @@ double NativeBladePass::purpose(const Vector3 &skater_pos) const {
 		t = CLAMP((double)(body - puck_xz).dot(path) / len_sq, 0.0, 1.0);
 	}
 	const double gap = (double)(puck_xz + path * (real_t)t - body).length() - s[S_PURPOSE_RIM];
-	return 1.0 - smoothstepd(reach_purpose_near_m, reach_purpose_far_m, gap);
+	// ReachPurposeRules.intent.
+	const double cursor_gap = (double)(Vector2(cursor_world.x, cursor_world.z) - body).length()
+			- s[S_PURPOSE_RIM];
+	return MAX(1.0 - smoothstepd(reach_purpose_near_m, reach_purpose_far_m, gap),
+			1.0 - smoothstepd(reach_intent_near_m, reach_intent_far_m, cursor_gap));
 }
 
 // SkaterIKCoordinator._carry_backhand_stop.
@@ -697,7 +889,7 @@ void NativeBladePass::apply_cfg(const Cfg &cfg) const {
 
 // SkaterIKCoordinator._two_hand_reach.
 double NativeBladePass::two_hand_reach(const Vector3 &shoulder, const Vector2 &target_xz, const Cfg &cfg) {
-	const Vector3 bottom = tilt.xform(folded(bottom_trunk_shoulder));
+	const Vector3 bottom = tilt.xform(folded(bottom_trunk_shoulder, s[S_CHEST_FOLD]));
 	apply_cfg(cfg);
 	const double grip = lerpd(bottom_hand_grip_fraction, faceoff_center_grip_fraction, s[S_ADDRESS]);
 	return top->two_hand_reach(shoulder, target_xz, sign, bottom, grip, s[S_BOTTOM_REACH],
@@ -1261,6 +1453,7 @@ void NativeBladePass::_bind_methods() {
 								 "net_crown_half_width", "net_mouth_corner_radius", "net_mesh_give"),
 			&NativeBladePass::set_net);
 	ClassDB::bind_method(D_METHOD("configure", "tunables"), &NativeBladePass::configure);
+	ClassDB::bind_method(D_METHOD("configure_hold", "tunables"), &NativeBladePass::configure_hold);
 	ClassDB::bind_method(D_METHOD("reset_seat"), &NativeBladePass::reset_seat);
 	ClassDB::bind_method(D_METHOD("run", "skater_xf", "ub_xf", "scalars", "vectors", "goalies"),
 			&NativeBladePass::run);
@@ -1270,6 +1463,7 @@ void NativeBladePass::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_pending_power"), &NativeBladePass::get_pending_power);
 	ClassDB::bind_method(D_METHOD("get_skipped"), &NativeBladePass::get_skipped);
 	ClassDB::bind_method(D_METHOD("get_hand"), &NativeBladePass::get_hand);
+	ClassDB::bind_method(D_METHOD("get_reach_hand"), &NativeBladePass::get_reach_hand);
 	ClassDB::bind_method(D_METHOD("get_blade"), &NativeBladePass::get_blade);
 	ClassDB::bind_method(D_METHOD("get_last_target"), &NativeBladePass::get_last_target);
 	ClassDB::bind_method(D_METHOD("get_smoothed_blade"), &NativeBladePass::get_smoothed_blade);

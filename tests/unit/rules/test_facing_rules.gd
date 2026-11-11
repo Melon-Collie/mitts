@@ -154,6 +154,58 @@ func test_turning_round_to_a_cursor_dead_behind_keeps_the_lean() -> void:
 	assert_almost_eq(turn, facing.angle_to(AHEAD), 0.0001)
 
 
+# ── turned ────────────────────────────────────────────────────────────────────
+
+const _STEP: float = 5.0 / 90.0
+
+
+# The tick's turn (rad) toward a target `deg` round to the right, the cursor on it.
+func _turn_toward(deg: float) -> float:
+	var target: Vector2 = _right_of_ahead(deg)
+	return absf(AHEAD.angle_to(FacingRules.turned_toward(_cfg, AHEAD, target, target, false, _STEP)))
+
+
+func test_a_turn_has_no_cliff_at_the_reach_edge() -> void:
+	# A degree either side of the edge the blade reaches to, and every degree
+	# round to dead behind: the tick's turn moves by a sliver of itself.
+	var prev: float = _turn_toward(1.0)
+	for deg: int in range(2, 180):
+		var turn: float = _turn_toward(float(deg))
+		assert_almost_eq(turn, prev, 0.03 * _STEP, "%d° round" % deg)
+		prev = turn
+
+
+func test_a_turn_round_is_no_faster_than_the_chord_turns() -> void:
+	var widest: float = 0.0
+	for deg: int in range(1, 180):
+		widest = maxf(widest, _turn_toward(float(deg)))
+	assert_almost_eq(widest, asin(_STEP / (1.0 - _STEP)), 0.0001, "the chord's widest turn")
+	assert_almost_eq(_turn_toward(179.0), widest, 0.0001, "and a target behind turns at it")
+	assert_almost_eq(_turn_toward(90.0), atan2(_STEP, 1.0 - _STEP), 0.0001,
+			"square to the body, it is the chord's own")
+
+
+func test_a_small_turn_is_the_chord() -> void:
+	var target: Vector2 = _right_of_ahead(40.0)
+	var turned: Vector2 = FacingRules.turned_toward(_cfg, AHEAD, target, target, false, _STEP)
+	assert_almost_eq(turned.angle_to(AHEAD.lerp(target, _STEP).normalized()), 0.0, 0.0001)
+
+
+func test_a_turn_round_keeps_to_the_cursors_side() -> void:
+	# The target just left of dead behind, the cursor behind on the right.
+	var target: Vector2 = _left_of_ahead(175.0)
+	var cursor: Vector2 = _right_of_ahead(170.0)
+	var turned: Vector2 = FacingRules.turned_toward(_cfg, AHEAD, target, cursor, false, _STEP)
+	assert_eq(signf(AHEAD.angle_to(turned)), signf(AHEAD.angle_to(cursor)))
+
+
+func test_a_coarse_step_lands_on_no_zero_vector() -> void:
+	# The rollout steps several ticks at once; half the chord to a target dead
+	# behind is the origin.
+	var turned: Vector2 = FacingRules.turned_toward(_cfg, AHEAD, BEHIND, BEHIND, false, 0.5)
+	assert_almost_eq(turned.length(), 1.0, 0.0001)
+
+
 # ── turn_rate ─────────────────────────────────────────────────────────────────
 
 const _ACCEL: float = 300.0

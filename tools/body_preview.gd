@@ -10,7 +10,10 @@ extends SceneTree
 #   BODY_AUDIT_ZONE=33 ... --audit               # + list one zone's folded faces
 #   .claude/hooks/render-body.sh --head          # framed on the helmet
 #   .claude/hooks/render-body.sh --waist         # framed on the belt: the tuck
+#   .claude/hooks/render-body.sh --shoulders     # the yoke square on: front, side, back
 #   .claude/hooks/render-body.sh --skate         # framed on the near skate
+#   .claude/hooks/render-body.sh --hands         # framed on the top hand: a glove or a bare fist
+#   .claude/hooks/render-body.sh --tile=900      # each view that many px square
 #   BODY_PREVIEW_KIT=1,1 ...                     # in slot 1's away kit
 #
 # Bootstrapped like pose_capture.gd, for the same reason: the runner names
@@ -22,7 +25,11 @@ var _started: bool = false
 
 
 func _init() -> void:
-	DisplayServer.window_set_size(Vector2i(TILE, TILE))
+	var tile: int = TILE
+	for a: String in OS.get_cmdline_user_args():
+		if a.begins_with("--tile="):
+			tile = maxi(a.trim_prefix("--tile=").to_int(), 64)
+	DisplayServer.window_set_size(Vector2i(tile, tile))
 	process_frame.connect(_on_frame)
 
 
@@ -39,4 +46,4 @@ func _on_frame() -> void:
 			only = a.trim_prefix("--only=")
 	runner.call("begin_preview", only, args.has("--pants"),
 			args.has("--audit"), args.has("--head"), args.has("--waist"),
-			args.has("--skate"))
+			args.has("--skate"), args.has("--shoulders"), args.has("--hands"))

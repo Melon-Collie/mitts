@@ -523,7 +523,10 @@ func test_he_sinks_once_a_shot_could_beat_his_reaction() -> void:
 	_brain.play.theirs = false
 	assert_false(_asks_to_sink(me + Vector2(0.0, -2.0)), "ours: no shot coming")
 	_brain.play.theirs = true
-	assert_false(_asks_to_sink(Vector2(4.0, -0.5)), "at a sharp angle: on the post standing")
+	# On the post at a sharp angle too: standing tall there his body rides over
+	# the band behind his near pad that a shot along the goal line comes in by.
+	assert_true(_asks_to_sink(Vector2(4.0, -0.5)), "at a sharp angle, in reach: sunk on the post")
+	assert_eq(_brain.zone, Z.SHARP)
 	# Watched wound up, his read is quicker and he holds the ready stance closer in.
 	_brain.play.watched_s = KeeperPlayRead.PRIME_S
 	assert_lt(_sink_reach(_brain.play), reach, "primed: a shorter reach")

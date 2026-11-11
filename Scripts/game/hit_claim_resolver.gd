@@ -15,8 +15,8 @@ extends RefCounted
 #             sends NetworkManager.send_hit_claim. The host re-derives the
 #             contact facts from rewound snapshots on receipt.
 #   receive_claim(hitter, victim, host_ts, interp_delay_ms) [host]
-#     → reject if claim stale, peers unknown, or rewound positions out of range
-#     → rewind hitter to host_ts + INPUT_LEAD_SEC (their own predicted body)
+#     → reject if claim stale, peers unknown, or the rewound bodies not touching
+#     → rewind hitter to self_view_time (host_ts + the claim's lead: their own predicted body)
 #       and victim to host_ts - interp_delay (the remote body they saw)
 #     → re-derive impulse from rewound velocities along hitter→victim normal,
 #       scaled by the hitter's weight (the same magnitude the host-observed
@@ -32,7 +32,13 @@ extends RefCounted
 # Emits no signals; HitTracker.impact_landed / hit_credited fire when the
 # contact / stat land.
 
-const MAX_RANGE_M: float = 2.0
+# How far apart (centre to centre, plan view) the two rewound bodies may sit
+# beyond touching and still be credited. The claim is stamped with the wall
+# clock and the contact happened on an input stamp, which can sit up to two
+# ticks off it inside one frame: two ticks of a head-on closing at the league's
+# top speed, plus the victim's forward-prediction error (~9 cm).
+const CONTACT_SLACK_M: float = \
+		2.0 * GameRules.DEFAULT_SKATER_MAX_SPEED_M_S * 2.0 / Constants.PHYSICS_TICK + 0.09
 
 var _registry: PlayerRegistry = null
 var _state_buffer: StateBufferManager = null
@@ -132,7 +138,8 @@ func receive_claim(hitter_peer_id: int, victim_peer_id: int, host_timestamp: flo
 		return
 	var hitter_rec: PlayerRecord = _registry.get_record(hitter_peer_id)
 	var victim_rec: PlayerRecord = _registry.get_record(victim_peer_id)
-	if hitter_rec == null or victim_rec == null:
+	if hitter_rec == null or victim_rec == null or hitter_rec.skater == null \
+			or victim_rec.skater == null:
 		return
 	# Two rewinds because the attacker viewed the two bodies at different times:
 	# their own body via local prediction (SELF view) and the victim via
@@ -170,7 +177,7 @@ func receive_claim(hitter_peer_id: int, victim_peer_id: int, host_timestamp: flo
 	# The hitter is SELF-view, and that instant is past the newest capture on any
 	# link whose one-way is shorter than their input lead, so hitter_snap is
 	# silently the newest rather than the requested instant. Unlike the other
-	# three resolvers this feeds the CONTACT GEOMETRY directly rather than only a
+	# resolvers this feeds the CONTACT GEOMETRY directly rather than only a
 	# clamp: an under-caught hitter reads short on range and skews the contact
 	# normal. Velocity is deliberately left at the snapshot's — over a window
 	# bounded by the input lead, thrust is near-balanced by friction at skating
@@ -181,7 +188,13 @@ func receive_claim(hitter_peer_id: int, victim_peer_id: int, host_timestamp: flo
 			hitter_rewind_time, _state_buffer.newest_host_timestamp()):
 		return
 	var hit_pos: Vector3 = hitter_snap.position + _claimant.catch_up()
-	if hit_pos.distance_to(vic_pos) > MAX_RANGE_M:
+	# Each build's own radius (Size scales it), and a locked pin pair's flat
+	# contact along the boards' normal, exactly as the live resolver measures it.
+	var hit_r: float = hitter_rec.skater.collision_radius()
+	var vic_r: float = victim_rec.skater.collision_radius()
+	var axis: Vector3 = BoardPinRules.locked_contact_axis(hit_pos, hitter_snap.pin_role, hit_r,
+			vic_pos, victim_snap.pin_role, vic_r)
+	if not in_contact_range(hit_pos, vic_pos, hit_r + vic_r, axis):
 		return
 	# Puck carrier read from the victim's rewind snapshot — that's the world the
 	# attacker saw when they committed to the check. The tracker's grace path
@@ -202,13 +215,11 @@ func receive_claim(hitter_peer_id: int, victim_peer_id: int, host_timestamp: flo
 	var rel_vel: Vector3 = hitter_snap.velocity - vic_vel
 	rel_vel.y = 0.0
 	var impulse: float = rel_vel.dot(normal)
-	# Scale by the hitter's weight BEFORE the tracker validates so the claim
+	# Scaled by the hitter's weight before the tracker validates, so the claim
 	# path meets the same weight-scaled bar as the host-observed path
-	# (body_checked_player carries weight × approach) — validating the raw
-	# closing speed here made remote hitters need more closing speed than
-	# hosted ones. Weight spreads ±18% with Size. `normal` is the
+	# (body_checked_player carries weight × approach). `normal` is the
 	# hitter → victim direction for the burst.
-	var hit_force: float = impulse * (hitter_rec.skater.weight if hitter_rec.skater != null else 1.0)
+	var hit_force: float = impulse * hitter_rec.skater.weight
 	# Commit read from the hitter's own rewind snapshot (their predicted body at
 	# the instant they committed) — the same replicated hit_committed the live
 	# resolver gates the physics on, so the credit meets the same bar.
@@ -217,3 +228,14 @@ func receive_claim(hitter_peer_id: int, victim_peer_id: int, host_timestamp: flo
 			puck_snap.carrier_peer_id == hitter_peer_id,
 			puck_snap.carrier_peer_id == victim_peer_id,
 			hitter_snap.hit_committed)
+
+
+# Whether two rewound bodies are close enough for the hitter to have touched the
+# victim: their collision radii plus CONTACT_SLACK_M, on the ice plane — or,
+# given a locked pin pair's `axis` (BoardPinRules.locked_contact_axis), along it.
+static func in_contact_range(hitter_pos: Vector3, victim_pos: Vector3,
+		radii_sum_m: float, axis: Vector3 = Vector3.ZERO) -> bool:
+	var d: Vector3 = victim_pos - hitter_pos
+	d.y = 0.0
+	var dist: float = d.length() if axis == Vector3.ZERO else d.dot(axis)
+	return dist <= radii_sum_m + CONTACT_SLACK_M

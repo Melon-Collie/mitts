@@ -102,13 +102,27 @@ func time_to_line() -> float:
 	return -at.z / velocity.z
 
 
-# Whether it goes in if nothing stops it: across the goal line inside the iron
-# and under the bar.
+# Whether it can go in if nothing stops it: across the goal line inside the
+# iron's centreline and under the bar's. A puck clear of the iron goes in, and
+# so does one that catches the inner half of a post or the bar and is turned
+# in off it (GoalDetectionRules' cavity); never read the clear mouth alone, or
+# a shot placed tight inside the far post is let go as wide.
 func on_net() -> bool:
 	var t: float = time_to_line()
 	if t == INF:
 		return false
 	var p: Vector3 = position_in(t)
-	var r: float = GameRules.PUCK_COLLISION_RADIUS
-	return absf(p.x) < GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - r \
-			and p.y < GameRules.NET_HEIGHT - GameRules.NET_POST_RADIUS - r
+	return absf(p.x) < GameRules.NET_HALF_WIDTH and p.y < GameRules.NET_HEIGHT
+
+
+# The read under way on the wire (KeeperWire): where a shot is from may be
+# anywhere on the rink, in 32 bits. The delays are the tier's.
+func wire(w: KeeperWire) -> void:
+	age = w.s32(age, KeeperWire.MS)
+	at = w.v3_32(at, KeeperWire.MM)
+	velocity = w.v3_16(velocity, KeeperWire.SPEED)
+	_primed = w.bit(_primed)
+	_hidden_s = w.s32(_hidden_s, KeeperWire.MS)
+	_first = w.bit(_first)
+	_from = w.v3_32(_from, KeeperWire.MM)
+	_from_velocity = w.v3_16(_from_velocity, KeeperWire.SPEED)

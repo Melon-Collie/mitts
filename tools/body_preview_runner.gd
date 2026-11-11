@@ -4,7 +4,6 @@ extends "res://tools/pose_capture_runner.gd"
 # scripted poses; what it changes is the loop: each pose is built and run, then
 # shot from four sides of the skater.
 
-const PREVIEW_TILE: int = 448
 const PREVIEW_FOV: float = 30.0
 const PREVIEW_DIR: String = "res://.preview/body"
 # Skater-local camera offsets (he faces −Z): front three-quarter, side, back
@@ -29,11 +28,21 @@ const PANTS_POSES: Array[String] = [
 const PANTS_FOV: float = 22.0
 # --head: framed on the helmet.
 const HEAD_FOV: float = 7.0
-# --waist: framed on the belt, where a tuck goes in.
+# --waist: framed on the belt, where a tuck goes in, from the WAIST bone, so a
+# crouch keeps it in frame.
 const WAIST_FOV: float = 13.0
-const WAIST_AIM_Y: float = -0.17
+const WAIST_AIM_Y: float = -0.22
+# --shoulders: framed on the yoke, square on from the front, the side, the back
+# and from above behind: where the shoulders meet the trunk.
+const SHOULDERS_FOV: float = 13.0
+const SHOULDER_ANGLES: Array[Vector3] = [
+	Vector3(0.0, 0.2, -3.6), Vector3(3.6, 0.2, 0.0), Vector3(0.0, 0.2, 3.6),
+	Vector3(1.2, 2.4, 2.4),
+]
 # --skate: framed on the near (left) skate, where the upper meets the leg.
 const SKATE_FOV: float = 8.0
+# --hands: framed on the top hand, from the TOP_HAND bone so a reach keeps it in.
+const HANDS_FOV: float = 6.0
 const PANTS_AIM_Y: float = -0.4
 
 enum Step { BUILD, POSE, GRAB }
@@ -46,12 +55,16 @@ var _audit: bool = false
 var _head: bool = false
 var _waist: bool = false
 var _skate: bool = false
+var _shoulders: bool = false
+var _hands: bool = false
 
 
 func begin_preview(only: String, pants: bool = false,
 		audit: bool = false, head: bool = false, waist: bool = false,
-		skate: bool = false) -> void:
+		skate: bool = false, shoulders: bool = false, hands: bool = false) -> void:
 	_pants = pants
+	_hands = hands
+	_shoulders = shoulders
 	_skate = skate
 	_waist = waist
 	_audit = audit
@@ -134,7 +147,9 @@ func _place_camera() -> void:
 	var aim: Vector3 = _skater.global_position + Vector3(0.0, PANTS_AIM_Y if _pants else -0.1, 0.0)
 	if _waist:
 		_camera.fov = WAIST_FOV
-		aim = _skater.global_position + Vector3(0.0, WAIST_AIM_Y, 0.0)
+		var waist: Skeleton3D = _skater._arms._skeleton
+		aim = waist.global_transform * waist.get_bone_global_pose(
+				SkaterBodySkeleton.WAIST_BONE).origin + Vector3(0.0, WAIST_AIM_Y, 0.0)
 	if _head:
 		var body: Skeleton3D = _skater._arms._skeleton
 		_camera.fov = HEAD_FOV
@@ -145,19 +160,35 @@ func _place_camera() -> void:
 		_camera.fov = SKATE_FOV
 		aim = legs.global_transform * legs.get_bone_global_pose(SkaterBodySkeleton.LEG_BONE_OFFSET
 				+ SkaterMeshBuilder.LegBone.FOOT_L).origin
-	_camera.global_position = aim + basis * ANGLES[_angle]
+	if _hands:
+		var arms: Skeleton3D = _skater._arms._skeleton
+		_camera.fov = HANDS_FOV
+		aim = arms.global_transform * arms.get_bone_global_pose(
+				SkaterMeshBuilder.UpperBone.TOP_HAND).origin
+	var offset: Vector3 = ANGLES[_angle]
+	if _shoulders:
+		var spine: Skeleton3D = _skater._arms._skeleton
+		_camera.fov = SHOULDERS_FOV
+		var torso: Transform3D = spine.global_transform * spine.get_bone_global_pose(
+				SkaterMeshBuilder.UpperBone.TORSO)
+		aim = torso.origin + Vector3(0.0, 0.18, 0.0)
+		# Square to the chest, which a pose may turn off the facing.
+		var ahead: Vector3 = torso.basis.z
+		basis = Basis(Vector3.UP, atan2(ahead.x, ahead.z))
+		offset = SHOULDER_ANGLES[_angle]
+	_camera.global_position = aim + basis * offset
 	_camera.look_at(aim, Vector3.UP)
 
 
 func _save_pose_sheet() -> void:
-	var sheet := Image.create_empty(ANGLES.size() * PREVIEW_TILE, PREVIEW_TILE, false,
-			Image.FORMAT_RGBA8)
+	# The window's size (tools/body_preview.gd, --tile).
+	var tile: Vector2i = _tiles[0].get_size()
+	var sheet := Image.create_empty(ANGLES.size() * tile.x, tile.y, false, Image.FORMAT_RGBA8)
 	sheet.fill(BACKGROUND)
 	for i: int in _tiles.size():
 		var src: Image = _tiles[i]
 		src.convert(Image.FORMAT_RGBA8)
-		sheet.blit_rect(src, Rect2i(0, 0, PREVIEW_TILE, PREVIEW_TILE),
-				Vector2i(i * PREVIEW_TILE, 0))
+		sheet.blit_rect(src, Rect2i(Vector2i.ZERO, tile), Vector2i(i * tile.x, 0))
 	var path: String = "%s/%s%s.png" % [PREVIEW_DIR,
 			_sheet_prefix(),
 			String(_poses[_pose_index]["name"])]
@@ -173,6 +204,10 @@ func _sheet_prefix() -> String:
 		return "head_"
 	if _waist:
 		return "waist_"
+	if _shoulders:
+		return "shoulders_"
+	if _hands:
+		return "hands_"
 	return "skate_" if _skate else ""
 
 
@@ -184,7 +219,6 @@ func _audit_folds() -> void:
 	var mesh: ArrayMesh = SkaterConnectedMesh.shared_mesh(_skater.gear_style.jersey_tuck)
 	var a: Array = mesh.surface_get_arrays(0)
 	var verts: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-	var normals: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
 	var bones: PackedInt32Array = a[Mesh.ARRAY_BONES]
 	var weights: PackedFloat32Array = a[Mesh.ARRAY_WEIGHTS]
 	var zones: PackedVector2Array = a[Mesh.ARRAY_TEX_UV2]
@@ -212,7 +246,9 @@ func _audit_folds() -> void:
 		var n: Vector3 = (p[2] - p[0]).cross(p[1] - p[0])
 		if n.length_squared() < 1e-12:
 			continue
-		var expected: Vector3 = (turn * normals[t]).normalized()
+		# Its own bind facing: the normal it carries may be its quad's.
+		var bind: Vector3 = (verts[t + 2] - verts[t]).cross(verts[t + 1] - verts[t])
+		var expected: Vector3 = (turn * bind).normalized()
 		if n.normalized().dot(expected) < 0.0:
 			var zone: int = int(round(zones[t].x))
 			flipped[zone] = int(flipped.get(zone, 0)) + 1

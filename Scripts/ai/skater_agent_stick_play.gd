@@ -3,29 +3,27 @@ extends RefCounted
 
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
-# Long enough for the blade to sweep through the puck, short enough to read as a
-# discrete poke.
-const POKE_JAB_ACTIVE_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 12   # ~80 ms
-# Cooldown so the bot returns to gap control between jabs.
-const POKE_JAB_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 8   # ~375 ms
-# A lift chosen over the jab (AIStickLiftRead) holds the button through the rise
-# and then hooks for as long as a jab sweeps, so it reads as the same reach-in.
-# Ends well inside StickCheckRules.HOOK_MAX_S, so the blade takes the fast drop.
+# A lift chosen to beat a shielded puck (AIStickLiftRead) holds the button
+# through the rise and then hooks a beat longer, well inside
+# StickCheckRules.HOOK_MAX_S, so the blade takes the fast drop.
+const STICK_LIFT_HOOK_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 12   # ~80 ms
 const STICK_LIFT_HOLD_TICKS: int = ceili(
-		StickCheckRules.RISE_S * _PhysicsConstants.PHYSICS_TICK) + POKE_JAB_ACTIVE_TICKS
+		StickCheckRules.RISE_S * _PhysicsConstants.PHYSICS_TICK) + STICK_LIFT_HOOK_TICKS
+# After a lift the bot plays the stick on the path before reaching in again.
+const STICK_LIFT_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 8   # ~375 ms
 
-# One bot's stick play: the pressurer's reach-in (a jab, or a lift when the
-# carrier's body shields the puck), the coverer's tie on his man, a tied
-# attacker's pull or hold, and the stick-check button that carries them every
-# tick. Owns the windows and the tie it holds; the role, the tier's gates and the
-# bot's reaches come in per call.
+# One bot's stick play: the pressurer's blade on the carried puck's path
+# (AIStickPathRead) or a lift when the carrier's body shields the puck, the
+# coverer's tie on his man, a tied attacker's pull or hold, and the stick-check
+# button that carries them every tick. Owns the lift's window and the tie it
+# holds; the role, the tier's gates and the bot's reaches come in per call.
 
 var _peer_id: int = -1
 var _team_id: int = -1
 var _team_id_by_peer: Dictionary = {}
-# The jab window and cooldown.
-var _poke_jab_active_ticks: int = 0
-var _poke_jab_cooldown_ticks: int = 0
+# The lift's window and the cooldown after it.
+var _lift_active_ticks: int = 0
+var _lift_cooldown_ticks: int = 0
 # Physics ticks left holding the stick-check button for a lift, and whether its
 # press edge is still to send. Counted per physics tick in apply_button,
 # since the button must be held on the throttled ticks too.
@@ -53,10 +51,10 @@ func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary) -> void:
 	_team_id_by_peer = team_id_by_peer
 
 
-# A fresh carry: no reach-in window, cooldown or lift hold.
+# A fresh carry: no lift window, cooldown or hold.
 func reset_reach_in() -> void:
-	_poke_jab_active_ticks = 0
-	_poke_jab_cooldown_ticks = 0
+	_lift_active_ticks = 0
+	_lift_cooldown_ticks = 0
 	_stick_lift_hold_ticks = 0
 	_stick_lift_press_pending = false
 
@@ -66,58 +64,46 @@ func drop_tie() -> void:
 	_stick_tie_holding = false
 
 
-# Defensive poke jab (or stick lift): the reach-in aim while one is active, else
-# INF. Runs the jab lifecycle — active, then cooldown, then a fresh trigger when
-# within reach of an opposing carrier's puck. Only the puck-pressurer slots jab,
-# so the team doesn't collapse two bots onto the puck.
-# `is_pressurer` is whether our role owns the carrier this beat; the reaches are
-# this bot's own; the window counts down by `dispatch_period_ticks`.
-func jab_aim(snapshot: WorldSnapshot, self_pos: Vector3, is_pressurer: bool,
-		lifts_sticks: bool, stick_lift_reach: float, jab_reach: float,
-		dispatch_period_ticks: int) -> Vector3:
-	if _poke_jab_active_ticks > 0:
+# The stick lift: under the carrier's shaft while one is held, else INF. Runs the
+# lift's lifecycle — held, then a cooldown, then a fresh one when the carrier's
+# body stands between us and the puck with his shaft in reach
+# (AIStickLiftRead.prefers_lift). Only the puck-pressurer slots lift, so the team
+# doesn't collapse two bots onto the puck. `is_pressurer` is whether our role
+# owns the carrier this beat; the window counts down by `dispatch_period_ticks`.
+func lift_aim(snapshot: WorldSnapshot, self_pos: Vector3, is_pressurer: bool,
+		lifts_sticks: bool, stick_lift_reach: float, dispatch_period_ticks: int) -> Vector3:
+	if _lift_active_ticks > 0:
 		# Dispatch-span decrement: the window is in physics ticks.
-		_poke_jab_active_ticks -= dispatch_period_ticks
-		if _poke_jab_active_ticks <= 0:
-			_poke_jab_active_ticks = 0
-			_poke_jab_cooldown_ticks = POKE_JAB_COOLDOWN_TICKS
-		return jab_target(snapshot)
-	if _poke_jab_cooldown_ticks > 0:
-		_poke_jab_cooldown_ticks = maxi(0, _poke_jab_cooldown_ticks - dispatch_period_ticks)
+		_lift_active_ticks -= dispatch_period_ticks
+		if _lift_active_ticks <= 0:
+			_lift_active_ticks = 0
+			_lift_cooldown_ticks = STICK_LIFT_COOLDOWN_TICKS
+		return lift_target(snapshot)
+	if _lift_cooldown_ticks > 0:
+		_lift_cooldown_ticks = maxi(0, _lift_cooldown_ticks - dispatch_period_ticks)
 		return Vector3.INF
-	if not is_pressurer:
+	if not is_pressurer or not lifts_sticks or snapshot.puck_state == null:
 		return Vector3.INF
-	if snapshot.puck_state == null:
-		return Vector3.INF
-	# Must be an opposing carrier (not loose, not a teammate carrying).
 	var carrier_pid: int = snapshot.puck_state.carrier_peer_id
 	if carrier_pid == -1 or _team_id_by_peer.get(carrier_pid, -1) == _team_id:
 		return Vector3.INF
-	var puck_pos: Vector3 = snapshot.puck_state.position
 	var carrier_state: SkaterNetworkState = snapshot.skater_states.get(carrier_pid)
-	# Read before the jab's reach: the shaft runs back toward a carrier's hands, so
-	# from behind it is in reach while the puck out front is not. The body
-	# half-width that blocks the jab is the skater collision disc
+	# The body half-width that blocks the blade is the skater collision disc
 	# (GameRules.OFFSIDE_LINE_SLACK, the canonical half-width).
-	if lifts_sticks and carrier_state != null and AIStickLiftRead.prefers_lift(
-			self_pos, carrier_state.position, puck_pos,
+	if carrier_state == null or not AIStickLiftRead.prefers_lift(
+			self_pos, carrier_state.position, snapshot.puck_state.position,
 			carrier_state.top_hand_world, carrier_state.blade_contact_world,
 			stick_lift_reach, GameRules.OFFSIDE_LINE_SLACK):
-		_stick_lift_hold_ticks = STICK_LIFT_HOLD_TICKS
-		_stick_lift_press_pending = true
-		_poke_jab_active_ticks = STICK_LIFT_HOLD_TICKS
-		return jab_target(snapshot)
-	var dx: float = puck_pos.x - self_pos.x
-	var dz: float = puck_pos.z - self_pos.z
-	if dx * dx + dz * dz > jab_reach * jab_reach:
 		return Vector3.INF
-	_poke_jab_active_ticks = POKE_JAB_ACTIVE_TICKS
-	return puck_pos
+	_stick_lift_hold_ticks = STICK_LIFT_HOLD_TICKS
+	_stick_lift_press_pending = true
+	_lift_active_ticks = STICK_LIFT_HOLD_TICKS
+	return lift_target(snapshot)
 
 
-# Where the reach-in aims: under the carrier's shaft while a lift is held, then
-# the puck — the dropping blade comes down onto it, which is the take.
-func jab_target(snapshot: WorldSnapshot) -> Vector3:
+# Where a held lift aims: under the carrier's shaft through the hook, then the
+# puck — the dropping blade comes down onto it, which is the take.
+func lift_target(snapshot: WorldSnapshot) -> Vector3:
 	if _stick_lift_hold_ticks > 0 and snapshot.puck_state != null:
 		var cs: SkaterNetworkState = snapshot.skater_states.get(
 				snapshot.puck_state.carrier_peer_id)
@@ -126,6 +112,74 @@ func jab_target(snapshot: WorldSnapshot) -> Vector3:
 	if snapshot.puck_state == null or snapshot.puck_state.carrier_peer_id == -1:
 		return Vector3.INF
 	return snapshot.puck_state.position
+
+
+# The pressurer's blade on an opposing carrier's puck: the first point of its
+# path our blade beats it to (AIStickPathRead.path_point), INF when there is
+# none. `poke_reach` is our body's reach to a puck the blade touches. Without
+# `reads_path` the read takes the puck and our body where they are, unmoving.
+func path_aim(snapshot: WorldSnapshot, me: SkaterNetworkState, poke_reach: float,
+		blade_speed: float, reads_path: bool) -> Vector3:
+	var carrier: SkaterNetworkState = _opposing_carrier(snapshot)
+	if carrier == null or me == null:
+		return Vector3.INF
+	var blade: Vector3 = me.blade_contact_world if me.blade_contact_world != Vector3.ZERO \
+			else me.position
+	return AIStickPathRead.path_point(me.position,
+			me.velocity if reads_path else Vector3.ZERO, blade,
+			snapshot.puck_state.position, carrier.velocity if reads_path else Vector3.ZERO,
+			poke_reach, blade_speed)
+
+
+# With no point of the path in time, the carrier's line to `our_net` where it
+# comes into reach (AIStickPathRead.lane_point), INF when it never does.
+func lane_aim(snapshot: WorldSnapshot, me: SkaterNetworkState, poke_reach: float,
+		our_net: Vector3) -> Vector3:
+	if _opposing_carrier(snapshot) == null or me == null:
+		return Vector3.INF
+	return AIStickPathRead.lane_point(me.position, snapshot.puck_state.position, our_net,
+			poke_reach)
+
+
+# The lone defender's blade on a rush (AIRushRead.is_lone_defender): in the
+# lane from the carried puck to whichever of the rush's men he can take away,
+# the one whose lane passes nearest him (AIStickPathRead.pass_lane_point). Each
+# man is led to where a pass fired now meets him — his skating over its flight
+# at the pace a pass is expected at (AIPuckLane.expected_pass_speed) — since a
+# feed is led to a man skating onto it, and a stick in the lane to where he is
+# now sits off the line the puck travels. INF with no man of theirs on the rush.
+func pass_lane_aim(snapshot: WorldSnapshot, me: SkaterNetworkState, rush: AIRushRead,
+		poke_reach: float) -> Vector3:
+	var carrier: SkaterNetworkState = _opposing_carrier(snapshot)
+	if carrier == null or me == null:
+		return Vector3.INF
+	var puck: Vector3 = snapshot.puck_state.position
+	var best: Vector3 = Vector3.INF
+	var best_miss: float = INF
+	for pid: int in rush.attackers:
+		if pid == snapshot.puck_state.carrier_peer_id or not snapshot.skater_states.has(pid):
+			continue
+		var man: SkaterNetworkState = snapshot.skater_states[pid]
+		var flight_s: float = puck.distance_to(man.position) \
+				/ maxf(AIPuckLane.expected_pass_speed(puck, man.position), 0.1)
+		var receiver: Vector3 = man.position + Vector3(man.velocity.x, 0.0, man.velocity.z) \
+				* flight_s
+		var miss: float = AIStickPathRead.lane_miss_m(me.position, puck, receiver)
+		if miss < best_miss:
+			best_miss = miss
+			best = receiver
+	if not best.is_finite():
+		return Vector3.INF
+	return AIStickPathRead.pass_lane_point(me.position, puck, best, poke_reach)
+
+
+func _opposing_carrier(snapshot: WorldSnapshot) -> SkaterNetworkState:
+	if snapshot.puck_state == null:
+		return null
+	var pid: int = snapshot.puck_state.carrier_peer_id
+	if pid == -1 or _team_id_by_peer.get(pid, -1) == _team_id:
+		return null
+	return snapshot.skater_states.get(pid)
 
 
 # Ties the covered man's stick when the puck is coming to him and nothing else

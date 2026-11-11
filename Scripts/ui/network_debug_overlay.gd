@@ -537,6 +537,8 @@ func _render_client(t: NetworkTelemetry) -> void:
 	_context(_band(pdv, 8.0, 20.0), "Delay spread", "%.1f ms (floor %.0f)" % [pdv, NetworkManager.get_packet_delay_floor_ms()],
 		"jitter measured vs the host CLOCK, ignores clumping; if Jitter is high but this is low, packets are clumping, not the path being jittery")
 	_info("Updates in", "%.0f/s" % t.world_state_hz, "world snapshots received; matches host send rate")
+	_info("Your input queue", "%d frames at the host" % t.input_queue_depth_median,
+		"how many of your inputs the host held waiting, echoed back; the host's own row judges it")
 	_sim_line(t)
 
 	# End-to-end latency decomposed into its named terms, so a netcode change
@@ -560,6 +562,8 @@ func _render_client(t: NetworkTelemetry) -> void:
 	if t.reconcile_per_sec > 0.5:
 		_info("Reconcile cause", "pos %.0f · vel %.0f · rot %.0f /s · off %+.1ft · resid %.0fcm" % [t.recon_pos_per_sec, t.recon_vel_per_sec, t.recon_ubody_per_sec, t.pos_offset_ticks_avg, t.post_replay_residual_avg * 100.0],
 			"resid = distance from server AFTER the snap+replay. At rest it should be ~0; if resid stays ~9cm the replay isn't converging (offset rebuilds), vs ~0 = rebuild is in normal physics")
+		_info("Reconcile size", "blade %.0fcm · lead %.0fcm" % [t.blade_reconcile_mag_avg * 100.0, t.prediction_divergence_avg * 100.0],
+			"blade = how far a correction moved your blade; lead = your prediction's distance ahead of the server's last position when one fired, which grows with ping × speed by design (not a fault)")
 	_metric(_band(t.extrapolation_pct, NetworkTelemetry.EXTRAPOLATION_WARN_PCT,
 			NetworkTelemetry.EXTRAPOLATION_BAD_PCT), "Guessing ahead", "%.0f%% of frames (%.0f fps)" % [t.extrapolation_pct, t.client_fps],
 		"share of rendered frames dead-reckoning a remote past the buffer (framerate-independent). If high on a clumpy link, the jitter cushion is too thin — see Smoothing delay")
@@ -570,15 +574,22 @@ func _render_client(t: NetworkTelemetry) -> void:
 	_metric(_band(t.remote_correction_avg_m * 100.0, 10.0, 30.0), "Remote predict err",
 		"%.1f cm avg · %.0f cm peak" % [t.remote_correction_avg_m * 100.0, t.remote_correction_max_m * 100.0],
 		"same pre-damp error on remote skater bodies; steady growth = intent decay / hard cuts outrunning the prediction")
+	_metric(_band(100.0 - t.keeper_confirm_pct, 50.0, 90.0), "Goalie predict",
+		"%.0f%% confirmed · %.1f re-steps/s · gap %.0f cm avg, %.0f peak" % [t.keeper_confirm_pct,
+			t.keeper_resteps_per_sec, t.keeper_restep_gap_avg_m * 100.0, t.keeper_restep_gap_max_m * 100.0],
+		"snapshots whose goalie state the predictor already had (confirmed) vs ones that re-seeded and re-stepped him; gap = how far his gear was off the host's at that snapshot. Re-steps follow hidden releases, saves and any world the client predicts off the host's")
+	_metric(_band(t.keeper_predict_us_p95, 4000.0, 8000.0), "Goalie predict cost",
+		"%.0f us/frame avg · %.0f p95" % [t.keeper_predict_us_avg, t.keeper_predict_us_p95],
+		"main-thread time stepping both predicted goalies per physics frame; p95 is the re-step frames")
 
 	_section("Smoothing buffers")
 	_info("Interp depth", "skater %d · puck %d · goalie %d" % [t.buffer_depth_skater, t.buffer_depth_puck, t.buffer_depth_goalie],
-		"frames queued to smooth motion; ~2-4 healthy, 0-1 risks stutter")
+		"frames queued to smooth motion, the shallowest remote of each kind; ~2-4 healthy, 0-1 risks stutter")
 	_info("Smoothing delay", "%.0f ms" % (NetworkManager.get_target_interpolation_delay() * 1000.0),
 		"intentional delay to hide jitter; sized off Delay spread (de-clumped path jitter), grows with RTT. If Guessing ahead climbs, this is under-cushioning")
 	if t.ws_gap_histogram != "—":
 		_info("Packet spacing", t.ws_gap_histogram,
-			"% of updates by gap (ms); steady ~8ms is smooth, split low+high = clumping")
+			"% of updates by gap (ms); steady ~22ms is smooth, split low+high = clumping")
 
 	_info("Bandwidth", "%.1f KB/s down" % (t.bytes_received_per_sec / 1024.0),
 		"game data received per second (payload only, excludes Steam framing)")
@@ -599,10 +610,11 @@ func _render_host(t: NetworkTelemetry) -> void:
 		"world states broadcast per second, counted once per broadcast rather than per recipient (Bandwidth below is the per-peer total); constant at the send rate in every phase")
 	_sim_line(t)
 
-	if not peers.is_empty():
+	if t.host_input_queue_depth_samples > 0:
 		_section("Client input queue")
-		_metric(_queue_health(t.input_queue_depth_median), "Queue depth", "%d frames" % t.input_queue_depth_median,
-			"client inputs waiting to apply; ~1-3 healthy, 0 = starving, high = backed up")
+		_metric(queue_health(t.host_input_queue_depth_max), "Queue depth",
+			"peak %d frames (healthy ~%.0f)" % [t.host_input_queue_depth_max, _queue_margin_ticks()],
+			"the deepest client input queue this second: the input lead's margin holds it at ~%.1f; 0 = starving, high = backed up" % _queue_margin_ticks())
 		_metric(_band(t.input_lead_avg_ms, 10.0, 30.0), "Input lead", "%.1f ms" % t.input_lead_avg_ms,
 			"how late inputs arrive vs schedule; want near 0")
 		_metric(_band(t.input_starvations_per_sec, NetworkTelemetry.STARVATION_WARN_PER_SEC,
@@ -951,11 +963,21 @@ func _when_positive(value: float, bad: float) -> Health:
 		return Health.WARN
 	return Health.OK
 
-# Input queue: starving (0) and backed up (high) are both bad; ~1-3 is healthy.
-func _queue_health(depth: int) -> Health:
-	if depth == 0 or depth > 12:
+# The depth the input lead's margin holds a client's queue at, in ticks: the lead
+# pays the trip, so only the margin queues.
+static func _queue_margin_ticks() -> float:
+	return NetworkManager.INPUT_LEAD_SEC * float(Constants.PHYSICS_TICK)
+
+
+# The host's peak client input queue this window, judged against the margin:
+# empty at every sample is starving; ~45 ms of extra input latency past the
+# margin is backing up, ~100 ms is backed up.
+static func queue_health(peak: int) -> Health:
+	var margin: float = _queue_margin_ticks()
+	var extra: float = float(peak) - margin
+	if peak == 0 or extra > 0.1 * float(Constants.PHYSICS_TICK):
 		return Health.BAD
-	if depth > 6:
+	if extra > 0.045 * float(Constants.PHYSICS_TICK):
 		return Health.WARN
 	return Health.OK
 

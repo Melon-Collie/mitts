@@ -79,3 +79,35 @@ func test_a_carrier_holds_the_puck_out_while_a_teammate_owes_a_tag_up() -> void:
 	var input: InputState = _agent().tick(s, 1.0 / 120.0, 0.0)
 	assert_gte(input.move_vector.y, 0.0,
 			"the carrier stops short of the line: got %s" % input.move_vector)
+
+
+# The man a hunter is after skates into the zone ahead of the puck, and the
+# hunter goes in after him.
+func _hunting_into_the_zone() -> WorldSnapshot:
+	var s := WorldSnapshot.new()
+	s.skater_states[SELF_ID] = _skater(Vector3(0.0, 0.0, LINE_Z + 1.0),
+			Vector3(0.0, 0.0, -5.0))
+	s.skater_states[TEAMMATE_ID] = _skater(Vector3(-5.0, 0.0, 5.0))
+	s.skater_states[PINNER_ID] = _skater(Vector3(0.0, 0.0, LINE_Z - 4.0))
+	s.puck_state = PuckNetworkState.new()
+	s.puck_state.position = Vector3(8.0, 0.0, 10.0)
+	s.puck_state.carrier_peer_id = -1
+	s.real_puck_carrier_peer_id = -1
+	return s
+
+
+func test_a_hunter_follows_his_man_over_the_line() -> void:
+	var agent: SkaterAgent = _agent()
+	agent.set_hunt_peer(PINNER_ID)
+	var input: InputState = agent.tick(_hunting_into_the_zone(), 1.0 / 120.0, 0.0)
+	assert_lt(input.move_vector.y, -0.5, "into the zone after him: got %s" % input.move_vector)
+
+
+func test_a_hunter_owing_a_tag_up_clears_out_first() -> void:
+	var agent: SkaterAgent = _agent()
+	agent.set_hunt_peer(PINNER_ID)
+	var s: WorldSnapshot = _hunting_into_the_zone()
+	s.skater_states[SELF_ID].position = Vector3(0.0, 0.0, LINE_Z - 2.0)
+	s.tag_up_peers[SELF_ID] = true
+	var input: InputState = agent.tick(s, 1.0 / 120.0, 0.0)
+	assert_gt(input.move_vector.y, 0.0, "back out over the line: got %s" % input.move_vector)

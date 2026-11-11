@@ -48,6 +48,13 @@ public:
 
 	void reset_smoothing();
 	void seed(const godot::Vector3 &world_pos, const godot::Vector3 &skater_pos);
+	void seed_moving(const godot::Vector3 &world_pos, const godot::Vector3 &skater_pos,
+			const godot::Vector3 &velocity);
+	godot::Vector3 get_dangle_velocity() const;
+	// SkaterIKCoordinator._frozen_blade: the smoothed blade carried to
+	// `skater_pos`, or `fallback` before the first advance.
+	godot::Vector3 carried_to(const godot::Vector3 &skater_pos,
+			const godot::Vector3 &fallback) const;
 
 	godot::Vector3 advance(
 			const godot::Vector3 &target_blade_world,

@@ -445,35 +445,78 @@ here whenever you bump, in the same format.
 #      from the same packet's puck. Same size; a v90 peer ignores the bit, but
 #      mixed builds must be refused. Replay FORMAT_VERSION unchanged: an older replay reads
 #      the bit as clear, and its wind-ups are still recognized by shot state.
-# v92: PlayerStats gained `interceptions` (appended to to_array), so the stats
-#      player record is 20 values (peer_id + 19).
-# v93: titles (docs/game-pucks-plan.md, Phase 2). request_join and
-#      spawn_remote_skater carry the Titles id the player wears as a trailing
-#      String; the lobby roster entry's look (PlayerLook.cosmetics_to_wire)
-#      appends it, and the existing-player sync carries it at index 18. An
-#      older peer would send none and read none, but mixed builds must be
-#      refused. Replay FORMAT_VERSION unchanged: the header's roster gains an
-#      optional "title_id" that an older replay simply lacks.
-# v94: feats (docs/game-pucks-plan.md, Phase 3). A new host→peer RPC,
-#      notify_feat(puck_id), tells a player the host saw them make a feat play.
-#      Godot routes RPCs by their index in the name-sorted method list, so the
-#      addition shifts every index after it; mixed builds must be refused.
-#      Replay FORMAT_VERSION unchanged.
-# v95: the tape palette (TapeColorRegistry) gains TEAM_SECOND at index 11, the
-#      kit's secondary colour, for the tape and lace codes (docs/game-pucks-
-#      plan.md, Phase 4). Same widths, but an older peer clamps index 11 back
-#      to the team primary and paints a different stick; mixed builds must be
-#      refused. Replay FORMAT_VERSION unchanged: an older replay never holds 11.
-# v96: two tape spans (StickTapeConfig.Span.SPACED, BOTTOM_STRIP) fill the
-#      span's 3 bits, and the tape code grows a toe-cap colour (5 bits above
-#      the handle style) — docs/game-pucks-plan.md, Phase 4 step 2. An older
-#      peer clamps the new spans and drops the toe colour; mixed builds must be
-#      refused. Replay FORMAT_VERSION unchanged: an older replay's codes decode
-#      as before.
-# v97: sticks as patterns (docs/game-pucks-plan.md, Phase 4 step 3). The gear
-#      code's stick_model is now a StickModelRegistry pattern, and the tape
-#      code grows a paint flag and five 5-bit zone colours above the toe
-#      colour (46 bits in all). An older peer drops the paint and draws the
-#      old fixed colourways; mixed builds must be refused. Replay
-#      FORMAT_VERSION unchanged: an older replay's tape code has no paint flag
-#      and draws its pattern's defaults.
+# v92: receive_pickup_claim drops its trailing top_hand Vector3 (the client's
+#      top-hand grip). The host's catch read is the blade's distance off the
+#      puck's path (PuckReceptionRules.path_offset), which never read the shaft.
+#      The RPC's argument count changed, so mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged: claims are not recorded.
+# v93: the world-state snapshot and the input batch are compressed at the RPC
+#      boundary (WirePacking: a u16 raw size and a zstd / deflate body). A v92
+#      peer would decode the packed bytes as a raw layout, so mixed builds must
+#      be refused. Replay FORMAT_VERSION unchanged: recorders keep raw frames.
+# v94: snapshots go as deltas against the newest one each client acked
+#      (SnapshotDelta: a u8 kind, a u16 connection-scoped seq and, for a delta,
+#      the u16 baseline seq, before the body), and the input batch header grows
+#      to 6 B to carry that ack (u8 has-ack, u16 seq). Mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged: recorders keep raw frames.
+# v95: receive_snapshot_ack RPC added — a spectator's delta ack, since it sends
+#      no input batches. The RPC set changed, so mixed builds must be refused.
+# v96: the goalies' whole sim states ride every snapshot (KeeperWireTail, a
+#      KeeperWire blob per goalie: KeeperController.wire at the Q16 scales,
+#      the host snapping his own state to it), appended after the world-state
+#      body inside the delta and ahead of the carrier-event block, so a client
+#      can re-seed a keeper of its own from it (#903). A v95 peer would read the
+#      blobs as world state, so mixed builds must be refused. Replay
+#      FORMAT_VERSION unchanged: the recorders' frames never hold the blobs.
+# v97: the keeper's blob carries his tier (GoalieSkillProfile.tier), which a
+#      client never learned, so a client's predicted keeper (KeeperPredictor)
+#      plays the host's. One byte more in the blob, so mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged.
+# v98: the keeper's blob ends in a u32 digest of his discrete state
+#      (KeeperWire.discrete_digest), which a client's predictor compares
+#      before confirming a snapshot within the box tolerance. A v97 peer would
+#      read the digest as bits past the blob's end, so mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged.
+# v99: fighting, phase 1. The input record grows 24 -> 25 bytes (a second flag
+#      byte, fight_pressed in bit 0); the lobby settings and game-config RPCs
+#      carry the Fighting toggle; new reliable RPCs notify_fight_challenge,
+#      notify_fight_called and notify_fight_challenge_lapsed shift the RPC
+#      index set; GamePhase gains FIGHT (ordinal 7) on the world-state phase
+#      byte. Replay FORMAT_VERSION unchanged: the recorders store snapshots,
+#      not inputs, and FIGHT is appended so every older file's phases still
+#      read the same.
+# v100: fighting, phase 2. The skater's body-lock byte carries fight_role
+#      (FightRules.Role) in bits 4-5, which every machine draws a fighter's
+#      gear off and guard up from. A v99 peer reads the bits as zero and draws
+#      a fighter holding his stick, so mixed builds must be refused. Replay
+#      FORMAT_VERSION unchanged: the byte was there, and an older file's bits
+#      are zero.
+# v101: fighting, phase 3. The skater block grows 58 -> 59 bytes: a fight
+#      byte with what the holding hand holds (FightHoldRules.Grip, 2 bits) and
+#      which arm punches (FightHoldRules.Side, 1 bit). The fists ride the
+#      existing hand and blade markers. Replay FORMAT_VERSION 20 -> 21, since
+#      the recorded frames carry the block.
+# v102: fighting, phase 4. The skater block's fight byte carries the rattle
+#      (FightPunchRules, seconds @0.1 s) in bits 3-7, and the new reliable RPC
+#      notify_punch_landed shifts the RPC index set. Replay FORMAT_VERSION
+#      unchanged at 21: the bits were zero, and still are in a file older
+#      than this.
+# v103: Game Pucks (docs/game-pucks-plan.md), one bump for the branch's
+#      wire changes, none of which shipped on its own:
+#      - PlayerStats gained `interceptions` (appended to to_array), one value
+#        more in the stats player record.
+#      - Titles: request_join and spawn_remote_skater carry the Titles id the
+#        player wears as a trailing String; the lobby roster entry's look
+#        (PlayerLook.cosmetics_to_wire) appends it, and the existing-player
+#        sync carries it. Replay header rosters gain an optional "title_id".
+#      - A new host→peer RPC, notify_feat(puck_id), shifts the RPC index set.
+#      - The tape palette gains TEAM_SECOND at index 11 (the kit's secondary
+#        colour) for the tape and lace codes.
+#      - Two tape spans (StickTapeConfig.Span.SPACED, BOTTOM_STRIP) fill the
+#        span's 3 bits, and the tape code grows a toe-cap colour (5 bits).
+#      - Sticks are patterns: the gear code's stick_model is a
+#        StickModelRegistry pattern, and the tape code grows a paint flag and
+#        five 5-bit zone colours above the toe colour (46 bits in all).
+#      An older peer reads none of this, so mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged: an older replay's codes decode as
+#      before and its header simply lacks the title.

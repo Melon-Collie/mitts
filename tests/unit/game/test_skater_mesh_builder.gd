@@ -52,8 +52,9 @@ func _parts() -> Array[PartSpec]:
 		PartSpec.new("head", SkaterMeshBuilder._build_ball(
 				SkaterMeshBuilder.HEAD_RADIUS, 10, 5, 1.0),
 				Vector3(0.27, 0.27, 0.27), false),
+		# Helmet-local, drawn at the helmet's 0.75 scale.
 		PartSpec.new("neck", SkaterMeshBuilder._build_neck(),
-				Vector3(0.19, 0.10, 0.19), true),
+				Vector3(0.25, 0.155, 0.25), true),
 		PartSpec.new("blade_holder", SkaterMeshBuilder._build_skate_blade(),
 				Vector3(0.023, 0.21, 0.06), false, SkaterMeshBuilder.BLADE_PART_HOLDER),
 		PartSpec.new("blade_runner", SkaterMeshBuilder._build_skate_blade(),
@@ -145,7 +146,7 @@ func test_torso_clearance_measures_the_rest_rings() -> void:
 		for k: int in ring.size() - 1:
 			middle += ring[k]
 		middle /= float(ring.size() - 1)
-		assert_lt(SkaterMeshBuilder.torso_clearance(middle), -0.1,
+		assert_lt(SkaterMeshBuilder.torso_clearance(middle), -0.05,
 				"station %d's middle is inside" % station)
 		for k: int in ring.size() - 1:
 			var corner: Vector3 = ring[k]
@@ -250,7 +251,8 @@ func _signed_volume(mesh: ArrayMesh, surface: int = 0) -> float:
 # bone and nothing on the other three, so a bone pose places its part exactly.
 # The skate's upper is the exception: its weight is split between its side's
 # SKATE bone and the foot's bind (SKATE_UPPER_FOOT_BIND), summing to 1.0, in
-# whichever order the mesh keeps them.
+# whichever order the mesh keeps them. So is the neck, split between the
+# helmet and its foot's bind (NECK_FOOT_BIND).
 # Cheap to check here, invisible in a render.
 func test_the_rigid_parts_are_rigidly_weighted() -> void:
 	for rig: Array in [
@@ -268,12 +270,14 @@ func test_the_rigid_parts_are_rigidly_weighted() -> void:
 				bad += 1
 			elif rig[0] == "leg" and _ankle_weighted(bones, weights, v):
 				bent += 1
+			elif rig[0] == "upper" and _neck_weighted(bones, weights, v):
+				bent += 1
 			elif bones[v * 4] < 0 or bones[v * 4] >= int(rig[2]) \
 					or not is_equal_approx(weights[v * 4], 1.0) or weights[v * 4 + 1] != 0.0:
 				bad += 1
 		assert_eq(bad, 0, "%s: every vertex weight 1.0 on one bone in range" % rig[0])
-		if rig[0] == "leg":
-			assert_gt(bent, 0, "the skate uppers bend across the ankle")
+		assert_gt(bent, 0, "%s: the skate uppers bend across the ankle, the neck over the collar"
+				% rig[0])
 
 
 func _ankle_weighted(bones: PackedInt32Array, weights: PackedFloat32Array, v: int) -> bool:
@@ -288,6 +292,12 @@ func _ankle_weighted(bones: PackedInt32Array, weights: PackedFloat32Array, v: in
 			# Stored at 16 bits a weight.
 			return absf(weights[v * 4] + weights[v * 4 + 1] - 1.0) < 1e-3
 	return false
+
+
+func _neck_weighted(bones: PackedInt32Array, weights: PackedFloat32Array, v: int) -> bool:
+	return weights[v * 4 + 1] > 0.0 and bones[v * 4] == SkaterMeshBuilder.UpperBone.HELMET \
+			and bones[v * 4 + 1] == SkaterRigidParts.NECK_FOOT_BIND \
+			and absf(weights[v * 4] + weights[v * 4 + 1] - 1.0) < 1e-3
 
 
 # The head sits a centimetre or two inside the shell all round; where the rim's

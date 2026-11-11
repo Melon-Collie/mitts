@@ -157,3 +157,21 @@ func test_an_earlier_request_restarts_the_projection() -> void:
 	walked.sample_state_at(10.0 + TICK * 9.0)
 	var got: Vector3 = walked.sample_state_at(10.0 + TICK * 4.0).position
 	assert_eq(got, cold.sample_state_at(10.0 + TICK * 4.0).position)
+
+
+func test_interpolating_takes_the_newer_endpoints_discrete_fields() -> void:
+	# The host's rewind and this client's render both take discrete fields from
+	# the newer snapshot; the replay's sample must too, or the three resolve one
+	# contact with two different braces / ghosts / stances.
+	var rc := _controller()
+	_buffer(rc, 10.0, Vector3.ZERO, Vector3(0.0, 0.0, 6.0))
+	_buffer(rc, 10.0 + TICK * 2.0, Vector3(0.0, 0.0, 0.13), Vector3(0.0, 0.0, 6.0))
+	var newer: SkaterNetworkState = rc._state_buffer[1].state
+	newer.brake_intent = true
+	newer.hit_committed = true
+	newer.is_ghost = true
+	newer.stance_active = true
+	newer.move_intent = Vector2(1.0, 0.0)
+	var s: SkaterNetworkState = rc.sample_state_at(10.0 + TICK * 0.5)
+	assert_true(s.brake_intent and s.hit_committed and s.is_ghost and s.stance_active)
+	assert_eq(s.move_intent, Vector2(1.0, 0.0))

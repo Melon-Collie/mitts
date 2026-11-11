@@ -341,13 +341,10 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 			var toward: float = des_x * ux + des_z * uz
 			var allowed: float = sqrt(2.0 * ARRIVAL_BRAKE_DECEL_M_S2
 					* maxf(floor_dist - floor_radius, 0.0))
-			if toward > allowed:
-				des_x -= ux * (toward - allowed)
-				des_z -= uz * (toward - allowed)
-			# RoleDecision.advance_cap_m_s: the same component's other sign.
-			elif -toward > advance_cap:
-				des_x -= ux * (toward + advance_cap)
-				des_z -= uz * (toward + advance_cap)
+			# RoleDecision.advance_cap_m_s bounds the same component from below.
+			var bounded: float = clampf(toward, minf(-advance_cap, allowed), allowed)
+			des_x -= ux * (toward - bounded)
+			des_z -= uz * (toward - bounded)
 	# We cannot skate faster than we can skate. Clamping the SUM (rather than the
 	# closing term) keeps the best available heading: flat out along the line that
 	# serves both errands, which as the gap closes rotates off pursuit and onto the

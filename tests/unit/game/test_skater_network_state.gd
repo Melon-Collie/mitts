@@ -32,6 +32,10 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	s.pin_strength                = 0.6
 	s.diving                      = true
 	s.slapshot_pinned             = true
+	s.fight_role                  = FightRules.Role.FIGHTING
+	s.fight_grip                  = FightHoldRules.Grip.ARM_BOTTOM
+	s.fight_punch_side            = FightHoldRules.Side.BOTTOM
+	s.fight_rattle                = 1.7
 
 	var r := SkaterNetworkState.from_array(s.to_array())
 
@@ -61,12 +65,16 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	assert_almost_eq(r.pin_strength, s.pin_strength, 0.00001)
 	assert_eq(r.diving, s.diving)
 	assert_eq(r.slapshot_pinned, s.slapshot_pinned)
+	assert_eq(r.fight_role, s.fight_role)
+	assert_eq(r.fight_grip, s.fight_grip)
+	assert_eq(r.fight_punch_side, s.fight_punch_side)
+	assert_almost_eq(r.fight_rattle, s.fight_rattle, 1e-5)
 
 
 func test_array_length_sentinel() -> void:
 	# Field-count sentinel — if a field is added without updating to_array /
 	# from_array, this catches the mismatch before it becomes a silent bug.
-	# 33: position, velocity, blade_position, top_hand_position,
+	# 37: position, velocity, blade_position, top_hand_position,
 	# upper_body_rotation_y, facing, last_processed_host_timestamp,
 	# is_ghost, shot_state, shot_charge, facing_angular_velocity,
 	# upper_body_angular_velocity, elevation_level, blade_up,
@@ -74,9 +82,9 @@ func test_array_length_sentinel() -> void:
 	# hit_committed, blade_side, balance_tilt, balance_tilt_vel,
 	# torso_lean, posture_lean, recoil_dir, stick_check_phase,
 	# stick_check_elapsed, stick_tied, pin_role, pin_strength, diving,
-	# slapshot_pinned.
+	# slapshot_pinned, fight_role, fight_grip, fight_punch_side, fight_rattle.
 	var s := SkaterNetworkState.new()
-	assert_eq(s.to_array().size(), 33)
+	assert_eq(s.to_array().size(), 37)
 
 
 func test_blade_up_back_compat_defaults_false() -> void:

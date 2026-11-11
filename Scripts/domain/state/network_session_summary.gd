@@ -36,7 +36,7 @@ class_name NetworkSessionSummary extends RefCounted
 # Metrics where a LOWER value is the bad direction, so the session minimum is
 # the diagnostic extreme worth keeping (everything else keeps the maximum).
 const MIN_KEYS: Array[String] = ["sim_rate_hz", "reconcile_match_pct", "client_fps",
-		"buffer_depth_skater", "buffer_depth_puck"]
+		"buffer_depth_skater", "buffer_depth_puck", "keeper_confirm_pct"]
 
 # Metrics observed as PER-WINDOW EVENT COUNTS rather than rates/levels — the
 # rare discrete tripwires (puck hard-snaps, blade jumps). Averaging smears
@@ -48,12 +48,13 @@ const TOTAL_KEYS: Array[String] = ["puck_predict_fallbacks", "delay_clamps",
 		"pickup_claims", "pickup_claim_misses", "pickup_claim_deflects",
 		"poke_claims", "poke_claim_misses",
 		"stick_lift_claims", "stick_lift_claim_misses",
+		"stick_tie_claims", "stick_tie_claim_misses",
 		"claim_miss_recovered", "claim_continuity_clamps",
 		"claim_stamp_rejects",
 		"provisional_pins", "provisional_confirmed", "provisional_timeouts",
 		"provisional_stolen",
 		"reconcile_miss_empty", "reconcile_miss_older", "reconcile_miss_newer",
-		"reconcile_miss_gap", "shot_launches", "host_stalls"]
+		"reconcile_miss_gap", "shot_launches", "host_stalls", "keeper_predict_fallbacks"]
 
 # Cap on felt-lag markers per session — defense against a tester leaning on the
 # key. Beyond the cap we keep a count so the total is still visible.

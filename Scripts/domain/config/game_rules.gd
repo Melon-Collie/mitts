@@ -68,6 +68,8 @@ const INTERMISSION_SETTLE: float   = 2.0
 const INTERMISSION_DURATION: float = 20.0
 const OT_ENABLED: bool             = true
 const OT_DURATION: float           = 4.0 * 60.0   # 240 s per OT period
+# The lobby's Fighting toggle, as a new lobby opens (FightRules.allowed).
+const FIGHTING_ENABLED: bool       = true
 
 # ── Rink Geometry ─────────────────────────────────────────────────────────────
 const GOAL_LINE_Z: float = 26.65  # rink_length / 2 - distance_from_end (30 - 3.35)
@@ -468,7 +470,7 @@ const DEFAULT_SKATER_STOP_DECEL_M_S2: float = 9.0
 const DEFAULT_SKATER_REVERSE_SKID_FRACTION: float = 0.75
 const DEFAULT_SKATER_TURN_ACCEL_M_S2: float = 9.0
 const DEFAULT_SKATER_MAX_TURN_RATE_RAD_S: float = 6.0
-const DEFAULT_STICK_LENGTH_M: float = 1.30
+const DEFAULT_STICK_LENGTH_M: float = 1.40
 const DEFAULT_BLADE_LENGTH_M: float = 0.30
 
 # Swept-segment hit radius for poke checks (puck-segment vs blade-segment).
@@ -496,7 +498,7 @@ const STICK_LIFT_RADIUS_M: float = 0.45
 #   wrister 33 m/s ≈ 74 mph  (~36.4 ≈ 81 mph strongest, ~29.0 ≈ 65 mph weakest)
 #   slapper 40 m/s ≈ 89 mph  (~48.2 ≈ 108 mph / ~32.1 ≈ 72 mph)
 # Reception already gates hard shots (above deflect_min_speed ~22 m/s
-# receiver-relative needs a squared blade), so most of the wrister band is
+# receiver-relative needs the blade on the puck's line), so most of the wrister band is
 # catch-with-care territory.
 # The slapper min is a hurried, barely-wound release — still a heavy shot
 # (~45 mph); one-timers always fire at max regardless of charge.

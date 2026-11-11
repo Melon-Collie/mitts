@@ -64,7 +64,7 @@ func test_array_length_sentinel() -> void:
 	# Field count sentinel — if someone adds a field without updating
 	# to_array/from_array, this catches the mismatch.
 	var s := InputState.new()
-	assert_eq(s.to_array().size(), 25)
+	assert_eq(s.to_array().size(), 26)
 
 
 func test_stick_lift_back_compat_defaults_false() -> void:
@@ -152,7 +152,28 @@ func test_bytes_negative_mouse_screen_pos_round_trips() -> void:
 
 
 func test_bytes_size_sentinel() -> void:
-	assert_eq(InputState.BYTES_SIZE, 24)
+	assert_eq(InputState.BYTES_SIZE, 25)
+
+
+# The fight press rides the record's second flag byte, and is an edge like the
+# other presses: a fallback re-applying an input clears it, and a drained frame
+# hands it on to the next one applied.
+func test_bytes_round_trip_the_fight_press() -> void:
+	var s := InputState.new()
+	s.fight_pressed = true
+	assert_true(InputState.from_bytes(s.to_bytes()).fight_pressed)
+	assert_false(InputState.from_bytes(InputState.new().to_bytes()).fight_pressed)
+	assert_true(InputState.from_array(s.to_array()).fight_pressed, "the array form too")
+
+
+func test_the_fight_press_is_an_edge() -> void:
+	var dropped := InputState.new()
+	dropped.fight_pressed = true
+	var next := InputState.new()
+	next.fold_edges_from(dropped)
+	assert_true(next.fight_pressed, "a press in a drained frame still fires")
+	next.clear_edges()
+	assert_false(next.fight_pressed, "and a fallback does not re-fire it")
 
 
 # ── Committed wrister power (gamepad) ────────────────────────────────────────

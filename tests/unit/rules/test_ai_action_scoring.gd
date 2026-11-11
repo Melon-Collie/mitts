@@ -905,14 +905,14 @@ func test_lane_clear_accurate_compounds_two_separated_defenders() -> void:
 	# compound to a much less clear lane than either alone.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 16.0)
-	var one_a: Array[Vector3] = [Vector3(5.0, 0.0, 12.0)]     # contests the middle
-	var one_b: Array[Vector3] = [Vector3(-5.6, 0.0, 14.0)]    # contests the receiver end
+	var one_a: Array[Vector3] = [Vector3(4.2, 0.0, 12.0)]     # contests the middle
+	var one_b: Array[Vector3] = [Vector3(-5.0, 0.0, 14.0)]    # contests the receiver end
 	var both: Array[Vector3] = [one_a[0], one_b[0]]
 	var speed: float = 18.0
 	var clear_a: float = AIPuckLane.lane_clear(from, to, one_a, speed, [], [], true)
 	var clear_b: float = AIPuckLane.lane_clear(from, to, one_b, speed, [], [], true)
 	var clear_both: float = AIPuckLane.lane_clear(from, to, both, speed, [], [], true)
-	# Each leaves a real gap alone (~0.6–0.7 clear); together the lane is much
+	# Each leaves a real gap alone (~0.7–0.8 clear); together the lane is much
 	# worse than either — the product compounds two independent, separated threats.
 	assert_gt(clear_a, 0.3)
 	assert_gt(clear_b, 0.3)
@@ -1133,13 +1133,13 @@ func test_lane_loss_point_finite_for_close_release_defender() -> void:
 
 
 func test_lane_loss_point_prices_a_lane_only_the_planted_interceptor_blocks() -> void:
-	# 4.5 m off a 16 m lane at z = 10: coasting, he never reaches the puck, but
+	# 4.65 m off a 16 m lane at z = 10: coasting, he never reaches the puck, but
 	# he can skate down the lane and plant on it ahead of the feed. The accurate
 	# lane prices that pick, so the loss point must be that planted spot — not
 	# INF, which turnover_cost reads as a free interception.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 16.0)
-	var planter: Array[Vector3] = [Vector3(4.5, 0.0, 10.0)]
+	var planter: Array[Vector3] = [Vector3(4.65, 0.0, 10.0)]
 	var speed: float = AIPuckLane.PASS_SPEED_M_S
 	assert_eq(AIPuckLane.lane_clear(from, to, planter, speed), 1.0,
 			"precondition: the coasting read sees no block")
@@ -1369,12 +1369,17 @@ func test_tip_needs_a_blade_the_shot_line_actually_crosses() -> void:
 			"an unreachable flight is not tippable")
 
 
-func test_tip_needs_deflect_pace() -> void:
-	# Below the deflect threshold (Puck.deflect_min_speed mirror) the puck
-	# lands on the tape as a catch — a pass, not a tip.
+func test_tip_needs_shot_pace() -> void:
+	# The tipper holds the deflect, so any pace tips — but under the pace the
+	# finisher reads as a shot (AIRoleFinisher.INCOMING_SHOT_SPEED_M_S) he never
+	# goes to tip it.
 	var none: Array[Vector3] = []
-	assert_eq(_tip_fixture(Vector3(0.0, 0.0, 24.0), 18.0, none), 0.0,
+	var gate: float = AIActionScoring.TIP_MIN_SPEED_M_S
+	assert_eq(AIRoleFinisher.INCOMING_SHOT_SPEED_M_S, gate, "the tip is priced where it is played")
+	assert_eq(_tip_fixture(Vector3(0.0, 0.0, 24.0), gate - 1.0, none), 0.0,
 			"a soft feed is a pass, not a tip")
+	assert_gt(_tip_fixture(Vector3(0.0, 0.0, 24.0), 18.0, none), 0.0,
+			"a wrister under the old catch ceiling is tipped all the same")
 
 
 func test_lane_clear_accurate_never_reads_a_crossing_defender_clearer() -> void:

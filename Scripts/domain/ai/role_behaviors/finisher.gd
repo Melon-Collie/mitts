@@ -5,8 +5,17 @@ class_name AIRoleFinisher
 # active; POSITIONING stages for the next one. No exposure factor: crashing the
 # net is the role, and defensive recovery is SUPPORT's job.
 
-# Speed gate: pucks slower than this are passes / rolling, not shots.
-const INCOMING_SHOT_SPEED_M_S: float = 12.0
+# Speed gate: pucks slower than this are passes / rolling, not shots. The tip
+# pricing reads the same gate.
+const INCOMING_SHOT_SPEED_M_S: float = AIActionScoring.TIP_MIN_SPEED_M_S
+
+# The most a deliberate tip turns the puck (Puck.deflect_max_turn_deg, held by
+# test_bot_mirrors.gd), with the blade square beside the body.
+const TIP_MAX_TURN_RAD: float = deg_to_rad(25.0)
+# How far out from the body the tipper's blade sits: the ring the agent's FACE
+# cursor snaps to (AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M), so standing this
+# far back of the tip point along the blade's bearing puts the blade on it.
+const TIP_BLADE_OUT_M: float = AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 
 # Weak-side staging bias for the SET CYCLE, where the cross-seam feed is the
 # highest-value look. Feel tunable; 0 = centered.
@@ -71,25 +80,49 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	var to_goal_z: float = opp_goal_z - puck_pos.z
 	if puck_vel.z * to_goal_z <= 0.0:
 		return null
-
-	# Where the puck path crosses our z plane.
 	if absf(puck_vel.z) < 0.001:
 		return null
+
+	# The tip point: where the puck's path crosses our z plane, short of the
+	# goal line.
 	var t_to_my_z: float = (ctx.self_pos.z - puck_pos.z) / puck_vel.z
 	if t_to_my_z <= 0.0 or t_to_my_z > 2.0:
 		return null
-	var path_x_at_my_z: float = puck_pos.x + puck_vel.x * t_to_my_z
+	if (opp_goal_z - ctx.self_pos.z) * puck_vel.z <= 0.0:
+		return null
+	var tip := Vector2(puck_pos.x + puck_vel.x * t_to_my_z, ctx.self_pos.z)
+	var travel: Vector2 = Vector2(puck_vel.x, puck_vel.z) / puck_speed
 
-	# TIP: step onto the puck path at our current z and aim at the goal, so the
-	# blade angles the redirect on- and off-target shots alike.
+	# A tip turns the puck at most TIP_MAX_TURN_RAD, so a shot is tipped when
+	# that reaches the mouth from the tip point: on net already, or wide by no
+	# more than that. A shot wider than a tip can bring back, or a teammate's
+	# pass running at the net, is left alone.
+	var mouth: float = GameRules.NET_ENTRY_HALF_WIDTH
+	var x_at_goal: float = puck_pos.x + puck_vel.x * (to_goal_z / puck_vel.z)
+	if absf(x_at_goal) > mouth and absf(travel.angle_to(
+			Vector2(signf(x_at_goal) * mouth, opp_goal_z) - tip)) > TIP_MAX_TURN_RAD:
+		return null
+
+	# TIP: the turn toward the middle of the net, as far as a tip turns, asked
+	# for by the side the blade is held on: PuckCollisionRules.tip_turn turns it
+	# by TIP_MAX_TURN_RAD × the cross of the puck's travel with the body→blade
+	# bearing. The blade goes on the path at the tip point, toward the puck, and
+	# the body stands TIP_BLADE_OUT_M back of it along that bearing.
+	var turn: float = clampf(travel.angle_to(Vector2(0.0, opp_goal_z) - tip),
+			-TIP_MAX_TURN_RAD, TIP_MAX_TURN_RAD)
+	var bearing: Vector2 = (-travel).rotated(-asin(turn / TIP_MAX_TURN_RAD))
+	var body: Vector2 = tip - bearing * TIP_BLADE_OUT_M
 	var d := RoleDecision.new()
-	d.target_position = Vector3(path_x_at_my_z, 0.0, ctx.self_pos.z)
-	d.aim_world_pos = Vector3(0.0, 0.0, opp_goal_z)
+	d.target_position = Vector3(body.x, 0.0, body.y)
+	d.aim_world_pos = Vector3(tip.x, 0.0, tip.y)
 	d.has_aim_override = true
-	# A grounded blade flies under an elevated puck, so an airborne incoming shot
-	# has to be met with the blade raised.
-	if _last_shooter_is_elevated(ctx):
-		d.lift_blade = true
+	# Hold the deflect, so the blade redirects the shot rather than catching it,
+	# from when the press can read the puck: it reads it once, and takes the
+	# blade to its height (DeflectReachRules.lift_to_meet). The tip changes the
+	# plane the keeper read: a shot on the ice goes up, a raised one down.
+	if t_to_my_z <= DeflectReachRules.TRACK_HORIZON_S:
+		d.deflect = true
+		d.deflect_up = not _last_shooter_is_elevated(ctx)
 	return d
 
 

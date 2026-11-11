@@ -107,6 +107,16 @@ var _pending_loft_level: int = ShotMechanics.ELEVATION_FLAT
 var _pending_backhand: bool = false
 # The peers credit_assists last credited, primary first.
 var _last_assist_ids: Array[int] = []
+# The pending shot has been redirected since its release: the keeper set on the
+# shot, not on the man it came off last (release_history).
+var _pending_tipped: bool = false
+# The current carrier since his pickup and how long (s) he has had it, the play
+# the keeper saw before a release (release_history). -1: nobody has picked it up.
+var _holder_peer_id: int = -1
+var _held_s: float = 0.0
+# Where the pass the holder took (or a one-timer's feed) was released from,
+# laterally; INF when he did not take the puck off a teammate's release.
+var _fed_from_x: float = INF
 # The ShotEvent already emitted for the LIVE pending shot, held so a later goal
 # can re-label it (a shot the goalie got a piece of resolves as SAVED first —
 # see on_goal_confirmed). Listeners keep the same object, so the re-label reaches
@@ -129,8 +139,11 @@ func on_pickup(peer_id: int) -> void:
 	# receive as a teammate is a missed-shot attempt (Corsi); a teammate receiving
 	# it (backdoor feed / saucer) is a pass, not a shot. _resolve_pending_miss
 	# reads the picker's team, so it must see it before the clear.
+	_fed_from_x = _pass_origin_x(peer_id)
 	_resolve_pending_miss(peer_id)
 	clear_pending()
+	_holder_peer_id = peer_id
+	_held_s = 0.0
 	# A pickup alone is only a touch — a momentary attach in a scramble must
 	# not break the opposing assist chain. on_possession_established upgrades.
 	_record_toucher(peer_id, false)
@@ -151,6 +164,8 @@ func on_possession_established(peer_id: int) -> void:
 func on_deflection(peer_id: int) -> void:
 	if peer_id == -1:
 		return
+	if _pending_remaining >= 0.0:
+		_pending_tipped = true
 	# Rebound re-shot: the pending shot was already SAVED and counted, and now an
 	# ATTACKING player redirects the loose puck. That's a fresh shot attempt — the
 	# prior save's SOG already landed, so re-arm a new pending shot (this player as
@@ -214,6 +229,8 @@ func _record_toucher(peer_id: int, possession: bool) -> void:
 func on_shot_started(shooter_peer_id: int, is_one_timer: bool = false) -> void:
 	if shooter_peer_id == -1:
 		return
+	if is_one_timer:
+		_fed_from_x = _pass_origin_x(shooter_peer_id)
 	_shooter_peer_id = shooter_peer_id
 	_pending_remaining = SHOT_ON_GOAL_TIMEOUT
 	_block_window_remaining = BLOCK_WINDOW
@@ -221,6 +238,7 @@ func on_shot_started(shooter_peer_id: int, is_one_timer: bool = false) -> void:
 	_pending_one_timer = is_one_timer
 	_pending_loft_level = ShotMechanics.ELEVATION_FLAT
 	_pending_backhand = false
+	_pending_tipped = false
 	# Assume on net until the caller's ballistic read (note_trajectory, run
 	# right after the authoritative release) says otherwise — a missed read
 	# should over-credit, not swallow saves.
@@ -481,6 +499,7 @@ func credit_assists(scorer_peer_id: int) -> Array[String]:
 
 
 func tick(delta: float) -> void:
+	_held_s += delta
 	if _block_window_remaining > 0.0:
 		_block_window_remaining -= delta
 	if _pending_remaining < 0.0:
@@ -508,6 +527,32 @@ func has_pending_shot() -> bool:
 
 
 # Whether the live pending shot was a one-timer. False without a pending shot.
+# The play the defending keeper saw before the pending shot (AIShotOdds.History):
+# off a pass the shooter took (a one-timer, or a puck had for less than the keeper
+# takes to set on him, AIGoalieModel.goalie_reset_s), FED_ACROSS when it crossed
+# the royal road and FED_SAME when it did not; FED off a redirect, or a pass from
+# where nobody saw; CARRIED otherwise.
+func release_history() -> int:
+	if _pending_tipped or (_shooter_peer_id != _holder_peer_id and not _pending_one_timer):
+		return AIShotOdds.History.FED
+	if not _pending_one_timer and _held_s >= AIGoalieModel.goalie_reset_s():
+		return AIShotOdds.History.CARRIED
+	if is_inf(_fed_from_x):
+		return AIShotOdds.History.FED if _pending_one_timer else AIShotOdds.History.CARRIED
+	return AIShotOdds.History.FED_ACROSS \
+			if AIShotOdds.crosses_royal_road(_fed_from_x, _pending_origin.x) \
+			else AIShotOdds.History.FED_SAME
+
+
+# The lateral origin of the pending release when `receiver` takes it off a
+# teammate (a pass), else INF. Read before the pending release is cleared.
+func _pass_origin_x(receiver: int) -> float:
+	if _shooter_peer_id == -1 or _shooter_peer_id == receiver \
+			or not _same_team(_shooter_peer_id, receiver):
+		return INF
+	return _pending_origin.x
+
+
 func pending_is_one_timer() -> bool:
 	return _shooter_peer_id != -1 and _pending_one_timer
 
@@ -528,6 +573,7 @@ func clear_pending() -> void:
 	_pending_one_timer = false
 	_pending_loft_level = ShotMechanics.ELEVATION_FLAT
 	_pending_backhand = false
+	_pending_tipped = false
 	_pending_event = null
 
 
@@ -535,6 +581,8 @@ func clear_pending() -> void:
 func on_play_stopped() -> void:
 	_recent_carriers.clear()
 	_recent_carrier_possession.clear()
+	_holder_peer_id = -1
+	_fed_from_x = INF
 
 
 # Called on full game reset. Clears carrier history plus pending state, and
@@ -542,6 +590,8 @@ func on_play_stopped() -> void:
 func reset_all() -> void:
 	_recent_carriers.clear()
 	_recent_carrier_possession.clear()
+	_holder_peer_id = -1
+	_fed_from_x = INF
 	clear_pending()
 	if _state_machine != null:
 		_state_machine.team_shots[0] = 0
@@ -553,6 +603,8 @@ func reset_all() -> void:
 func clear_state() -> void:
 	_recent_carriers.clear()
 	_recent_carrier_possession.clear()
+	_holder_peer_id = -1
+	_fed_from_x = INF
 	clear_pending()
 
 

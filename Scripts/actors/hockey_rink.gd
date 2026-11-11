@@ -246,6 +246,7 @@ var _board_ad_material: StandardMaterial3D = null
 var _board_ads: MeshInstance3D = null
 var _ads_shown: bool = true
 var _render_targets_freed: bool = false
+var _ring_field: IceRingField = null
 
 func _ready() -> void:
 	_rebuild()
@@ -254,6 +255,8 @@ func _ready() -> void:
 		# unbind the int — without this, Godot errors silently each emit
 		# ("Expected 0 arguments, got 1") and the ice never resets.
 		GameManager.period_synced.connect(_scratch_map.clear.unbind(1))
+	if not Engine.is_editor_hint() and _ring_field != null:
+		GameManager.phase_changed.connect(_ring_field.on_phase_changed)
 		# Resurfacer crew for scoreless intermissions. Both teardown signals are
 		# needed: a reel break ends with intermission_ended, but a scoreless one
 		# never emits it — the next faceoff prep is its exit (same dismissal the
@@ -582,6 +585,7 @@ func _add_ice(tex: ImageTexture) -> void:
 		ring_field.name = "IceRingField"
 		ring_field.setup(mat)
 		add_child(ring_field)
+		_ring_field = ring_field
 
 	# Center-ice decals (logo + curved "MITTS"/"ARENA" text). The content
 	# only occupies a small patch at center ice (logo + text ring fit inside

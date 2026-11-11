@@ -102,11 +102,13 @@ func _caps(span: float, max_speed: float, accel: float,
 func test_apply_capabilities_derives_reach_gates_and_speeds() -> void:
 	var sm := SkaterAgentStateMachine.new()
 	var caps := _caps(2.0, 10.5, 13.0, 27.0)
+	caps.max_blade_reach = 2.4
 	sm.apply_capabilities(caps)
-	# Reach gates derive from blade_span + the SM's own buffers.
+	# The blade and reception gates derive from blade_span + the SM's buffers.
 	assert_almost_eq(sm._blade_reach,
 			2.0 + AIBotMechanics.BLADE_REACH_BUFFER_M, 0.001)
-	assert_almost_eq(sm._poke_jab_reach, 2.0 + GameRules.POKE_RADIUS_M, 0.001)
+	# A poke reaches with the arm: the body's full blade reach, not hand-to-toe.
+	assert_almost_eq(sm._poke_reach, 2.4 + GameRules.POKE_RADIUS_M, 0.001)
 	assert_almost_eq(sm._receive_body_offset,
 			2.0 - SkaterAgentReception.RECEIVE_BODY_INSET_M, 0.001)
 	# Scalars pass straight through.

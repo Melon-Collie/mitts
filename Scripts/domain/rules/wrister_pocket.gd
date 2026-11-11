@@ -17,6 +17,7 @@ class_name WristerPocket
 # an eighth either side of each.
 const _CANDIDATES: Array[float] = [
 	PI * 0.5, -PI * 0.5, PI * 0.25, -PI * 0.25, PI * 0.75, -PI * 0.75]
+const CANDIDATE_COUNT: int = 6
 
 
 class Result:
@@ -34,7 +35,8 @@ class Result:
 static func solve(out: Result, aim: Vector2, velocity: Vector2, facing: Vector2,
 		is_left_handed: bool, load_cfg: WristerLoad.Config, facing_cfg: FacingRules.Config,
 		unloaded_share: float, backhand_coefficient: float,
-		facing_scratch: FacingRules.Result, load_scratch: WristerLoad.Result) -> void:
+		facing_scratch: FacingRules.Result, load_scratch: WristerLoad.Result,
+		candidate_scratch: Result) -> void:
 	out.dir = aim
 	out.is_backhand = false
 	out.load_share = 1.0
@@ -42,35 +44,53 @@ static func solve(out: Result, aim: Vector2, velocity: Vector2, facing: Vector2,
 	out.facing = facing
 	if aim.length_squared() < 0.000001:
 		return
-	var aim_dir: Vector2 = aim.normalized()
-	var stick_sign: float = _stick_sign(is_left_handed)
-	var aim_yaw: float = _yaw(aim_dir)
 	# No hold beats this, and a tie keeps the first: the search is done there.
 	var ceiling: float = maxf(1.0, backhand_coefficient)
 	var best: float = -1.0
-	for offset: float in _CANDIDATES:
+	for k: int in CANDIDATE_COUNT:
 		if best >= ceiling:
 			break
-		var pocket: Vector2 = aim_dir.rotated(offset)
-		FacingRules.solve(facing_scratch, facing, pocket, velocity, false, false,
-				is_left_handed, facing_cfg)
-		# Past the carry's backhand stop the blade cannot hold the puck on this
-		# line: the hips pivot onto the other one, and the shot is not this one.
-		if facing_scratch.pivoting:
+		if not read_candidate(candidate_scratch, k, aim, velocity, facing, is_left_handed, load_cfg,
+				facing_cfg, unloaded_share, backhand_coefficient, facing_scratch, load_scratch):
 			continue
-		var body_yaw: float = _yaw(facing_scratch.target)
-		WristerLoad.solve_load(load_scratch, _bearing(_yaw(pocket), body_yaw, stick_sign),
-				_bearing(aim_yaw, body_yaw, stick_sign), load_cfg)
-		var share: float = WristerLoad.power_share(load_scratch.load_share,
-				load_scratch.arm_share, load_scratch.is_backhand, unloaded_share,
-				backhand_coefficient)
-		if share > best:
-			best = share
-			out.dir = pocket
-			out.is_backhand = load_scratch.is_backhand
-			out.load_share = load_scratch.load_share
-			out.power_share = share
-			out.facing = facing_scratch.target
+		if candidate_scratch.power_share > best:
+			best = candidate_scratch.power_share
+			copy(out, candidate_scratch)
+
+
+# Candidate `k` (of CANDIDATE_COUNT) round `aim`, read as solve reads each, into
+# `out`; false when the blade cannot hold the puck there (the hips pivot onto
+# the other line past the carry's backhand stop).
+static func read_candidate(out: Result, k: int, aim: Vector2, velocity: Vector2,
+		facing: Vector2, is_left_handed: bool, load_cfg: WristerLoad.Config,
+		facing_cfg: FacingRules.Config, unloaded_share: float, backhand_coefficient: float,
+		facing_scratch: FacingRules.Result, load_scratch: WristerLoad.Result) -> bool:
+	var aim_dir: Vector2 = aim.normalized()
+	var stick_sign: float = _stick_sign(is_left_handed)
+	var pocket: Vector2 = aim_dir.rotated(_CANDIDATES[k])
+	FacingRules.solve(facing_scratch, facing, pocket, velocity, false, false,
+			is_left_handed, facing_cfg)
+	if facing_scratch.pivoting:
+		return false
+	var body_yaw: float = _yaw(facing_scratch.target)
+	WristerLoad.solve_load(load_scratch, _bearing(_yaw(pocket), body_yaw, stick_sign),
+			_bearing(_yaw(aim_dir), body_yaw, stick_sign), load_cfg)
+	out.dir = pocket
+	out.is_backhand = load_scratch.is_backhand
+	out.load_share = load_scratch.load_share
+	out.power_share = WristerLoad.power_share(load_scratch.load_share,
+			load_scratch.arm_share, load_scratch.is_backhand, unloaded_share,
+			backhand_coefficient)
+	out.facing = facing_scratch.target
+	return true
+
+
+static func copy(to: Result, from: Result) -> void:
+	to.dir = from.dir
+	to.is_backhand = from.is_backhand
+	to.load_share = from.load_share
+	to.power_share = from.power_share
+	to.facing = from.facing
 
 
 # Share of max_wrister_power a release toward `aim` carries with the puck at

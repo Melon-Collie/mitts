@@ -141,7 +141,7 @@ func _build_row(clip: Dictionary, index: int) -> Button:
 	btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	var team_id: int = int(clip.get("scoring_team_id", -1))
 	if team_id >= 0:
-		btn.add_theme_color_override("font_color", HudChrome.team_stripe(team_id).lightened(0.35))
+		btn.add_theme_color_override("font_color", HudChrome.team_ink(team_id))
 	btn.pressed.connect(func() -> void: goal_picked.emit(index))
 	return btn
 

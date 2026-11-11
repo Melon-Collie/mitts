@@ -3,7 +3,8 @@ extends RefCounted
 
 # A kit on a skater's body: every zone of its BodyZonePaint the uniform and the
 # gear style dress — the jersey and its sleeves through their decals, the
-# helmet, the pants, the socks and the knees under them, the gloves, the skates
+# helmet and its number, the pants, the socks and the knees under them, the
+# gloves, the skates
 # and the skin. Shared by the rink's skater (SkaterUniformCoordinator) and the
 # display figures (LockerMannequin), so a figure wears exactly what the ice
 # shows. The decals' viewports live under `viewport_host`.
@@ -12,12 +13,16 @@ const _Upper = SkaterMeshBuilder.UpperSurface
 const _Leg = SkaterMeshBuilder.LegSurface
 const _UPPER: int = SkaterMeshBuilder.UPPER_ZONE_BASE
 const _PANTS_TEX_WIDTH_PX: int = 128
+# The least luminance apart a number and the helmet it is on may be.
+const _NUMBER_CONTRAST: float = 0.3
 
 var _paint: BodyZonePaint
 var _jersey_viewport: SubViewport
 var _jersey_decal: JerseyDecal
 var _sleeve_viewport: SubViewport
 var _sleeve_decal: SleeveDecal
+var _helmet_viewport: SubViewport
+var _helmet_decal: HelmetDecal
 
 var _uniform: Dictionary = {}
 var _text_color: Color = Color.BLACK
@@ -44,6 +49,11 @@ func _init(paint: BodyZonePaint, viewport_host: Node) -> void:
 	for side: float in [-1.0, 1.0]:
 		_upper(SkaterConnectedMesh.sleeve_surface(side),
 				SleeveDecal.part_material(_sleeve_viewport.get_texture(), side))
+	_helmet_decal = HelmetDecal.new()
+	_helmet_decal.name = "HelmetDecal"
+	_helmet_viewport = _decal_viewport(viewport_host, "HelmetViewport", _helmet_decal,
+			HelmetDecal.SIZE)
+	_upper(_Upper.HELMET_SHELL, HelmetDecal.shell_material(_helmet_viewport.get_texture()))
 
 
 # The full v2 colors dict (TeamColorRegistry.get_colors): the kit and the slots
@@ -58,7 +68,6 @@ func apply_uniform(colors: Dictionary) -> void:
 	var preset: Dictionary = colors.get("preset", {})
 	_jersey_decal.update_crest(TeamCrest.fruit_for(preset), preset)
 	_rebuild_decals()
-	_upper(_Upper.HELMET_SHELL, UniformPaint.solid(_uniform.helmet, UniformPaint.ROUGH_HELMET))
 	var pants: Dictionary = _uniform.pants
 	_paint_pants(pants)
 	_upper(_Upper.PELVIS, UniformPaint.solid(pants.base, UniformPaint.ROUGH_NYLON))
@@ -130,6 +139,17 @@ func _rebuild_decals() -> void:
 	_sleeve_decal.update_sleeve(_uniform.sleeve, _jersey_number, shoulders.text,
 			shoulders.stroke)
 	_sleeve_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	var helmet: Color = _uniform.helmet
+	_helmet_decal.update_helmet(helmet, _jersey_number, _number_on(helmet))
+	_helmet_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+# The kit's lettering colour, or white or black where it would not stand out
+# against `background`.
+func _number_on(background: Color) -> Color:
+	if absf(_text_color.get_luminance() - background.get_luminance()) >= _NUMBER_CONTRAST:
+		return _text_color
+	return Color.WHITE if background.get_luminance() < 0.5 else Color.BLACK
 
 
 # The pants' vertical side stripes, turned per leg so the column lands on each

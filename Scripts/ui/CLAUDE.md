@@ -125,6 +125,14 @@ screen — it uppercases the button's current text, so call it **after** setting
 `btn.text`, and any later dynamic text must supply an uppercase string itself
 (`Button` has no uppercase property).
 
+**A team colour is a fill or an ink, never both.** As a fill (a stripe or
+swatch beside white lettering) it is the team's true primary,
+`TeamColorRegistry.get_score_stripe_pair`. As ink (text, bars, dots or lines
+drawn straight onto the dark panels) it is `get_score_ink_pair`, the primary
+lifted until it reads at 4.5:1 (`HudChrome.team_ink` on the HUD). Half the
+league's primaries are near-invisible on `BROADCAST_BG`, so a raw primary used
+as ink is a bug, and so is a hand-rolled `lightened()`.
+
 ## Seeing a screen
 
 `.claude/hooks/render-ui.sh` renders the menus and HUD offscreen (root

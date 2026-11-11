@@ -374,4 +374,16 @@ func _open_post_game_analytics() -> void:
 		{"team_id": 1, "hits": 13, "takeaways": 3, "giveaways": 8,
 				"faceoff_wins": 8, "faceoff_losses": 11},
 	]
-	screen.present_history(events, -1, -1, "preview game", [], box)
+	screen.present_history(events, -1, -1, "preview game", _hardest_team_inks(), box)
+
+
+# The two teams whose primaries read worst on the panel, in the inks the screen
+# gets for them — the case its contrast has to survive.
+func _hardest_team_inks() -> Array[Color]:
+	var surface: Color = MenuStyle.BROADCAST_BG
+	var slots: Array[int] = TeamColorRegistry.get_all_slots()
+	slots.sort_custom(func(a: int, b: int) -> bool:
+		return TeamColorRegistry.contrast_ratio(TeamColorRegistry.get_preset(a).primary, surface) \
+				< TeamColorRegistry.contrast_ratio(TeamColorRegistry.get_preset(b).primary, surface))
+	var pair: Dictionary = TeamColorRegistry.get_score_ink_pair(slots[0], slots[1], surface)
+	return [pair.home, pair.away]

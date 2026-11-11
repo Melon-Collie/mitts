@@ -282,21 +282,24 @@ func apply_facing(input: InputState, delta: float) -> void:
 			mouse_world.x - _skater.global_position.x,
 			mouse_world.z - _skater.global_position.z
 		)
+		# A fighter squares up to the man, not the cursor, which throws his fist.
+		var fight_dir: Vector2 = _controller.fight_facing_dir()
+		if fight_dir != Vector2.ZERO:
+			to_mouse = fight_dir
 		if to_mouse.length() > _controller.move_deadzone:
 			var cursor_dir: Vector2 = to_mouse.normalized()
 			if s == State.FOLLOW_THROUGH:
 				cursor_dir = _finish_facing_dir(cursor_dir)
 			var lefty: bool = _skater.is_left_handed
-			var rules: FacingRules.Config = _controller.facing_rules
+			var rules: FacingRules.Config = _empty_stick_rules(input)
 			# A carrier's hips pivot where its blade stops on the backhand, and
-			# yield to the puck before it stops on the forehand.
+			# yield to the puck before it stops on the forehand. A fighter squares
+			# up to the cursor the way the stance does.
 			FacingRules.solve(_facing_rule, facing, cursor_dir,
 					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
-					_controller.stance_active, lefty,
+					_controller.stance_active or _controller.is_fighting(), lefty,
 					_controller.carry_facing_rules if _controller.has_puck else rules)
 			var facing_target: Vector2 = _facing_rule.target
-			var behind: bool = absf(facing.angle_to(cursor_dir)) \
-					>= FacingRules.reach_edge(rules, facing, cursor_dir, lefty)
 			var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed
 			# Re-square hard through the follow-through: the coil left facing stale
 			# at the wind-up cursor, and a lazy drag can't square it to the shot
@@ -317,15 +320,8 @@ func apply_facing(input: InputState, delta: float) -> void:
 								Vector2(_skater.global_position.x, _skater.global_position.z),
 								_controller.board_shield_probe),
 						deg_to_rad(_controller.board_shield_max_deg))
-			var turned: Vector2
-			if behind or absf(facing.angle_to(facing_target)) \
-					>= FacingRules.reach_edge(rules, facing, facing_target, lefty):
-				# Turning round to a cursor or a target behind, standing or moving: a
-				# chord lerp toward a near-opposed vector barely moves, so turn by angle.
-				turned = facing.rotated(FacingRules.turn_round_angle(
-						facing, facing_target, cursor_dir) * minf(drag * delta, 1.0))
-			else:
-				turned = facing.lerp(facing_target, drag * delta).normalized()
+			var turned: Vector2 = FacingRules.turned_toward(rules, facing, facing_target, cursor_dir,
+					lefty, drag * delta)
 			if _controller.has_puck:
 				turned = FacingRules.yield_on_forehand(turned, cursor_dir, lefty,
 						_controller.carry_facing_rules)
@@ -375,6 +371,21 @@ func _turn_toward(turned: Vector2, delta: float) -> void:
 
 # Where facing heads this tick (FacingRules); a caller-owned scratch.
 var _facing_rule: FacingRules.Result = FacingRules.Result.new()
+var _reaching_rules: FacingRules.Config = FacingRules.Config.new()
+
+
+# An empty stick's facing rules under this input: the controller's, their
+# backhand edge out by as much of the wider swing behind as its cursor asks
+# for (SkaterController.reach_behind_for), so the hips pivot where that blade
+# stops. A caller-owned scratch when it differs.
+func _empty_stick_rules(input: InputState) -> FacingRules.Config:
+	var behind: float = _controller.reach_behind_for(input)
+	if behind <= 0.0:
+		return _controller.facing_rules
+	_reaching_rules.assign(_controller.facing_rules)
+	_reaching_rules.backhand_edge_rad += behind * deg_to_rad(
+			_controller.rom_backhand_angle_empty_deg - _controller.rom_backhand_angle_max_deg)
+	return _reaching_rules
 
 
 # Sole writer of the lower body's yaw. Decays the facing-driven turn lag and
@@ -556,7 +567,9 @@ func apply_upper_body(delta: float) -> void:
 
 	var target_angle: float = 0.0
 	var target_lean: Vector2 = Vector2.ZERO
-	# Measured as the solve measures it (SkaterIKCoordinator._solve_top_hand): off
+	# The reach solve's own hand, not the marker's, which is held in its pocket
+	# until the arm is nearly out. Measured as the solve measures it
+	# (SkaterIKCoordinator._solve_top_hand): off
 	# the shoulder the arm is drawn from, the chest's fold over the stick
 	# included (or the hands it carries out front read as a reach, and lean on
 	# it twice), in the arm's level frame — less the faceoff fold, which the
@@ -566,7 +579,7 @@ func apply_upper_body(delta: float) -> void:
 	var shoulder: Vector3 = tilt * CarryPostureRules.folded_shoulder(
 			SkaterSpineRig.shoulder_in_frame(_skater.shoulder.position, rot, 0.0,
 			_skater.trunk_fold()), _controller.chest_fold())
-	var hand: Vector3 = tilt * _skater.top_hand.position
+	var hand: Vector3 = tilt * _controller.reach_hand()
 	var hand_vec := Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
 	var hand_reach: float = hand_vec.length()
 

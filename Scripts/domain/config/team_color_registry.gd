@@ -22,9 +22,9 @@ class_name TeamColorRegistry
 #     the jersey/* keys (those mirror the 3D uniform mesh and look muddy in
 #     flat UI panels).
 #   - A nested "uniform" sub-dict carrying the full v2 detail
-#     (shoulders, jersey-with-yoke-and-stripes, arms.upper/lower,
-#     pants-with-stripes, socks-with-stripes). The skater painter
-#     consumes this; UI accent code doesn't need to touch it.
+#     (shoulders, jersey-with-yoke-and-stripes, the sleeve,
+#     pants-with-stripes, socks-with-stripes). The skaters' and the goalie's
+#     painters consume this; UI accent code doesn't need to touch it.
 #
 # Color identity is an integer slot: the team's index in the loaded array.
 # Out-of-range slots return a fallback and log a warning; they never crash.
@@ -174,6 +174,56 @@ static func get_score_stripe_pair(home_slot: int, away_slot: int) -> Dictionary:
 	}
 
 
+# A team colour used as INK — text, lines, dots and bars drawn straight onto a
+# surface — must read on it; as a FILL (a stripe or swatch beside white
+# lettering) it stays the true primary, which is what get_score_stripe_pair is.
+# WCAG AA for small text: the analytics labels and card rosters are 11–16 px.
+const INK_MIN_CONTRAST: float = 4.5
+# Below this HSV saturation the lifted ink is a grey, which reads as the UI's own
+# neutral text rather than as a team (Blackberry's near-black primary).
+const _INK_MIN_SATURATION: float = 0.2
+
+
+# Each team's ink on `surface`. Returns { home, away } as Colors.
+static func get_score_ink_pair(home_slot: int, away_slot: int, surface: Color) -> Dictionary:
+	return {
+		"home": _ink_for(get_preset(home_slot), surface),
+		"away": _ink_for(get_preset(away_slot), surface),
+	}
+
+
+# The primary lifted to read on `surface`, unless that lift is a hueless grey and
+# the secondary's is not.
+static func _ink_for(preset: Dictionary, surface: Color) -> Color:
+	var primary: Color = readable_on(preset.primary, surface)
+	if primary.s >= _INK_MIN_SATURATION:
+		return primary
+	var secondary: Color = readable_on(preset.secondary, surface)
+	return secondary if secondary.s > primary.s else primary
+
+
+# `ink` unchanged if it already reaches `min_contrast` on `surface`; otherwise
+# the nearest OKHSL lightness, hue and saturation held, that does. Lightens on a
+# dark surface, darkens on a light one; the far end (white or black) is returned
+# when even it falls short.
+static func readable_on(ink: Color, surface: Color,
+		min_contrast: float = INK_MIN_CONTRAST) -> Color:
+	if contrast_ratio(ink, surface) >= min_contrast:
+		return ink
+	var h: float = ink.ok_hsl_h
+	var s: float = ink.ok_hsl_s
+	var fails: float = ink.ok_hsl_l
+	var passes: float = 1.0 \
+			if contrast_ratio(Color.WHITE, surface) >= contrast_ratio(Color.BLACK, surface) else 0.0
+	for _i: int in 16:
+		var mid: float = (fails + passes) * 0.5
+		if contrast_ratio(Color.from_ok_hsl(h, s, mid, ink.a), surface) >= min_contrast:
+			passes = mid
+		else:
+			fails = mid
+	return Color.from_ok_hsl(h, s, passes, ink.a)
+
+
 static func get_all_slots() -> Array[int]:
 	ensure_loaded()
 	var result: Array[int] = []
@@ -246,7 +296,6 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 	var socks_raw:     Dictionary = raw.get("socks",     {})
 	var text_raw:      Dictionary = raw.get("text",      {})
 	var arms := {
-		"elbow": _parse_optional_color(arms_raw.get("elbow", null)),
 		"upper": {
 			"base":    _parse_color(arms_upper.get("base",    "#FFFFFF")),
 			"stripes": _parse_stripes(arms_upper.get("stripes", [])),
@@ -258,8 +307,7 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 	}
 	var shoulder_color: Color = _parse_color(shoulders_raw.get("color", "#FFFFFF"))
 	# The sleeve is the kit's arm (SleevePaint); a kit still in the two-segment
-	# form is read into one, and a sleeve hands the two-segment form back to the
-	# bodies that paint the arm in two.
+	# form is read into one.
 	var sleeve: Dictionary
 	if raw.has("sleeve"):
 		var sleeve_raw: Dictionary = raw.sleeve
@@ -267,12 +315,17 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 			"base":    _parse_color(sleeve_raw.get("base", "#FFFFFF")),
 			"stripes": _parse_stripes(sleeve_raw.get("stripes", []), true),
 		}
-		arms.upper = SleevePaint.segment(sleeve, true)
-		arms.lower = SleevePaint.segment(sleeve, false)
 		shoulder_color = SleevePaint.color_at(sleeve,
 				SleevePaint.pos_of(SleevePaint.NUMBER_CENTER_M))
 	else:
 		sleeve = SleevePaint.from_legacy(arms, shoulder_color)
+	# A round yoke runs on over the shoulders' caps, which are the sleeve's:
+	# under the kit's own sleeve stripes, so a shoulder band of its own covers it.
+	var yoke: Variant = _parse_optional_color(jersey_raw.get("yoke", null))
+	var yoke_shape: String = SleevePaint.YOKE_ROUND \
+			if jersey_raw.get("yoke_shape") == SleevePaint.YOKE_ROUND else SleevePaint.YOKE_SQUARE
+	if yoke is Color and yoke_shape == SleevePaint.YOKE_ROUND:
+		(sleeve.stripes as Array[Dictionary]).push_front(SleevePaint.yoke_cap(yoke))
 	return {
 		"helmet":      _parse_color(raw.get("helmet", "#FFFFFF")),
 		"shoulders": {
@@ -282,12 +335,12 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 		},
 		"jersey": {
 			"base":    _parse_color(jersey_raw.get("base",    "#FFFFFF")),
-			"yoke":    _parse_optional_color(jersey_raw.get("yoke", null)),
+			"yoke":    yoke,
+			"yoke_shape": yoke_shape,
 			"collar":  _parse_optional_color(jersey_raw.get("collar", null)),
 			"stripes": _parse_stripes(jersey_raw.get("stripes", []), true),
 		},
 		"sleeve":      sleeve,
-		"arms":        arms,
 		"gloves":      _parse_color(raw.get("gloves", "#FFFFFF")),
 		"pants": {
 			"base":    _parse_color(pants_raw.get("base",    "#FFFFFF")),
@@ -344,9 +397,8 @@ static func _parse_color(hex: Variant) -> Color:
 	return Color.WHITE
 
 
-# yoke, collar, arms.elbow and ui_ink are optional — null falls back: the collar
-# to the yoke, the yoke to the jersey body, the elbow to the sleeve under it,
-# the ink to the side's usual lettering.
+# yoke, collar and ui_ink are optional — null falls back: the collar to the
+# yoke, the yoke to the jersey body, the ink to the side's usual lettering.
 static func _parse_optional_color(hex: Variant) -> Variant:
 	if hex == null:
 		return null

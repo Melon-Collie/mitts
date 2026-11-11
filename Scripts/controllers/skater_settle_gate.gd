@@ -21,8 +21,7 @@ var _until_wire: int = 0
 # and a press it made then was a puckless one on its own screen.
 var _notice_from_wire: int = 0
 var _notice_from_pending: float = 0.0
-# The press waiting for the unlock. Replay re-derives it from the same inputs,
-# so LocalController saves and restores it around a reconcile.
+# The press waiting for the unlock.
 var queued: Press = Press.NONE
 # This input's read (read → the controller's dispatch): still locked, or the
 # queued press the unlock just released.
@@ -72,6 +71,33 @@ func arm_local(until_stamp: float) -> void:
 	_until_wire = _to_wire(until_stamp)
 	_notice_from_wire = 0
 	queued = Press.NONE
+
+
+# Reconcile replay walks the same inputs through the gate: it notes and releases
+# presses, and a slapshot called off re-arms the lock from the replay's charge,
+# which is not the live one. The live inputs already did all of it, so
+# LocalController saves the gate before the replay and restores it after.
+var _saved_until_wire: int = 0
+var _saved_notice_from_wire: int = 0
+var _saved_notice_from_pending: float = 0.0
+var _saved_queued: Press = Press.NONE
+var _saved_last_stamp: float = 0.0
+
+
+func save() -> void:
+	_saved_until_wire = _until_wire
+	_saved_notice_from_wire = _notice_from_wire
+	_saved_notice_from_pending = _notice_from_pending
+	_saved_queued = queued
+	_saved_last_stamp = last_stamp
+
+
+func restore() -> void:
+	_until_wire = _saved_until_wire
+	_notice_from_wire = _saved_notice_from_wire
+	_notice_from_pending = _saved_notice_from_pending
+	queued = _saved_queued
+	last_stamp = _saved_last_stamp
 
 
 func clear() -> void:

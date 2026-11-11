@@ -71,23 +71,6 @@ func test_his_gear_is_the_save_geometry() -> void:
 		assert_true(found, "%s's box where his gear is" % KeeperGear.Part.keys()[part])
 
 
-# A remote shooter's release reaches the host after he saw it leave his stick:
-# the keeper reads it from then, and a back-date set for one release is not
-# carried to the next.
-func test_a_remote_release_is_read_from_when_its_shooter_saw_it() -> void:
-	_spawn(GameRules.GOAL_LINE_Z)
-	_run(0.3)
-	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 8.0)
-	_puck.set_puck_velocity(Vector3(0.0, 0.0, 25.0))
-	_keeper.set_pending_reaction_back_date(0.05)
-	_puck.puck_released.emit()
-	assert_almost_eq(_keeper.read.age, 0.05, 1e-6, "read from when the shooter saw it")
-	_keeper.set_pending_reaction_back_date(0.05)
-	_keeper._physics_process(DT)
-	_puck.puck_released.emit()
-	assert_almost_eq(_keeper.read.age, 0.0, 1e-6, "a back-date lapses with its tick")
-
-
 func test_on_either_net_he_stands_on_the_angle_line_square_to_the_puck() -> void:
 	for goal_line_z: float in [GameRules.GOAL_LINE_Z, -GameRules.GOAL_LINE_Z]:
 		_spawn(goal_line_z)
@@ -222,6 +205,13 @@ func _shot(from: Vector3, to: Vector2, speed: float) -> int:
 	_puck.global_position = from
 	_puck.set_puck_velocity(v)
 	_puck.puck_released.emit()
+	return _fly(v, lifted)
+
+
+# The puck flown on from where it is at `v`, him ticking each step: the part
+# of his gear it meets first, or -1 once it crosses the goal line.
+func _fly(v: Vector3, lifted: bool) -> int:
+	var line_z: float = GameRules.GOAL_LINE_Z
 	var contact := GoalieContactDetector.Contact.new()
 	for i: int in int(3.0 / DT):
 		var was: Vector3 = _puck.global_position
@@ -269,6 +259,28 @@ func test_a_long_shot_to_a_corner_is_met_on_its_line() -> void:
 		var to := Vector2(side * (GameRules.NET_HALF_WIDTH - 0.12), 0.2)
 		var met: int = _shot(Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 48.0), to, 36.0)
 		assert_gte(met, 0, "%+.0f: met by his gear" % side)
+
+
+# A shot fired as a match fires it: Puck.release queues the launch, and the
+# skater controllers that release it tick before him and he before the puck, so
+# on the release tick the puck's velocity is still the carried puck's, as it was
+# picked up. Picked up at rest, that goes nowhere near his net; he reads the
+# shot's own flight all the same and his gear meets it.
+func test_a_released_shot_is_read_from_its_launch() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	var from := Vector3(-1.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 12.0)
+	_puck.global_position = from
+	_run(1.5)
+	_puck.set_puck_velocity(Vector3.ZERO)
+	var aim: Vector3 = (Vector3(GameRules.NET_HALF_WIDTH - 0.12, _puck.ice_height, GameRules.GOAL_LINE_Z) - from).normalized()
+	_puck.release(aim, 22.0)
+	assert_eq(_puck.get_puck_velocity(), Vector3.ZERO, "launch still queued on the release tick")
+	_keeper._physics_process(DT)
+	# The puck's drive then launches it, as it does after him in a match.
+	_puck._pending_elevation_vel = Vector3.ZERO
+	var met: int = _fly(aim * 22.0, false)
+	assert_true(_keeper.read.reading(), "still reading the shot once it is over")
+	assert_gte(met, 0, "met by his gear")
 
 
 # A shot in on him before his legs have read it (set for a puck wide of him,

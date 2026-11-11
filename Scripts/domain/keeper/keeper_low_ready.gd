@@ -119,3 +119,11 @@ static func sink_leg(leg: KeeperPose.Leg, up: KeeperPose.Leg, up_knee: Vector3, 
 	leg.toe = up.toe.lerp(low.toe, s).normalized()
 	leg.flex = lerpf(up.flex, low.flex, s)
 	leg.along_shin = lerpf(up.along_shin, low.along_shin, s)
+
+
+# His state on the wire (KeeperWire); the stances are built once.
+func wire(w: KeeperWire) -> void:
+	asked = w.bit(asked)
+	share = w.s16(share, KeeperWire.FRACTION)
+	_sunk = w.s16(_sunk, KeeperWire.FRACTION)
+	w.leg(_stroked)

@@ -146,6 +146,12 @@ var protects_the_puck: bool
 # so shielding the puck from a beginner bot genuinely protects it.
 var lifts_sticks: bool
 
+# COGNITION: the pressurer reads where the carried puck is going — his blade
+# goes to the first point of its path he beats it to, or onto the carrier's
+# line to our net (AIStickPathRead). False = it reads where the puck and his own
+# body are now, so a carrier skating past outruns the stick.
+var reads_puck_path: bool
+
 # COGNITION: the stick battle — a covering defender ties his man's stick when the
 # puck is coming to him and nothing else would stop it, and a tied attacker pulls
 # his stick free (AIStickTieRead). False = neither.
@@ -155,6 +161,10 @@ var ties_sticks: bool
 # and a 2-on-1's last defender dives across the pass (AIShotBlockRead). False =
 # neither, so a newcomer's shots and cross-ice feeds are never taken away.
 var blocks_shots: bool
+# In a fight (AIFightBrain): catches the other man's thrown punching arm and
+# frees its own held one by swapping hands. Closed, it only guards, holds the
+# sweater and throws.
+var ties_up_arms: bool = true
 
 
 func _init(p_carrier_reaction_delay_s: float,
@@ -168,7 +178,8 @@ func _init(p_carrier_reaction_delay_s: float,
 		p_angles_the_chase: bool, p_plays_rush_pass_lanes: bool,
 		p_protects_the_puck: bool,
 		p_reads_receiver_commitment: bool,
-		p_lifts_sticks: bool, p_ties_sticks: bool, p_blocks_shots: bool) -> void:
+		p_lifts_sticks: bool, p_ties_sticks: bool, p_blocks_shots: bool,
+		p_reads_puck_path: bool) -> void:
 	carrier_reaction_delay_s = p_carrier_reaction_delay_s
 	dispatch_period_ticks = maxi(1, roundi(p_dispatch_period_s * _PhysicsConstants.PHYSICS_TICK))
 	shot_aim_error_rad = p_shot_aim_error_rad
@@ -189,6 +200,7 @@ func _init(p_carrier_reaction_delay_s: float,
 	lifts_sticks = p_lifts_sticks
 	ties_sticks = p_ties_sticks
 	blocks_shots = p_blocks_shots
+	reads_puck_path = p_reads_puck_path
 
 
 # Hard reads as a very strong human rather than a frame-perfect robot: ~50 ms
@@ -202,7 +214,7 @@ func _init(p_carrier_reaction_delay_s: float,
 static func hard() -> BotSkillProfile:
 	return BotSkillProfile.new(0.05, 1.0 / 60.0, 0.01, 0.01, 0.10, 0.0, 0.25,
 			0.0, 1.0, 1.0, 1.0,
-			true, true, true, true, true, true, true, true, true)
+			true, true, true, true, true, true, true, true, true, true)
 
 
 # Normal is the beatable tier, pushed firmly off the Hard ceiling: a ~220 ms
@@ -225,7 +237,7 @@ static func hard() -> BotSkillProfile:
 static func normal() -> BotSkillProfile:
 	return BotSkillProfile.new(0.22, 0.05, 0.04, 0.015, 0.16, 0.60, 0.30,
 			0.75, 0.85, 0.65, 0.6,
-			true, true, true, true, true, true, true, true, true)
+			true, true, true, true, true, true, true, true, true, true)
 
 
 # Easy is the newcomer floor: a ~340 ms reaction (visibly human-slow) and a slow
@@ -241,12 +253,15 @@ static func normal() -> BotSkillProfile:
 # never hunt body checks, and put the puck on a teammate's tape at 0.75 pace
 # (15 m/s), a floaty feed a newcomer has time to step in front of.
 #
-# Cognition: all gates closed, so the cutback to the middle, the straight-line
-# poke-check, and the cross-crease 2-on-1 glory feed all genuinely work.
+# Cognition: all gates closed, so the cutback to the middle, skating the puck
+# past a poke that reads only where it is, and the cross-crease 2-on-1 glory
+# feed all genuinely work.
 static func easy() -> BotSkillProfile:
-	return BotSkillProfile.new(0.34, 0.075, 0.055, 0.0225, 0.24, 0.85, 0.55,
+	var p := BotSkillProfile.new(0.34, 0.075, 0.055, 0.0225, 0.24, 0.85, 0.55,
 			3.0, 0.75, 0.0, 0.2,
-			false, false, false, false, false, false, false, false, false)
+			false, false, false, false, false, false, false, false, false, false)
+	p.ties_up_arms = false
+	return p
 
 
 static func for_difficulty(difficulty: int) -> BotSkillProfile:

@@ -7,6 +7,7 @@
 #   .claude/hooks/render-arms.sh                           # every scenario
 #   .claude/hooks/render-arms.sh carry_sweep,tight_sweep   # named scenarios only
 #   .claude/hooks/render-arms.sh --list
+#   .claude/hooks/render-arms.sh dangle --tile=512         # each view that many pixels square
 #
 # Same xvfb / software-GL constraint as render-poses.sh: Godot's --headless
 # draws nothing. A few seconds a scenario.
@@ -34,11 +35,12 @@ if [ -z "${DISPLAY:-}" ] && command -v xvfb-run >/dev/null 2>&1; then
 fi
 
 ARGS=()
-if [ "${1:-}" = "--list" ]; then
-  ARGS=(--list)
-elif [ $# -gt 0 ]; then
-  ARGS=(--only="$1")
-fi
+for arg in "$@"; do
+  case "$arg" in
+    --list|--tile=*) ARGS+=("$arg") ;;
+    *) ARGS+=(--only="$arg") ;;
+  esac
+done
 
 exec "${RUNNER[@]}" "$GODOT" --path "$PROJECT_DIR" \
   --rendering-driver opengl3 --rendering-method gl_compatibility \

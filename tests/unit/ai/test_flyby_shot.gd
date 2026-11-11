@@ -45,9 +45,21 @@ func _snapshot(pos: Vector3, vel: Vector3, facing: Vector2,
 		var g := GoalieNetworkState.new()
 		g.position_x = 0.0
 		g.position_z = (1.0 if tid == 0 else -1.0) * (GameRules.GOAL_LINE_Z - 0.8)
+		if tid == 1:
+			# The keeper the flyby attacks, where the live one stands: on the
+			# carrier's line at his depth for it, tracking him across.
+			var at: Vector3 = _tracking_keeper(pos)
+			g.position_x = at.x
+			g.position_z = at.z
+			g.velocity_x = (_tracking_keeper(pos + vel * DT).x - at.x) / DT
 		g.rotation_y = atan2(-(pos.x - g.position_x), -(pos.z - g.position_z))
 		snap.goalie_states[tid] = g
 	return snap
+
+
+func _tracking_keeper(carrier: Vector3) -> Vector3:
+	var forward: float = absf(carrier.z - _goal.z)
+	return _goal + (carrier - _goal) * (AIGoalieModel.keeper_depth(_goal, carrier) / forward)
 
 
 # Run one scripted flyby. `facing_net` faces the goal (best case); else facing

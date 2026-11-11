@@ -15,10 +15,18 @@ extends GaitLayer
 # with the stick, hold the finish with it and come down with it.
 
 const State = SkaterStateMachine.State
+# The share of a full shot's wrist roll the softest release still makes: the
+# wrists turn over on a touch pass too, less far.
+const _WRIST_ROLL_SOFT: float = 0.5
 
 # Radians of lower-body rotation.y, republished by the coordinator for the pose
 # coordinator's yaw sum.
 var hip_yaw: float = 0.0
+# How far the wrists have rolled the stick over through a wrister's or a
+# pass's finish, 0..1 (Skater.set_finish_roll): on the kick's own envelope, so
+# the blade turns over as the stick goes out and back as it comes down. A
+# slapshot's stick turns as one piece through its swing and takes none.
+var wrist_roll: float = 0.0
 var _prev_state: int = 0
 var _wrister_load: float = 0.0      # smoothed 0..1 drag-charge engagement
 var _wrister_hip: float = 0.0       # smoothed hip share of the wrister's torso wind-up
@@ -37,6 +45,7 @@ func stages() -> int:
 
 func reset() -> void:
 	hip_yaw = 0.0
+	wrist_roll = 0.0
 	_prev_state = 0
 	_wrister_load = 0.0
 	_wrister_hip = 0.0
@@ -98,15 +107,18 @@ func advance(delta: float) -> bool:
 	if _is_slap_charge(state):
 		slap_target = sqrt(clampf(_skater.shot_charge, 0.0, 1.0))
 	_slap_load = lerpf(_slap_load, slap_target, blend)
-	_kick_env = 0.0
+	var finish: float = 0.0
 	if _kick_t >= 0.0:
 		_kick_t += delta
 		var kt: float = _kick_t / maxf(_kick_total, 0.001)
 		if kt >= 1.0:
 			_kick_t = -1.0
 		else:
-			_kick_env = SkaterShotPoseCoordinator.finish_envelope(kt, _kick_total,
-					_kick_attack, _controller.wrister_whip_release_frac) * _kick_power
+			finish = SkaterShotPoseCoordinator.finish_envelope(kt, _kick_total,
+					_kick_attack, _controller.wrister_whip_release_frac)
+	_kick_env = finish * _kick_power
+	wrist_roll = 0.0 if _kick_is_slap \
+			else finish * lerpf(_WRIST_ROLL_SOFT, 1.0, _kick_power)
 	# Hips coil with the load (stick-side hip pulls back, riding the torso coil)
 	# and uncoil THROUGH the release — the stick-side hip drives forward past
 	# square, mirroring the follow-through's torso `through` term. Positive

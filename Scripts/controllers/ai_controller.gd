@@ -17,6 +17,8 @@ func is_ai_controlled() -> bool:
 # forwards to StateBufferManager. We don't keep a separate AI perception
 # buffer — the lag-comp ring is already capturing the same data.
 
+var _game_state_has_fight: bool = false
+var _game_state_has_hunts: bool = false
 var _agent: SkaterAgent = null
 # Cached most-recent snapshot read this tick. Public for debug inspection.
 var perceived_snapshot: WorldSnapshot = null
@@ -32,13 +34,6 @@ var _pending_host_time: float = 0.0
 var _stale_pending: bool = false
 
 
-# Bots never set deliberate-deflect intent. The agent holds the shoot button
-# off-puck to wind up wrister one-timers (SkaterAgentStateMachine._state_one_timer_pressed),
-# expecting to CATCH the incoming puck and fire — routing that into a deflect
-# would break it. Deliberate deflection is a human-only mechanic in v1.
-func _wants_deflect(_input: InputState) -> bool:
-	return false
-
 # Scratch InputState reused every FACEOFF_PREP tick so we don't allocate per
 # frame. All flags default to false; we only overwrite mouse_world_pos / time
 # / delta. Lifetime is the controller — bots aren't re-allocated mid-match.
@@ -46,6 +41,9 @@ var _faceoff_input: InputState = InputState.new()
 # The same, for a bot scorer's celebration (_celebrate).
 var _celebration_input: InputState = InputState.new()
 const _CELEBRATION_REST_AHEAD_M: float = 1.0
+var _fight_input: InputState = InputState.new()
+var _fight_brain := AIFightBrain.new()
+var _fight_view := AIFightBrain.View.new()
 
 # Bot draw swing. A center bot loads its blade on the dot through the countdown,
 # then in the final bot_draw_swing_time before the drop yanks the blade-aim target
@@ -100,6 +98,10 @@ var _debug_last_text: String = ""
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	super.setup(assigned_skater, assigned_puck, game_state)
 	_agent = SkaterAgent.new()
+	# Cached so begin_tick asks without a has_method() every tick (test stubs may
+	# not implement it).
+	_game_state_has_fight = game_state.has_method("is_in_fight")
+	_game_state_has_hunts = game_state.has_method("fight_hunt_target_peer")
 
 
 # Push the bot's attribute-scaled capabilities into the agent so the AI plans
@@ -130,6 +132,9 @@ func setup_agent(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: 
 		# the perfect-bot defaults. Perception delay is applied globally by
 		# GameManager, not here.
 		_agent.apply_profile(profile)
+	# Its fights: the tier's reaction and aggression, its cadence staggered by
+	# its peer id so two bots never throw in step.
+	_fight_brain.setup(profile, float(peer_id) * 0.37)
 	if SHOW_DEBUG_LABEL and skater != null:
 		_debug_label = Label3D.new()
 		_debug_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -215,6 +220,14 @@ func begin_tick(delta: float) -> bool:
 		if has_celebration_window():
 			_celebrate(delta)
 		return false
+	if _game_state_has_fight and _game_state.is_in_fight():
+		# The fight's stoppage: the puck is dead and nobody may touch the fighters,
+		# so the bots coast like the celebration's — and one fighting holds his
+		# fists up, which the fight's tick does off an idle input.
+		_stale_pending = true
+		if is_fighting():
+			_fight_tick(delta)
+		return false
 	# Deliberately NO is_input_blocked() gate here: that flag means the LOCAL
 	# human's menu is open, and bots run only on the host — gating on it froze
 	# every bot when the host paused while the world played on.
@@ -241,11 +254,47 @@ func _celebrate(delta: float) -> void:
 	skater.current_shot_state = _sm.get_state() as int
 
 
+# A fighting bot works the three controls a human fights with (AIFightBrain),
+# off what it can see of the man it fights, read at last tick's start.
+func _fight_tick(delta: float) -> void:
+	var v: AIFightBrain.View = _fight_view
+	v.me = skater.global_position
+	v.facing = skater.get_facing()
+	v.my_grip = skater.fight_grip
+	v.my_arm_held = false
+	v.his_arm_thrown = false
+	var man: Skater = _fight_partner
+	if man != null and is_instance_valid(man):
+		v.head = FightPunchJudge.head_center(man)
+		v.his_top_fist = man.upper_body_to_global(man.get_top_hand_position())
+		v.his_bottom_fist = man.upper_body_to_global(man.get_blade_position())
+		v.my_arm_held = FightHoldRules.tied(skater.fight_punch_side, man.fight_grip)
+		var top: bool = man.fight_punch_side == FightHoldRules.Side.TOP
+		v.his_arm_thrown = FightHoldRules.thrown(
+				man.shoulder.position if top else man.bottom_shoulder.position,
+				man.get_top_hand_position() if top else man.get_blade_position(),
+				SkaterFightHands.arm_reach(man))
+	else:
+		v.head = v.me + Vector3(v.facing.x, 0.0, v.facing.y)
+	var d: AIFightBrain.Decision = _fight_brain.decide(v, delta)
+	_fight_input.delta = delta
+	_fight_input.host_timestamp = NetworkManager.estimated_host_time()
+	_fight_input.mouse_world_pos = d.aim
+	_fight_input.shoot_held = d.grab
+	_fight_input.slap_pressed = d.swap
+	_fight_input.brake = true
+	_process_input(_fight_input, delta)
+	skater.current_shot_state = _sm.get_state() as int
+
+
 # Main-thread stamp done right before the worker is kicked (worker idle), so the
 # decision's host time is set without racing an in-flight decide(). See
 # AICoordinator.
 func prep_for_decide() -> void:
 	_pending_host_time = NetworkManager.estimated_host_time()
+	if _agent != null:
+		_agent.set_hunt_peer(_game_state.fight_hunt_target_peer(skater)
+				if _game_state_has_hunts and skater != null else -1)
 
 
 # WORKER-SAFE decision: run the agent against the frozen snapshot + strategy view
@@ -271,6 +320,7 @@ func apply_decision(delta: float) -> void:
 	var t0: int = Time.get_ticks_usec()
 	_pending_input.move_vector = AIBotMechanics.braked_stick(_pending_input.move_vector,
 			_pending_input.brake, skater.velocity, _pending_input.bot_shuffle)
+	_pending_input.bot_cursor_turns = true
 	_process_input(_pending_input, delta)
 	HostCostProbe.record(HostCostProbe.Section.SKATER_STEP, Time.get_ticks_usec() - t0)
 	skater.current_shot_state = _sm.get_state() as int

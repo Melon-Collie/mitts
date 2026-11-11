@@ -144,12 +144,13 @@ const ZONE_SLOTS: Array[int] = [
 ]
 
 # Attackers in the zone that no defender has, per tick, in the low cycle
-# (measured 1.24, pinned at the ~0.28 margin the scripted fixtures use). Most of
-# it is the weak point, whom the D sag off; the man in the puck owner's area
-# stays coverable while he is on the puck (TeamBrain's eligibility). A loose
-# puck counts every attacker as a man to cover, so the bot attack's own feeds
-# move this (183 of its 480 D-zone ticks loose); the coverage itself is the
-# phase with an attacker on the puck, pinned on its own below.
+# (measured 1.12; the ceiling is the ~0.28 margin the scripted fixtures use over
+# an earlier 1.24). A loose puck counts every attacker as a man to cover, so the
+# bot attack's own feeds move this (185 of its 285 D-zone ticks loose: a rim
+# behind the net that dribbles up the far wall); the coverage itself is the
+# phase with an attacker on the puck, pinned on its own below. While it is
+# loose the teammate elected to race it is the one on it, and the area that
+# holds it covers a man (AIZoneCoverage.chased_by_another).
 const UNCOVERED_CEILING: float = 1.52
 # The same count over the low cycle's ticks with an attacker on the puck
 # (measured 0.94), at the same margin.
@@ -177,8 +178,6 @@ const DOUBLE_LOCK_SHARE_CEILING: float = 0.12
 # Fixture sanity: the sim has to actually spend time in D-zone coverage for any
 # of the above to mean anything.
 const MIN_DZONE_TICKS: int = 120
-# Un-pend once the goalie stops conceding what the new shot field measured (#836).
-const PENDED_FOR_836: bool = true
 
 
 class Result:
@@ -294,9 +293,6 @@ func _assert_shape(label: String, r: Result,
 
 
 func test_a_low_cycle_is_covered() -> void:
-	if PENDED_FOR_836:
-		pending("red since the regulation puck's shot field: #836")
-		return
 	# The everyday D-zone look: puck worked low on the strong wall, a man at the
 	# net front, a man in the slot, both points manned. Exercises the net-front
 	# box, the slot seam and the low battle at once.

@@ -3,11 +3,15 @@ extends GutTest
 # Three real bots bring the puck from their own half into the offensive zone
 # against a defence standing up at its blue line, on the duel harness: how many
 # carry it in, how many turn it over, how many passes it takes (and how many go
-# backward), and how long the carrier stalls by the line. Team 0 attacks -Z;
-# their blue line is z = -BLUE_LINE_Z. Not modelled: offside, real boards, a
-# live goalie.
+# backward), and how long the carrier stalls by the line. Run as the shot field
+# stands and with point shots worth nothing (point_odds_off.gd): the regression
+# docs/possession-floor-plan.md started from, bots that stop entering the zone
+# once nothing from the point scores. Team 0 attacks -Z;
+# their blue line is z = -BLUE_LINE_Z. Not modelled: offside, a lofted puck's
+# bounce off the glass, a live goalie.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
+const PointOff := preload("res://tests/instruments/ai/point_odds_off.gd")
 const SECS: float = 8.0
 # Stalled: the carrier within STALL_BAND_M of the line, slower than STALL_SPEED.
 const STALL_BAND_M: float = 4.0
@@ -71,6 +75,16 @@ func _setup(carrier_x: float, speed: float, n_def: int) -> Object:
 
 
 func test_neutral_zone_entries() -> void:
+	gut.p("as the field stands:")
+	_sweep()
+	PointOff.apply()
+	gut.p("point shots worth nothing:")
+	_sweep()
+	PointOff.restore()
+	assert_true(true)
+
+
+func _sweep() -> void:
 	var tally: Dictionary = {}
 	var t_carried: float = 0.0
 	var n_carried: int = 0
@@ -95,4 +109,3 @@ func test_neutral_zone_entries() -> void:
 		gut.p(row)
 	gut.p("%s | carried-entry time %.2f s | passes %d (backward %d) | stall %.1f s over %d runs"
 			% [str(tally), t_carried / maxf(n_carried, 1), passes, back, stall, runs])
-	assert_true(true)

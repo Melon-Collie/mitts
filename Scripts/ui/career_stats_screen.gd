@@ -704,6 +704,10 @@ func _build_game_card(summary: Dictionary) -> Control:
 	var colors: Array = summary.get("colors", []) as Array
 	var home_col: Color = colors[0] if colors.size() == 2 else _NEUTRAL_HOME
 	var away_col: Color = colors[1] if colors.size() == 2 else _NEUTRAL_AWAY
+	# Where the colour IS the lettering (period letters, rosters), the ink.
+	var inks: Array = summary.get("inks", []) as Array
+	var home_ink: Color = inks[0] if inks.size() == 2 else _NEUTRAL_HOME
+	var away_ink: Color = inks[1] if inks.size() == 2 else _NEUTRAL_AWAY
 	var score := HBoxContainer.new()
 	score.alignment = BoxContainer.ALIGNMENT_CENTER
 	score.add_theme_constant_override("separation", 8)
@@ -719,7 +723,7 @@ func _build_game_card(summary: Dictionary) -> Control:
 	vbox.add_child(score)
 
 	var periods: Control = _period_grid(summary.get("periods", []) as Array,
-			home_col, away_col)
+			home_ink, away_ink)
 	if periods != null:
 		vbox.add_child(periods)
 
@@ -731,7 +735,7 @@ func _build_game_card(summary: Dictionary) -> Control:
 		if names.is_empty():
 			continue
 		var line := _ui_label(" · ".join(PackedStringArray(names)), 11,
-				home_col if team_id == 0 else away_col)
+				home_ink if team_id == 0 else away_ink)
 		line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		vbox.add_child(line)
@@ -773,6 +777,7 @@ func _summarise_backend(game: Dictionary, meta: Dictionary) -> Dictionary:
 		"source": "backend",
 		"game_id": gid,
 		"colors": _colors_from_meta(meta),
+		"inks": _inks_from_meta(meta),
 		# Prefer the replay's roster: career_stats rows exist per HUMAN, so the
 		# backend's player list omits bots entirely — a solo bot game would name
 		# only you, which is the opposite of recognisable. The file's roster is
@@ -805,6 +810,7 @@ func _summarise_replay(path: String, meta: Dictionary) -> Dictionary:
 		"source": "local",
 		"game_id": "",
 		"colors": _colors_from_meta(meta),
+		"inks": _inks_from_meta(meta),
 		"roster": _roster_from_meta(meta),
 		"you": _you_line_from_meta(meta),
 		# Footers written before shot logging have no list, so this reads 0 and
@@ -832,6 +838,20 @@ func _colors_from_meta(meta: Dictionary) -> Array[Color]:
 	var pair: Dictionary = TeamColorRegistry.get_score_stripe_pair(
 			_safe_int(header.get("home_color_slot", 0)),
 			_safe_int(header.get("away_color_slot", 1)))
+	return [pair.home, pair.away]
+
+
+# The same teams as text on the card (rosters, period letters) and on the
+# analytics screen: each primary lifted until it reads on the dark surface. The
+# neutral pair already does.
+func _inks_from_meta(meta: Dictionary) -> Array[Color]:
+	var header: Dictionary = meta.get("header", {})
+	if not header.has("home_color_slot"):
+		return [_NEUTRAL_HOME, _NEUTRAL_AWAY]
+	var pair: Dictionary = TeamColorRegistry.get_score_ink_pair(
+			_safe_int(header.get("home_color_slot", 0)),
+			_safe_int(header.get("away_color_slot", 1)),
+			MenuStyle.BROADCAST_BG)
 	return [pair.home, pair.away]
 
 
@@ -1044,7 +1064,7 @@ func _on_analytics_pressed(summary: Dictionary) -> void:
 	var away: int = int(summary.get("away", -1))
 	var label: String = "%s · replayed from the game's shot log" % String(summary.get("date", ""))
 	var colors: Array[Color] = []
-	for c: Variant in (summary.get("colors", []) as Array):
+	for c: Variant in (summary.get("inks", []) as Array):
 		colors.append(c as Color)
 	if String(summary.get("source", "")) == "local":
 		_show_analytics(ShotEvent.decode_list(summary.get("shot_rows", []) as Array),

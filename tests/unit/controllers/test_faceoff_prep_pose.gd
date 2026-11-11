@@ -435,3 +435,32 @@ func test_nobody_holds_a_draw_stance_once_the_puck_is_live() -> void:
 	_state.faceoff_prep = false
 	assert_false(centre.is_faceoff_ready(),
 			"the stance is gated on the phase, so the drop releases it")
+
+
+# ── The clock the pose is drawn on ───────────────────────────────────────────
+
+# The locked-phase paths leave the legs to the render pass, as live play does.
+# Posed on the tick, they read the previous frame's animation-LOD verdict, and
+# every skater but the local one was drawn on stale legs — jitter through the
+# whole skate-in and settle.
+func test_the_prep_poses_the_legs_at_render_rate_only() -> void:
+	var c: SkaterController = _controller(true)
+	var target := Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+	c.begin_approach(Vector3(-1.5, GameRules.FACEOFF_SPAWN_HEIGHT, 4.0), target,
+			Vector2(0.0, -1.0), 1.0)
+	var input := InputState.new()
+	input.delta = DT
+	input.mouse_world_pos = Vector3(0.0, 0.0, -1.0)
+	var on_tick: int = 0
+	var on_frame: int = 0
+	for _i: int in 200:
+		var before: int = c.skater.leg_pose_version()
+		if not c.tick_faceoff_approach(DT):
+			c.skater.velocity = Vector3.ZERO
+			c.apply_blade_aim_only(input, DT)
+		var ticked: int = c.skater.leg_pose_version()
+		on_tick += ticked - before
+		c.skater._process(DT)
+		on_frame += c.skater.leg_pose_version() - ticked
+	assert_eq(on_tick, 0, "nothing on the tick writes the legs")
+	assert_gt(on_frame, 0, "the render pass does")
