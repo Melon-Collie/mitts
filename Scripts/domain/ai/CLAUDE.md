@@ -455,8 +455,11 @@ skates into a set defender meet a check rather than a bump. It rides
 opponent in our end winds up and we stand on the line from the release to our
 net, the shot is still under the block's seal when it reaches us (his replicated
 loft rung under gravity), and we are not inside the room our goalie needs to see
-around a screen. He stays down while the released puck is still coming through
-us. The dive is rarer: only the lone defender back, goal-side (INSIDE, with
+around a screen. A man winding up without the puck is a shot only once a loose
+puck's path reaches his blade — the feed released, or one lying there — and his
+release is that blade: a one-timer waiting on a pass that has not been made is
+not blocked, and the block goes down as fast as the pass can be seen leaving.
+He stays down while the released puck is still coming through us. The dive is rarer: only the lone defender back, goal-side (INSIDE, with
 `AIRushRead.back_count` 1), against two or more, the carrier inside shooting
 range in front of our goal line where our goalie can take him, dives across a
 pass lane past his standing reach: his stick, plus what he skates toward the lane

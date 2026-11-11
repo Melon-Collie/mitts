@@ -52,8 +52,8 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 		input.stance_held = false
 
 
-# An opponent winding up in our end with us in his lane, low enough to block,
-# and us not in our goalie's eyes.
+# An opponent winding up in our end with the puck coming off his stick, us in
+# his lane, low enough to block, and us not in our goalie's eyes.
 func _shot_coming(snapshot: WorldSnapshot, me: SkaterNetworkState, goal: Vector3,
 		own_goal_dir: float) -> bool:
 	var goalie: GoalieNetworkState = snapshot.goalie_states.get(_team_id)
@@ -67,8 +67,13 @@ func _shot_coming(snapshot: WorldSnapshot, me: SkaterNetworkState, goal: Vector3
 		var shooter: SkaterNetworkState = snapshot.skater_states[pid]
 		if not _winding_up(shooter.shot_state):
 			continue
-		# A one-timer's release is his blade, where the feed meets it.
-		var release: Vector3 = puck.position if puck.carrier_peer_id == pid else shooter.position
+		var release: Vector3 = puck.position
+		if puck.carrier_peer_id != pid:
+			# Without the puck he shoots only what reaches him: a one-timer
+			# released from his blade, where the feed meets it.
+			if not _feed_reaches(puck, shooter.blade_contact_world):
+				continue
+			release = shooter.blade_contact_world
 		if own_goal_dir * release.z < GameRules.BLUE_LINE_Z:
 			continue
 		var caps: AISkaterCaps = _caps_by_peer.get(pid)
@@ -78,6 +83,14 @@ func _shot_coming(snapshot: WorldSnapshot, me: SkaterNetworkState, goal: Vector3
 				and AIShotBlockRead.stays_low(me.position, release, shooter.elevation_level, speed):
 			return true
 	return false
+
+
+# A loose puck whose path reaches the blade: a feed already on its way, or one
+# lying there. A pass he is only waiting on is not a shot yet, and the block goes
+# down as fast as the pass can be seen leaving.
+static func _feed_reaches(puck: PuckNetworkState, blade: Vector3) -> bool:
+	return puck.carrier_peer_id == -1 and AIStickTieRead.path_passes_within(puck.position,
+			puck.velocity, blade, PuckController.PICKUP_RADIUS + AIStickTieRead.RECEIVER_STEP_M)
 
 
 static func _winding_up(shot_state: int) -> bool:
