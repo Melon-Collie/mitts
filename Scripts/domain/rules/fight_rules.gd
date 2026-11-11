@@ -38,14 +38,12 @@ static func allowed(rule_set: int, enabled: bool, practice: bool) -> bool:
 	return enabled and not practice and rule_set != GameRules.RuleSet.OFF
 
 
-# The phases a challenge can be made and answered in: live play, and the
-# faceoff before the drop, where two men lined up across the dot can drop the
-# gloves. Not the goal celebration: it ends in the goal's replay (and in
-# overtime, the game), which a fight would have to hold off.
+# The phases a challenge can be made and answered in: live play, the dropped
+# puck included. Not the faceoff's set-up (a press there is dropped, not held for
+# the drop), and not the goal celebration, which ends in the goal's replay (and
+# in overtime, the game) that a fight would have to hold off.
 static func phase_allows(phase: int) -> bool:
-	return phase == GamePhase.Phase.PLAYING \
-			or phase == GamePhase.Phase.FACEOFF \
-			or phase == GamePhase.Phase.FACEOFF_PREP
+	return phase == GamePhase.Phase.PLAYING or phase == GamePhase.Phase.FACEOFF
 
 
 # Whether a man at `from` facing `facing` (XZ, need not be unit) is squared up

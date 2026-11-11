@@ -140,9 +140,10 @@ func test_a_carrier_cannot_challenge_but_can_be_challenged() -> void:
 
 
 func test_no_press_counts_outside_the_phases_a_fight_starts_in() -> void:
-	_press(_home, GamePhase.Phase.GOAL_CELEBRATION)
-	assert_true(_made.is_empty())
-	assert_false(_home.fight_press_pending, "and the press is gone, not saved for later")
+	for phase: int in [GamePhase.Phase.GOAL_CELEBRATION, GamePhase.Phase.FACEOFF_PREP]:
+		_press(_home, phase)
+		assert_true(_made.is_empty(), GamePhase.Phase.keys()[phase])
+		assert_false(_home.fight_press_pending, "and the press is gone, not saved for later")
 
 
 func test_a_fight_ends_once_they_have_been_apart_long_enough() -> void:
@@ -194,7 +195,7 @@ func test_fights_left_over_after_play_moved_on_are_dropped() -> void:
 	_press(_away)
 	_fights.tick(TICK, true, GamePhase.Phase.FACEOFF_PREP)
 	assert_false(_fights.is_fighting(_home))
-	_press(_home, GamePhase.Phase.FACEOFF_PREP)
+	_press(_home)
 	assert_eq(_made.size(), 2, "and both may fight again")
 
 

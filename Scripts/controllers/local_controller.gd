@@ -244,7 +244,6 @@ func _step_tick(delta: float) -> void:
 			if _input_history.size() > input_history_cap(NetworkManager.get_latest_rtt_ms()):
 				_input_history.pop_front()
 			apply_blade_aim_only(_current_input, delta)
-			note_fight_press(_current_input)
 			# Snapshot the frozen prep frame too, so a broadcast that acks a
 			# prep-phase input after the lock lifts matches in find_at instead of
 			# falling back to the live position (a spurious post-faceoff reconcile).

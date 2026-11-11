@@ -15,11 +15,11 @@ func test_fights_are_off_in_practice_and_in_the_off_set() -> void:
 			"never where nothing is whistled")
 
 
-func test_a_fight_starts_in_play_or_off_a_faceoff_only() -> void:
-	for phase: int in [GamePhase.Phase.PLAYING, GamePhase.Phase.FACEOFF,
-			GamePhase.Phase.FACEOFF_PREP]:
+func test_a_fight_starts_in_live_play_only() -> void:
+	for phase: int in [GamePhase.Phase.PLAYING, GamePhase.Phase.FACEOFF]:
 		assert_true(FightRules.phase_allows(phase), GamePhase.Phase.keys()[phase])
-	for phase: int in [GamePhase.Phase.GOAL_CELEBRATION, GamePhase.Phase.GOAL_SCORED,
+	for phase: int in [GamePhase.Phase.FACEOFF_PREP,
+			GamePhase.Phase.GOAL_CELEBRATION, GamePhase.Phase.GOAL_SCORED,
 			GamePhase.Phase.END_OF_PERIOD, GamePhase.Phase.GAME_OVER, GamePhase.Phase.FIGHT]:
 		assert_false(FightRules.phase_allows(phase), GamePhase.Phase.keys()[phase])
 
@@ -90,13 +90,11 @@ func test_a_fight_whistles_play_dead_and_restarts_with_a_faceoff() -> void:
 	assert_false(sm.end_fight(), "nothing to end outside a fight")
 
 
-func test_a_fight_off_the_faceoff_restarts_on_that_dot() -> void:
+func test_no_fight_in_the_faceoff_set_up() -> void:
 	var sm := GameStateMachine.new()
-	var dot := Vector2(-GameRules.END_ZONE_FACEOFF_DOT_X, GameRules.ICING_FACEOFF_DOT_Z)
-	sm.begin_faceoff_prep(dot)
-	assert_true(sm.begin_fight(Vector2.ZERO))
-	sm.end_fight()
-	assert_eq(sm.active_faceoff_dot, dot)
+	sm.begin_faceoff_prep(Vector2(-GameRules.END_ZONE_FACEOFF_DOT_X, GameRules.ICING_FACEOFF_DOT_Z))
+	assert_false(sm.begin_fight(Vector2.ZERO))
+	assert_eq(sm.current_phase, GamePhase.Phase.FACEOFF_PREP)
 
 
 func test_no_fight_in_the_goal_celebration() -> void:

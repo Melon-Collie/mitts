@@ -641,14 +641,13 @@ func begin_faceoff_prep(dot_xz: Vector2 = GameRules.CENTER_ICE_DOT,
 	_prep_extra_time = maxf(extra_prep_time, 0.0)
 
 
-# Whistles the play dead for a fight (host). From live play the faceoff after
-# it is taken at `resume_dot`; from a faceoff not yet dropped, at that faceoff's
-# own dot. Returns false (and changes nothing) in a phase a fight can't start in.
+# Whistles the play dead for a fight (host); the faceoff after it is taken at
+# `resume_dot`. Returns false (and changes nothing) in a phase a fight can't
+# start in.
 func begin_fight(resume_dot: Vector2) -> bool:
 	if not FightRules.phase_allows(current_phase):
 		return false
-	fight_resume_dot = active_faceoff_dot if current_phase == GamePhase.Phase.FACEOFF_PREP \
-			else resume_dot
+	fight_resume_dot = resume_dot
 	_set_phase(GamePhase.Phase.FIGHT)
 	return true
 

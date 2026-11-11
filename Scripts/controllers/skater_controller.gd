@@ -1768,10 +1768,9 @@ func is_fighting() -> bool:
 	return skater.fight_role == FightRules.Role.FIGHTING
 
 
-# Hands the fight button's press to the host's FightTracker. Also called by the
-# locked faceoff paths, which skip _process_input, so two men lined up across
-# the dot can drop the gloves. Live inputs only: a replay re-reads presses the
-# tracker already took.
+# Hands the fight button's press to the host's FightTracker. Live inputs only: a
+# replay re-reads presses the tracker already took. A locked phase never gets
+# here, so a press in the faceoff's set-up is dropped.
 func note_fight_press(input: InputState) -> void:
 	if input.fight_pressed and not is_replaying:
 		skater.fight_press_pending = true

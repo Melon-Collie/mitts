@@ -15,7 +15,7 @@ faceoff, and both stay on.
 | Question | Answer |
 |---|---|
 | Consent | **Challenge + accept.** One player presses Fight squared up to an opponent nearby; the opponent has a short window to press it back. An unanswered challenge just lapses, with nothing lost. |
-| When, and the whistle | **Any time.** In live play the whistle goes the instant both have agreed; in dead time (a faceoff set-up) the fight runs before the next faceoff. A faceoff follows every fight. The goal celebration is the one exception (see *Phase 1 as built*). |
+| When, and the whistle | **In live play**, the dropped puck included: the whistle goes the instant both have agreed, and a faceoff follows every fight. Not in a faceoff's set-up (a press there does nothing, and is not held for the drop; revised 2026-11-11), and not in the goal celebration (see *Phase 1 as built*). |
 | Afterwards | **No penalty.** Both stay on. |
 | Controls | **The cursor drives the fist, and a button grabs.** The fist uses the stick's IK, reach and speed limits; punch power is the fist's speed at contact. Holding a button grabs with the other hand and keeps the grip. A key swaps the hands. |
 | Bots | **Never challenge, and accept every challenge at once**, for now, so a fight can be tested against them. How a bot decides to fight comes later. |
@@ -48,10 +48,9 @@ NONE ──Fight press, opponent in range──▶ CHALLENGING ──opponent pr
 - **The whistle**: from `PLAYING` the host blows it dead at once
   (`FIGHT_CALLED` signal and RPC, `FACEOFF_WHISTLE` sound, a toast). It
   stores where the puck was, for the faceoff dot
-  (`GameRules.nearest_faceoff_dot`). From `GOAL_CELEBRATION` or
-  `FACEOFF_PREP` it stores the dot that phase was heading for. Every path
-  enters a **new phase `GamePhase.Phase.FIGHT`**, appended as ordinal 7 so
-  `.mreplay` files stay valid.
+  (`GameRules.nearest_faceoff_dot`), and enters a **new phase
+  `GamePhase.Phase.FIGHT`**, appended as ordinal 7 so `.mreplay` files stay
+  valid.
 - **The `FIGHT` phase**: the puck is dead and stays where it lies,
   pickup-locked as it is in `GOAL_CELEBRATION`. The clock is stopped.
   Bystanders can skate, but contact between a bystander and a fighter is
@@ -215,9 +214,8 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   `FightTracker` (`Scripts/game/`), tested by `test_fight_rules.gd` and
   `test_fight_tracker.gd`. A press reaches the tracker as
   `Skater.fight_press_pending`, set by `SkaterController.note_fight_press` on
-  every input the controller applies, including the locked faceoff paths. A
-  fight can start in `PLAYING`, `FACEOFF` and `FACEOFF_PREP`, and a second
-  pair can start inside `FIGHT`.
+  every live input the controller applies. A fight can start in `PLAYING` and
+  `FACEOFF` (the puck dropped), and a second pair can start inside `FIGHT`.
 - **Not from the goal celebration.** It ends in the goal's replay, and in
   overtime in the game itself. A fight would have to hold both off, which is
   phase 5 work if you want it.
