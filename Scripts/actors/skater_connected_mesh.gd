@@ -151,17 +151,6 @@ const _TRAP_GIRDLE: Array[float] = [0.05, 0.1, 0.15, 0.1, 0.05]
 # the seam. The elbow's turn is spread over ~25 cm of sleeve, eased in and out,
 # each ring built turned by its share (_round_elbow), so the bend is a curve
 # rather than a crease — a cloth sleeve over a pad, not a hinge.
-# A loose sleeve is cloth hung between the armhole and the elbow, not a tube
-# on the arm. Round from straight over the arm to straight under it, each
-# column of it comes to lie on the straight line from the seam to the elbow
-# (the tube's own underside is buried in the chest there, where anything hung
-# from the chest starts out folded) and to hang from the chest: wholly at the
-# seam, and less by the way down to the elbow. So a raised arm draws the
-# sleeve out straight from the flank, rather than swinging a ball of shoulder
-# up with it, and the armhole's bottom stays on the chest while its top turns
-# with the girdle. That hand-off goes the whole way round the armhole: taken
-# between two columns it twists the faces between them inside out.
-#
 # The first ring's share on the shoulder's middle rather than the arm: over
 # the top of the arm, and at its sides. All of it on the shoulder over the top
 # puts the whole of the arm's turn between this ring and the next, a step
@@ -668,8 +657,10 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 		between.append(b.vertex(
 				at_seam.lerp(b.position(rings[0][m]), 0.5).lerp(at_seam + cap_reach, over),
 				[girdle_bind, shoulder_bind], [girdle, 1.0 - girdle]))
-	# Each column from the seam to the elbow: laid toward the straight line
-	# between them as far as it is under the arm, then hung from the chest.
+	# The sleeve hangs between the armhole and the elbow (Scripts/actors/
+	# CLAUDE.md): each column from the seam to the elbow is laid toward the
+	# straight line between them as far as it is under the arm, then hung from
+	# the chest, wholly at the seam and less by the way down.
 	var columns: Array[PackedInt32Array] = [seam, between]
 	columns.append_array(rings.slice(0, _UPPER_RINGS.size() + 1))
 	var at_elbow: int = columns.size() - 1
