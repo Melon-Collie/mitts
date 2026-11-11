@@ -29,12 +29,13 @@ static var preview_pants_only: bool = false
 # each shoulder's middle, two thirds of the way from the chest to the upper arm,
 # for the same reason as the elbow's; then each shoulder girdle, the third of
 # the arm's swing the collarbone and the shoulder blade take (the scapulohumeral
-# rhythm), which the armhole and the top of the shoulder ride.
+# rhythm), which the armhole and the top of the shoulder ride; last, the neck's
+# foot, which the rigid parts' neck stands in the collar on (SkaterRigidParts).
 enum Deform {
 	UPPER_L, ELBOW_L, FORE_L, UPPER_R, ELBOW_R, FORE_R, KNEE_L, KNEE_R, SHOULDER_L, SHOULDER_R,
-	GIRDLE_L, GIRDLE_R,
+	GIRDLE_L, GIRDLE_R, NECK_FOOT,
 }
-const DEFORM_COUNT: int = 12
+const DEFORM_COUNT: int = 13
 # The share of the arm's swing off the chest the shoulder's middle turns by,
 # and the girdle's: little with the arm down, rising as it lifts — the
 # collarbone and shoulder blade only come up with an arm raised, and the

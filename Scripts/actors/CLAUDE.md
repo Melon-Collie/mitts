@@ -29,7 +29,8 @@ delegates to.
 
 `SkaterConnectedMesh` builds the torso, sleeves, pants and socks as ONE
 connected skin with blended weights; the head, gloves and skate blades are rigid
-parts on their bones (`SkaterRigidParts`). Each skate's upper is one closed
+parts on their bones (`SkaterRigidParts`), and the neck bends between the
+head and the collar (below). Each skate's upper is one closed
 shell (`SkateUpperMesh`, `test_skate_upper.gd`) whose cuff rides the SKATE bone
 and whose foot rides the FOOT bone, blended across the ankle through a bind of
 its own on the foot, so the ankle's give-back flexes the boot rather than
@@ -124,6 +125,15 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   CLAUDE.md), painted by the same two decals.
 - **The knees** blend through a middle bone at half the shin's turn
   (`Deform.KNEE_*`), so the back of the knee does not collapse.
+- **The neck stands in the collar.** It is built with the head, in the
+  helmet's frame, but only its top rides the helmet: from the collar's lip
+  down it rides its foot (`Deform.NECK_FOOT`, `SkaterRigidParts.neck_foot_share`),
+  the helmet's rest frame as the torso carries it. A head carried off the
+  trunk's line (a trunk folded under a level head puts it 3 cm back) then
+  bends the neck over the collar; rigid to the helmet, its column swings out
+  through the back of the collar and hides it. The foot turns about its own
+  axis as far as the head is turned, or the column is wrung between them.
+  `test_neck_stands_in_the_collar.gd`.
 - **The gloves are a right and a left.** The back of the hand is padded and
   the fingers are four chunky rolls with grooves between them, each bent over
   round the shaft toward the palm as a closed fist's are, so the flat palm side
@@ -207,8 +217,8 @@ HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
       NECK   takes back part of the trunk's lean; the helmet
     TAIL   the torso's placement hung from the waist: the share of the
            jersey's tail the hips carry
-deform   the skin's sleeves (roots) and knees (on the LEG bones), posed off
-         the bones above (SkaterConnectedRig)
+deform   the skin's sleeves (roots) and knees (on the LEG bones) and the
+         neck's foot (a root), posed off the bones above (SkaterConnectedRig)
 tail     roots, one pair per tail column: the jersey's tail below the belt,
          draped by SkaterHemFlaps (with the jersey's carry above, SkaterJerseyHem)
 arms     roots, solved from the spine's shoulders to the gameplay hands
