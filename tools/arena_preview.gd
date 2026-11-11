@@ -18,8 +18,9 @@ extends SceneTree
 # llvmpipe is far slower and forward+ needs it. Shot list and output directory
 # come from the environment so the caller drives it without editing this file:
 # ARENA_PREVIEW_OUT (default user://arena_preview), ARENA_PREVIEW_SHOTS (comma
-# separated names from _SHOTS, default all) and ARENA_PREVIEW_EXCITEMENT (the
-# crowd's 0..1 reaction, default 0).
+# separated names from _SHOTS, default all), ARENA_PREVIEW_EXCITEMENT (the
+# crowd's 0..1 reaction, default 0) and ARENA_PREVIEW_LOOK ("x,y,z": a point on
+# the ice the crowd turns fully to watch, as through a fight).
 
 # Each shot is a camera placement in world metres. `bench` and `box` are the
 # reason this exists — they frame rinkside staff against the crowd behind them,
@@ -85,6 +86,12 @@ const _SHOTS: Dictionary = {
 		"look_at": Vector3(16.0, 3.0, -10.0),
 		"fov": 40.0,
 	},
+	# Straight down over the boards, as the match camera sees a fight there.
+	"fans_overhead": {
+		"from": Vector3(13.0, 16.0, -6.0),
+		"look_at": Vector3(13.0, 0.0, -6.01),
+		"fov": 45.0,
+	},
 	"wide": {
 		"from": Vector3(26.0, 14.0, 34.0),
 		"look_at": Vector3(0.0, 2.0, 0.0),
@@ -126,6 +133,11 @@ func _render_shots() -> void:
 	var excitement: String = OS.get_environment("ARENA_PREVIEW_EXCITEMENT")
 	if not excitement.is_empty():
 		ArenaCrowd.shared_material().set_shader_parameter("excitement", excitement.to_float())
+	var look: PackedFloat64Array = OS.get_environment("ARENA_PREVIEW_LOOK").split_floats(",")
+	if look.size() == 3:
+		ArenaCrowd.shared_material().set_shader_parameter("look_at",
+				Vector3(look[0], look[1], look[2]))
+		ArenaCrowd.shared_material().set_shader_parameter("look_weight", 1.0)
 
 	var cam := Camera3D.new()
 	world.add_child(cam)

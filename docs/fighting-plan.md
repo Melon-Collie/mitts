@@ -440,6 +440,21 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
 - **Tested by** `test_fight_grudges.gd`, `test_fight_tracker.gd` and
   `test_agent_hunt.gd`.
 
+## The crowd at a fight
+
+Through the `FIGHT` stoppage `ArenaStands` holds the bowl's excitement at
+`_FIGHT_EXCITEMENT` (the goal's hands-up cheer, held rather than a burst that
+fades) and turns every fan to the fight: `crowd.gdshader`'s look, a world point
+(`GameManager.fight_focus`, followed every frame) and a weight eased in over
+`_LOOK_TURN_TIME`. Each figure turns about its own vertical axis, the head up to
+`ArenaFigureMesh.HEAD_TURN_MAX` and the trunk up to `TRUNK_TURN_MAX`, easing in
+from the seat; the face is painted from the figure as built, so it turns with
+the head. `crowd_pose_bounds` sweeps the turn's arc, so the cull bounds hold it
+(`test_arena_figures.gd`). The stoppage over, both settle back over
+`_EXCITE_DECAY_TIME`. Seen with `ARENA_PREVIEW_LOOK=x,y,z
+ARENA_PREVIEW_EXCITEMENT=0.9 .claude/hooks/render-arena.sh fans,fans_overhead`;
+tested by `test_arena_stands.gd`.
+
 ## The fight camera
 
 Through the stoppage, `GameCamera` keeps its own top-down framing, locked,

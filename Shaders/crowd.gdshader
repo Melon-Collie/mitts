@@ -33,6 +33,15 @@ uniform vec3 elbow;
 uniform float elbow_unbend;
 // ArenaFigureMesh's bare-skin tones: the face under a cap or hair paint.
 uniform vec3 skin_tones[5];
+// Something on the ice to watch (a fight), in world space, and how far the bowl
+// has turned to it, 0..1. Each fan turns about its own vertical axis toward it:
+// the head as far as head_turn_max, the trunk as far as trunk_turn_max, eased
+// in from the seat so the hips stay on the thighs. ArenaFigureMesh writes the
+// limits, and its crowd_pose_bounds holds the turned figure.
+uniform vec3 look_at = vec3(0.0);
+uniform float look_weight : hint_range(0.0, 1.0) = 0.0;
+uniform float head_turn_max;
+uniform float trunk_turn_max;
 
 // The crowd casts no shadows (ArenaCrowd.attach), so nothing darkens a lap in
 // the row's shade of the seat back and the fan in front; this does instead, from
@@ -115,6 +124,13 @@ vec3 turn_x(vec3 v, vec2 pivot_yz, float a) {
 	return vec3(v.x, pivot_yz + vec2(d.x * c - d.y * s, d.x * s + d.y * c));
 }
 
+// Turn `v` by `a` about the figure's vertical axis (x = z = 0); 0 faces -Z.
+vec3 turn_y(vec3 v, float a) {
+	float c = cos(a);
+	float s = sin(a);
+	return vec3(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
+}
+
 // Turn `v` by `a` about the Z axis through the point (`pivot_xy`).
 vec3 turn_z(vec3 v, vec2 pivot_xy, float a) {
 	vec2 d = v.xy - pivot_xy;
@@ -155,9 +171,23 @@ void vertex() {
 		VERTEX = v;
 		NORMAL = n;
 	}
+	// The paint reads the figure as built, so a face turned to the ice keeps its
+	// eyes; only the drawn geometry and its lighting turn.
 	v_height = VERTEX.y;
 	v_normal = NORMAL;
 	v_x = VERTEX.x;
+	if (look_weight > 0.0 && part != 3 && part != 4) {
+		// The watched point in the figure's frame: the basis's transpose carries
+		// it in up to the instance's (positive, uniform) scale, which the
+		// bearing ignores.
+		vec3 to_it = transpose(mat3(MODEL_MATRIX)) * (look_at - MODEL_MATRIX[3].xyz);
+		float bearing = atan(-to_it.x, -to_it.z);
+		float turn = part == 5 ? clamp(bearing, -head_turn_max, head_turn_max)
+				: clamp(bearing, -trunk_turn_max, trunk_turn_max)
+						* smoothstep(0.0, body_top_y, VERTEX.y);
+		VERTEX = turn_y(VERTEX, turn * look_weight);
+		NORMAL = turn_y(NORMAL, turn * look_weight);
+	}
 
 	float sway_amp = INSTANCE_CUSTOM.y;
 	float hop_amp = INSTANCE_CUSTOM.z;

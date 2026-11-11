@@ -28,6 +28,11 @@ const PART_HEAD: float = 5.0
 const BODY_TOP_Y: float = 0.452
 const NECK_GAP: float = 0.02
 const HEAD_HEIGHT: float = 0.22
+# How far a fan turns to watch something on the ice (crowd.gdshader's look),
+# radians about the figure's vertical axis: the head, and the trunk at the
+# shoulders. A seated neck turns ~70°; the rest is the shoulders coming round.
+const HEAD_TURN_MAX: float = 1.2
+const TRUNK_TURN_MAX: float = 0.5
 
 # ── Stature ──────────────────────────────────────────────────────────────────
 # One unscaled figure stands 0.692 m from the tread to the crown of its head.
@@ -121,6 +126,8 @@ static func new_material() -> ShaderMaterial:
 	mat.set_shader_parameter("shoulder", SHOULDER)
 	mat.set_shader_parameter("elbow", ELBOW)
 	mat.set_shader_parameter("elbow_unbend", elbow_unbend())
+	mat.set_shader_parameter("head_turn_max", HEAD_TURN_MAX)
+	mat.set_shader_parameter("trunk_turn_max", TRUNK_TURN_MAX)
 	var skin: PackedVector3Array = PackedVector3Array()
 	for i: int in BARE_HEAD_TONES:
 		var c: Color = HEAD_PALETTE[i]
@@ -263,11 +270,16 @@ static func elbow_unbend() -> float:
 # before sway and hop. The arms only turn about the shoulder and the elbow, so
 # wherever they are posed, an arm vertex stays within its rest distance of the
 # shoulder — through the elbow, for the forearm — and a sphere that wide holds
-# every raise.
+# every raise. Then the look turns the head and the trunk, arms and all, about
+# the vertical axis by no more than their limits, so each point is swept along
+# that arc, and an arm's sphere with its shoulder.
 static func crowd_pose_bounds() -> AABB:
 	if _pose_bounds.has_volume():
 		return _pose_bounds
 	var bounds: AABB = head_mesh().get_aabb().merge(far_head_mesh().get_aabb())
+	for mesh: ArrayMesh in [head_mesh(), far_head_mesh()]:
+		for v: Vector3 in mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+			bounds = _swept(bounds, v, HEAD_TURN_MAX)
 	var reach: float = 0.0
 	for mesh: ArrayMesh in [seated_body_mesh(), far_body_mesh()]:
 		var arrays: Array = mesh.surface_get_arrays(0)
@@ -282,12 +294,30 @@ static func crowd_pose_bounds() -> AABB:
 				PART_FOREARM:
 					reach = maxf(reach,
 							SHOULDER.distance_to(ELBOW) + v.distance_to(ELBOW * m))
+				PART_BODY:
+					bounds = _swept(bounds, v, TRUNK_TURN_MAX)
 				_:
 					bounds = bounds.expand(v)
 	for m: Vector3 in _SIDES:
 		var shoulder: Vector3 = SHOULDER * m
-		bounds = bounds.merge(AABB(shoulder - Vector3.ONE * reach, Vector3.ONE * reach * 2.0))
+		var arc: AABB = _swept(AABB(shoulder, Vector3.ZERO), shoulder, TRUNK_TURN_MAX)
+		bounds = bounds.merge(arc.grow(reach))
 	_pose_bounds = bounds
+	return bounds
+
+
+# `bounds` grown by the arc `v` sweeps turned up to `turn` either way about the
+# vertical axis, as crowd.gdshader's turn_y turns it: its ends, and every
+# heading on an axis it passes through.
+static func _swept(bounds: AABB, v: Vector3, turn: float) -> AABB:
+	var r: float = Vector2(v.x, v.z).length()
+	var at: float = atan2(v.z, v.x)
+	bounds = bounds.expand(Vector3(r * cos(at - turn), v.y, r * sin(at - turn)))
+	bounds = bounds.expand(Vector3(r * cos(at + turn), v.y, r * sin(at + turn)))
+	for k: int in range(-8, 9):
+		var axis: float = float(k) * PI * 0.5
+		if axis > at - turn and axis < at + turn:
+			bounds = bounds.expand(Vector3(r * cos(axis), v.y, r * sin(axis)))
 	return bounds
 
 
