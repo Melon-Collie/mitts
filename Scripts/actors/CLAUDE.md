@@ -78,10 +78,16 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   elbow's middle and the forearm share the ELBOW bone's hinge.
 - **The armhole is a jersey's seam**, near upright from the shoulders' flat
   top down to under the arm, so the torso carries the shoulder's top out level
-  from the neck and the sleeve leaves it at the side; the seam joins the
-  upper arm's first ring directly: one tube narrowing from the seam down the
-  arm. Any ring between them reads as a separate shoulder part, a kink where
-  the sleeve meets it.
+  from the neck and the sleeve leaves it at the side. One ring lies between
+  the seam and the upper arm's first ring. Under the arm it is on the line
+  between them and only spreads the turn over two bands. Over the arm it is
+  the shoulder's cap: stood out level from the seam's top to the arm's outside
+  and riding the girdle, so the top stays square over an arm that hangs, as
+  over a pad, rather than sloping from the seam straight down the arm
+  (`test_connected_body.gd`). The cap is laid off the seam, in the chest's
+  terms. Laid round the arm instead (a ring square to it at the joint) it
+  leans forward with the arm and is narrower fore and aft than the seam, and
+  the band between them folds in when the arm swings forward.
 - **The shoulder splits the arm's turn off the chest into swing and twist.** The
   girdle (the armhole and the top of the shoulder) takes a share of the swing
   that rises as the arm lifts, as the collarbone and shoulder blade do (the

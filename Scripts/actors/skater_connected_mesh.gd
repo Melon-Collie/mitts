@@ -163,6 +163,16 @@ const _FIRST_RING_ARM_SHARE := Vector2(0.55, 0.15)
 # The share of the seam's lowest point (the armpit) on the shoulder's middle
 # rather than the girdle, easing to none at the seam's middle height.
 const _ARMPIT_SHOULDER: float = 0.5
+# The shoulder's cap: over the top of the arm the ring between the seam and the
+# first ring stands out from the seam's top (this far out, this far down), so
+# the shoulder's top runs on level to the arm's outside and turns down there,
+# as over a shoulder pad, rather than sloping straight from the seam to the
+# arm. `_CAP_OVER` is where up the seam's height (0 its middle, 1 its top) the
+# cap eases in, and `_CAP_GIRDLE` the cap's share on the girdle, which keeps it
+# up where an arm hangs.
+const _CAP_REACH_M := Vector2(0.060, 0.012)
+const _CAP_OVER := Vector2(0.2, 0.8)
+const _CAP_GIRDLE: float = 0.8
 const _UPPER_RINGS: Array[Vector3] = [
 	Vector3(0.12, 0.100, 0.0), Vector3(0.17, 0.091, 0.0), Vector3(0.205, 0.086, 0.08),
 	Vector3(0.24, 0.084, 0.25), Vector3(0.275, 0.084, 0.5), Vector3(0.305, 0.085, 0.8),
@@ -643,16 +653,22 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 		axes.append(frame)
 		vs.append(SleevePaint.pos_of(BIND_ARM_SEGMENT_M + r.x))
 
-	# Between the seam and the arm's first ring, a ring on the straight line
-	# joining them: no shape of its own at rest, but riding halfway from the
-	# girdle to the shoulder's middle, so the turn between the chest and the arm
+	# Between the seam and the arm's first ring, a ring riding from the girdle
+	# toward the shoulder's middle, so the turn between the chest and the arm
 	# bends over two bands, not one that stretches flat or turns inside out.
+	# Under the arm it is on the straight line joining them; over it, the cap.
 	var seam: PackedInt32Array = b.aligned(hole, rings[0])
 	var girdle_bind: int = Bind.GIRDLE_L if left else Bind.GIRDLE_R
 	var between := PackedInt32Array()
+	var cap_reach := Vector3(side * _CAP_REACH_M.x, -_CAP_REACH_M.y, 0.0)
 	for m: int in LIMB_SIDES:
-		between.append(b.vertex(b.position(seam[m]).lerp(b.position(rings[0][m]), 0.5),
-				[girdle_bind, shoulder_bind], [0.5, 0.5]))
+		var at_seam: Vector3 = b.position(seam[m])
+		var over: float = smoothstep(_CAP_OVER.x, _CAP_OVER.y,
+				(at_seam.y - _ARMHOLE_CENTRE.y) / _ARMHOLE_RADII.y)
+		var girdle: float = lerpf(0.5, _CAP_GIRDLE, over)
+		between.append(b.vertex(
+				at_seam.lerp(b.position(rings[0][m]), 0.5).lerp(at_seam + cap_reach, over),
+				[girdle_bind, shoulder_bind], [girdle, 1.0 - girdle]))
 	# The seam's armpit edge goes partly with the shoulder, so a raised arm
 	# lifts it rather than folding the band under the arm over itself.
 	for m: int in LIMB_SIDES:
