@@ -289,10 +289,11 @@ func apply_facing(input: InputState, delta: float) -> void:
 			var lefty: bool = _skater.is_left_handed
 			var rules: FacingRules.Config = _controller.facing_rules
 			# A carrier's hips pivot where its blade stops on the backhand, and
-			# yield to the puck before it stops on the forehand.
+			# yield to the puck before it stops on the forehand. A fighter squares
+			# up to the cursor the way the stance does.
 			FacingRules.solve(_facing_rule, facing, cursor_dir,
 					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
-					_controller.stance_active, lefty,
+					_controller.stance_active or _controller.is_fighting(), lefty,
 					_controller.carry_facing_rules if _controller.has_puck else rules)
 			var facing_target: Vector2 = _facing_rule.target
 			var behind: bool = absf(facing.angle_to(cursor_dir)) \

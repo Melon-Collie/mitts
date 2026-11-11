@@ -267,7 +267,7 @@ stroke's path rather than rolling the solved legs off it.
 
 Everything the gait lays on the stroke — the faceoff stance, the loaded skating
 stance (Shift), the shot loads and kick, the check commit and drive, the board
-pin, the press (a driver's lunge into the man, a dug-in man sat back into it),
+pin, the fight stance, the press (a driver's lunge into the man, a dug-in man sat back into it),
 the stick lift, the celebration bounce, the stagger, the block and the
 knockdown — is a `GaitLayer`
 (`Scripts/controllers/gait/`). The coordinator runs them lowest priority first
@@ -306,12 +306,14 @@ physics rate.
 
 ### A change of who poses the stick is eased, not cut
 
-The tracked IK, the slapper's wind-up, the follow-throughs and the shot block
-each place the hand and blade from their own geometry, and none starts where the
+The tracked IK, the slapper's wind-up, the follow-throughs, the shot block and
+a fighter's guard (`FightGuardRules`, the stick down and the fists up) each
+place the hand and blade from their own geometry, and none starts where the
 last left off — a change of owner moved the stick up to 1.8 m in a tick.
 `SkaterPoseBridge` runs after the tick's last write: on a change of owner it
 holds the stick last drawn and eases the new owner's pose in from it (0.15 s;
-0.05 s into a follow-through, which is the shot's own whip). It advances on live
+0.05 s into a follow-through, which is the shot's own whip; `FightGuardRules.EASE_S`
+into or out of the guard). It advances on live
 ticks only — reconcile treats the live tick as the truth, and a bridge advanced
 through a replay would play its ease twice — and its effect rides the hand and
 blade the wire already carries. The same rule shapes the rest of the

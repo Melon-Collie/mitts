@@ -23,7 +23,8 @@ delegates to.
 | `_shadow` | `SkaterShadows` | the Player Shadows setting: whether the body's meshes and the stick cast, and a ghost never does |
 | `_paint` | `BodyZonePaint` | the body's one material: a zone per leg and upper surface, painted from `StandardMaterial3D` records through `Skater`'s surface seams |
 | `_anim_lod` | `SkaterAnimationLod` | how often the mesh is re-posed, by camera distance and the Animation Detail setting |
-| `_connected` | `SkaterConnectedRig` | the body's one mesh (`SkaterBodyMesh`: the skin and the rigid parts) and the skin's deform bones (below) |
+| `_connected` | `SkaterConnectedRig` | the body's one mesh (`SkaterBodyMesh`: the skin and the rigid parts) and the skin's deform bones (below); bare fists in it while `Skater.gloves_off()` |
+| `_dropped_gear` | `SkaterDroppedGear` | the stick and gloves a fighter drops: copied from where they are drawn as the gloves come off, fallen and lying on the ice, gone when they go back on; mesh only, on every machine |
 
 ## The body's skin
 

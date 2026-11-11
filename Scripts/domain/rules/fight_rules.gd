@@ -27,6 +27,9 @@ const DISENGAGE_S: float = 1.5
 const FIGHT_MAX_S: float = 20.0
 
 enum End { NONE, DISENGAGED, LINESMEN }
+# Skater.fight_role: written by the host's FightTracker alone and replicated,
+# so every machine draws a fighter's gear off and his guard from it.
+enum Role { NONE, CHALLENGING, FIGHTING }
 
 
 # Whether this match fights at all. Never in practice (free play, the tutorial,

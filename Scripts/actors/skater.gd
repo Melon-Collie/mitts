@@ -419,6 +419,9 @@ var body_block_height: float = 0.7
 # runs at render rate, so the node lookup is resolved once in
 # _rebuild_blade_mesh rather than per frame.
 var _blade_mesh_instance: MeshInstance3D = null
+# Whether the stick (shaft, knob, blade) was last drawn: hidden while the gloves
+# are off (gloves_off).
+var _stick_shown: bool = true
 # Where the blade mesh was last drawn, in UpperBody's frame: a frame that skips
 # the mesh pass holds it there (_hold_blade_mesh).
 var _blade_drawn: Transform3D = Transform3D.IDENTITY
@@ -719,6 +722,9 @@ var stick_tied: bool = false
 # since the host's FightTracker last read it (the tracker clears it). Set on
 # every machine and read only by the host's tracker.
 var fight_press_pending: bool = false
+# In a fight or calling one (FightRules.Role; FightTracker, host-only writer;
+# replicated). FIGHTING draws the stick and gloves off and the hands up.
+var fight_role: int = FightRules.Role.NONE
 # The stick-check button as this skater's last input held it, stamped by the
 # controller. Read only by the host's StickTieTracker (either player holding keeps
 # a tie); never replicated.
@@ -932,6 +938,8 @@ var _arms: SkaterArmRig
 var _spine: SkaterSpineRig
 var _stick: SkaterStickRig
 var _connected: SkaterConnectedRig = SkaterConnectedRig.new()
+var _dropped_gear := SkaterDroppedGear.new()
+var _body_skeleton: Skeleton3D = null
 var _draw: SkaterDrawTracker = SkaterDrawTracker.new()
 var _uniform: SkaterUniformCoordinator
 var _hud: SkaterHUDCoordinator
@@ -990,6 +998,8 @@ func _ready() -> void:
 	# the space both gameplay frames are positioned in.
 	var body: Skeleton3D = SkaterBodySkeleton.new_body_skeleton()
 	mesh_root.add_child(body)
+	_body_skeleton = body
+	_dropped_gear.setup(self)
 
 	_legs = SkaterLegRig.new()
 	_legs.setup(self)
@@ -1044,6 +1054,7 @@ func _process(delta: float) -> void:
 	# a node written here is the previous frame's pose, so a frame that ran two
 	# ticks drew them a tick behind the marker the blade hangs from.
 	if is_visible_in_tree():
+		_show_stick(not gloves_off())
 		# The mesh is posed when the camera sees him and his animation LOD is
 		# due; any other frame is off camera to the rig, which still runs the
 		# gait for the part of it that is not mesh.
@@ -1066,6 +1077,7 @@ func _process(delta: float) -> void:
 			_hold_blade_mesh()
 		if _on_camera:
 			_connected.update()
+		_dropped_gear.update(delta)
 		if _on_camera or not seen:
 			_anim_lod.consumed()
 	# World HUD (ring, name, chevrons, beacon) at RENDER rate: ~10 top_level node
@@ -3148,6 +3160,43 @@ func update_arm_mesh(delta: float = -1.0) -> void:
 # (upper-body space) — the offset a hand on the stick rides.
 func stick_bow_offset(point: Vector3) -> Vector3:
 	return _stick.bow_offset(point)
+
+
+# The gloves and stick are on the ice (a fight): drawn bare-handed, the stick
+# hidden.
+func gloves_off() -> bool:
+	return fight_role == FightRules.Role.FIGHTING
+
+
+# What SkaterDroppedGear copies the dropped stick and gloves from.
+func blade_mesh_instance() -> MeshInstance3D:
+	return _blade_mesh_instance
+
+
+func body_skeleton() -> Skeleton3D:
+	return _body_skeleton
+
+
+func body_material() -> Material:
+	return _paint.material
+
+
+# Which hand's glove the top one is: a left shot's top hand is his right.
+func is_top_hand_right() -> bool:
+	return shoulder.position.x >= 0.0
+
+
+# Hidden, it is written every frame: a paint pass can rebuild the knob, which
+# comes back visible.
+func _show_stick(shown: bool) -> void:
+	if shown and _stick_shown:
+		return
+	_stick_shown = shown
+	stick_mesh.visible = shown
+	if stick_knob_mesh != null:
+		stick_knob_mesh.visible = shown
+	if _blade_mesh_instance != null:
+		_blade_mesh_instance.visible = shown
 
 
 func stick_grip_axis(point: Vector3) -> Vector3:

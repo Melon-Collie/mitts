@@ -196,3 +196,32 @@ func test_fights_left_over_after_play_moved_on_are_dropped() -> void:
 	assert_false(_fights.is_fighting(_home))
 	_press(_home, GamePhase.Phase.FACEOFF_PREP)
 	assert_eq(_made.size(), 2, "and both may fight again")
+
+
+func test_the_tracker_writes_each_mans_role() -> void:
+	_press(_home)
+	assert_eq(_home.fight_role, FightRules.Role.CHALLENGING)
+	assert_eq(_away.fight_role, FightRules.Role.NONE, "called out is not yet fighting")
+	_press(_away)
+	assert_eq(_home.fight_role, FightRules.Role.FIGHTING)
+	assert_eq(_away.fight_role, FightRules.Role.FIGHTING)
+	_now += FightRules.FIGHT_MAX_S
+	_fights.tick(TICK, true, GamePhase.Phase.FIGHT)
+	assert_eq(_home.fight_role, FightRules.Role.NONE)
+	assert_eq(_away.fight_role, FightRules.Role.NONE)
+
+
+func test_a_lapsed_challenge_stands_the_challenger_down() -> void:
+	_press(_home)
+	_now += FightRules.CHALLENGE_WINDOW_S + 0.01
+	_fights.tick(TICK, true, PLAYING)
+	assert_eq(_home.fight_role, FightRules.Role.NONE)
+
+
+func test_clear_stands_everyone_down() -> void:
+	_press(_home)
+	_press(_away)
+	_mate.fight_role = FightRules.Role.FIGHTING  # as a goal replay's stamp would leave it
+	_fights.clear()
+	for s: Skater in [_home, _away, _mate]:
+		assert_eq(s.fight_role, FightRules.Role.NONE)

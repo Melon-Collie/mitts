@@ -556,6 +556,21 @@ func test_skater_slapshot_pin_rides_the_body_lock_byte() -> void:
 		assert_true(dec.diving, "the pin bit leaves the dive alone")
 
 
+func test_skater_fight_role_rides_the_body_lock_byte() -> void:
+	for role: int in [FightRules.Role.NONE, FightRules.Role.CHALLENGING,
+			FightRules.Role.FIGHTING]:
+		var s := SkaterNetworkState.new()
+		s.pin_role = BoardPinRules.Role.PINNER
+		s.diving = true
+		s.slapshot_pinned = true
+		s.fight_role = role
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_eq(dec.fight_role, role)
+		assert_eq(dec.pin_role, BoardPinRules.Role.PINNER, "the fight bits leave the pin alone")
+		assert_true(dec.diving and dec.slapshot_pinned, "and the dive and the slapshot pin")
+
+
 func test_skater_stagger_round_trips() -> void:
 	# stagger_timer was never on the wire, so a client victim's predicted stagger
 	# was wiped to 0 on the next reconcile. u8 @0.01s must now round-trip it.

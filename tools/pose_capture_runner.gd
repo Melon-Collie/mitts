@@ -83,7 +83,9 @@ const CAM_HAND_FOV: float = 22.0
 # partner (a second skater in the away kit, the two in contact: "offset" from
 # the posed skater, "face", and the "input" spec he holds every tick — the
 # press's other body), celebrate (the goal-celebration window started before the
-# first tick, in seconds). "readout": true also prints the pose's speed
+# first tick, in seconds), fight (the gloves off: FightRules.Role.FIGHTING on the
+# posed skater and any partner; fight_at, the tick it comes on instead).
+# "readout": true also prints the pose's speed
 # and body lean, which a tile can't be read for.
 const POSES: Array = [
 	{"name": "rest", "puck": false, "steps": [[40, {}]]},
@@ -392,6 +394,32 @@ const POSES: Array = [
 		"cam": Vector3(-3.4, 0.6, 0.3), "steps": [[120, {}]]},
 	{"name": "celebrate_game", "puck": false, "celebrate": GameRules.GOAL_CELEBRATION_DURATION,
 		"game_cam": true, "steps": [[120, {"move": Vector2(0.0, -1.0)}]]},
+	# ── Fighting ──────────────────────────────────────────────────────────────
+	# Gloves and stick off, the bare fists up in the guard (FightGuardRules), the
+	# stance squared up: from the front three-quarter, head-on, from the side, and
+	# squared up to a man in the away kit, from the side.
+	{"name": "fight_guard", "puck": false, "fight": true,
+		"cam": Vector3(1.2, 0.5, -2.4), "cam_aim": Vector3(0.0, 0.4, 0.0),
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -2.0), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	{"name": "fight_guard_front", "puck": false, "fight": true,
+		"cam": Vector3(0.0, 0.6, -2.6), "cam_aim": Vector3(0.0, 0.45, 0.0),
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -2.0), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	{"name": "fight_guard_side", "puck": false, "fight": true,
+		"cam": Vector3(-2.6, 0.5, 0.0), "cam_aim": Vector3(0.0, 0.4, 0.0),
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -2.0), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	# The gloves and stick coming off a skater holding them out, a moment after
+	# and once they lie on the ice; framed wide, from above.
+	{"name": "fight_drop_falling", "puck": false, "fight_at": 30,
+		"cam": Vector3(2.2, 1.4, -2.2), "cam_aim": Vector3(0.0, -0.4, -0.3),
+		"steps": [[38, {"aim": Vector3(0.8, 0.0, -2.0), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	{"name": "fight_drop_down", "puck": false, "fight_at": 30,
+		"cam": Vector3(2.2, 1.4, -2.2), "cam_aim": Vector3(0.0, -0.4, -0.3),
+		"steps": [[130, {"aim": Vector3(0.8, 0.0, -2.0), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	{"name": "fight_pair", "puck": false, "fight": true,
+		"cam": Vector3(3.4, 0.5, -0.6), "cam_aim": Vector3(0.0, 0.3, -0.6),
+		"partner": {"offset": Vector3(0.0, 0.0, -1.2), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 2.0)}},
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -2.0), "face": Vector3(0.0, 0.0, -1.0)}]]},
 	# ── FACEOFF_PREP ──────────────────────────────────────────────────────────
 	# The locked-phase path (begin_approach → tick_faceoff_approach →
 	# apply_blade_aim_only), which _process_input never reaches, so the specs
@@ -662,6 +690,12 @@ func _teardown() -> void:
 		_partner_controller = null
 
 
+func _set_fight_role(role: int) -> void:
+	_skater.fight_role = role
+	if _partner != null:
+		_partner.fight_role = role
+
+
 func _run_pose() -> void:
 	var pose: Dictionary = _poses[_pose_index]
 	if bool(pose.get("puck", false)):
@@ -677,6 +711,10 @@ func _run_pose() -> void:
 		_place_for_pin(int(pose["pin_role"]))
 	if pose.has("celebrate"):
 		_controller.start_celebration(float(pose["celebrate"]))
+	_set_fight_role(FightRules.Role.FIGHTING if bool(pose.get("fight", false)) \
+			else FightRules.Role.NONE)
+	var fight_at: int = int(pose.get("fight_at", -1))
+	var tick: int = 0
 	var steps: Array = pose.get("steps", [])
 	for step: Array in steps:
 		var ticks: int = step[0]
@@ -686,6 +724,9 @@ func _run_pose() -> void:
 			_controller._pose.facing = Vector2(face.x, face.z).normalized()
 			_skater.set_facing(_controller._pose.facing)
 		for t: int in ticks:
+			if tick == fight_at:
+				_set_fight_role(FightRules.Role.FIGHTING)
+			tick += 1
 			_fill_input(input, spec, t == 0)
 			# Same order as a live tick: the controller runs at physics priority
 			# -1, ahead of the skater's own integration, and the cosmetic rig

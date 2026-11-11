@@ -951,6 +951,11 @@ var pin_stance: float = 0.6
 var pin_pressed_lean_deg: float = 12.0
 var pin_drive_lean_deg: float = 18.0
 var pin_pose_speed: float = 6.0
+# A fighter's stance (GaitFightLayer): its crouch floor (× stance_hip_deg), each
+# skate set out from under its hip, and the chest over the knees.
+var fight_stance_crouch: float = 1.2
+var fight_stance_width_m: float = 0.09
+var fight_chest_deg: float = 12.0
 # Press pose (GaitPressLayer): the driver sits into a lunge and leans into the
 # man; the man dug in sits deep and wide and leans back into the push.
 var press_drive_stance: float = 0.7
@@ -1757,6 +1762,12 @@ func _adopt_stick_check(state: SkaterNetworkState) -> void:
 	skater.stick_check_phase = _stick_check.phase
 
 
+# Gloves off in a fight (FightRules.Role.FIGHTING, replicated): the guard owns
+# the hands and the shot machine stands down.
+func is_fighting() -> bool:
+	return skater.fight_role == FightRules.Role.FIGHTING
+
+
 # Hands the fight button's press to the host's FightTracker. Also called by the
 # locked faceoff paths, which skip _process_input, so two men lined up across
 # the dot can drop the gloves. Live inputs only: a replay re-reads presses the
@@ -1893,7 +1904,7 @@ func _process_input(input: InputState, delta: float) -> void:
 		else:
 			_ik.hold_free_hand(Vector3.ZERO, 0.0)
 		_pose_bridge.settle(skater, _sm.get_state(), delta, _aiming.slapper_setup_done,
-				_sm.follow_through_is_slapper)
+				_sm.follow_through_is_slapper, is_fighting())
 	# Replay too: down with block held, nothing re-solves the stick, so the next
 	# tick's twist follows the one this leaves (Scripts/networking/CLAUDE.md).
 	_apply_down_pose()
@@ -2247,6 +2258,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.stick_check_elapsed = _stick_check.elapsed
 	state.stick_tied = skater.stick_tied
 	state.pin_role = skater.pin_role
+	state.fight_role = skater.fight_role
 	state.pin_strength = skater.pin_strength
 	state.diving = skater.is_diving
 	state.slapshot_pinned = skater.is_slapshot_pinning()
@@ -2340,6 +2352,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.stick_tied = state.stick_tied
 	skater.pin_role = state.pin_role
 	skater.pin_strength = state.pin_strength
+	skater.fight_role = state.fight_role
 	# Intent feeds the gait's input-driven reads below (glide / dig-in /
 	# crossovers / brake stop) — stamp it like the live controllers do, so
 	# playback strides match live play instead of reading zero (file viewer)
@@ -2830,6 +2843,12 @@ func _reset_to_skating_state() -> void:
 # blade at its seat and dispatches nothing; the first input past it dispatches
 # the queued press as its own.
 func _apply_state(input: InputState, delta: float) -> void:
+	if is_fighting():
+		# The stick is on the ice: no shot, pass or block is begun, and none in
+		# hand when the gloves came off goes on.
+		_reset_to_skating_state()
+		_shot_pose.apply_fight_guard()
+		return
 	if _settle.settling:
 		if skater.is_slapshot_pinning():
 			# A called-off slapshot: the blade comes down onto the held puck.
@@ -3583,10 +3602,11 @@ func one_timer_would_connect() -> bool:
 
 # A board pin is the host's to start and end (BoardPinTracker) and lands every
 # broadcast like a tie; the replay reads the adopted role, so the cap below is
-# reproduced exactly.
+# reproduced exactly. A fight's role (FightTracker) lands the same way.
 func _adopt_pin(state: SkaterNetworkState) -> void:
 	skater.pin_role = state.pin_role
 	skater.pin_strength = state.pin_strength
+	skater.fight_role = state.fight_role
 
 
 # Locked in a pin, the body slides along the wall no faster than its role's cap.

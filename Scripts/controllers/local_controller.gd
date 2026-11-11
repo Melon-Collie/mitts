@@ -824,7 +824,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			# During the celebration the raised-stick pose owns the hands;
 			# re-IKing to the mouse here would pop the blade down for a frame
 			# on every reconcile. Skip — the next real tick re-applies it.
-			if not is_celebrating():
+			if is_fighting():
+				_shot_pose.apply_fight_guard()
+			elif not is_celebrating():
 				_ik.apply_blade_from_mouse(_current_input, 0.0)
 	_apply_down_pose()
 	var blade_reconcile_delta: float = skater.get_blade_contact_global().distance_to(pre_reconcile_blade)

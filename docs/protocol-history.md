@@ -485,3 +485,9 @@ here whenever you bump, in the same format.
 #      byte. Replay FORMAT_VERSION unchanged: the recorders store snapshots,
 #      not inputs, and FIGHT is appended so every older file's phases still
 #      read the same.
+# v100: fighting, phase 2. The skater's body-lock byte carries fight_role
+#      (FightRules.Role) in bits 4-5, which every machine draws a fighter's
+#      gear off and guard up from. A v99 peer reads the bits as zero and draws
+#      a fighter holding his stick, so mixed builds must be refused. Replay
+#      FORMAT_VERSION unchanged: the byte was there, and an older file's bits
+#      are zero.

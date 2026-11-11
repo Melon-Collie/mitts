@@ -2,9 +2,10 @@ class_name FightTracker
 extends RefCounted
 
 # Host-only owner of every challenge and every fight (FightRules). It reads each
-# skater's fight press (`Skater.fight_press_pending`, which it clears) and says
-# when a fight starts and when the last one is over; GameManager blows the
-# whistle and runs the faceoff after.
+# skater's fight press (`Skater.fight_press_pending`, which it clears), is the
+# only writer of the replicated `Skater.fight_role`, and says when a fight starts
+# and when the last one is over; GameManager blows the whistle and runs the
+# faceoff after.
 #
 # A press by a man an open challenge is aimed at answers it, if he is still
 # within FightRules.ACCEPT_RANGE_M of the challenger. Any other press challenges
@@ -77,7 +78,8 @@ func challenge_target_of(challenger: Skater) -> Skater:
 
 
 # A stoppage, a rematch or a teardown: every challenge and fight goes, and so
-# does every press nobody has read yet.
+# does every press nobody has read yet. Sweeps every skater, not only the ones
+# held here: the goal replay stamps its recorded fight_role onto the live actors.
 func clear() -> void:
 	_challenges.clear()
 	_cooling_until.clear()
@@ -86,6 +88,7 @@ func clear() -> void:
 		return
 	for skater: Skater in _registry.skaters():
 		skater.fight_press_pending = false
+		skater.fight_role = FightRules.Role.NONE
 
 
 func _on_press(skater: Skater) -> void:
@@ -106,6 +109,7 @@ func _on_press(skater: Skater) -> void:
 	c.target = target
 	c.expires_at = _now() + FightRules.CHALLENGE_WINDOW_S
 	_challenges[skater] = c
+	skater.fight_role = FightRules.Role.CHALLENGING
 	challenge_made.emit(skater, target)
 	if _is_bot(target):
 		_start(skater, target)
@@ -156,6 +160,8 @@ func _start(a: Skater, b: Skater) -> void:
 	_started_at[b] = now
 	_apart_s[a] = 0.0
 	_apart_s[b] = 0.0
+	a.fight_role = FightRules.Role.FIGHTING
+	b.fight_role = FightRules.Role.FIGHTING
 	fight_started.emit(a, b)
 
 
@@ -170,9 +176,14 @@ func _lapse_challenges() -> void:
 			continue
 		_challenges.erase(key)
 		if gone:
+			if is_instance_valid(key) and (key as Skater).fight_role == FightRules.Role.CHALLENGING:
+				(key as Skater).fight_role = FightRules.Role.NONE
 			continue
 		_cooling_until[key] = now + FightRules.CHALLENGE_COOLDOWN_S
-		challenge_lapsed.emit(key as Skater)
+		var challenger: Skater = key as Skater
+		if challenger.fight_role == FightRules.Role.CHALLENGING:
+			challenger.fight_role = FightRules.Role.NONE
+		challenge_lapsed.emit(challenger)
 
 
 func _step_fights(delta: float) -> void:
@@ -200,6 +211,9 @@ func _step_fights(delta: float) -> void:
 
 
 func _end_all() -> void:
+	for key: Variant in _partner.keys():
+		if is_instance_valid(key):
+			(key as Skater).fight_role = FightRules.Role.NONE
 	_partner.clear()
 	_started_at.clear()
 	_apart_s.clear()
@@ -207,6 +221,9 @@ func _end_all() -> void:
 
 # Takes Variants: either man may already be freed.
 func _end(a: Variant, b: Variant) -> void:
+	for s: Variant in [a, b]:
+		if is_instance_valid(s):
+			(s as Skater).fight_role = FightRules.Role.NONE
 	_partner.erase(a)
 	_partner.erase(b)
 	_started_at.erase(a)

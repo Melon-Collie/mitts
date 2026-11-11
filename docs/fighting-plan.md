@@ -1,8 +1,8 @@
 # Fighting — design plan
 
-Status: **approved; phase 1 (lifecycle) built**, awaiting a local playtest.
-Phases 2–5 are not started. Where phase 1 differs from the text below, the
-"Phase 1 as built" section says how.
+Status: **approved; phases 1 (lifecycle) and 2 (gloves off) built**; phase 2
+awaits a local playtest. Phases 3–5 are not started. Where what is built
+differs from the text below, the "as built" sections say how.
 
 Two skaters can fight. Both must agree to it, the referee blows the play
 dead, and the fight is played with the same hands the stick is: the cursor
@@ -236,3 +236,43 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   up is already the loft step), both rebindable.
 - **The Fighting toggle** is on by default (`GameRules.FIGHTING_ENABLED`) and
   rides the lobby-settings and game-config RPCs.
+
+## Phase 2 as built
+
+- **`Skater.fight_role` is on the wire** (`FightRules.Role`: NONE,
+  CHALLENGING, FIGHTING), in bits 4–5 of the skater's body-lock byte
+  (protocol v100). `FightTracker` is its only writer; it lands every
+  broadcast with the pin's role (`SkaterController._adopt_pin`). CHALLENGING
+  is replicated but nothing draws it yet.
+- **The guard** (`FightGuardRules`): with the gloves off, the top fist sits in
+  front of the chin inside its shoulder, and the blade marker is parked under
+  it, so a fist drawn from the "shaft" through it is thumb up. The shot
+  machine stands down while fighting (`SkaterController._apply_state`): a
+  wind-up in hand is called off and nothing new starts. The guard is pure in
+  the frame, so a reconcile replay lays the same one, and the post-reconcile
+  dispatch re-applies it. `SkaterPoseBridge` has a `FIGHT` owner and eases the
+  hands up over `FightGuardRules.EASE_S`. The off hand comes up at render rate
+  (`SkaterIKCoordinator.update_bottom_hand`) off the replicated role, so every
+  machine draws it.
+- **Facing squares up to the cursor while fighting**, as the stance's does
+  (`FacingRules.solve`'s stance flag), rather than to the opponent: the cursor
+  is input, so prediction and the host agree on it exactly.
+- **The stance** is `GaitFightLayer`: a crouch floor, a base set out from
+  under the hips and the chest over the knees (`fight_stance_*`,
+  `fight_chest_deg` on `SkaterController`).
+- **Bare fists**: `SkaterBodyMesh` has a bare variant per glove pair
+  (`SkaterRigidParts.upper_body_mesh(top_right, bare)`), the glove's fist at
+  `BARE_FIST_SCALE` and a wrist where the cuff was, both in the skin's zone.
+  `SkaterConnectedRig` switches to it on `Skater.gloves_off()`, and the arm rig
+  gives each bare fist `FightGuardRules.FIST_GRIP_AXIS`.
+- **The stick is hidden** (shaft, knob and blade; `Skater._show_stick`), and
+  **the stick and gloves drop** (`SkaterDroppedGear`, a `Skater` collaborator).
+  The stick is copied from its live nodes, each glove from its bones with
+  `SkaterRigidParts.glove_mesh` drawn by the body's material. The pieces fall
+  and tumble, slide to a stop lying flat, and go when the role clears. They
+  are mesh only, on every machine, never on the wire.
+- **Seen with** `render-poses.sh --only=fight`: the guard from three sides, the
+  drop falling and down, and a squared-up pair. **Tested by**
+  `test_fight_guard.gd`.
+- **Not yet**: a challenger's squared-up pose (CHALLENGING), and a pair whose
+  fight ends while another goes on picks its gear up at once.
