@@ -326,6 +326,58 @@ stick pivoting about its blade. It is an offset on `Skater.drawn_top_hand()`,
 which the arm, the stick and the bottom hand are drawn to; the `TopHand` marker
 every claim reads never takes it.
 
+### Where the hands are drawn
+
+The tick decides where the BLADE goes, and that is the game: the cursor's
+projection onto the reach, the speed cap, the clamps. Where the hands hold the
+stick that reaches it is drawn, by a rule of its own (`StickHoldRules`, laid on
+as an offset on `Skater.drawn_top_hand()` by
+`SkaterIKCoordinator._hold_offset`). The marker's hand is the tick's: on the
+line from the shoulder to the blade, raised over the shoulder when the blade
+comes inside the stick's span, which at a dangle's distance stood the shaft up
+past 60° with the top hand at the chest and the elbow winged level with the
+shoulder. Nothing gameplay reads moves, and nothing goes on the wire: every
+peer derives the hold from the hand and blade it already has.
+
+- **The hand lives in a pocket off its own hip, and the stick pivots through
+  it.** A stick is 1.02 m across the ice at its lie, so a blade that far off
+  the pocket is held on the lie with the hand at the waist; a blade further off
+  draws the hand out toward it, and one nearer draws it out to its own side
+  and back, the stick across the front of the body. Only what the pocket
+  cannot take up stands the shaft off its lie. The hand's height is never
+  chosen: it is what the rigid stick leaves, so the drawn stick is exactly the
+  tick's length. `test_stick_hold_rules.gd`.
+- **The pocket hangs from the shoulder as drawn** (`Skater.visible_shoulder`),
+  and the held hand follows on a spring. Placed from the tick's shoulder it
+  stepped ahead of the body at a pickup, where the fold comes on at once and
+  the trunk eases into it.
+- **It is the tracked stick's.** A shot, the block, the centre's address, the
+  check commit, a celebration and a knockdown pose their own hands; the hold
+  hands over on a spring quick enough to be gone inside the pose bridge's
+  ease. Two gates are instant, because they are about where the stick is
+  rather than whose it is: a blade lifted off the ice (the hold describes a
+  blade on it), and a hand past the arm's reach (the one-handed reach to the
+  rim, which is the marker's).
+- **The body comes down to the stick.** A top hand at the waist under
+  shoulders 1.45 m up locks the bottom arm straight and bunches the hands, so
+  a carrier sits (`carry_crouch`, standing, for as long as he carries) and is
+  drawn folded further than the solve measures (`carry_fold_drawn_deg` against
+  `carry_fold_deg`, `drawn_chest_fold`): the reach the tick allows is the
+  shallower fold's, and shoulders drawn ahead of the solve's are only ever
+  nearer the hands. The drawn fold follows the blade's distance further out
+  than the solve's does (`_DRAWN_FOLD_OUT_M`): over a puck a stick's span out
+  the back is flat, and over a dangle the chest comes up and the shoulders
+  back off the stick, which is what keeps the shaft down there.
+- **The drawn blade turns with the drawn hand.** The blade is dressed along
+  the heel→hand line, so a hand drawn off the marker's yaws the drawn blade off
+  the marker's by up to ~20°; the carry seat (`Skater._seat_on_puck`) rests it
+  on the puck from there. The contact the claims and the deflections read is
+  still the marker's.
+
+`test_carry_hold.gd` holds the carry on the live rig, and
+`.claude/hooks/render-arms.sh` prints the hold per frame (hand and shoulder
+heights, the shaft's angle, the hands' spacing, both elbows).
+
 ### The gait's numeric core is native
 
 Where the extension is built, `NativeSkaterGait` runs `SkaterLocomotion`, the
@@ -424,9 +476,9 @@ hand the drawn arm could not reach or barely extended toward:
   blade marker and the posture's own fold, which it tops up rather than adds
   to, so it needs no wire field: full while the puck is ahead and out, none
   round beside or behind him, none pulled in tight. A shot or the block,
-  posing their own stick, take none. The gait draws exactly that fold on the
-  trunk texture, with a crouch under it standing (`GaitCarryLayer`).
-  `test_carry_posture_rules.gd`.
+  posing their own stick, take none. The gait draws a deeper fold on the
+  trunk texture, with a crouch under it standing (`GaitCarryLayer`; *Where the
+  hands are drawn*). `test_carry_posture_rules.gd`.
 - **Round the forehand the hand comes across the body**
   (`top_hand_forward_m`, `TopHandIK.Config.hand_forward`). Held at its own
   shoulder, on the backhand side, the top hand of a stick swept round the

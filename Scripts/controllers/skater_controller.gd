@@ -443,6 +443,10 @@ var velocity_lean_speed: float = 6.0
 # standing or skating — its shoulders, and with them his hands, out in front of
 # his hips where both can hold it.
 var carry_fold_deg: float = 22.0
+# And how far it is drawn folded (SkaterIKCoordinator.drawn_chest_fold): a
+# trunk ~40° off upright with the hips sat back under it brings the shoulders
+# down to a stick whose top hand rides at the waist, so both elbows bend.
+var carry_fold_drawn_deg: float = 36.0
 # The least a carried puck comes off the centre of his body (m; CarryPostureRules
 # .held_out): pulled in closer, the shaft stands up beside him, the top hand rises
 # into his armpit and the bottom arm reaches it only through his belly.
@@ -674,7 +678,7 @@ var stance_sit_gain: float = 0.35        # extra stroke crouch in the stance
 var stance_crouch: float = 1.7           # crouch floor in the stance (× stance_hip_deg)
 var stance_width_m: float = 0.125        # each skate set out from under its hip
 var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
-var carry_crouch: float = 1.7            # crouch floor under the full chest fold over the stick (× stance_hip_deg), the loaded stance's
+var carry_crouch: float = 2.3            # crouch floor carrying, standing (× stance_hip_deg): the hips ~0.12 m under rest
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
 # glide (speed is power per stride, not faster turnover). cruise_gear (fast AND
@@ -2295,6 +2299,14 @@ func reach_purpose() -> float:
 # How far the chest folds over the stick (SkaterIKCoordinator.chest_fold).
 func chest_fold() -> float:
 	return _ik.chest_fold()
+
+
+func drawn_chest_fold() -> float:
+	return _ik.drawn_chest_fold()
+
+
+func carrying() -> bool:
+	return _ik.carrying()
 
 
 # The gait's (stop weight as the scrape hears it, skid weight, turn load) this

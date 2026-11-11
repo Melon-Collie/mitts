@@ -127,8 +127,8 @@ func test_no_arm_is_drawn_longer_than_it_is() -> void:
 # still on the stick, between the top hand and the blade.
 func test_the_bottom_hand_holds_the_stick_in_a_carry() -> void:
 	_worst_through(_POSES[1])
-	var top: Vector3 = _skater.get_top_hand_position()
-	var blade: Vector3 = _skater.get_blade_position()
+	var top: Vector3 = _skater.drawn_top_hand()
+	var blade: Vector3 = _skater.drawn_blade().origin
 	var bottom: Vector3 = _skater.bottom_hand.position
 	var shaft: Vector3 = blade - top
 	var g: float = (bottom - top).dot(shaft) / shaft.length_squared()
