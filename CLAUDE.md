@@ -114,7 +114,10 @@ keeper (`Scripts/domain/keeper/`) in every taught stance from the
 front, side, three-quarter, the shooter's spot on the dot line and behind, with
 the mouth as a straight-on shot sees him (seams red), save boxes overlaid, to
 `.preview/keeper/` (`tools/keeper_capture.gd`), and diffs each sheet against
-a baseline recorded with `--baseline`. `.claude/hooks/render-keeper-strip.sh`
+a baseline recorded with `--baseline`. No taught stance raises an arm, so
+`KEEPER_CAPTURE_STANCES` also takes its reaches (`reach_glove_high`,
+`reach_glove_out`, `reach_both_high`: a hand put where a save takes it), which
+is where his sleeves' hang shows. `.claude/hooks/render-keeper-strip.sh`
 draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recovery, the sink into the low ready and the drop from it, the butterfly slide and the rotation on his knees, the RVH's ways in and out and the push off the post, a whole sequence of them through `KeeperMotor`, goals given to it with the moves `KeeperRoute` picks, the first brain tracking a puck round the zone, his saves against a shot read as in a match, and a puck dribbling in to his feet covered) frame by frame (`tools/keeper_strip.gd`).
 
 **To see the BODY's skin, render it.** `.claude/hooks/render-body.sh

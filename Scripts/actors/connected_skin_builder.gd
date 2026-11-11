@@ -30,6 +30,8 @@ const FACET_OFF_SPLIT: int = 3
 # How far one diagonal's middle must stand off the other's for the quad to count
 # as out of plane: under it the split stays as handed in.
 const _SPLIT_EPSILON_M: float = 1e-5
+# A weight under this is none: the vertex is not bound there.
+const _WEIGHT_EPSILON: float = 1e-4
 
 var _pos := PackedVector3Array()
 var _bones := PackedInt32Array()
@@ -67,12 +69,23 @@ func reweight(id: int, binds: Array, weights: Array) -> void:
 		_weights[id * MAX_INFLUENCES + i] = float(weights[i]) / total if i < weights.size() else 0.0
 
 
-# A vertex's weight on `bind`, or none.
-func weight_on(id: int, bind: int) -> float:
+# Blends a vertex's weights `share` of the way toward `weights` over `binds`;
+# a bind left with no weight worth the name is dropped.
+func blend_toward(id: int, binds: Array, weights: Array, share: float) -> void:
+	var total: float = 0.0
+	for w: float in weights:
+		total += w
+	var blended: Dictionary = {}
 	for i: int in MAX_INFLUENCES:
-		if _bones[id * MAX_INFLUENCES + i] == bind:
-			return _weights[id * MAX_INFLUENCES + i]
-	return 0.0
+		var held: float = _weights[id * MAX_INFLUENCES + i] * (1.0 - share)
+		if held > _WEIGHT_EPSILON:
+			var bind: int = _bones[id * MAX_INFLUENCES + i]
+			blended[bind] = float(blended.get(bind, 0.0)) + held
+	for i: int in binds.size():
+		var toward: float = float(weights[i]) / total * share
+		if toward > _WEIGHT_EPSILON:
+			blended[int(binds[i])] = float(blended.get(int(binds[i]), 0.0)) + toward
+	reweight(id, blended.keys(), blended.values())
 
 
 # Moves a vertex before any face round it is laid (a face takes its winding and

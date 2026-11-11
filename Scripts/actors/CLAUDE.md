@@ -96,12 +96,13 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   into the arm collapses the pad into a fin past ~90°; putting the whole twist
   on one ring pinches the sleeve shut.
 - **The sleeve is cloth hung between the armhole and the elbow, not a tube on
-  the arm.** Round from over the arm to under it, each column of it is laid
-  toward the straight line from the seam to the elbow and hung from the chest:
-  wholly at the seam, less by the way down to the elbow. A raised arm then
-  draws the underside out straight from the flank, and the armhole's bottom
-  stays on the chest (`test_raised_sleeve_hangs_straight.gd`). Three things
-  that came out of getting there:
+  the arm** (`SleeveHang`, which hangs the keeper's sleeves too). Round from
+  over the arm to under it, each column of it is laid toward the straight line
+  from the seam to the elbow and hung from the chest: wholly at the seam, less
+  by the way down to the elbow. A raised arm then draws the underside out
+  straight from the flank, and the armhole's bottom stays on the chest
+  (`test_raised_sleeve_hangs_straight.gd`, and `test_keeper_jersey.gd` for
+  his). Three things that came out of getting there:
   - Riding the shoulder's bones, the armhole's bottom and the sleeve's first
     rings swing up with the arm as a ball and the arm steps out of it, since
     all of the turn left over falls between the last ring on the shoulder and

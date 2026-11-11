@@ -8,7 +8,8 @@ extends SceneTree
 # his back and the mouth as a shot straight on sees it (KeeperSeams: his body
 # grey, where a puck cannot fit pale, its seams red) — plus one of every stance
 # from the front. KEEPER_CAPTURE_STANCES names a
-# comma-separated subset; KEEPER_CAPTURE_SCALE enlarges the tiles;
+# comma-separated subset, which may include the reaches (_REACHES: a hand put up
+# or out, as a save takes it); KEEPER_CAPTURE_SCALE enlarges the tiles;
 # KEEPER_CAPTURE_FOCUS names a KeeperGear part (MASK, BLOCKER...) to look at up
 # close from the same directions; KEEPER_CAPTURE_TEAM picks the team slot whose kit
 # he wears (KEEPER_CAPTURE_AWAY for its away kit); KEEPER_CAPTURE_RIGHT=1 draws a
@@ -126,8 +127,32 @@ func _init() -> void:
 	var only: String = OS.get_environment("KEEPER_CAPTURE_STANCES")
 	if not only.is_empty():
 		var keep: PackedStringArray = only.split(",")
+		_stances.append_array(_REACHES.map(func(reach: Array) -> Array:
+			return [reach[0], func(p: KeeperPose) -> void: _reach(p, reach[1], reach[2])]))
 		_stances = _stances.filter(func(st: Array) -> bool: return String(st[0]) in keep)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
+
+
+# Reaches, drawn only when KEEPER_CAPTURE_STANCES names them: the ready stance
+# with a hand put where a save takes it (the glove's place, the blocker's or
+# none), keeper space. No stance raises an arm, and a raised arm is where a
+# sleeve's hang shows.
+const _NO_HAND := Vector3.INF
+const _REACHES: Array[Array] = [
+	["reach_glove_high", Vector3(-0.55, 1.80, -0.15), _NO_HAND],
+	["reach_glove_out", Vector3(-0.95, 1.30, -0.10), _NO_HAND],
+	["reach_both_high", Vector3(-0.55, 1.80, -0.15), Vector3(0.55, 1.80, -0.15)],
+]
+
+
+static func _reach(p: KeeperPose, glove: Vector3, blocker: Vector3) -> void:
+	KeeperPoses.ready(p)
+	p.glove_from_chest = false
+	p.glove_hand = glove
+	p.glove_fingers = Vector3(-0.2, 1.0, 0.0)
+	p.blocker_reach = blocker != _NO_HAND
+	if p.blocker_reach:
+		p.blocker_grip = blocker
 
 
 var _shots: Array[Image] = []
