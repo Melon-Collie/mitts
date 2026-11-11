@@ -248,7 +248,8 @@ const POSES: Array = [
 		[70, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(3.0, 0.0, -0.5)}],
 	]},
 	# The same reads from the game camera, where a pose has to work: from above,
-	# the stance has to read by WIDTH, the commit by being tall and narrow.
+	# the stance has to read by WIDTH and the chest folded over the stick, the
+	# commit by a narrow base under a chest kept up.
 	{"name": "rest_game", "puck": false, "game_cam": true, "steps": [[40, {}]]},
 	{"name": "stance_rest_game", "puck": false, "game_cam": true,
 			"steps": [[40, {"stance": true}]]},
@@ -295,6 +296,11 @@ const POSES: Array = [
 	]},
 	{"name": "hit_commit_deep", "puck": false, "steps": [
 		[60, {"hit": true, "move": Vector2(0.84, -0.55), "aim": Vector3(1.6, 0.0, 2.4)}],
+	]},
+	# Side on and skating: the knee bend under the load.
+	{"name": "hit_commit_side", "puck": false, "cam": Vector3(-3.4, 0.9, 0.3), "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
 	# ── Board pin ───────────────────────────────────────────────────────────
 	# Both locked roles against the +x boards, facing them (the boards are not

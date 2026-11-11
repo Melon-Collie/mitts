@@ -19,6 +19,7 @@ var _drive_t: float = -1.0              # seconds into the drive; <0 = idle
 var _drive_intensity: float = 0.0       # 0..1 VFX hit hardness
 var _drive_env: float = 0.0
 var _commit_blend: float = 0.0
+var _commit_rate: float = 0.0
 
 
 func stages() -> int:
@@ -31,6 +32,7 @@ func reset() -> void:
 	_drive_intensity = 0.0
 	_drive_env = 0.0
 	_commit_blend = 0.0
+	_commit_rate = 0.0
 
 
 func is_quiet() -> bool:
@@ -63,8 +65,13 @@ func advance(delta: float) -> bool:
 			_drive_t = -1.0
 		else:
 			_drive_env = sin(PI * pow(du, 0.35)) * _drive_intensity
-	_commit_blend = move_toward(_commit_blend, 1.0 if _skater.hit_committed else 0.0,
-			_controller.hit_commit_pose_speed * delta)
+	# On a spring: the load is a crouch floor, which a lag would drop at full
+	# rate on the frame the button changes.
+	var target: float = 1.0 if _skater.hit_committed else 0.0
+	var omega: float = _controller.hit_commit_pose_speed * EaseRules.OMEGA_PER_RATE
+	var x: float = _commit_blend
+	_commit_blend = maxf(EaseRules.critical_x(x, _commit_rate, target, omega, delta), 0.0)
+	_commit_rate = EaseRules.critical_v(x, _commit_rate, target, omega, delta)
 	return _drive_env > 0.0 or _commit_blend > 0.001
 
 
@@ -73,9 +80,11 @@ func stride_hold() -> float:
 	return _drive_env * _controller.shot_stride_fade
 
 
-# The drive is delivered with the LEGS — the finishing base under the shoulder.
+# The load sits on bent knees, and the drive is delivered with the LEGS — the
+# finishing base under the shoulder.
 func stance_floor() -> float:
-	return _controller.check_drive_stance * _drive_env
+	return maxf(_controller.check_drive_stance * _drive_env,
+			_controller.hit_commit_stance * _commit_blend)
 
 
 func shape_trunk(p: GaitPose) -> void:
@@ -90,4 +99,3 @@ func shape_trunk(p: GaitPose) -> void:
 		p.trunk_roll += -drive_mag * drive_local.x
 	if _commit_blend > 0.001:
 		p.trunk_pitch += -deg_to_rad(_controller.hit_commit_lean_deg) * _commit_blend
-		p.drop += _controller.hit_commit_crouch_m * _commit_blend

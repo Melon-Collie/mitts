@@ -63,7 +63,7 @@ var commit_stride_mult: float = 0.5
 # up for the check — leans into it, sinks into a crouch, drives the leading
 # shoulder forward across the chest with the near arm tucked, and (empty-handed
 # only) pulls the stick up off the ice. Three parts on two clocks: the lean and
-# crouch are a render-rate trunk blend (GaitCheckLayer), the per-side
+# crouch are render-rate gait channels (GaitCheckLayer), the per-side
 # shoulder load-up is physics-rate on the skater (CheckStanceRules), and the
 # stick rides the IK's blade_y. All three derive from the replicated
 # skater.hit_committed, so they read on every machine, and all three are
@@ -74,7 +74,7 @@ var commit_stride_mult: float = 0.5
 # reads as reaching for something rather than coiling behind a shoulder, so the
 # pitch sets the attitude and the shoulder carries the read.
 var hit_commit_lean_deg: float = 14.0         # forward trunk lean into the check
-var hit_commit_crouch_m: float = 0.03         # tall over the feet — the stance is the low pose
+var hit_commit_stance: float = 1.5            # crouch floor loaded (× stance_hip_deg): knees bent under a chest kept up
 var hit_commit_blade_lift_m: float = 0.22     # stick raise off the ice on an empty-handed commit
 # Loaded stick pose: while committing (empty-handed), the stick STOPS chasing the
 # cursor and eases to a body-local "ready to hit" pose, so the stance reads as a
@@ -107,7 +107,7 @@ var hit_commit_hand_local_z: float = -0.40
 # rigid — SkaterStickRig gives back out of the butt whatever the grip takes, so
 # the drawn stick keeps its length and only the grip moves.
 var hit_commit_choke_frac: float = 0.10
-var hit_commit_pose_speed: float = 9.0        # how fast the stance eases in/out
+var hit_commit_pose_speed: float = 6.0        # the load's spring rate, as the press pose's
 # ── Body-Check Stagger Tuning ─────────────────────────────────────────────────
 # Getting checked hard staggers the victim: a temporary thrust and grip penalty,
 # scaled by how hard the hit landed (the m/s transfer impulse). stagger_timer
