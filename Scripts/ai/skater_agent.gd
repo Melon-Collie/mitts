@@ -30,6 +30,11 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_sm.apply_capabilities(caps)
 
 
+# Main thread, before the batch: the man this bot is hunting to fight, or -1.
+func set_hunt_peer(peer_id: int) -> void:
+	_sm.set_hunt_peer(peer_id)
+
+
 # Main thread only, after dispatch: the worker never writes team state.
 func push_one_timer_ready() -> void:
 	_sm.push_one_timer_ready()

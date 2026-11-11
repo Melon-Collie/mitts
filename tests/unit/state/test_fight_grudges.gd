@@ -44,8 +44,14 @@ func test_each_pair_is_its_own() -> void:
 	_g.raise(2, 1, 1.5, 0.0)
 	_g.raise(2, 3, 0.5, 0.0)
 	assert_eq(_g.level(1, 2, 0.0), 0.0, "not both ways round")
-	assert_almost_eq(_g.peak(2, 0.0), 1.5, 1e-6)
-	assert_eq(_g.peak(1, 0.0), 0.0)
+	assert_eq(_g.angriest_at(2, 0.0), 1)
+	assert_eq(_g.angriest_at(1, 0.0), -1)
+
+
+func test_the_angriest_ties_to_the_lower_peer() -> void:
+	_g.raise(2, 7, 1.0, 0.0)
+	_g.raise(2, 4, 1.0, 0.0)
+	assert_eq(_g.angriest_at(2, 0.0), 4)
 
 
 func test_a_fight_settles_it_and_a_clear_ends_all() -> void:
@@ -55,4 +61,4 @@ func test_a_fight_settles_it_and_a_clear_ends_all() -> void:
 	assert_eq(_g.level(2, 1, 0.0), 0.0)
 	assert_almost_eq(_g.level(2, 3, 0.0), 0.5, 1e-6, "his grudge against the other man stays")
 	_g.clear()
-	assert_eq(_g.peak(2, 0.0), 0.0)
+	assert_eq(_g.angriest_at(2, 0.0), -1)

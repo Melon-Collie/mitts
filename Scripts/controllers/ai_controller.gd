@@ -18,6 +18,7 @@ func is_ai_controlled() -> bool:
 # buffer — the lag-comp ring is already capturing the same data.
 
 var _game_state_has_fight: bool = false
+var _game_state_has_hunts: bool = false
 var _agent: SkaterAgent = null
 # Cached most-recent snapshot read this tick. Public for debug inspection.
 var perceived_snapshot: WorldSnapshot = null
@@ -100,6 +101,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	# Cached so begin_tick asks without a has_method() every tick (test stubs may
 	# not implement it).
 	_game_state_has_fight = game_state.has_method("is_in_fight")
+	_game_state_has_hunts = game_state.has_method("fight_hunt_target_peer")
 
 
 # Push the bot's attribute-scaled capabilities into the agent so the AI plans
@@ -290,6 +292,9 @@ func _fight_tick(delta: float) -> void:
 # AICoordinator.
 func prep_for_decide() -> void:
 	_pending_host_time = NetworkManager.estimated_host_time()
+	if _agent != null:
+		_agent.set_hunt_peer(_game_state.fight_hunt_target_peer(skater)
+				if _game_state_has_hunts and skater != null else -1)
 
 
 # WORKER-SAFE decision: run the agent against the frozen snapshot + strategy view

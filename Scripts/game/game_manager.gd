@@ -986,6 +986,34 @@ func _on_fight_challenge_lapsed(challenger: Skater) -> void:
 	NetworkManager.notify_fight_challenge_lapsed_to_all(c)
 
 
+# A hunter leaves his team's shape while he goes after the man; the others cover.
+func _on_hunt_started(hunter: Skater, _target: Skater) -> void:
+	_set_hunter_in_shape(hunter, false)
+
+
+func _on_hunt_ended(hunter: Skater) -> void:
+	_set_hunter_in_shape(hunter, true)
+
+
+func _set_hunter_in_shape(hunter: Skater, in_shape: bool) -> void:
+	var team: int = _registry.team_id_by_skater.get(hunter, -1)
+	if _ai_coordinator == null or team < 0 or team >= team_brains.size():
+		return
+	var pid: int = _registry.resolve_peer_id(hunter)
+	if in_shape:
+		_ai_coordinator.queue_include_skater(team, pid)
+	else:
+		_ai_coordinator.queue_exclude_skater(team, pid)
+
+
+# The peer id of the man this bot is hunting to fight, or -1 (AIController).
+func fight_hunt_target_peer(hunter: Skater) -> int:
+	if _fights == null or _registry == null:
+		return -1
+	var target: Skater = _fights.hunt_target_of(hunter)
+	return _registry.resolve_peer_id(target) if target != null else -1
+
+
 # Host: both men agreed. The first pair whistles the play dead into the fight's
 # stoppage, its faceoff at the dot nearest the puck; a pair inside the stoppage
 # just joins it.
@@ -1852,6 +1880,8 @@ func _wire_subsystems() -> void:
 	_fights.challenge_lapsed.connect(_on_fight_challenge_lapsed)
 	_fights.fight_started.connect(_on_fight_started)
 	_fights.fights_over.connect(_on_fights_over)
+	_fights.hunt_started.connect(_on_hunt_started)
+	_fights.hunt_ended.connect(_on_hunt_ended)
 	if _punches != null:
 		_punches.clear()
 	_punches = FightPunchJudge.new()

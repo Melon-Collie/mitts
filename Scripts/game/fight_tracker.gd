@@ -12,10 +12,11 @@ extends RefCounted
 # the opponent nearest in front of the presser (FightRules.can_challenge), unless
 # he already has a challenge open, is cooling down from one that lapsed, or is
 # carrying the puck. A bot has no press: it answers a challenge at once if its
-# grudge against the challenger has reached FightGrudgeRules.ACCEPT_LEVEL (else
-# the challenge lapses unanswered), and calls out the nearest man in front of it
-# its grudge against has reached CHALLENGE_LEVEL. A fight spends the pair's
-# grudges. Nobody already fighting, down or ghosted takes part.
+# grudge against the challenger has reached FightGrudgeRules.ACCEPT_LEVEL, or if
+# the challenger is hunting it (FightHunts: it has to answer for its hits), and
+# otherwise lets it lapse; a hunter calls out the man it hunts once he is in
+# front of it. A fight spends the pair's grudges. Nobody already fighting, down
+# or ghosted takes part.
 #
 # A fight ends when either man goes down, when the pair have been apart long
 # enough or at the linesmen's cap (FightRules.end_of), or when either man is gone.
@@ -24,6 +25,8 @@ signal challenge_made(challenger: Skater, target: Skater)
 signal challenge_lapsed(challenger: Skater)
 signal fight_started(a: Skater, b: Skater)
 signal fights_over
+signal hunt_started(hunter: Skater, target: Skater)
+signal hunt_ended(hunter: Skater)
 
 class Challenge:
 	var target: Skater
@@ -38,6 +41,7 @@ var _cooling_until: Dictionary = {}           # Skater -> host seconds
 var _partner: Dictionary = {}                 # Skater -> Skater, both ways round
 var _started_at: Dictionary = {}              # Skater -> host seconds, both of a pair
 var _apart_s: Dictionary = {}                 # Skater -> seconds, both of a pair
+var _hunts: FightHunts = null                 # with grudges only
 
 
 func setup(registry: PlayerRegistry, now_getter: Callable, carrier_getter: Callable,
@@ -46,6 +50,11 @@ func setup(registry: PlayerRegistry, now_getter: Callable, carrier_getter: Calla
 	_now_getter = now_getter
 	_carrier_getter = carrier_getter
 	_grudges = grudges
+	if grudges != null:
+		_hunts = FightHunts.new()
+		_hunts.setup(registry, grudges, _now, carrier_getter, _can_take_part)
+		_hunts.hunt_started.connect(hunt_started.emit)
+		_hunts.hunt_ended.connect(hunt_ended.emit)
 
 
 # A credited body check (HitTracker.impact_landed): every bot on the hit man's
@@ -84,8 +93,9 @@ func tick(delta: float, allowed: bool, phase: int) -> void:
 		skater.fight_press_pending = false
 		if open:
 			_on_press(skater)
-	if open:
-		_bots_call_out()
+	if open and _hunts != null:
+		_hunts.step()
+		_hunters_call_out()
 	_step_fights(delta)
 
 
@@ -97,6 +107,11 @@ func partner_of(skater: Skater) -> Skater:
 	return _partner.get(skater, null)
 
 
+# The man this bot is skating after to fight, or null.
+func hunt_target_of(hunter: Skater) -> Skater:
+	return _hunts.target_of(hunter) if _hunts != null else null
+
+
 func challenge_target_of(challenger: Skater) -> Skater:
 	var c: Challenge = _challenges.get(challenger, null)
 	return c.target if c != null else null
@@ -106,6 +121,8 @@ func challenge_target_of(challenger: Skater) -> Skater:
 # does every press nobody has read yet. Sweeps every skater, not only the ones
 # held here: the goal replay stamps its recorded fight_role onto the live actors.
 func clear() -> void:
+	if _hunts != null:
+		_hunts.clear()
 	_challenges.clear()
 	_cooling_until.clear()
 	_end_all()
@@ -131,18 +148,14 @@ func _on_press(skater: Skater) -> void:
 		_challenge(skater, target)
 
 
-func _bots_call_out() -> void:
-	if _grudges == null:
-		return
-	var now: float = _now()
+func _hunters_call_out() -> void:
 	for skater: Skater in _registry.skaters():
-		if not _is_bot(skater) \
-				or _grudges.peak(_registry.resolve_peer_id(skater), now) < FightGrudgeRules.CHALLENGE_LEVEL \
-				or not _can_take_part(skater) or not _may_call_out(skater):
+		var target: Skater = _hunts.target_of(skater)
+		if target == null or not _can_take_part(skater) or not _can_take_part(target) \
+				or not _may_call_out(skater) \
+				or not FightRules.can_challenge(_xz(skater), skater.get_facing(), _xz(target)):
 			continue
-		var target: Skater = _nearest_in_front(skater, FightGrudgeRules.CHALLENGE_LEVEL)
-		if target != null:
-			_challenge(skater, target)
+		_challenge(skater, target)
 
 
 func _may_call_out(skater: Skater) -> bool:
@@ -157,7 +170,8 @@ func _challenge(skater: Skater, target: Skater) -> void:
 	_challenges[skater] = c
 	skater.fight_role = FightRules.Role.CHALLENGING
 	challenge_made.emit(skater, target)
-	if _is_bot(target) and _grudge(target, skater) >= FightGrudgeRules.ACCEPT_LEVEL:
+	if _is_bot(target) and (_grudge(target, skater) >= FightGrudgeRules.ACCEPT_LEVEL
+			or _hunts != null and _hunts.is_hunting(skater, target)):
 		_start(skater, target)
 
 
@@ -174,8 +188,7 @@ func _challenger_aimed_at(target: Skater) -> Skater:
 	return null
 
 
-# With `min_grudge`, only a man the skater's grudge against has reached it.
-func _nearest_in_front(skater: Skater, min_grudge: float = -1.0) -> Skater:
+func _nearest_in_front(skater: Skater) -> Skater:
 	var team: int = _registry.team_id_by_skater.get(skater, -1)
 	var from: Vector2 = _xz(skater)
 	var facing: Vector2 = skater.get_facing()
@@ -189,8 +202,6 @@ func _nearest_in_front(skater: Skater, min_grudge: float = -1.0) -> Skater:
 			continue
 		var to: Vector2 = _xz(other)
 		if not FightRules.can_challenge(from, facing, to):
-			continue
-		if min_grudge >= 0.0 and _grudge(skater, other) < min_grudge:
 			continue
 		var d2: float = from.distance_squared_to(to)
 		if d2 < best_d2:
@@ -211,6 +222,8 @@ func _start(a: Skater, b: Skater) -> void:
 	_apart_s[b] = 0.0
 	a.fight_role = FightRules.Role.FIGHTING
 	b.fight_role = FightRules.Role.FIGHTING
+	if _hunts != null:
+		_hunts.note_fight(a, b)
 	if _grudges != null:
 		var pa: int = _registry.resolve_peer_id(a)
 		var pb: int = _registry.resolve_peer_id(b)
@@ -237,6 +250,8 @@ func _lapse_challenges() -> void:
 		var challenger: Skater = key as Skater
 		if challenger.fight_role == FightRules.Role.CHALLENGING:
 			challenger.fight_role = FightRules.Role.NONE
+		if _hunts != null:
+			_hunts.note_refused(challenger, c.target)
 		challenge_lapsed.emit(challenger)
 
 

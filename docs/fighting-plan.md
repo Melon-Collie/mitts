@@ -416,17 +416,29 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   check hard enough to floor a man counts about 1.4 full ones.
 - **At `ACCEPT_LEVEL`** (two full checks on the bot) it answers that man's
   challenge at once; below it, the challenge lapses unanswered.
-- **At `CHALLENGE_LEVEL`** (four) it calls him out (`FightTracker._bots_call_out`):
-  the nearest man in front of it within challenge reach it holds that grudge
-  against, past any nearer man, never while it carries the puck, and on the
-  same cooldown a lapsed challenge gives a human. It does not skate to him: it
-  calls him out when play brings them face to face.
+- **At `CHALLENGE_LEVEL`** (four) the team **hunts** him (`FightHunts`, held
+  by the tracker): one hunt per team, for its angriest grudge. The hunter is
+  the team's biggest free bot (`Skater.weight`), unless the angriest one is
+  more than `ENFORCER_DETOUR_M` closer to the man; never the carrier. He
+  leaves his team's slot election while he hunts (`TeamBrain.exclude_skater`,
+  queued through `AICoordinator`), so the others cover his job, and skates to
+  a stand `HUNT_STAND_OFF_M` off the man facing him
+  (`SkaterAgentStateMachine._hunt`, the man stamped by
+  `AIController.prep_for_decide`), leaving loose pucks and feeds alone. Face
+  to face (`FightRules.can_challenge`) he calls him out, and after each
+  refusal and its cooldown again. A refusal spends `REFUSAL_COST` of the
+  grudge that sent him (and of his own), so the third takes it under
+  `ACCEPT_LEVEL` and the hunt is called off.
+- **A hunted bot answers the bell**: a challenge from the man hunting it is
+  accepted whatever its own grudge, because it has to answer for its hits. A
+  human can still refuse.
 - **Bots hold grudges against bots** too, so two bot teams can fight with no
-  human involved. A grudge is one way round, so the hit man's grudge is the
-  one that rises: a bot it calls out answers only if it holds one back.
-- **A fight spends the pair's grudges** against each other; their teammates'
-  stand. A new match or a rematch clears them all.
-- **Tested by** `test_fight_grudges.gd` and `test_fight_tracker.gd`.
+  human involved.
+- **A fight spends the pair's grudges** against each other, and the grudge
+  that sent a hunter after either; their other teammates' stand. A new match
+  or a rematch clears them all.
+- **Tested by** `test_fight_grudges.gd`, `test_fight_tracker.gd` and
+  `test_agent_hunt.gd`.
 
 ## The fight camera
 

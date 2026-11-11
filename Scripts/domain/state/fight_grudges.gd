@@ -31,13 +31,18 @@ func raise(holder: int, target: int, gain: float, now: float) -> void:
 	e.at = now
 
 
-# The holder's highest grudge against anyone.
-func peak(holder: int, now: float) -> float:
+# The man the holder holds the most against, or -1; a tie goes to the lower
+# peer id, never to the order they were first hit in.
+func angriest_at(holder: int, now: float) -> int:
 	var row: Dictionary = _by_holder.get(holder, {})
-	var best: float = 0.0
+	var best: int = -1
+	var best_level: float = 0.0
 	for target: int in row:
 		var e: Entry = row[target]
-		best = maxf(best, FightGrudgeRules.decayed(e.level, now - e.at))
+		var lv: float = FightGrudgeRules.decayed(e.level, now - e.at)
+		if lv > best_level or (lv == best_level and lv > 0.0 and target < best):
+			best_level = lv
+			best = target
 	return best
 
 

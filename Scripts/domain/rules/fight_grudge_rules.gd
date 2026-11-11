@@ -17,6 +17,13 @@ const GAIN_PER_FULL_CHECK: float = 0.5
 const TEAMMATE_SHARE: float = 0.25
 # A whole accept level drains in three minutes without a hit.
 const DECAY_PER_S: float = ACCEPT_LEVEL / 180.0
+# What a hunter's challenge refused spends of the grudge that sent him: from the
+# challenge level, the third refusal takes it under the accept level and the
+# hunt is called off.
+const REFUSAL_COST: float = 0.35
+# How much further from the man the team's biggest bot may be than its maddest
+# and still be the one who goes: about a second of skating at pace.
+const ENFORCER_DETOUR_M: float = 8.0
 
 
 # What a check of `force` (HitRules' impact scale) adds to the hit man's own
@@ -32,6 +39,11 @@ static func teammate_gain(force: float) -> float:
 
 static func decayed(level: float, elapsed_s: float) -> float:
 	return maxf(level - DECAY_PER_S * maxf(elapsed_s, 0.0), 0.0)
+
+
+# Whether the biggest goes rather than the maddest, by their distances to him.
+static func enforcer_goes(biggest_d: float, maddest_d: float) -> bool:
+	return biggest_d <= maddest_d + ENFORCER_DETOUR_M
 
 
 static func raised(level: float, gain: float) -> float:
