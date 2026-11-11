@@ -360,7 +360,7 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 
 	var torso_zone: int = zone(_UpperSurface.TORSO)
 	for i: int in rings.size() - 1:
-		var v0: float = 0.5 * (y_top - ys[i]) / span
+		var v0: float = maxf(0.5 * (y_top - ys[i]) / span, JerseyDecal.SIDE_TOP_V)
 		var v1: float = 0.5 * (y_top - ys[i + 1]) / span
 		var inside := Vector3(0.0, (ys[i] + ys[i + 1]) * 0.5, 0.0) + lift
 		var n: int = rings[i].size()

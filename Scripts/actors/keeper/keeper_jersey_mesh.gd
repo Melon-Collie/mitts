@@ -227,7 +227,7 @@ static func _build_torso(b: ConnectedSkinBuilder) -> Array[PackedInt32Array]:
 		rings.append(ids)
 		us.append(u)
 		ys.append(pts[0].y)
-		vs.append(torso_v(h.y - pts[0].y))
+		vs.append(maxf(torso_v(h.y - pts[0].y), JerseyDecal.SIDE_TOP_V))
 	var holes: Array[PackedInt32Array] = []
 	for side: int in 2:
 		holes.append(_cut_armhole(b, rings, side))

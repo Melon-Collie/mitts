@@ -247,17 +247,21 @@ func test_the_tails_paint_runs_on_from_the_hem() -> void:
 	assert_gt(met, 8, "the tail's top row meets the hem all round")
 
 
-func test_no_sleeve_samples_its_paint_across_the_wrap() -> void:
-	# On V = 0 itself the repeating texture filters the cuff's color into the
-	# sleeve's top (SleeveDecal.TOP_V).
+func test_neither_paint_is_sampled_across_its_wrap() -> void:
+	# On V = 0 itself a repeating texture filters its last row into its first:
+	# the cuff's color into the sleeve's top (SleeveDecal.TOP_V), the caps' into
+	# the neckline (JerseyDecal.SIDE_TOP_V).
 	var arrays: Array = KeeperJerseyMesh.shared_mesh().surface_get_arrays(0)
 	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
 	var zones: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
-	var top_v: float = INF
+	var top_v: Dictionary = {KeeperJerseyMesh.ZONE_SLEEVE: INF, KeeperJerseyMesh.ZONE_TORSO: INF}
 	for v: int in uvs.size():
-		if roundi(zones[v].x) == KeeperJerseyMesh.ZONE_SLEEVE:
-			top_v = minf(top_v, uvs[v].y)
-	assert_gte(top_v, SleeveDecal.TOP_V, "the sleeves' top a texel inside their paint")
+		var zone: int = roundi(zones[v].x)
+		top_v[zone] = minf(top_v[zone], uvs[v].y)
+	assert_gte(top_v[KeeperJerseyMesh.ZONE_SLEEVE], SleeveDecal.TOP_V,
+			"the sleeves' top a texel inside their paint")
+	assert_gte(top_v[KeeperJerseyMesh.ZONE_TORSO], JerseyDecal.SIDE_TOP_V,
+			"the neckline a texel inside the jersey's paint")
 
 
 # How far `p` lies outside the box (its centre and axes `box`, half sizes `h`).
