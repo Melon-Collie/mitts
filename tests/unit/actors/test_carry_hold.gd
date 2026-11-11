@@ -4,7 +4,8 @@ extends GutTest
 # SkaterIKCoordinator._hold_offset, and the carry's posture): the top hand in
 # its pocket off the hip, so the shaft stays near its lie and under the
 # shoulder across the distances a puck is carried at; the body come down to
-# it, so both elbows bend. Mesh only: the markers the tick placed do not move.
+# it, so both elbows bend; the top fist turned with the blade's face as a
+# stroke cups the puck. Mesh only: the markers the tick placed do not move.
 # Driven through the real controller and render pass.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
@@ -128,3 +129,21 @@ func test_a_shot_poses_its_own_hands() -> void:
 	c._ik._pump_hold = 0.0
 	c._ik._hold_offset(c.skater.get_top_hand_position(), c.skater.get_blade_position(), -1.0)
 	assert_eq(c._ik._hold_share, 0.0, "a stick the tracked solve does not own is not")
+
+
+# The cup rolls the whole stick, so the fist that grips it turns by as much:
+# from one face of the puck to the other, twice the cup.
+func test_the_top_fist_turns_with_the_stroke() -> void:
+	var c: SkaterController = _make_carrier()
+	_hold(c, Vector3(-0.2, 0.0, -1.2))
+	var sk: Skater = c.skater
+	var rolls := PackedFloat64Array()
+	for side: float in [1.0, -1.0]:
+		sk._stroke_cup = side
+		sk._stroke_cup_rate = 0.0
+		sk.update_stick_mesh()
+		sk.update_arm_mesh()
+		rolls.append(sk.stick_roll())
+	var cup: float = deg_to_rad(Skater._BLADE_STROKE_CUP_DEG)
+	assert_almost_eq(absf(rolls[0] - rolls[1]), 2.0 * cup, 0.001,
+			"the stick rolls a cup either way")

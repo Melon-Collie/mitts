@@ -51,6 +51,14 @@ const _BLADE_TOE_DRAG_ROLL_DEG: float = 20.0         # axial twist (handedness-s
 # forehand hook, so the cradle cups instead of rolling (grammar table in the
 # push-model plan).
 const _BLADE_CRADLE_CUP_DEG: float = 8.0             # axial twist (handedness-signed)
+# The face a stroke pushes with is rolled over the puck: the top hand's wrist
+# turns the whole stick, the forehand face closed over a puck on the forehand
+# and the backhand face over one on the backhand, through flat as the blade
+# hops over between them. About the hosel line, 16° leans the face ~12° and
+# curls the toe ~6 cm round the puck. On a spring (rad/s), the carry seat's
+# ease with it.
+const _BLADE_STROKE_CUP_DEG: float = 16.0
+const _STROKE_CUP_OMEGA: float = 18.0
 
 # Shoulder anchor offset from body center. The shoulder (top-hand anchor)
 # sits on the OPPOSITE side of the body from the blade: a left-handed shooter
@@ -843,6 +851,19 @@ var _carry_side_smoothed: float = 0.0
 # positional read in get_toe_drag_factor) and the backhand heel cradle.
 var _toe_drag_gesture: float = 0.0
 var _heel_cradle: float = 0.0
+# The stroke's cup (−1..1 by the face on the puck, _BLADE_STROKE_CUP_DEG at
+# either end) and its rate; the blade's whole roll and the cup's share of it
+# (radians) as last dressed, and the roll a swing started from (stick_roll).
+var _stroke_cup: float = 0.0
+var _stroke_cup_rate: float = 0.0
+var _stick_roll: float = 0.0
+var _stick_cup: float = 0.0
+var _swing_anchor_roll: float = 0.0
+# The carry seat's slide (_seat_on_puck) eased on and off with the carry, and
+# the slide it last rested at, which a dropped puck's seat fades from.
+var _seat_blend: float = 0.0
+var _seat_rate: float = 0.0
+var _seat_last := Vector3.ZERO
 # Remaining phase (1→0) of the current transit hop; see
 # get_carry_transit_factor.
 var _transit_hop: float = 0.0
@@ -1503,6 +1524,10 @@ func _apply_blade_tilt() -> void:
 			- get_toe_drag_factor() * _BLADE_TOE_DRAG_ROLL_DEG \
 			- _heel_cradle * _BLADE_CRADLE_CUP_DEG \
 			- _reception_give_blend * reception_cup_deg) * blade_side_sign)
+	var cup: float = _stroke_cup * deg_to_rad(_BLADE_STROKE_CUP_DEG)
+	twist += cup
+	_stick_roll = twist
+	_stick_cup = cup
 	# Mesh-only slides (never the marker):
 	#   X — wrister-address slide along the face-normal axis, addressing the
 	#   hand the release will fire as. Marker local +X IS the face normal
@@ -1542,7 +1567,7 @@ func _apply_blade_tilt() -> void:
 	heel += _seat_on_puck(Vector3(address_x, 0.0, 0.0), hand, twist, marker_global, up)
 	var rot: Basis = _rigid_blade_basis(hand - heel, twist)
 	heel = _toe_on_ice(heel, rot, hand, twist, marker_global.origin.y, up)
-	rot = _swing_rigid(_rigid_blade_basis(hand - heel, twist), marker.basis, hand - heel)
+	rot = _swing_rigid(_rigid_blade_basis(hand - heel, twist), marker.basis, hand - heel, cup)
 	var keep_scale: Vector3 = _blade_mesh_instance.transform.basis.get_scale()
 	_blade_mesh_instance.transform = Transform3D(rot.scaled(keep_scale), heel)
 	_blade_drawn = marker * _blade_mesh_instance.transform
@@ -1561,23 +1586,27 @@ func _apply_blade_tilt() -> void:
 # SWING_RELEASE_S. In the shoulders' frame, which the arms swing the stick in:
 # the body turning carries the stick with it, and only a roll in the hands
 # would spin it. The anchor is the dressed
-# blade whenever no swing is on, so the swing starts where the carry was. Read
+# blade whenever no swing is on, so the swing starts where the carry was, less
+# a stroke's cup (`cup`, radians about the hosel line), which is laid back on
+# as it stands: the wrists let it go through the wind-up, and the blade comes
+# through contact without it. Read
 # from replicated state alone, so every machine draws the same swing.
 const SWING_RELEASE_S: float = 0.15
 
 
-func _swing_rigid(rot: Basis, marker_basis: Basis, to_hand: Vector3) -> Basis:
+func _swing_rigid(rot: Basis, marker_basis: Basis, to_hand: Vector3, cup: float) -> Basis:
 	var to_hips: Basis = marker_basis.orthonormalized()
 	var hosel: Vector3 = (to_hips * to_hand).normalized()
 	var dressed: Basis = (to_hips * rot).orthonormalized()
 	var swinging: bool = _slap_swinging()
 	if not swinging and _swing_weight <= 0.0:
-		_swing_anchor_basis = dressed
+		_swing_anchor_basis = dressed.rotated(hosel, -cup)
+		_swing_anchor_roll = _stick_roll - cup
 		_swing_anchor_hosel = hosel
 		_swing_anchor_up = upper_body.global_transform.basis.inverse() * Vector3.UP
 		return rot
 	var arc := Quaternion(_swing_anchor_hosel, hosel)
-	_swing_basis = (Basis(arc) * _swing_anchor_basis).orthonormalized()
+	_swing_basis = (Basis(arc) * _swing_anchor_basis).rotated(hosel, cup).orthonormalized()
 	_swing_up = arc * _swing_anchor_up
 	_swing_weight = 1.0 if swinging \
 			else move_toward(_swing_weight, 0.0, _frame_dt / SWING_RELEASE_S)
@@ -1609,7 +1638,15 @@ func shaft_roll_up(dir: Vector3) -> Vector3:
 	var roll_up: Vector3 = world_up.lerp(_swing_up, _swing_weight)
 	if absf(dir.dot(roll_up.normalized())) > 0.999:
 		return Vector3.FORWARD
-	return roll_up
+	return roll_up.rotated(dir.normalized(), -stick_roll())
+
+
+# How far the wrists have rolled the stick about its shaft, as the blade's face
+# is dressed (radians about the heel→hand line): the shaft's faces and the top
+# fist turn by it too. A slapshot's swing carries its own roll, and only a
+# stroke's cup, on its way off, is laid on that.
+func stick_roll() -> float:
+	return lerpf(_stick_roll, _swing_anchor_roll + _stick_cup, _swing_weight)
 
 
 # The blade mesh hangs from the Blade marker, which the tick moves whether or
@@ -1640,13 +1677,16 @@ func _toe_on_ice(heel: Vector3, rot: Basis, hand: Vector3, twist: float, marker_
 # offset beside it, which is where a flat, square blade touches; the shaft's
 # pitch, a toe stood on the ice and the wrist roll all move the face from
 # there, and a heel up off the ice leaves only the toe to hold the puck. Faded
-# by the side factor, so a face change slides through it. Mesh only, like
-# every slide here: the puck stays on the cursor.
+# by the side factor, so a face change slides through it, and eased on and off
+# with the carry (_seat_blend), a dropped puck's from where it last rested.
+# Mesh only, like every slide here: the puck stays on the cursor.
 func _seat_on_puck(rest_heel: Vector3, hand: Vector3, twist: float,
 		marker_global: Transform3D, up: Vector3) -> Vector3:
 	var address_weight: float = absf(_address_factor)
-	if address_weight <= 0.0 or _blade_params == null or _slapshot_pin_active \
-			or not SkaterStateMachine.state_has_puck(current_shot_state):
+	if _blade_params == null or not _seated():
+		return _seat_last * _seat_blend
+	if address_weight <= 0.0:
+		_seat_last = Vector3.ZERO
 		return Vector3.ZERO
 	var p: StickBladeMeshBuilder.Params = _blade_params
 	var rot: Basis = _rigid_blade_basis(hand - rest_heel, twist)
@@ -1681,7 +1721,13 @@ func _seat_on_puck(rest_heel: Vector3, hand: Vector3, twist: float,
 	var lever: float = 1.0 + (to_seat - up * to_seat.dot(up)).length() \
 			/ maxf((to_hand - up * to_hand.dot(up)).length(), 0.05)
 	slide -= across * (slide.dot(across) * (1.0 - 1.0 / lever))
-	return slide.limit_length(_SEAT_MAX_SLIDE_M) * address_weight
+	_seat_last = slide.limit_length(_SEAT_MAX_SLIDE_M) * address_weight
+	return _seat_last * _seat_blend
+
+
+# Whether the blade has a carried puck to rest against.
+func _seated() -> bool:
+	return not _slapshot_pin_active and SkaterStateMachine.state_has_puck(current_shot_state)
 
 
 # The blade's orientation with its hosel laid along `to_hand` (heel → top hand,
@@ -2540,16 +2586,36 @@ func _update_carry_contact(delta: float) -> void:
 			if current_shot_state == SkaterStateMachine.State.WRISTER_AIM else 0.0
 	var new_aim_seat: float = move_toward(
 			_aim_seat_blend, aim_seat_target, carry_gesture_ease * delta)
+	# The cup follows the face the blade is drawn on, on a spring: the wrists
+	# roll the stick over, from rest and to rest, at a pickup as in a stroke.
+	var cupping: bool = current_shot_state == SkaterStateMachine.State.SKATING_WITH_PUCK \
+			or current_shot_state == SkaterStateMachine.State.WRISTER_AIM
+	var seat_to: float = 1.0 if _seated() else 0.0
+	var new_seat: float = clampf(EaseRules.critical_x(_seat_blend, _seat_rate, seat_to,
+			_STROKE_CUP_OMEGA, delta), 0.0, 1.0)
+	_seat_rate = EaseRules.critical_v(_seat_blend, _seat_rate, seat_to, _STROKE_CUP_OMEGA,
+			delta) if new_seat > 0.0 and new_seat < 1.0 else 0.0
+	var cup_to: float = _address_factor if cupping else 0.0
+	# Off twice as fast as on: a slapshot's set-up is short, and its swing
+	# starts from a blade the wrists have squared.
+	var cup_omega: float = _STROKE_CUP_OMEGA * (1.0 if cupping else 2.0)
+	var new_cup: float = EaseRules.critical_x(_stroke_cup, _stroke_cup_rate, cup_to,
+			cup_omega, delta)
+	_stroke_cup_rate = EaseRules.critical_v(_stroke_cup, _stroke_cup_rate, cup_to,
+			cup_omega, delta)
 	if new_drag != _toe_drag_gesture or new_cradle != _heel_cradle \
 			or new_stroke != _stroke_toe_blend or new_catch != _catch_heel_blend \
 			or new_give != _reception_give_blend or new_aim_seat != _aim_seat_blend \
-			or new_gap != _free_gap_blend:
+			or new_gap != _free_gap_blend or new_cup != _stroke_cup \
+			or new_seat != _seat_blend:
 		# The gesture factors tilt/slide the blade mesh without moving any
 		# marker, so the render-rate rig pass can't see the change — same
 		# escape as _update_blade_elevation.
 		_blade_tilt_dirty = true
 	_toe_drag_gesture = new_drag
 	_heel_cradle = new_cradle
+	_stroke_cup = new_cup
+	_seat_blend = new_seat
 	_stroke_toe_blend = new_stroke
 	_catch_heel_blend = new_catch
 	_reception_give_blend = new_give

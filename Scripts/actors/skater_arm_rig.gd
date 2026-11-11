@@ -58,6 +58,7 @@ var native_enabled: bool = true
 var _native_arms: Array[RefCounted] = []
 # NativeArmRig.pose's answers (its Result enum).
 const _NATIVE_DEGENERATE: int = 0
+const _NATIVE_POSE_ARGS: int = 10
 const _NATIVE_SETTLING: int = 2
 var _native_dirty: bool = true
 var _trunk_texture := Basis.IDENTITY
@@ -102,8 +103,11 @@ func build(skeleton: Skeleton3D) -> void:
 	_base_pos.resize(count)
 	_skeleton = skeleton
 
+	# A binary whose pose predates an argument takes the GDScript path.
 	if ClassDB.class_exists(&"NativeArmRig") \
-			and ClassDB.class_has_method(&"NativeArmRig", &"configure_torso"):
+			and ClassDB.class_has_method(&"NativeArmRig", &"configure_torso") \
+			and ClassDB.class_get_method_argument_count(&"NativeArmRig", &"pose") \
+			== _NATIVE_POSE_ARGS:
 		_native_arms = [ClassDB.instantiate(&"NativeArmRig") as RefCounted,
 				ClassDB.instantiate(&"NativeArmRig") as RefCounted]
 		for arm: int in 2:
@@ -221,10 +225,11 @@ func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vect
 	var grip_deg: float = _skater.top_grip_angle_deg if arm == 0 \
 			else _skater.bottom_grip_angle_deg
 	# The bottom hand holds the shaft from underneath, palm up, as the plane grip
-	# already has it; only the top fist rolls.
+	# already has it, and lets it turn in the fingers; only the top fist rolls,
+	# and it turns with the stick it grips (Skater.stick_roll).
 	var roll: float = 0.0 if arm != 0 else _ease_roll(arm, delta,
 			_grip_roll(shoulder_s, elbow_s, hand_s, shaft_s, grip_deg,
-			SkaterArmPoses.knuckles_forward(_skater.is_left_handed)))
+			SkaterArmPoses.knuckles_forward(_skater.is_left_handed))) - _skater.stick_roll()
 	_pose_glove(glove, elbow_s, hand_s, shaft_s, grip_deg, roll)
 
 
@@ -286,7 +291,8 @@ func _native_update_arm(arm: int, delta: float, marker_local: Vector3, hand_loca
 			Vector3(_skater.get_check_lead(), _skater.shoulder_offset,
 			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset),
 			Vector3(delta, SkaterArmPoses.knuckles_forward(_skater.is_left_handed)
-			if arm == 0 else 0.0, pole_sign))
+			if arm == 0 else 0.0, pole_sign),
+			-_skater.stick_roll() if arm == 0 else 0.0)
 	if result == _NATIVE_SETTLING:
 		_steering = true
 	return result != _NATIVE_DEGENERATE

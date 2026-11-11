@@ -125,7 +125,7 @@ func test_the_blade_rests_on_the_puck() -> void:
 			var c: SkaterController = _make_carrier()
 			_pull_in(c, dir, radius_m)
 			var rest: Vector2 = _rest(c.skater)
-			assert_between(rest.x, -0.015, 0.012, "%s, cursor %.2f m out: the blade on the puck" % [
+			assert_between(rest.x, -0.015, 0.014, "%s, cursor %.2f m out: the blade on the puck" % [
 					"forehand" if dir == FOREHAND else "backhand", radius_m])
 
 

@@ -362,12 +362,14 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Ten rules the rigs sit inside, all easy to break from in here:
+Twelve rules the rigs sit inside, all easy to break from in here:
 
 - **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
-  marker: the marker plus a render-only offset (the stride's pump), so the arm,
-  the stick and the blade's dressing pivot about a blade that has not moved.
-  The rebuild gate compares the drawn hand, or the pump would never redraw.
+  marker: the marker plus a render-only offset (the hold, the stride's pump,
+  the shaft's clearance; `Scripts/controllers/CLAUDE.md`, *Where the hands are
+  drawn*), so the arm, the stick and the blade's dressing pivot about a blade
+  that has not moved. The rebuild gate compares the drawn hand, or the offset
+  would never redraw.
 - **The rig reads the markers and the frames where the engine draws them**
   (`drawn_top_hand`, `Skater.drawn_blade`, `drawn_upper_body`,
   `drawn_lower_body`): between where the latest tick found them and where they
@@ -435,6 +437,18 @@ Ten rules the rigs sit inside, all easy to break from in here:
   front. The bottom hand does not roll: the plane grip already holds the shaft
   from underneath, palm up, as a bottom hand does, which that twist measure
   reads as out of range. `test_glove_grips_the_shaft.gd`.
+- **The wrists roll the whole stick, and the top fist turns with it.** Every
+  face dressing is an axial twist of the blade about the hosel line
+  (`Skater._apply_blade_tilt`), and the stick is one piece: the shaft's faces
+  (`Skater.shaft_roll_up`) and the top fist (past its eased roll) turn by the
+  same angle (`Skater.stick_roll`), while the bottom hand lets the shaft turn
+  in its fingers. A stroke cups the face it pushes with over the puck
+  (`_BLADE_STROKE_CUP_DEG`, by the side the blade is drawn on, on a spring), so
+  a dangle rolls the top wrist over and back with every stroke. The cup stays
+  out of a slapshot's swing anchor and is laid back on as it fades, so the
+  blade comes through contact square. The carry seat eases on and off with
+  the carry (`_seat_blend`): its slide grows with the roll, and snapped, a
+  pickup stepped the blade. `test_carry_hold.gd`, `test_slapper_stance.gd`.
 - **The arms have a C++ port** (`NativeArmRig`, which writes the arm bones
   itself and eases its own elbow turn and fist roll), held to `_update_arm` and
   the part poses (`SkaterArmPoses`) by `test_native_arm_rig_parity.gd`, landed
