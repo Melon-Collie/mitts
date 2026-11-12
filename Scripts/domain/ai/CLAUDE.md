@@ -564,6 +564,18 @@ three out of the house for men who cannot score from where they stand
 (`TeamBrain._one_owns`). With two in the box no body is elected the one, the
 perimeter has no owner, and the three hold the wedge alone.
 
+**Up the ice a man down is a 1-3, and it never forechecks.** "Forecheck or set
+up" has one answer for it: set up (`TeamBrain`, before the read is even asked).
+A forecheck sends two forwards into their end, and a team already a body short
+has none to send. The set shape it falls into is the 1-1-3 with one post
+unfilled, and which post matters: `AIRoleSlots5` elects `NZ_F1` ahead of
+`NZ_MID` when it has fewer bodies than posts, so the three hold our line and
+the one is the forward who steers the carrier, with the middle layer the post
+given up. Left in list order the high man was the one dropped, and the carrier
+came through the neutral zone unsteered. A man down, NZ_F1's stand goes no
+deeper than their blue line (`AIRoleNeutralZone.their_line_depth_m`), where at
+even strength it follows the carrier to their circle tops.
+
 A man UP changes nothing: the offense is the ordinary one.
 
 ## Covering a man is one behavior, and the role only chooses WHO

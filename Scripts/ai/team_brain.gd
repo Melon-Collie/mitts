@@ -282,8 +282,10 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 	if not their_deep_puck and forecheck_margin_s == -INF:
 		_forechecking = false
 	else:
-		_forechecking = AIForecheckRead.can_forecheck(forecheck_margin_s, _forechecking,
-				forecheck_depth_margin_s)
+		# A man down never forechecks: the men it sends deep are the ones the
+		# set shape is already short of.
+		_forechecking = not _man_down and AIForecheckRead.can_forecheck(
+				forecheck_margin_s, _forechecking, forecheck_depth_margin_s)
 		state = AIPossessionState.State.FORECHECK if _forechecking \
 				else AIPossessionState.State.TRANS_DEFENSE
 

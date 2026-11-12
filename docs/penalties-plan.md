@@ -327,8 +327,20 @@ The bots learn each rule in the phase that adds it.
     shape holding, not what the kill is worth.
   - **A man up** keeps the ordinary offense (decided 2026-11-12): no power-play
     shape.
-  - **Not built:** a short team's forecheck and neutral zone are the ordinary
-    ones, a man light.
+  - **Up the ice it is a passive 1-3** (decided 2026-11-12). A team a man
+    down never forechecks: their puck outside our zone is always the set shape
+    (`TeamBrain`), and the men a forecheck would send deep are the ones that
+    shape is short of. Loose pucks are still raced. The set shape is the
+    5v5 1-1-3 with one post given up, and the post is the middle layer, not
+    the high man: three across our line and the forward who steers the
+    carrier to a wall (`AIRoleSlots5` elects `NZ_F1` ahead of `NZ_MID` when it
+    has fewer bodies than posts). A man down, that forward goes no further up
+    the ice than their blue line and steers from there
+    (`AIRoleNeutralZone.their_line_depth_m`).
+  - **Measured** the same way, the attackers breaking out from behind their
+    net: no killer was in their zone on any set-shape tick, the high man
+    averaged 10 m from the carrier and 13 m from our line, and the three were
+    2 m to 7 m from it (*slow* `test_penalty_kill_shape.gd`).
 
 ## Phases
 

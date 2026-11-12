@@ -387,3 +387,22 @@ func test_the_brain_holds_a_deep_forecheck_its_f1_has_lost() -> void:
 		assert_eq(brain.state, AIPossessionState.State.FORECHECK if wing_z < -20.0
 				else AIPossessionState.State.TRANS_DEFENSE,
 				"wingers at %.0f" % wing_z)
+
+
+# ── A man down ───────────────────────────────────────────────────────────────
+
+func test_a_team_a_man_down_sets_up_where_it_would_have_forechecked() -> void:
+	# Our F1 on their settled carrier, which at even strength is a forecheck
+	# (test_a_settled_carrier_our_f1_gets_on_is_forechecked_again).
+	var even: TeamBrain = _settled_brain()
+	_run(even, Vector3(1.2, 0.0, -27.2), 0.5, -14.0)
+	assert_eq(even.state, AIPossessionState.State.FORECHECK, "three against three forechecks")
+	var skaters: Array = _settled(Vector3(1.2, 0.0, -27.2), -14.0)
+	skaters.append([203, 1, Vector3(0.0, 0.0, -10.0)])   # their extra man
+	var brain := TeamBrain.new(TEAM_ID, _teams(skaters), {}, 3)
+	var snap: WorldSnapshot = _snap(skaters, 200)
+	for _i: int in 25:
+		brain.tick(0.02, snap)
+	assert_true(brain.man_down())
+	assert_eq(brain.state, AIPossessionState.State.TRANS_DEFENSE,
+			"three against four: nobody is sent deep")

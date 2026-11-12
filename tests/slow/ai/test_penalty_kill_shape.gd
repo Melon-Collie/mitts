@@ -115,3 +115,104 @@ func test_with_a_defenseman_in_the_box_the_killers_hold_the_wedge_and_one() -> v
 	var r: Dictionary = _kill([4, 0, 1, 2])   # RD, C, LW, RW: the left defenseman sits
 	_report("a defenseman off", r)
 	_assert_wedge_and_one("a defenseman off", r)
+
+
+# ── Their puck outside our zone: the 1-3 ─────────────────────────────────────
+# The same four killers with the attackers breaking out: their carrier starts
+# behind his own net and skates the puck up the ice. Read every tick the
+# killers are in the set shape.
+#   NOBODY IS SENT DEEP — no killer is in the attackers' zone.
+#   THREE BACK AND ONE HIGH — the high man is the killer nearest the carrier,
+#     and the other three are nearer our line than he is.
+
+const THREE_BACK: Array[int] = [AIRoleSlots.Slot.BACK_STRONG, AIRoleSlots.Slot.BACK_MID,
+		AIRoleSlots.Slot.BACK_WEAK]
+const HIGH_MAN: int = AIRoleSlots.Slot.NZ_F1
+# A body eases onto a stand at their line; this much past it is still on it.
+const LINE_SLACK_M: float = 1.0
+
+
+func _set_shape(seats: Array[int]) -> Dictionary:
+	var duel := Duel.new()
+	duel.team_size = 5
+	var breakout: Array[Vector3] = [Vector3(0.0, 0.0, -NET_Z - 1.5), Vector3(4.0, 0.0, 12.0),
+			Vector3(6.0, 0.0, -2.0)]
+	duel.add_scripted_attacker(1, 0, breakout, 3.0)
+	var posts: Array[Vector3] = [Vector3(-8.0, 0.0, 16.0), Vector3(8.0, 0.0, 14.0),
+			Vector3(-5.0, 0.0, 6.0), Vector3(0.0, 0.0, 8.0)]
+	for i: int in posts.size():
+		var post: Array[Vector3] = [posts[i]]
+		duel.add_scripted_attacker(2 + i, 0, post, 0.0)
+	for i: int in 5:
+		duel.positions[1 + i] = i
+	var spawns: Array[Vector3] = [Vector3(-4.0, 0.0, 2.0), Vector3(4.0, 0.0, 2.0),
+			Vector3(0.0, 0.0, 6.0), Vector3(-6.0, 0.0, 8.0)]
+	for i: int in seats.size():
+		duel.add_skater(50 + i, 1, spawns[i], BotSkillProfile.hard())
+		duel.positions[50 + i] = seats[i]
+	duel.start(1)
+
+	var brain: TeamBrain = duel.brains[1]
+	var ticks: int = 0
+	var deep_ticks: int = 0
+	var slot_ticks: Dictionary = {}
+	var carrier_dist: Dictionary = {}
+	var line_dist: Dictionary = {}
+	for _t: int in int(8.0 / DT):
+		duel.step()
+		if brain.state != AIPossessionState.State.TRANS_DEFENSE or not brain.man_down():
+			continue
+		ticks += 1
+		var anyone_deep: bool = false
+		for pid: int in brain.slot_assignments:
+			var slot: int = brain.slot_assignments[pid]
+			var pos: Vector3 = duel.skater_pos(pid)
+			slot_ticks[slot] = int(slot_ticks.get(slot, 0)) + 1
+			carrier_dist[slot] = float(carrier_dist.get(slot, 0.0)) \
+					+ pos.distance_to(duel.skater_pos(1))
+			# Our line is at -BLUE_LINE_Z; theirs at +BLUE_LINE_Z.
+			line_dist[slot] = float(line_dist.get(slot, 0.0)) \
+					+ absf(pos.z + GameRules.BLUE_LINE_Z)
+			if pos.z > GameRules.BLUE_LINE_Z + LINE_SLACK_M:
+				anyone_deep = true
+		if anyone_deep:
+			deep_ticks += 1
+	var result: Dictionary = {"ticks": ticks, "deep_ticks": deep_ticks,
+			"carrier_dist": {}, "line_dist": {}}
+	for slot: int in slot_ticks:
+		result.carrier_dist[slot] = float(carrier_dist[slot]) / float(slot_ticks[slot])
+		result.line_dist[slot] = float(line_dist[slot]) / float(slot_ticks[slot])
+	return result
+
+
+func _assert_one_three(label: String, r: Dictionary) -> void:
+	gut.p("  %s: %d set-shape ticks a man down, %d with a killer in their zone"
+			% [label, r.ticks, r.deep_ticks])
+	for slot: int in r.carrier_dist:
+		gut.p("    %-12s mean %.1f m from the carrier, %.1f m from our line" % [
+				AIRoleSlots.Slot.keys()[slot], float(r.carrier_dist[slot]),
+				float(r.line_dist[slot])])
+	assert_gt(int(r.ticks), int(2.0 / DT), "%s: the killers set up" % label)
+	assert_eq(int(r.deep_ticks), 0, "%s: nobody is sent into their zone" % label)
+	assert_true(r.carrier_dist.has(HIGH_MAN), "%s: somebody is the high man" % label)
+	assert_false(r.carrier_dist.has(AIRoleSlots.Slot.NZ_MID),
+			"%s: the middle layer is the post given up" % label)
+	for slot: int in THREE_BACK:
+		assert_true(r.carrier_dist.has(slot), "%s: %s is manned"
+				% [label, AIRoleSlots.Slot.keys()[slot]])
+		if not r.carrier_dist.has(slot) or not r.carrier_dist.has(HIGH_MAN):
+			continue
+		assert_lt(float(r.carrier_dist[HIGH_MAN]), float(r.carrier_dist[slot]),
+				"%s: the high man is nearer the carrier than %s"
+				% [label, AIRoleSlots.Slot.keys()[slot]])
+		assert_lt(float(r.line_dist[slot]), float(r.line_dist[HIGH_MAN]),
+				"%s: %s is nearer our line than the high man"
+				% [label, AIRoleSlots.Slot.keys()[slot]])
+
+
+func test_with_a_forward_in_the_box_the_killers_set_up_one_and_three() -> void:
+	_assert_one_three("a forward off", _set_shape([3, 4, 0, 1]))
+
+
+func test_with_a_defenseman_in_the_box_the_killers_set_up_one_and_three() -> void:
+	_assert_one_three("a defenseman off", _set_shape([4, 0, 1, 2]))
