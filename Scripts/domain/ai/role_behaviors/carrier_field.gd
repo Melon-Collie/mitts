@@ -375,7 +375,7 @@ func arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3
 	if aim.length_squared() < 0.0001:
 		aim = Vector2(0.0, -signf(ctx.attacking_goal_pos.z))
 	var facing: Vector2 = ctx.snapshot.skater_states[ctx.peer_id].facing
-	var windup: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+	var windup: float = ctx.self_shot_lookahead_s
 	holds.solve_arrival(aim.normalized(), Vector2(arrive_vel.x, arrive_vel.z), facing,
 			candidate + arrive_vel * windup, carry_s + windup,
 			opponents, opponent_vels, opponent_caps, ctx.self_pos)

@@ -356,7 +356,7 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	_move_reach[m] = 0
 	if not _move_legal(ctx, rollout, m, ctx.self_pos):
 		return
-	var reach: int = _priced_reach(rollout, m, ctx.self_pos, behind_net)
+	var reach: int = _priced_reach(rollout, m, ctx.self_pos, behind_net, ctx.self_shot_lookahead_s)
 	if reach == 0:
 		return
 	_move_reach[m] = reach
@@ -417,11 +417,11 @@ static func _max_abs_z(behind_net: bool) -> float:
 # arrival still leaves in front of the goal line. The wind-up carries the puck on
 # at his pace, and a release behind the line is no shot.
 static func _priced_reach(roll: AICarryRollout, m: int, from: Vector3,
-		behind_net: bool) -> int:
+		behind_net: bool, lookahead_s: float) -> int:
 	var max_abs_z: float = _max_abs_z(behind_net)
 	var reach: int = roll.reach_short_of_net(m, max_abs_z)
 	while reach > 0 and absf(roll.reach_pos(m, reach).z + roll.reach_vel(m, reach, from).z
-			* AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S) > max_abs_z:
+			* lookahead_s) > max_abs_z:
 		reach -= 1
 	return reach
 
@@ -494,7 +494,7 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 	for m: int in AICarryRollout.MOVE_COUNT:
 		if not _move_legal(ctx, _rollout2, m, start):
 			continue
-		var reach: int = _priced_reach(_rollout2, m, start, behind_net)
+		var reach: int = _priced_reach(_rollout2, m, start, behind_net, ctx.self_shot_lookahead_s)
 		if reach == 0:
 			continue
 		var t2: float = AICarryRollout.HORIZON_S * reach / AICarryRollout.SAMPLES
@@ -706,10 +706,10 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 	var cand_wait: float = 0.0
 	var cand_keep: float = 1.0
 	if AICarrierField.shot_reads(ctx, self_pos,
-			candidate + arrive_vel * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S):
+			candidate + arrive_vel * ctx.self_shot_lookahead_s):
 		cand_wait = _field.arrival_hold_wait(ctx, candidate, arrive_vel, local_time)
 		cand_keep = _field.holds.arrival_keep
-	var cand_windup: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + cand_wait
+	var cand_windup: float = ctx.self_shot_lookahead_s + cand_wait
 	# The keeper backs in as the carry closes on him (the planning depth model).
 	# Closing is the rate this carry shortens the puck's distance to the goal.
 	var carry_closing: float = (self_pos.distance_to(ctx.attacking_goal_pos)

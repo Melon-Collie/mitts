@@ -1807,6 +1807,25 @@ func test_shot_entry_samples_release_hold_inside_timing_budget() -> void:
 	sm._set_state(Agent.State.OFF_PUCK)
 
 
+func test_a_shot_is_priced_where_it_leaves_on_average() -> void:
+	# The carrier prices a shot AIBotMechanics.shot_lookahead_s ahead: the
+	# wrister's lookahead plus the mean hold the hands add. Held against the
+	# holds the press really samples, on every tier (#943).
+	for profile: BotSkillProfile in [BotSkillProfile.hard(), BotSkillProfile.normal(),
+			BotSkillProfile.easy()]:
+		sm.apply_profile(profile)
+		var sum: int = 0
+		var n: int = 4000
+		for i: int in n:
+			sum += sm._sample_release_hold_ticks()
+		var sampled_s: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S \
+				+ float(sum) / n * Agent.MOUSE_TICK_DELTA
+		assert_almost_eq(AIBotMechanics.shot_lookahead_s(profile.shot_timing_error_s),
+				sampled_s, 0.004,
+				"the priced lookahead is the sampled hold's mean (error %.2f s)"
+				% profile.shot_timing_error_s)
+
+
 # ── Cognition gates (difficulty-tiered hockey IQ) ────────────────────────────
 
 func test_apply_profile_sets_cognition_gates() -> void:

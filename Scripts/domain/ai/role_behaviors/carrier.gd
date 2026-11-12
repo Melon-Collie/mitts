@@ -546,7 +546,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 				ctx.snapshot.puck_state.position.x, 0.0,
 				ctx.snapshot.puck_state.position.z)
 	var wrister_base_release: Vector3 = puck_now \
-			+ horizontal_velocity * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+			+ horizontal_velocity * ctx.self_shot_lookahead_s
 	# No shot when the PUCK ITSELF is on/behind the goal line. Gate on the real
 	# puck, not the projection: score_shoot clamps a behind-the-goalie release to
 	# a jam point in FRONT of him, so a projected blade landing a hair in front
@@ -606,7 +606,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 				snapshot.skater_states[ctx.peer_id].facing)
 		_field.holds.price_keep(self_pos, Vector2(horizontal_velocity.x, horizontal_velocity.z),
 				snapshot.skater_states[ctx.peer_id].facing,
-				AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, _field.opponents,
+				ctx.self_shot_lookahead_s, _field.opponents,
 				_field.opponent_vels, _field.opponent_caps)
 	_phase_shoot_score = -1.0
 	for k: int in _field.holds.count:
@@ -617,7 +617,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var pull_s: float = _field.holds.pull_s[k]
 		var sample_speed: float = ctx.self_wrister_shot_speed * share
 		var released_at: Vector3 = self_pos + hold + horizontal_velocity \
-				* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s)
+				* (ctx.self_shot_lookahead_s + pull_s)
 		if not _shootable_from(released_at, attacking_goal, goalie_now):
 			continue
 		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(released_at,

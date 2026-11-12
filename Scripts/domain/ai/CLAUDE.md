@@ -97,6 +97,11 @@ current rate.
 Shot scatter (`shot_aim_error_rad`) acts on execution only: the compete prices a
 spot through the value seam, which is a property of the chance rather than the
 shooter, so a wobblier tier takes the same shots and misses more of them (#699).
+The release timing (`shot_timing_error_s`) is the other way round: the hands'
+hold moves WHERE the shot leaves, not its odds from there, so the compete prices
+every shot at the hold's mean (`AIBotMechanics.shot_lookahead_s`). Left out, a
+lower tier at breakaway pace decided to shoot from the spot it would have liked
+and released a metre further in, on the keeper (#943).
 
 Tuning order, when a tier is wrong: if it plays like a pushover, raise the
 precision knobs back toward Hard and let the pace knobs keep it beatable; if it

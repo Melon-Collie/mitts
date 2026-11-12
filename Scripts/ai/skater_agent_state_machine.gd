@@ -1249,6 +1249,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.self_wrister_shot_speed = _self_wrister_shot_speed
 	ctx.self_lateral_grip = _self_lateral_grip
 	ctx.self_pass_aim_error_rad = _pass_aim_error_rad
+	ctx.self_shot_lookahead_s = AIBotMechanics.shot_lookahead_s(_shot_timing_error_s)
 	ctx.self_weight = _self_weight
 	ctx.self_body_check_transfer = _self_body_check_transfer
 	ctx.self_handle_reach = _self_handle_reach
@@ -2035,7 +2036,8 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 		var hv0: Vector3 = Vector3.ZERO
 		if self_state != null:
 			hv0 = Vector3(self_state.velocity.x, 0.0, self_state.velocity.z)
-		_shoot_release_anchor = self_pos + hv0 * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+		_shoot_release_anchor = self_pos + hv0 * (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+				+ float(_shoot_release_hold_ticks) / _PhysicsConstants.PHYSICS_TICK)
 		_shoot_wind_up_moving = hv0.length() > BOT_WRISTER_PLANT_SPEED_M_S
 	# Rush wrister: steer to the anchor. Near-still: plant (BOT_WRISTER_PLANT_SPEED_M_S).
 	if _shoot_wind_up_moving:
