@@ -301,6 +301,16 @@ func scenarios() -> Array[Dictionary]:
 	_add(out, "forward → backward (move reversed)", 360, func(inp: InputState, i: int) -> Vector3:
 		inp.move_vector = Vector2(0.0, -1.0) if i < 120 else Vector2(0.0, 1.0)
 		return _up(3.0), 12.0)
+	# An empty stick placed round behind on the top hand's side and brought back,
+	# skating: the cursor near enough to be a reach, not a look (the wider swing,
+	# SkaterController.reach_behind_for).
+	_add(out, "empty stick reached round behind the top hand's side", 360,
+			func(inp: InputState, i: int) -> Vector3:
+		inp.move_vector = Vector2(0.0, -1.0)
+		var top_side: float = -FacingRules.forehand_sign(_skater.is_left_handed)
+		var swept: float = deg_to_rad(170.0) * smoothstep(60.0, 150.0, float(i)) \
+				* (1.0 - smoothstep(210.0, 300.0, float(i)))
+		return Vector3(sin(swept) * top_side, 0.0, -cos(swept)) * 1.4, 26.0)
 	# The loaded stance on and off, skating and standing.
 	_add(out, "stance on/off while skating", 360, func(inp: InputState, i: int) -> Vector3:
 		inp.move_vector = Vector2(0.0, -1.0)
@@ -370,14 +380,14 @@ func _add_play(out: Array[Dictionary]) -> void:
 	_add(out, "knocked down from the side and up again", 420, func(inp: InputState, i: int) -> Vector3:
 		inp.move_vector = Vector2(0.0, -1.0)
 		if i == 60:
-			_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+			_controller._on_body_check_received(Vector3(5.3, 0.0, 0.0))
 		return _up(2.0), 26.0)
-	# Just past his balance from the side: the softest fall and the shortest lie.
-	_add(out, "knocked down just past his balance and up again", 420,
+	# Past his balance and short of flat, from the side: down onto a knee and up.
+	_add(out, "stumbled onto a knee and up again", 420,
 			func(inp: InputState, i: int) -> Vector3:
 		inp.move_vector = Vector2(0.0, -1.0)
 		if i == 60:
-			_controller._on_body_check_received(Vector3(1.93, 0.0, 0.0))
+			_controller._on_body_check_received(Vector3(2.73, 0.0, 0.0))
 		return _up(2.0), 26.0)
 	_add(out, "shot block down and back up, puck ahead", 300, func(inp: InputState, i: int) -> Vector3:
 		inp.block_held = i >= 60 and i < 180
@@ -396,25 +406,27 @@ func _add_play(out: Array[Dictionary]) -> void:
 
 # The press (PressRules) from both sides: driving into a man dug in ahead, and
 # dug in with a man driving into us from behind. Each comes on at t60 and goes
-# off at t200, from a standstill in contact.
+# off at t200, from a standstill in contact. Every check button is down from
+# the start, its drive (CheckDriveRules) spent, so what lands is the press and
+# not a shove.
 func _add_press(out: Array[Dictionary]) -> void:
 	var dug_in: Callable = func(inp: InputState, _i: int) -> Vector3:
 		inp.brake = true
-		inp.stance_held = true
+		inp.hit_held = true
 		return _up(-2.0)
 	_add(out, "press: drive into a man dug in, and off", 320, func(inp: InputState, i: int) -> Vector3:
 		var on: bool = i >= 60 and i < 200
-		inp.hit_held = on
+		inp.hit_held = i < 200
 		inp.move_vector = Vector2(0.0, -1.0) if on else Vector2.ZERO
 		return _up(2.0), 0.0, -1.0, {"dir": Vector3(0.0, 0.0, -1.0),
 				"face": Vector2(0.0, 1.0), "steer": dug_in})
 	_add(out, "press: dug in against a driver, and off", 320, func(inp: InputState, i: int) -> Vector3:
 		var on: bool = i >= 60 and i < 200
 		inp.brake = on
-		inp.stance_held = on
+		inp.hit_held = true
 		return _up(2.0), 0.0, -1.0, {"dir": Vector3(0.0, 0.0, 1.0),
 				"face": Vector2(0.0, -1.0),
 				"steer": func(inp: InputState, i: int) -> Vector3:
-					inp.hit_held = i >= 40 and i < 220
-					inp.move_vector = Vector2(0.0, -1.0) if inp.hit_held else Vector2.ZERO
+					inp.hit_held = i < 220
+					inp.move_vector = Vector2(0.0, -1.0) if i >= 40 and i < 220 else Vector2.ZERO
 					return _up(2.0)})

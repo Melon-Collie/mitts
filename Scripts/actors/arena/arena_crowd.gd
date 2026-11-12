@@ -81,6 +81,14 @@ func set_excitement(v: float) -> void:
 		_flashbulbs.set_excitement(v)
 
 
+# Something on the ice the bowl turns to watch (world space), and how far it
+# has turned, 0..1. The sink again: the owner eases the weight.
+func set_look(at: Vector3, weight: float) -> void:
+	var mat: ShaderMaterial = shared_material()
+	mat.set_shader_parameter("look_at", at)
+	mat.set_shader_parameter("look_weight", weight)
+
+
 # ── Layout ───────────────────────────────────────────────────────────────────
 
 # Build the color-independent half of the crowd into `layout`: per-section

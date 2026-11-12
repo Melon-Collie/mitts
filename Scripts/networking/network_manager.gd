@@ -75,6 +75,10 @@ signal puck_out_of_play_received
 signal icing_called_received
 signal icing_race_received(icing_team_id: int, waved_off: bool)
 signal goalie_freeze_called_received
+signal fight_challenge_received(challenger_peer_id: int, target_peer_id: int)
+signal fight_challenge_lapsed_received(challenger_peer_id: int)
+signal fight_called_received(a_peer_id: int, b_peer_id: int)
+signal punch_landed_received(victim_peer_id: int, intensity: float, dir_x: float, dir_z: float)
 signal puck_frozen_called_received
 signal offside_called_received
 signal faceoff_positions_received(positions: Array, preroll: float)
@@ -93,7 +97,7 @@ signal lobby_roster_synced(roster: Array)
 signal color_vote_changed(peer_id: int, color_slot: int)
 signal color_votes_synced(votes: Dictionary)
 signal team_colors_changed(home_slot: int, away_slot: int)
-signal lobby_settings_synced(num_periods: int, period_duration: float, ot_enabled: bool, rule_set: int, team_size: int, bot_difficulty: int, goalie_difficulty: int)
+signal lobby_settings_synced(num_periods: int, period_duration: float, ot_enabled: bool, rule_set: int, team_size: int, bot_difficulty: int, goalie_difficulty: int, fighting: bool)
 signal return_to_lobby_received(roster: Array)
 signal player_ready_changed(peer_id: int, is_ready: bool)
 # Lobby per-slot bot toggle. Slot keys follow LobbyManager._slot_key (team*3+slot).
@@ -183,6 +187,10 @@ signal local_skin_changed(skin_tone: int)
 # map (apply_local_gear_style). Cosmetic — carries the packed GearStyleConfig
 # code.
 signal local_gear_style_changed(gear_style_code: int)
+# The host saw the local player make a feat play (a FeatRules id).
+signal feat_received(puck_id: String)
+# Fires after a local title pick lands in the peer map (apply_local_title).
+signal local_title_changed(title_id: String)
 
 # Local player picked a different attribute spread (Speed/Agility/Size/Skill).
 # Fires after the new picks land in PlayerPrefs and _peer_attributes[1] is
@@ -242,6 +250,7 @@ var pending_period_duration: float = GameRules.PERIOD_DURATION
 var pending_ot_enabled: bool = GameRules.OT_ENABLED
 var pending_rule_set: int = GameRules.DEFAULT_RULE_SET
 var pending_team_size: int = GameRules.DEFAULT_TEAM_SIZE
+var pending_fighting: bool = GameRules.FIGHTING_ENABLED
 # Host's AI difficulty picks, mirrored to clients for lobby DISPLAY only —
 # the AI itself is host-simulated from the host's PlayerPrefs, so clients
 # never feed these back into gameplay (and never write them to their own
@@ -288,6 +297,9 @@ var _peer_shot_sensitivity: Dictionary[int, float] = {}
 var _peer_tape_codes: Dictionary[int, int] = {}
 var _peer_skin_tones: Dictionary[int, int] = {}
 var _peer_gear_styles: Dictionary[int, int] = {}
+# The Titles id each peer wears ("" for none), sent once at join like the
+# cosmetics above. Bots never hold one.
+var _peer_titles: Dictionary[int, String] = {}
 # Preferred position (PlayerRules.POSITION_NAMES index) — read by the lobby's
 # host-side seat assignment, never by spawn.
 var _peer_positions: Dictionary[int, int] = {}
@@ -469,10 +481,11 @@ func _ready() -> void:
 	local_is_left_handed = PlayerPrefs.is_left_handed
 	PlayerPrefs.cloud_prefs_adopted.connect(_on_cloud_prefs_adopted)
 	_peer_attributes[1] = PlayerPrefs.get_player_attributes()
-	_peer_tape_codes[1] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[1] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones[1] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
-	_peer_gear_styles[1] = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[1] = PlayerPrefs.worn_gear_style_code()
 	_peer_positions[1] = PlayerPrefs.preferred_position
+	_peer_titles[1] = Titles.coerce(PlayerPrefs.equipped_title)
 
 
 # Routed through apply_local_identity so a mid-session adopt (Deck resume)
@@ -496,10 +509,11 @@ func start_offline() -> void:
 	_peer_names[1] = local_player_name
 	_peer_numbers[1] = local_jersey_number
 	_peer_attributes[1] = PlayerPrefs.get_player_attributes()
-	_peer_tape_codes[1] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[1] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones[1] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
-	_peer_gear_styles[1] = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[1] = PlayerPrefs.worn_gear_style_code()
 	_peer_positions[1] = PlayerPrefs.preferred_position
+	_peer_titles[1] = Titles.coerce(PlayerPrefs.equipped_title)
 	pending_game_config = {"num_periods": 1, "period_duration": 0.0, "ot_enabled": false, "ot_duration": 0.0,
 			"rule_set": GameRules.DEFAULT_RULE_SET,
 			"team_size": GameRules.DEFAULT_TEAM_SIZE}
@@ -769,6 +783,7 @@ func _on_peer_disconnected(id: int) -> void:
 	_peer_tape_codes.erase(id)
 	_peer_skin_tones.erase(id)
 	_peer_gear_styles.erase(id)
+	_peer_titles.erase(id)
 	_peer_positions.erase(id)
 	pending_color_votes.erase(id)
 	# NOTE: _peer_steam_ids is deliberately NOT erased before the emit below —
@@ -806,18 +821,19 @@ func _on_connected_to_server() -> void:
 	# all-medium. Valid here — the unique id is assigned before
 	# connected_to_server.
 	_peer_attributes[local_peer_id()] = local_attrs
-	_peer_tape_codes[local_peer_id()] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[local_peer_id()] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones[local_peer_id()] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
-	_peer_gear_styles[local_peer_id()] = GearStyleConfig.from_code(
-			PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[local_peer_id()] = PlayerPrefs.worn_gear_style_code()
+	_peer_titles[local_peer_id()] = Titles.coerce(PlayerPrefs.equipped_title)
 	_peer_positions[local_peer_id()] = PlayerPrefs.preferred_position
 	request_join.rpc_id(1, local_is_left_handed, local_player_name, local_jersey_number,
 			local_attrs.height, local_attrs.weight, local_attrs.profile,
 			local_attrs.curve, local_attrs.flex, local_attrs.length,
 			SteamManager.steam_id, BuildInfo.PROTOCOL_VERSION,
 			SteamManager.get_app_build_id(), PlayerPrefs.shot_power_sensitivity,
-			PlayerPrefs.stick_tape_code, PlayerPrefs.skin_tone,
-			PlayerPrefs.gear_style_code, PlayerPrefs.preferred_position)
+			PlayerPrefs.worn_tape_code(), PlayerPrefs.skin_tone,
+			PlayerPrefs.worn_gear_style_code(), PlayerPrefs.preferred_position,
+			Titles.coerce(PlayerPrefs.equipped_title))
 	client_connected.emit()
 
 func _on_connection_failed() -> void:
@@ -923,11 +939,13 @@ func reset() -> void:
 	_peer_attributes.clear()
 	_peer_attributes[1] = PlayerPrefs.get_player_attributes()
 	_peer_tape_codes.clear()
-	_peer_tape_codes[1] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[1] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones.clear()
 	_peer_skin_tones[1] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
 	_peer_gear_styles.clear()
-	_peer_gear_styles[1] = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[1] = PlayerPrefs.worn_gear_style_code()
+	_peer_titles.clear()
+	_peer_titles[1] = Titles.coerce(PlayerPrefs.equipped_title)
 	_peer_positions.clear()
 	_peer_positions[1] = PlayerPrefs.preferred_position
 	pending_game_config = {}
@@ -948,6 +966,7 @@ func reset() -> void:
 	pending_ot_enabled = GameRules.OT_ENABLED
 	pending_rule_set = GameRules.DEFAULT_RULE_SET
 	pending_team_size = GameRules.DEFAULT_TEAM_SIZE
+	pending_fighting = GameRules.FIGHTING_ENABLED
 	pending_bot_difficulty = BotSkillProfile.Difficulty.NORMAL
 	pending_goalie_difficulty = GoalieSkillProfile.Difficulty.NORMAL
 	_input_timer = 0.0
@@ -1212,7 +1231,7 @@ func request_join(is_left_handed: bool, player_name: String, jersey_number: int 
 		tape_code: int = StickTapeConfig.DEFAULT_CODE,
 		skin_tone: int = SkinToneRegistry.DEFAULT_INDEX,
 		gear_style_code: int = GearStyleConfig.DEFAULT_CODE,
-		preferred_position: int = 0) -> void:
+		preferred_position: int = 0, title_id: String = "") -> void:
 	if not is_host:
 		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
@@ -1260,6 +1279,9 @@ func request_join(is_left_handed: bool, player_name: String, jersey_number: int 
 	_peer_skin_tones[sender_id] = SkinToneRegistry.clamp_index(skin_tone)
 	# Cosmetic gear style — round-trip coerces a forged code to a legal one.
 	_peer_gear_styles[sender_id] = GearStyleConfig.from_code(gear_style_code).to_code()
+	# Not checked against what the peer has earned (docs/game-pucks-plan.md, "No
+	# anti-cheat"); an id this build does not know wears none.
+	_peer_titles[sender_id] = Titles.coerce(title_id)
 	_peer_positions[sender_id] = clampi(preferred_position, 0,
 			PlayerRules.POSITION_NAMES.size() - 1)
 	# Seed the host-measured RTT immediately instead of waiting up to a full
@@ -1379,6 +1401,24 @@ func get_peer_gear_style(peer_id: int) -> int:
 
 func set_peer_gear_style(peer_id: int, gear_style_code: int) -> void:
 	_peer_gear_styles[peer_id] = GearStyleConfig.from_code(gear_style_code).to_code()
+
+
+# A peer's title (Titles id), "" for none and for bots and absent peers.
+func get_peer_title(peer_id: int) -> String:
+	return _peer_titles.get(peer_id, "")
+
+
+func set_peer_title(peer_id: int, title_id: String) -> void:
+	_peer_titles[peer_id] = Titles.coerce(title_id)
+
+
+# Live title pick, the same local-only contract as the gear style: remote peers
+# keep the title from this session's join handshake.
+func apply_local_title(title_id: String) -> void:
+	var coerced: String = Titles.coerce(title_id)
+	_peer_titles[1] = coerced
+	_peer_titles[local_peer_id()] = coerced
+	local_title_changed.emit(coerced)
 
 
 # A peer's preferred position (PlayerRules.POSITION_NAMES index). Absent
@@ -2084,13 +2124,15 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_colo
 		attr_length: int = PlayerAttributes.GEAR_BALANCED,
 		tape_code: int = StickTapeConfig.DEFAULT_CODE,
 		skin_tone: int = SkinToneRegistry.DEFAULT_INDEX,
-		gear_style_code: int = GearStyleConfig.DEFAULT_CODE, from_spectator: bool = false) -> void:
+		gear_style_code: int = GearStyleConfig.DEFAULT_CODE, from_spectator: bool = false,
+		title_id: String = "") -> void:
 	var attrs := PlayerAttributes.new(attr_height, attr_weight,
 			attr_profile, attr_curve, attr_flex, attr_length)
 	_peer_attributes[peer_id] = attrs
 	_peer_tape_codes[peer_id] = StickTapeConfig.from_code(tape_code).to_code()
 	_peer_skin_tones[peer_id] = SkinToneRegistry.clamp_index(skin_tone)
 	_peer_gear_styles[peer_id] = GearStyleConfig.from_code(gear_style_code).to_code()
+	_peer_titles[peer_id] = Titles.coerce(title_id)
 	remote_skater_spawn_requested.emit(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number, attrs, from_spectator)
 
 @rpc("authority", "reliable")
@@ -2179,6 +2221,18 @@ func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int, scorer_n
 	for peer_id in connected_peer_ids():
 		notify_goal.rpc_id(peer_id, scoring_team_id, score0, score1, scorer_name, assist1_name, assist2_name)
 
+func send_feat(peer_id: int, puck_id: String) -> void:
+	if is_offline_mode or not is_real_peer(peer_id):
+		return
+	notify_feat.rpc_id(peer_id, puck_id)
+
+@rpc("authority", "reliable")
+func notify_feat(puck_id: String) -> void:
+	NetworkSimManager.send(
+		func(id: String) -> void:
+			feat_received.emit(id),
+		[puck_id], true)
+
 func notify_puck_dropped_to_carrier(carrier_peer_id: int) -> void:
 	if not is_real_peer(carrier_peer_id):
 		return  # AI bot or sentinel — see send_puck_picked_up rationale.
@@ -2263,6 +2317,47 @@ func notify_goalie_freeze_called_to_all() -> void:
 @rpc("authority", "reliable")
 func notify_goalie_freeze_called() -> void:
 	NetworkSimManager.send(func() -> void: goalie_freeze_called_received.emit(), [], true)
+
+func notify_fight_challenge_to_all(challenger_peer_id: int, target_peer_id: int) -> void:
+	for peer_id: int in connected_peer_ids():
+		notify_fight_challenge.rpc_id(peer_id, challenger_peer_id, target_peer_id)
+
+@rpc("authority", "reliable")
+func notify_fight_challenge(challenger_peer_id: int, target_peer_id: int) -> void:
+	NetworkSimManager.send(
+		func(c: int, t: int) -> void: fight_challenge_received.emit(c, t),
+		[challenger_peer_id, target_peer_id], true)
+
+func notify_fight_challenge_lapsed_to_all(challenger_peer_id: int) -> void:
+	for peer_id: int in connected_peer_ids():
+		notify_fight_challenge_lapsed.rpc_id(peer_id, challenger_peer_id)
+
+@rpc("authority", "reliable")
+func notify_fight_challenge_lapsed(challenger_peer_id: int) -> void:
+	NetworkSimManager.send(
+		func(c: int) -> void: fight_challenge_lapsed_received.emit(c),
+		[challenger_peer_id], true)
+
+func notify_fight_called_to_all(a_peer_id: int, b_peer_id: int) -> void:
+	for peer_id: int in connected_peer_ids():
+		notify_fight_called.rpc_id(peer_id, a_peer_id, b_peer_id)
+
+@rpc("authority", "reliable")
+func notify_fight_called(a_peer_id: int, b_peer_id: int) -> void:
+	NetworkSimManager.send(
+		func(a: int, b: int) -> void: fight_called_received.emit(a, b),
+		[a_peer_id, b_peer_id], true)
+
+func notify_punch_landed_to_all(victim_peer_id: int, intensity: float, dir_x: float,
+		dir_z: float) -> void:
+	for peer_id: int in connected_peer_ids():
+		notify_punch_landed.rpc_id(peer_id, victim_peer_id, intensity, dir_x, dir_z)
+
+@rpc("authority", "reliable")
+func notify_punch_landed(victim_peer_id: int, intensity: float, dir_x: float, dir_z: float) -> void:
+	NetworkSimManager.send(
+		func(v: int, t: float, x: float, z: float) -> void: punch_landed_received.emit(v, t, x, z),
+		[victim_peer_id, intensity, dir_x, dir_z], true)
 
 func notify_offside_called_to_all() -> void:
 	for peer_id: int in connected_peer_ids():
@@ -2355,7 +2450,7 @@ func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey
 	spawn_remote_skater.rpc(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number,
 			attrs.height, attrs.weight, attrs.profile, attrs.curve, attrs.flex, attrs.length,
 			get_peer_tape_code(peer_id), get_peer_skin_tone(peer_id),
-			get_peer_gear_style(peer_id), from_spectator)
+			get_peer_gear_style(peer_id), from_spectator, get_peer_title(peer_id))
 
 func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)
@@ -2441,11 +2536,13 @@ func notify_join_in_progress(p_num_periods: int, p_period_duration: float,
 		p_away_color_slot: int = TeamColorRegistry.DEFAULT_AWAY_SLOT,
 		p_rule_set: int = GameRules.DEFAULT_RULE_SET,
 		p_game_id: String = "",
-		p_team_size: int = GameRules.DEFAULT_TEAM_SIZE) -> void:
+		p_team_size: int = GameRules.DEFAULT_TEAM_SIZE,
+		p_fighting: bool = GameRules.FIGHTING_ENABLED) -> void:
 	pending_home_color_slot = p_home_color_slot
 	pending_away_color_slot = p_away_color_slot
 	pending_rule_set = p_rule_set
 	pending_team_size = p_team_size
+	pending_fighting = p_fighting
 	# The Hockey scene is about to be (re)loaded for this join — stash any
 	# slot/roster RPCs that land before the new scene's _ready.
 	scene_swap_pending = true
@@ -2459,6 +2556,7 @@ func notify_join_in_progress(p_num_periods: int, p_period_duration: float,
 		"rule_set": p_rule_set,
 		"game_id": p_game_id,
 		"team_size": p_team_size,
+		"fighting": p_fighting,
 	})
 
 func send_join_in_progress(peer_id: int, config: Dictionary) -> void:
@@ -2467,10 +2565,11 @@ func send_join_in_progress(peer_id: int, config: Dictionary) -> void:
 	var rs: int = config.get("rule_set", pending_rule_set)
 	var gid: String = config.get("game_id", "")
 	var ts: int = config.get("team_size", pending_team_size)
+	var fight: bool = config.get("fighting", pending_fighting)
 	_grant_load_grace(peer_id)
 	notify_join_in_progress.rpc_id(peer_id,
 		config.num_periods, config.period_duration,
-		config.ot_enabled, config.ot_duration, hslot, aslot, rs, gid, ts)
+		config.ot_enabled, config.ot_duration, hslot, aslot, rs, gid, ts, fight)
 
 @rpc("authority", "reliable")
 func notify_game_start(p_num_periods: int, p_period_duration: float,
@@ -2479,11 +2578,13 @@ func notify_game_start(p_num_periods: int, p_period_duration: float,
 		p_away_color_slot: int = TeamColorRegistry.DEFAULT_AWAY_SLOT,
 		p_rule_set: int = GameRules.DEFAULT_RULE_SET,
 		p_game_id: String = "",
-		p_team_size: int = GameRules.DEFAULT_TEAM_SIZE) -> void:
+		p_team_size: int = GameRules.DEFAULT_TEAM_SIZE,
+		p_fighting: bool = GameRules.FIGHTING_ENABLED) -> void:
 	pending_home_color_slot = p_home_color_slot
 	pending_away_color_slot = p_away_color_slot
 	pending_rule_set = p_rule_set
 	pending_team_size = p_team_size
+	pending_fighting = p_fighting
 	# Lobby → Hockey transition incoming; same stash-forcing as join-in-progress.
 	scene_swap_pending = true
 	game_started.emit({
@@ -2496,6 +2597,7 @@ func notify_game_start(p_num_periods: int, p_period_duration: float,
 		"rule_set": p_rule_set,
 		"game_id": p_game_id,
 		"team_size": p_team_size,
+		"fighting": p_fighting,
 	})
 
 @rpc("authority", "reliable")
@@ -2515,15 +2617,17 @@ func send_game_start(config: Dictionary) -> void:
 	var rs: int = config.get("rule_set", GameRules.DEFAULT_RULE_SET)
 	var gid: String = config.get("game_id", "")
 	var ts: int = config.get("team_size", GameRules.DEFAULT_TEAM_SIZE)
+	var fight: bool = config.get("fighting", GameRules.FIGHTING_ENABLED)
 	pending_home_color_slot = hslot
 	pending_away_color_slot = aslot
 	pending_rule_set = rs
 	pending_team_size = ts
+	pending_fighting = fight
 	for peer_id: int in connected_peer_ids():
 		_grant_load_grace(peer_id)
 		notify_game_start.rpc_id(peer_id,
 			config.num_periods, config.period_duration,
-			config.ot_enabled, config.ot_duration, hslot, aslot, rs, gid, ts)
+			config.ot_enabled, config.ot_duration, hslot, aslot, rs, gid, ts, fight)
 	game_started.emit(config)
 
 func send_lobby_roster(peer_id: int, roster: Array) -> void:
@@ -2643,7 +2747,8 @@ func notify_lobby_settings(num_periods: int, period_duration: float, ot_enabled:
 		rule_set: int = GameRules.DEFAULT_RULE_SET,
 		team_size: int = GameRules.DEFAULT_TEAM_SIZE,
 		bot_difficulty: int = BotSkillProfile.Difficulty.NORMAL,
-		goalie_difficulty: int = GoalieSkillProfile.Difficulty.NORMAL) -> void:
+		goalie_difficulty: int = GoalieSkillProfile.Difficulty.NORMAL,
+		fighting: bool = GameRules.FIGHTING_ENABLED) -> void:
 	pending_num_periods = num_periods
 	pending_period_duration = period_duration
 	pending_ot_enabled = ot_enabled
@@ -2651,11 +2756,12 @@ func notify_lobby_settings(num_periods: int, period_duration: float, ot_enabled:
 	pending_team_size = team_size
 	pending_bot_difficulty = bot_difficulty
 	pending_goalie_difficulty = goalie_difficulty
+	pending_fighting = fighting
 	lobby_settings_synced.emit(num_periods, period_duration, ot_enabled, rule_set, team_size,
-			bot_difficulty, goalie_difficulty)
+			bot_difficulty, goalie_difficulty, fighting)
 
 func send_lobby_settings(num_periods: int, period_duration: float, ot_enabled: bool, rule_set: int,
-		team_size: int, bot_difficulty: int, goalie_difficulty: int) -> void:
+		team_size: int, bot_difficulty: int, goalie_difficulty: int, fighting: bool) -> void:
 	pending_num_periods = num_periods
 	pending_period_duration = period_duration
 	pending_ot_enabled = ot_enabled
@@ -2663,14 +2769,16 @@ func send_lobby_settings(num_periods: int, period_duration: float, ot_enabled: b
 	pending_team_size = team_size
 	pending_bot_difficulty = bot_difficulty
 	pending_goalie_difficulty = goalie_difficulty
+	pending_fighting = fighting
 	for peer_id: int in connected_peer_ids():
 		notify_lobby_settings.rpc_id(peer_id, num_periods, period_duration, ot_enabled, rule_set,
-				team_size, bot_difficulty, goalie_difficulty)
+				team_size, bot_difficulty, goalie_difficulty, fighting)
 
 func send_lobby_settings_to(peer_id: int, num_periods: int, period_duration: float, ot_enabled: bool,
-		rule_set: int, team_size: int, bot_difficulty: int, goalie_difficulty: int) -> void:
+		rule_set: int, team_size: int, bot_difficulty: int, goalie_difficulty: int,
+		fighting: bool) -> void:
 	notify_lobby_settings.rpc_id(peer_id, num_periods, period_duration, ot_enabled, rule_set,
-			team_size, bot_difficulty, goalie_difficulty)
+			team_size, bot_difficulty, goalie_difficulty, fighting)
 
 @rpc("authority", "reliable")
 func notify_return_to_lobby(roster: Array) -> void:

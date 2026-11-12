@@ -15,12 +15,21 @@ func test_cosmetics_round_trip_through_a_roster_entry() -> void:
 	sent.skin_tone = SkinToneRegistry.TONES.size() - 1
 	sent.tape_code = StickTapeConfig.from_code(12345).to_code()
 	sent.gear_style_code = GearStyleConfig.from_code(98765).to_code()
+	sent.title_id = "power_forward"
 	var got := PlayerLook.new()
 	got.cosmetics_from_wire(_entry_with(sent), 7)
 	assert_true(got.attributes.equals(sent.attributes))
 	assert_eq(got.skin_tone, sent.skin_tone)
 	assert_eq(got.tape_code, sent.tape_code)
 	assert_eq(got.gear_style_code, sent.gear_style_code)
+	assert_eq(got.title_id, "power_forward")
+
+
+# A v92 entry stops at the gear code: the peer wears no title.
+func test_an_entry_without_a_title_wears_none() -> void:
+	var got := PlayerLook.new()
+	got.cosmetics_from_wire([7, 0, 1, "Name", false, 12, true, {}, 0, 0, 0], 7)
+	assert_eq(got.title_id, "")
 
 
 # A v76 entry stops at is_ready: everyone seats in the default look.
@@ -40,6 +49,10 @@ func test_forged_cosmetics_land_on_a_legal_look() -> void:
 	assert_eq(got.tape_code, StickTapeConfig.from_code(-1).to_code())
 	assert_eq(got.gear_style_code, GearStyleConfig.from_code(-1).to_code())
 	assert_eq(got.attributes.height, PlayerAttributes.coerce_height(999))
+	var forged_title := PlayerLook.new()
+	forged_title.cosmetics_from_wire([7, 0, 1, "Name", false, 12, true, {}, 0, 0, 0,
+			"grand_poobah"], 7)
+	assert_eq(forged_title.title_id, "", "an unknown title wears none")
 
 
 func test_a_bot_without_a_card_is_numbered_by_its_id() -> void:
@@ -64,6 +77,7 @@ func test_a_bots_card_pins_its_look() -> void:
 	# Unpinned, the tape derives from the name, as it does when the bot spawns.
 	assert_eq(look.tape_code, StickTapeConfig.from_code(
 			BotIdentityRegistry.fallback_tape_code("Kowalski")).to_code())
+	assert_eq(look.title_id, "", "bots never wear a title")
 
 
 func test_a_record_reports_its_look() -> void:
@@ -72,8 +86,10 @@ func test_a_record_reports_its_look() -> void:
 	record.jersey_number = 9
 	record.skin_tone = 3
 	record.gear_style_code = GearStyleConfig.from_code(777).to_code()
+	record.title_id = "iron_man"
 	var look: PlayerLook = record.look()
 	assert_eq(look.player_name, "Ada")
 	assert_eq(look.jersey_number, 9)
 	assert_eq(look.skin_tone, 3)
 	assert_eq(look.gear_style_code, record.gear_style_code)
+	assert_eq(look.title_id, "iron_man")

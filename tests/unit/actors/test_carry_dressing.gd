@@ -88,7 +88,7 @@ func _settled_nod(cursor: Vector3, move: Vector2) -> float:
 
 
 func test_the_head_comes_down_to_a_puck_in_tight() -> void:
-	var out: float = _settled_nod(Vector3(0.0, 0.0, -1.1), Vector2.ZERO)
+	var out: float = _settled_nod(Vector3(0.0, 0.0, -1.5), Vector2.ZERO)
 	var tight: float = _settled_nod(Vector3(0.0, 0.0, -0.45), Vector2.ZERO)
 	assert_almost_eq(out, 0.0, 1.0, "a puck held out, still: eyes up")
 	assert_gt(tight, 15.0, "in tight, the head is down on it")

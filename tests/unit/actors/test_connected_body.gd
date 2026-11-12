@@ -132,3 +132,31 @@ func test_the_shoulders_top_runs_out_level_over_the_arm() -> void:
 		assert_gt(reach, joint.x * side + SkaterConnectedMesh.BIND_SLEEVE_RADIUS_M * 0.9,
 				"side %d: the shoulder's top reaches the arm's outside while still level" % int(side))
 
+
+# The lowest V the full body's vertices painted `zone` carry.
+func _top_v(zone: int) -> float:
+	var arrays: Array = SkaterConnectedMesh.shared_mesh(GearModelRegistry.TUCK_NONE) \
+			.surface_get_arrays(0)
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var zones: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	var top_v: float = INF
+	for v: int in uvs.size():
+		if roundi(zones[v].x) == zone:
+			top_v = minf(top_v, uvs[v].y)
+	return top_v
+
+
+func test_no_sleeve_samples_its_paint_across_the_wrap() -> void:
+	# The cap over the shoulder lies above the arm's joint, where the sleeve's V
+	# is held at its top. Held on V = 0 itself the repeating texture filters the
+	# cuff's color in, and the cap is drawn half shoulder and half cuff.
+	for side: float in [-1.0, 1.0]:
+		assert_gte(_top_v(SkaterConnectedMesh.zone(SkaterConnectedMesh.sleeve_surface(side))),
+				SleeveDecal.TOP_V, "side %d: the sleeve's top a texel inside its paint" % int(side))
+
+
+func test_the_neckline_samples_no_paint_across_the_wrap() -> void:
+	# On V = 0 the jersey's texture filters its caps' last row into the yoke
+	# along the collar's foot.
+	assert_gte(_top_v(SkaterConnectedMesh.zone(SkaterMeshBuilder.UpperSurface.TORSO)),
+			JerseyDecal.SIDE_TOP_V, "the neckline a texel inside the jersey's paint")

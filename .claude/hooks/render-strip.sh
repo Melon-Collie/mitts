@@ -32,9 +32,12 @@ if [ -z "${DISPLAY:-}" ] && command -v xvfb-run >/dev/null 2>&1; then
 fi
 
 ARGS=()
-if [ $# -gt 0 ]; then
-  ARGS=(--only="$1")
-fi
+for arg in "$@"; do
+  case "$arg" in
+    --tile=*) ARGS+=("$arg") ;;
+    *) ARGS+=(--only="$arg") ;;
+  esac
+done
 
 exec "${RUNNER[@]}" "$GODOT" --path "$PROJECT_DIR" \
   --rendering-driver opengl3 --rendering-method gl_compatibility \

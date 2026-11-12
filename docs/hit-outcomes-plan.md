@@ -1,10 +1,11 @@
 # Hit outcomes — balance, the rocked hit, and both bodies
 
-Status: **Phases 0–3 built**, playtest pending. Amends the physicality paragraphs of
+Status: **Phases 0–3, 5 and 6 built**, playtest pending. Amends the physicality paragraphs of
 `docs/gameplay-design.md` and the body-check verbs of
 `docs/physicality-plan.md`. Four phases plus a small controls pass, each its
-own PR and playtest. The cross-check this plan names was retired at v88
-(`docs/net-front-battles-plan.md`); its rows here record what was decided then.
+own PR and playtest. The cross-check this plan names was retired at v88 and
+the board pin at v101 (`docs/net-front-battles-plan.md`); their rows here, the
+bots' pin reach among them, record what was decided then.
 
 ## Decisions banked
 
@@ -424,6 +425,208 @@ snapshot with the commit saying the new numbers are intended.
 7. Into the boards: rocked and stripped at lower pace, never floored, pinnable.
 8. An uncommitted bump stays a jostle.
 
+## Phase 5 — the timed check (built)
+
+Why: a check's strength was closing speed and nothing else, so the way to hit
+hard was to arrive fast, and nothing cost the checker for it. Measured board
+checks close at about 3–4 m/s (the checker angles and matches speed first), and
+coaches teach the hit as a leg drive at contact. At 3 m/s a committed check
+landed 0.98 m/s, a stagger that strips nothing; the full-speed open-ice hit was
+the one that paid.
+
+### Decided with the user
+
+- **The press throws the check.** Pressing Hit starts a short leg drive; a
+  contact inside it is the timed check. Holding the button early is a shoulder
+  held in, which lands less.
+- **The drive adds impact, never speed.** A stride cannot push harder than a
+  stride, so with nobody there it gives nothing a normal stride doesn't, and
+  there is nothing to spam for pace.
+- **It has a cooldown**, and it re-arms only once the button is up.
+- **A hit thrown too fast costs its thrower.**
+
+### Rules
+
+- **The phase** (`CheckDriveRules`: `IDLE` → `DRIVE` → `SPENT`) is stepped from
+  the skater's own button and from whether he may commit at all, never from
+  whether it landed, like the stick lift's. `DRIVE` lasts `DRIVE_S`; `SPENT`
+  ends after `REARM_S` once the button is up. A press he cannot act on
+  (carrying, rocked, down, pinned, planted) is spent, so a button still held
+  when he becomes able to throws nothing. A carrier's Ctrl is still the brace.
+- **A tap is a whole check.** The commit holds through the drive's window, so
+  the stick is off the ice and the stride and edges are the commit's for all
+  of it.
+- **Delivery** (`SkaterCollisionRules.contact_transfer`): a checker inside his
+  drive lands his whole transfer; past it, `HELD_SHARE` of it; uncommitted, the
+  passive bump as before.
+- **The legs' kick** (`CheckDriveRules.kick_dv`, `SkaterCollisionRules
+  .drive_kick`): on a closing contact, a driving checker adds his stride's
+  force over `PUSH_S` to the other body, on that body's mass. Thrown into a
+  man he is already leaning on it is the whole of the hit, a shove that
+  staggers him and breaks his set (`docs/net-front-battles-plan.md`, Phase 4). His skates take
+  the reaction, so nothing comes back on him. A braced carrier takes it cut by
+  his brace, as he takes the transfer. Against the boards it adds to the
+  backstopped strength (`BoardPinRules.backstop_hit_strength`).
+- **The checker's lean depends on how fast he arrives**
+  (`BodyBalanceRules.leaned_into`, `approach_speed`): the part of his own Δv
+  that drives him back counts at `checker_front_share` while he skates into
+  the contact at up to `checker_control_speed`, rising to all of it at
+  `checker_wild_speed`. It is his own speed, not the closing speed, so a man
+  set against a carrier skating into him leans in whatever the carrier's pace.
+- **The knockdown line moves with the kick.** `balance_ref_dv` goes 2.4 → 3.4,
+  which puts a timed side hit's knockdown where the old committed one was
+  (~6 m/s closing at equal builds), and `vulnerable_mult` goes 0.6 → 0.73 for
+  the same reason (a man caught shooting, from the side: ~3.5 m/s). A held or
+  passive hit floors far less often than before. The victim's ladder is the next phase's to reshape.
+
+### What it does, at the starting values (equal builds, open ice)
+
+The checker skating in on a man standing still, but for the last row:
+
+| contact | victim's Δv | his outcome | checker |
+|---|---|---|---|
+| timed, 1 m/s closing | 1.17 | stagger | nothing |
+| timed, 2 m/s | 1.49 | rocked, stripped | nothing |
+| timed, 3 m/s | 1.81 | rocked, stripped | nothing |
+| timed, 6 m/s | 2.79 | rocked; down from the side | rocked |
+| timed, 8 m/s | 3.44 | rocked; down from the side | rocked |
+| timed, 10 m/s | 4.09 | rocked; down from the side | rocked |
+| held, 3 m/s | 0.59 | nothing | nothing |
+| held, 8 m/s | 1.56 | rocked, stripped | rocked |
+| uncommitted, 8 m/s | 0.78 | stagger | stagger |
+| stand-up: set and timed, the carrier at 8 m/s | 3.44 | rocked, stripped | stagger |
+
+### Networking
+
+`check_drive_phase` and its elapsed ticks ride the skater block in one byte
+(`CheckDriveRules.pack`), on the stick lift's rail: filled by the simulating
+machine, written onto remotes, adopted by the local reconcile ahead of its
+replay. The contact reads both bodies' phases in all three reconstructions (the
+live resolver, the reconcile replay's `drive` record, the puck strip), so the
+transfer and the kick are the same wherever the pair is resolved. Nothing in
+the movement model changed, so the forward prediction and the native kernel
+are untouched. Protocol v99, replay format 21.
+
+### Pose
+
+`GaitCheckLayer` throws on the press, off the replicated phase: the trunk
+driven forward and a dip onto the knees, out and back over the drive's window
+(`check_throw_lean_deg`, `check_throw_stance`), under the load-up and before
+the landed drive. The commit sits on bent knees (`hit_commit_stance`). A wider
+base under it pops the legs where a stride starts from rest into a press, so it
+is not in.
+
+### Bots
+
+- **A hunted check is held through the hunt and re-pressed at the contact**
+  (`SkaterAgentStandUp`): the dispatch's commit skates the bot at its man with
+  Hit held, so its stick is off the ice and its stride is the commit's, as a
+  hunt always was; once the drive has re-armed the button comes up
+  `REPRESS_S` ahead of `AIStandUpRead.THROW_S` and the press that follows
+  lands the contact inside a fresh drive. A contact inside the first press's
+  drive is timed too; one between that and the re-arm (0.3 to 1.0 s into the
+  hunt) lands the held share. Holding the button back for the whole hunt
+  instead was tried and measured: the bot closes at full stride with its
+  blade on the ice, and the pincer duel's carrier kept the puck in 4 of 12
+  seeds where it keeps it in 12 of 12 with the hunt held.
+- **The stand-up's prediction adds the kick** (`AIStandUpRead.meets`, through
+  `CheckDriveRules.kick_dv`): it presses inside `MEET_S`, so its contact is
+  always driven. **The commit bar does not** (`AIBodyCheck`): a hunt is held, so
+  whether its contact is driven depends on when it lands, and with the kick in
+  the bar a baseline bot committed from ~2.3 m/s closing where it commits from
+  ~5, gave up its containment loaded on a shoulder, and let a lone carrier walk
+  to the crease untouched (`test_one_on_one_to_the_crease.gd`).
+- Not built: a bot reading its own closing speed against what the hit will cost
+  it, and a carrier reading a checker's spent drive.
+
+### Tests
+
+- `test_check_drive_rules.gd`: the phase machine, the wire round trip, the kick.
+- `test_skater_collision_rules.gd`: the held share, the kick on the other body
+  only, none without a closing contact, the brace against it.
+- `test_body_balance_rules.gd`: the lean against the approach speed; the
+  checker's table and the knockdown grid (now a timed check's) re-pinned
+  (snapshots).
+- `test_contact_aggressor_side.gd`: on real skaters, the timed check against
+  the held shoulder, and the stand-up still only staggering its man.
+
+## Phase 6 — the stumble, and the fall (built)
+
+Why: past his balance there was one outcome, flat on the ice for 1.5–1.9 s and
+a 0.5 s stagger after, and it looked like a plank tipping about planted skates
+and bouncing. Coaching treats a check's job as separating the man from the
+puck; a man put on the ice is the exception.
+
+### Rules
+
+- **Past his balance and short of flat he stumbles** (`BodyCheckRules
+  .flat_overshoot`, 1.5): down onto a knee and up off it,
+  `stumble_min_seconds` just past his balance to `stumble_max_seconds` at the
+  band's top, then the stagger of a man finding his legs
+  (`knockdown_getup_stagger_seconds`, the knockdown's own). Down, he is down like anyone: no stride,
+  no stick, sliding on his gear, stripped.
+- **Past the flat line he is knocked flat**, as before: the fall, the lie
+  (now measured from the flat line, to `knockdown_ref_overshoot` 2.2) and the
+  staged get-up.
+- **It rides the knockdown's rail.** `knockdown_timer` runs the window and one
+  replicated bit (`Skater.is_stumbling`) says which it is, as `is_diving` does
+  for a dive. A stumbling man hit past the flat line is floored from the knee
+  on a clock of its own; a man lying flat is never stood up onto one.
+
+### What it does, at the starting values
+
+Closing speed (m/s) of a timed check, equal builds, from the snapshot grid
+(`tests/unit/rules/snapshots/body_balance.txt`) and the flat line:
+
+| victim | stumbles from | flat from |
+|---|---|---|
+| upright, hit from the side | 5.8 | 10.0 |
+| upright, heavy into light | 3.4 | 6.8 |
+| upright, 45° or square on | 12.5 / 18.3 | never one-sided |
+| caught shooting, from the side | 3.5 | 6.6 |
+| in the stance, from the side | 13.8 | never one-sided |
+
+So at equal builds a hard side hit puts a man on a knee, and he is laid out
+only caught shooting, badly outweighed, or by a full-speed hit he never saw.
+
+### The pose
+
+- **A stumble is the get-up's last stage entered from standing**
+  (`KnockdownFallRules.stumble_getup_left`, `stumble_entry`): down onto the
+  one-knee kneel over `STUMBLE_ENTRY_S`, the knee on the side he was driven
+  over, the other skate planted and the stick out on the ice; held; up off
+  the knee over `STUMBLE_RISE_S`. Every reader of the get-up's clock
+  (`SkaterController.knockdown_getup_left`) draws it with no branch of its
+  own.
+- **The fall turns about a point under his belt, not his skates**
+  (`KnockdownFallRules.feet_out`, `pivot_height` 0.75 m): blades do not hold
+  against a shove at the shoulders, so the skates go out the far side as he
+  goes over, and he lands on his hip sliding the way he was hit.
+- **It barely rebounds** (`restitution` 0.3 → 0.1).
+
+### Networking
+
+The body-lock byte's bit 4 is `stumbling`; nothing else moved. The local
+victim predicts the same verdict the host reaches, since the line between
+the two is a function of the overshoot both already compute. Protocol v100.
+
+### Bots
+
+No new decision. Every read of a downed man (`is_knocked_down`, the wire's
+`knockdown_timer`) takes a stumble as down, and the pin reach's "will this
+hit put him down" still asks whether it beats his balance.
+
+### Tests
+
+- `test_body_check_rules.gd`: the band, its timing against the softest
+  knockdown, room for the entry and the rise.
+- `test_knockdown_fall_rules.gd`: the stumble's envelopes on the get-up's
+  stages; the skates going out.
+- `test_stumble.gd`: through the controller, a stumble never lies down and is
+  up inside its window; past the flat line he is laid out; a stumbling man
+  hit flat is floored, a flat one stays flat.
+- `render-poses.sh --only=stumble`, `--only=knockdown`.
+
 ## Docs that change when each phase lands
 
 - `docs/gameplay-design.md`: the physicality and stagger paragraphs (1, 2, 3)
@@ -442,7 +645,9 @@ snapshot with the commit saying the new numbers are intended.
 |---|---|
 | Stagger, rocked and knockdown timers | `Scripts/domain/rules/body_check_rules.gd` |
 | Balance budget and tip share | new `Scripts/domain/rules/body_balance_rules.gd` |
+| The stumble band and its timing | `body_check_rules.gd`; its pose envelopes and the fall's pivot in `knockdown_fall_rules.gd` |
 | Delivery (transfer from commit, possession, brace) | one function beside `SkaterCollisionRules.victim_kick` |
+| The timed check's phase, window, kick and held share | `Scripts/domain/rules/check_drive_rules.gd`, stepped by `SkaterCheckDrive` |
 | Both-body outcomes | `Skater._resolve_player_collisions`, `LocalController`'s replay contact |
 | Rocked effects (stick, stance, commit, grip) | `SkaterController`, keyed off `stagger_timer` |
 | Rocked pose | `Scripts/controllers/gait/gait_stagger_layer.gd` |

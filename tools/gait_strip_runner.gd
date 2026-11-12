@@ -10,7 +10,6 @@ extends Node
 # so the strip is FRAMES columns by three rows.
 
 const DT: float = 1.0 / 120.0
-const TILE: int = 320
 const FRAMES: int = 8
 const VIEWS: int = 3
 const OUT_DIR: String = "user://gait_strip"
@@ -81,11 +80,23 @@ const SCENARIOS: Array[Dictionary] = [
 	# The same wind-up called off at SLAP_RELEASE_AT (the wrister button): the
 	# fake, and the stick coming back down to the puck over the recovery.
 	{"name": "slapfake", "warm": SLAP_RELEASE_AT - 2, "step": 8},
+	# Skating with the puck, a wrister up-ice and to the forehand: pressed at
+	# WRIST_AT, let go at WRIST_RELEASE_AT. The whole shot, then the release and
+	# the finish tick by tick, then the stick coming back to the ice. Seen from
+	# over the blade first, then beside and ahead.
+	{"name": "wristshot", "warm": WRIST_AT - 10, "step": 14},
+	{"name": "wristdown", "warm": WRIST_RELEASE_AT - 2, "step": 4},
+	{"name": "wristup", "warm": WRIST_RELEASE_AT + 22, "step": 8},
+	# The release and the finish again at the high loft: the finish is as high
+	# as the shot.
+	{"name": "wristhigh", "warm": WRIST_RELEASE_AT - 2, "step": 4},
 ]
 # The slapshot scenarios' press and release ticks: past the set-up and a full
 # wind-up.
 const SLAP_AT: int = 60
 const SLAP_RELEASE_AT: int = 190
+const WRIST_AT: int = 200
+const WRIST_RELEASE_AT: int = 260
 # The dangle scenario's sweep: ~4.4 m/s across the middle, a hard dangle.
 const DANGLE_HZ: float = 2.0
 const DANGLE_HALF_WIDTH: float = 0.35
@@ -104,6 +115,8 @@ class StubGameState extends Node:
 		return faceoff_prep
 
 
+# Each view's size in pixels, square (tools/gait_strip.gd's --tile).
+var tile: int = 320
 var _scenarios: Array[Dictionary] = []
 var _index: int = -1
 var _camera: Camera3D = null
@@ -209,7 +222,7 @@ func _build_actor() -> void:
 	add_child(_controller)
 	_controller.setup(_skater, _puck, _state)
 	_controller.apply_attributes(attrs)
-	if _dangling() or _slapping():
+	if _dangling() or _slapping() or _wristing():
 		_puck.visible = true
 		_puck.set_carrier(_skater)
 		_controller.on_puck_picked_up_network()
@@ -286,7 +299,7 @@ func _steer(input: InputState) -> void:
 			input.brake = _tick >= 20
 		"hitup":
 			if _tick == TURN_AT:
-				_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+				_controller._on_body_check_received(Vector3(5.3, 0.0, 0.0))
 		"dive", "diveup":
 			input.stance_held = turning and _tick <= TURN_AT + DIVE_HOLD
 			input.block_held = input.stance_held
@@ -305,6 +318,12 @@ func _steer(input: InputState) -> void:
 			input.slap_held = true
 			input.shoot_pressed = true
 			input.shoot_held = true
+	if _wristing():
+		aim = Vector2(0.26, -0.97)
+		input.elevation_level = ShotMechanics.ELEVATION_HIGH \
+				if String(_scenarios[_index]["name"]) == "wristhigh" else ShotMechanics.ELEVATION_FLAT
+		input.shoot_pressed = _tick == WRIST_AT
+		input.shoot_held = _tick >= WRIST_AT and _tick < WRIST_RELEASE_AT
 	input.move_vector = move
 	if String(_scenarios[_index]["name"]) in ["shuffle", "sidehold", "sidestop"]:
 		_shuffle_steps.shape(input, _skater.velocity, _controller.shuffle_step_distance,
@@ -332,6 +351,10 @@ func _dangling() -> bool:
 	return String(_scenarios[_index]["name"]) == "dangle"
 
 
+func _wristing() -> bool:
+	return String(_scenarios[_index]["name"]) in ["wristshot", "wristdown", "wristup", "wristhigh"]
+
+
 func _slapping() -> bool:
 	return String(_scenarios[_index]["name"]) in ["slapshot", "slapdown", "slapfake"]
 
@@ -345,6 +368,10 @@ func _place_camera(view: int) -> void:
 		aim = _skater.global_position + Vector3(0.0, -0.9, -1.0)
 		if view == 0:
 			view = -1
+	elif _wristing() and view == 0:
+		# From behind the body hides the stick: over the blade instead.
+		aim = _skater.global_position + travel * 1.7 + Vector3(0.0, -0.9, 0.0)
+		view = -1
 	match view:
 		-1:
 			offset = -travel * 0.6 + Vector3(0.0, 2.0, 0.0)
@@ -393,12 +420,12 @@ func _process(_delta: float) -> void:
 
 
 func _save_strip() -> void:
-	var sheet := Image.create(TILE * FRAMES, TILE * VIEWS, false, Image.FORMAT_RGBA8)
+	var sheet := Image.create(tile * FRAMES, tile * VIEWS, false, Image.FORMAT_RGBA8)
 	for i: int in _images.size():
 		var img: Image = _images[i]
 		img.convert(Image.FORMAT_RGBA8)
-		sheet.blit_rect(img, Rect2i(0, 0, TILE, TILE),
-				Vector2i((i / VIEWS) * TILE, (i % VIEWS) * TILE))
+		sheet.blit_rect(img, Rect2i(0, 0, tile, tile),
+				Vector2i((i / VIEWS) * tile, (i % VIEWS) * tile))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	var path: String = "%s/%s.png" % [OUT_DIR, String(_scenarios[_index]["name"])]
 	sheet.save_png(path)

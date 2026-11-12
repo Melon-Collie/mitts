@@ -63,6 +63,7 @@ static func fall_config(knockdown: KnockdownFallRules.Config) -> KnockdownFallRu
 	cfg.max_entry_omega = TIP_RATE_RAD_S
 	cfg.sprawl_in_seconds = knockdown.sprawl_in_seconds
 	cfg.sprawl_splay = knockdown.sprawl_splay
+	cfg.pivot_height = 0.0
 	return cfg
 
 

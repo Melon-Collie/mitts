@@ -2,11 +2,11 @@ class_name TapeColorRegistry
 extends RefCounted
 
 # The shared cosmetic color palette: stick tape (blade wrap and butt-end
-# knob) and the gear accent stripes (skate collar band, glove wrist cuff)
-# each index into it independently. Index 0 is the TEAM sentinel — it
-# resolves to a team color at paint time (the accent for tape and skates, the
-# kit's glove color for gloves), which keeps every untouched slot looking
-# exactly like the pre-customization kit.
+# knob) and the skate laces each index into it independently. Two entries are
+# team sentinels resolved at paint time: TEAM (index 0) to the kit's primary,
+# which keeps every untouched slot looking exactly like the pre-customization
+# kit, and TEAM_SECOND to its secondary. Which entries a player may pick is
+# CosmeticUnlocks' call, not this file's.
 #
 # The palette is wire data: indices travel in the packed tape and gear-style
 # codes (StickTapeConfig, GearStyleConfig), so entries must only ever be
@@ -14,6 +14,10 @@ extends RefCounted
 # picked it.
 
 const TEAM_INDEX: int = 0
+const WHITE_INDEX: int = 1
+const BLACK_INDEX: int = 2
+const YELLOW_INDEX: int = 5
+const TEAM_SECOND_INDEX: int = 11
 
 # Locale keys, indexed in lockstep with _COLORS (TEAM at 0 has no swatch color;
 # resolve() substitutes the live team accent).
@@ -29,6 +33,7 @@ const NAME_KEYS: Array[StringName] = [
 	&"TAPE_COLOR_PURPLE",
 	&"TAPE_COLOR_PINK",
 	&"TAPE_COLOR_TEAL",
+	&"TAPE_COLOR_TEAM_SECOND",
 ]
 
 # Cloth-tape albedos. Slot 0 (TEAM) holds a neutral placeholder that only
@@ -45,6 +50,7 @@ const _COLORS: Array[Color] = [
 	Color(0.40, 0.12, 0.65),   # purple
 	Color(0.95, 0.35, 0.65),   # pink
 	Color(0.05, 0.60, 0.60),   # teal
+	Color(0.6, 0.6, 0.6),      # TEAM_SECOND — resolved like TEAM
 ]
 
 
@@ -58,8 +64,11 @@ static func is_valid(index: int) -> bool:
 
 # The paint color for a palette pick (also what a picker swatch shows). TEAM —
 # and any out-of-range index from a hostile or future wire — resolves to the
-# team accent, matching the pre-pick default look.
-static func resolve(index: int, team_accent: Color) -> Color:
+# team's primary, matching the pre-pick default look; TEAM_SECOND to its
+# secondary.
+static func resolve(index: int, team_primary: Color, team_secondary: Color = team_primary) -> Color:
+	if index == TEAM_SECOND_INDEX:
+		return team_secondary
 	if index <= TEAM_INDEX or index >= _COLORS.size():
-		return team_accent
+		return team_primary
 	return _COLORS[index]

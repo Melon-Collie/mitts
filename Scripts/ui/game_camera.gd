@@ -395,6 +395,15 @@ func _process(delta: float) -> void:
 
 	var player_pos: Vector3 = skater.global_position + skater.visual_offset
 	player_pos.y = 0.0
+	# Through a fight's stoppage the puck is dead: the same top-down framing,
+	# locked, pins its centre on the fight instead (GameManager.fight_focus: his
+	# own, or the nearest), and the smoothing below carries it there and back.
+	var fight_center: Vector3 = GameManager.fight_focus(skater.global_position) \
+			if GameManager.is_in_fight() else Vector3.INF
+	if fight_center != Vector3.INF:
+		locked = true
+		has_puck = false
+		player_pos = fight_center
 	var puck_pos: Vector3 = player_pos
 	if has_puck:
 		puck_pos = puck.global_position
@@ -673,3 +682,4 @@ func _process(delta: float) -> void:
 		var w: float = 1.0 - _intro_time_left / _intro_duration
 		var eased: float = w * w * (3.0 - 2.0 * w)
 		global_transform = _intro_start.interpolate_with(global_transform, eased)
+

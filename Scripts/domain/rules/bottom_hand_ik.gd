@@ -55,6 +55,29 @@ static func reachable_grip(shoulder: Vector3, top: Vector3, blade: Vector3,
 	return Vector2(nearest, maxf((w + u * nearest).length() - reach, 0.0))
 
 
+# How far a stick from `top` to `blade` has to come, across the ice toward the
+# bottom shoulder, for the bottom hand to hold it within `reach` at `spacing`
+# down from the top hand or lower: nothing while it can, eased in from `band`
+# (m) short of the reach running out, so a pose that carries the stick away
+# brings both hands with it rather than leaving one behind. One frame, y up.
+static func drawn_in(shoulder: Vector3, top: Vector3, blade: Vector3, reach: float,
+		spacing: float, band: float) -> Vector3:
+	var u: Vector3 = blade - top
+	var a: float = u.length_squared()
+	if a < 0.000001:
+		return Vector3.ZERO
+	var w: Vector3 = top - shoulder
+	var g: float = clampf(-u.dot(w) / a, minf(spacing / sqrt(a), 1.0), 1.0)
+	var to_shoulder: Vector3 = -(w + u * g)
+	var flat := Vector2(to_shoulder.x, to_shoulder.z)
+	var out: float = flat.length()
+	if out < 0.0001:
+		return Vector3.ZERO
+	var within: float = sqrt(maxf(reach * reach - to_shoulder.y * to_shoulder.y, 0.0))
+	var come: float = minf(StickHoldRules.eased_in(out - within, band), out)
+	return Vector3(flat.x, 0.0, flat.y) * (come / out)
+
+
 # The drawn grip: reachable_grip's, but easing up the shaft over the last `band`
 # (shaft fraction) before the preferred grip runs out of reach, rather than
 # turning there. A hard min turns the hand's path through a corner in one frame,

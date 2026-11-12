@@ -1,17 +1,19 @@
 class_name LobbySettingsPanel
 extends VBoxContainer
 
-# Compact match-settings section for the lobby. Renders seven rows
-# (Mode, Periods, Period Length, Overtime, Rules, Bot Difficulty, Goalie),
+# Compact match-settings section for the lobby. Renders eight rows
+# (Mode, Periods, Period Length, Overtime, Rules, Fighting, Bot Difficulty,
+# Goalie),
 # each with a label on the left and the control on the right, laid out as two
 # side-by-side row columns so the section stays shallow: the pace rules
 # (Mode / Periods / Period Length / Overtime) on the left, the OptionButton
-# trio (Rules + the two host-local AI difficulty prefs) on the right. Hosts
+# trio (Rules, then Fighting, then the two host-local AI difficulty prefs) on
+# the right. Hosts
 # get editable controls; clients see them dimmed and disabled. The "MATCH"
 # header above this panel is rendered by LobbyManager so the same widget can
 # drop into either the lobby tray or a hypothetical pause-menu surface later.
 #
-# All seven rows are NETWORK-SYNCED for display — they emit settings_changed
+# All eight rows are NETWORK-SYNCED for display — they emit settings_changed
 # and LobbyManager owns broadcasting them to clients. Bot Difficulty and
 # Goalie are additionally host-LOCAL persisted preferences: the AI is
 # host-simulated, so only the host's PlayerPrefs feed gameplay (GameManager
@@ -21,7 +23,7 @@ extends VBoxContainer
 # clients never write them to their own prefs.
 
 signal settings_changed(num_periods: int, period_duration: float, ot_enabled: bool, rule_set: int,
-		team_size: int, bot_difficulty: int, goalie_difficulty: int)
+		team_size: int, bot_difficulty: int, goalie_difficulty: int, fighting: bool)
 
 const _ROW_HEIGHT: int = 28
 const _PERIODS_MIN: int = 1
@@ -36,11 +38,13 @@ var _rule_set: int
 var _team_size: int
 var _bot_difficulty: int
 var _goalie_difficulty: int
+var _fighting: bool
 var _is_host: bool
 
 var _periods_value_label: Label = null
 var _dur_value_label: Label = null
 var _ot_check: CheckButton = null
+var _fighting_check: CheckButton = null
 var _rules_btn: OptionButton = null
 var _mode_btn: OptionButton = null
 var _bot_difficulty_btn: OptionButton = null
@@ -54,7 +58,8 @@ var _dur_plus: Button = null
 func _init(num_periods: int, period_duration: float, ot_enabled: bool, rule_set: int, is_host: bool,
 		team_size: int = GameRules.DEFAULT_TEAM_SIZE,
 		bot_difficulty: int = BotSkillProfile.Difficulty.NORMAL,
-		goalie_difficulty: int = GoalieSkillProfile.Difficulty.NORMAL) -> void:
+		goalie_difficulty: int = GoalieSkillProfile.Difficulty.NORMAL,
+		fighting: bool = GameRules.FIGHTING_ENABLED) -> void:
 	_num_periods = num_periods
 	_period_duration = period_duration
 	_ot_enabled = ot_enabled
@@ -62,6 +67,7 @@ func _init(num_periods: int, period_duration: float, ot_enabled: bool, rule_set:
 	_team_size = team_size
 	_bot_difficulty = bot_difficulty
 	_goalie_difficulty = goalie_difficulty
+	_fighting = fighting
 	_is_host = is_host
 	add_theme_constant_override("separation", 10)
 	_build()
@@ -70,7 +76,8 @@ func _init(num_periods: int, period_duration: float, ot_enabled: bool, rule_set:
 func apply_settings(num_periods: int, period_duration: float, ot_enabled: bool, rule_set: int,
 		team_size: int = GameRules.DEFAULT_TEAM_SIZE,
 		bot_difficulty: int = BotSkillProfile.Difficulty.NORMAL,
-		goalie_difficulty: int = GoalieSkillProfile.Difficulty.NORMAL) -> void:
+		goalie_difficulty: int = GoalieSkillProfile.Difficulty.NORMAL,
+		fighting: bool = GameRules.FIGHTING_ENABLED) -> void:
 	_num_periods = num_periods
 	_period_duration = period_duration
 	_ot_enabled = ot_enabled
@@ -78,9 +85,11 @@ func apply_settings(num_periods: int, period_duration: float, ot_enabled: bool, 
 	_team_size = team_size
 	_bot_difficulty = bot_difficulty
 	_goalie_difficulty = goalie_difficulty
+	_fighting = fighting
 	_periods_value_label.text = str(_num_periods)
 	_dur_value_label.text = "%d min" % int(_period_duration / 60.0)
 	_ot_check.set_pressed_no_signal(_ot_enabled)
+	_fighting_check.set_pressed_no_signal(_fighting)
 	_rules_btn.select(_rule_set)
 	_mode_btn.select(maxi(GameRules.TEAM_SIZE_OPTIONS.find(_team_size), 0))
 	_bot_difficulty_btn.select(_bot_difficulty)
@@ -178,7 +187,22 @@ func _build() -> void:
 	r_row.add_child(_rules_btn)
 	right.add_child(r_row)
 
-	# Row 5 (right): Bot Difficulty. Host-local persisted preference that is
+	# Row 5 (right): Fighting. A match rule like Rules; FightRules.allowed
+	# reads it with the rule set, so the OFF set fights no matter what this says.
+	var f_row := _row(tr("LOBBY_FIGHTING"))
+	_fighting_check = CheckButton.new()
+	_fighting_check.set_pressed_no_signal(_fighting)
+	_fighting_check.size_flags_horizontal = Control.SIZE_SHRINK_END
+	SoundManager.wire_button(_fighting_check)
+	_fighting_check.disabled = not _is_host
+	if _is_host:
+		_fighting_check.toggled.connect(_on_fighting_toggled)
+	else:
+		_fighting_check.modulate = Color(1, 1, 1, 0.5)
+	f_row.add_child(_fighting_check)
+	right.add_child(f_row)
+
+	# Row 6 (right): Bot Difficulty. Host-local persisted preference that is
 	# also synced for client display (see class doc). Host-gated like Rules.
 	var b_row := _row("Bot Difficulty")
 	_bot_difficulty_btn = OptionButton.new()
@@ -196,7 +220,7 @@ func _build() -> void:
 	b_row.add_child(_bot_difficulty_btn)
 	right.add_child(b_row)
 
-	# Row 6 (right): Goalie Difficulty. Host-local persisted preference like
+	# Row 7 (right): Goalie Difficulty. Host-local persisted preference like
 	# Bot Difficulty, synced the same way so clients see the host's pick.
 	var g_row := _row("Goalie")
 	_goalie_difficulty_btn = OptionButton.new()
@@ -288,16 +312,14 @@ func _on_periods_minus() -> void:
 	_num_periods = clampi(_num_periods - 1, _PERIODS_MIN, _PERIODS_MAX)
 	_periods_value_label.text = str(_num_periods)
 	_update_stepper_enabled()
-	settings_changed.emit(_num_periods, _period_duration, _ot_enabled, _rule_set, _team_size,
-			_bot_difficulty, _goalie_difficulty)
+	_emit_settings()
 
 
 func _on_periods_plus() -> void:
 	_num_periods = clampi(_num_periods + 1, _PERIODS_MIN, _PERIODS_MAX)
 	_periods_value_label.text = str(_num_periods)
 	_update_stepper_enabled()
-	settings_changed.emit(_num_periods, _period_duration, _ot_enabled, _rule_set, _team_size,
-			_bot_difficulty, _goalie_difficulty)
+	_emit_settings()
 
 
 func _on_dur_minus() -> void:
@@ -305,8 +327,7 @@ func _on_dur_minus() -> void:
 	_period_duration = dur_min * 60.0
 	_dur_value_label.text = "%d min" % dur_min
 	_update_stepper_enabled()
-	settings_changed.emit(_num_periods, _period_duration, _ot_enabled, _rule_set, _team_size,
-			_bot_difficulty, _goalie_difficulty)
+	_emit_settings()
 
 
 func _on_dur_plus() -> void:
@@ -314,26 +335,27 @@ func _on_dur_plus() -> void:
 	_period_duration = dur_min * 60.0
 	_dur_value_label.text = "%d min" % dur_min
 	_update_stepper_enabled()
-	settings_changed.emit(_num_periods, _period_duration, _ot_enabled, _rule_set, _team_size,
-			_bot_difficulty, _goalie_difficulty)
+	_emit_settings()
 
 
 func _on_ot_toggled(pressed: bool) -> void:
 	_ot_enabled = pressed
-	settings_changed.emit(_num_periods, _period_duration, _ot_enabled, _rule_set, _team_size,
-			_bot_difficulty, _goalie_difficulty)
+	_emit_settings()
+
+
+func _on_fighting_toggled(pressed: bool) -> void:
+	_fighting = pressed
+	_emit_settings()
 
 
 func _on_rule_set_selected(idx: int) -> void:
 	_rule_set = idx
-	settings_changed.emit(_num_periods, _period_duration, _ot_enabled, _rule_set, _team_size,
-			_bot_difficulty, _goalie_difficulty)
+	_emit_settings()
 
 
 func _on_mode_selected(idx: int) -> void:
 	_team_size = GameRules.TEAM_SIZE_OPTIONS[clampi(idx, 0, GameRules.TEAM_SIZE_OPTIONS.size() - 1)]
-	settings_changed.emit(_num_periods, _period_duration, _ot_enabled, _rule_set, _team_size,
-			_bot_difficulty, _goalie_difficulty)
+	_emit_settings()
 
 
 # Host-local preference, persisted immediately (GameManager reads
@@ -343,8 +365,7 @@ func _on_bot_difficulty_selected(idx: int) -> void:
 	_bot_difficulty = idx
 	PlayerPrefs.bot_difficulty = idx
 	PlayerPrefs.save()
-	settings_changed.emit(_num_periods, _period_duration, _ot_enabled, _rule_set, _team_size,
-			_bot_difficulty, _goalie_difficulty)
+	_emit_settings()
 
 
 # Host-local preference, persisted immediately (GameManager reads
@@ -353,5 +374,9 @@ func _on_goalie_difficulty_selected(idx: int) -> void:
 	_goalie_difficulty = idx
 	PlayerPrefs.goalie_difficulty = idx
 	PlayerPrefs.save()
+	_emit_settings()
+
+
+func _emit_settings() -> void:
 	settings_changed.emit(_num_periods, _period_duration, _ot_enabled, _rule_set, _team_size,
-			_bot_difficulty, _goalie_difficulty)
+			_bot_difficulty, _goalie_difficulty, _fighting)

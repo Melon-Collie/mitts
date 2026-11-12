@@ -73,11 +73,3 @@ func test_the_slack_stays_well_inside_a_body_width() -> void:
 func test_height_does_not_count() -> void:
 	assert_true(HitClaimResolver.in_contact_range(
 			Vector3.ZERO, Vector3(RADII_SUM, 3.0, 0.0), RADII_SUM))
-
-
-func test_a_locked_pin_pair_measures_along_the_boards_normal() -> void:
-	# Flat against the glass: an along-wall offset is not a gap.
-	var axis := Vector3(1.0, 0.0, 0.0)
-	var victim := Vector3(RADII_SUM, 0.0, 1.5)
-	assert_false(HitClaimResolver.in_contact_range(Vector3.ZERO, victim, RADII_SUM))
-	assert_true(HitClaimResolver.in_contact_range(Vector3.ZERO, victim, RADII_SUM, axis))

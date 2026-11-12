@@ -414,3 +414,24 @@ func test_a_replayed_hit_rumbles_the_crowd() -> void:
 	GameManager.replay_body_check.emit(1000.0)
 	await wait_seconds(0.3)
 	assert_gt(_shown_excitement(), 0.0)
+
+
+func _shown_look() -> float:
+	return float(ArenaCrowd.shared_material().get_shader_parameter("look_weight"))
+
+
+# A fight: the bowl is up, arms raised, and turned to it for the whole stoppage,
+# not a burst that fades while the fighters are still going.
+func test_the_crowd_stands_and_watches_a_fight_until_it_is_over() -> void:
+	var stands: ArenaStands = _make_stands(3, 2)
+	stands._on_phase_changed(GamePhase.Phase.FIGHT)
+	await wait_seconds(ArenaStands._LOOK_TURN_TIME + 0.1)
+	assert_almost_eq(_shown_excitement(), ArenaStands._FIGHT_EXCITEMENT, 1e-3)
+	assert_almost_eq(_shown_look(), 1.0, 1e-3, "turned to it")
+	await wait_seconds(ArenaStands._EXCITE_HOLD_TIME * ArenaStands._FIGHT_EXCITEMENT + 0.5)
+	assert_almost_eq(_shown_excitement(), ArenaStands._FIGHT_EXCITEMENT, 1e-3,
+			"still up after a goal's burst would have faded")
+	stands._on_phase_changed(GamePhase.Phase.FACEOFF_PREP)
+	await wait_seconds(ArenaStands._EXCITE_DECAY_TIME + 0.1)
+	assert_eq(_shown_excitement(), 0.0)
+	assert_eq(_shown_look(), 0.0, "and back to the game")

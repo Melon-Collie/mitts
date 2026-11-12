@@ -84,6 +84,14 @@ func test_roster_announcements_reach_the_toast_stack() -> void:
 			"a roster announcement raises one toast")
 
 
+func test_game_pucks_reach_the_toast_stack() -> void:
+	GameManager.game_puck_earned.emit("goals", 50)
+	GameManager.game_puck_earned.emit("hat_trick", 0)
+	GameManager.game_puck_earned.emit("power_forward", 0)
+	assert_eq((_panel(&"_toast_stack") as ToastStack).get_child_count(), 3,
+			"each puck, tier and combo raises one toast")
+
+
 func test_rematch_votes_reach_the_tally() -> void:
 	NetworkManager.rematch_voters_changed.emit(2)
 	NetworkManager.rematch_vote_changed.emit(7, RematchVoteRules.Choice.REMATCH)

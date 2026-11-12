@@ -1,168 +1,149 @@
 class_name StickModelRegistry
 extends RefCounted
 
-# The catalogue of stick MODELS — whole shaft/blade colorways, the way a real
-# stick is bought as one design. Unlike the skate and glove catalogue
-# (GearModelRegistry), rows are FIXED colors rather than team-slot paints:
-# a real stick ships in its maker's colorway whoever you play for, and the
-# player's color already rides the tape job.
+# The catalogue of stick PATTERNS — the layout of a stick's paint, each zone of
+# which (shaft, up to two bands, wordmark, blade) the player colours from the
+# tape palette under CosmeticUnlocks' rules (docs/game-pucks-plan.md, Phase 4).
+# A pattern also names the colours it wears until the player paints it
+# (StickTapeConfig.paint_custom off), so an untouched stick, a bot and an older
+# code all draw the pattern's defaults.
 #
-# Every row past the house Stealth is inspired by a recognizable real-world
-# stick without naming it (same convention as the M88/M92/M28 blade patterns
-# for P88/P92/P28): Redline reads as a Vapor's red kick zone, Volt as a
-# Ribcor's acid graphic, Split as an Alpha's grey upper over a black lower,
-# Whiteout as the custom all-white pro look, Woodie as a varnished-ash wood
-# stick.
+# The pattern index travels in the packed GearStyleConfig code (its
+# `stick_model` field) and the zone colours in the tape code, so rows must only
+# ever be APPENDED. PATTERN_SOLID_WHITE is an alias kept for codes saved when it
+# was a fixed white colourway: it draws a white solid stick but is not listed,
+# since painting Solid white is the same stick.
 #
-# A model paints: the shaft base, the brand wordmark, up to two BANDS (color
-# spans along the shaft, in real metres from an anchor end — the same
-# object-space metric placement the wordmark uses, so a blade-anchored kick
-# zone stays pinned at the blade whatever the build's cut length), and
-# optionally the blade (base + carbon-weave pair, for wood). StickStyle turns
-# a row into the shader materials; the tape job and grip wrap always paint
-# over a band.
-#
-# The catalogue is wire data: the model index travels in the packed
-# GearStyleConfig code, so rows must only ever be APPENDED — reordering or
-# removing one silently re-equips every player who had picked it. Index 0 is
-# the house MITTS stick — the stock look an untouched player carries.
+# Bands are spans along the shaft in real metres from an anchor end — the same
+# object-space placement the wordmark uses, so a blade-anchored kick zone stays
+# pinned at the blade whatever the build's cut length. The wood pattern's shaft
+# and blade are varnished ash, not paint.
 
 const ANCHOR_BUTT: int = 0
 const ANCHOR_BLADE: int = 1
 
-const STICK_STEALTH: int = 0
-const STICK_REDLINE: int = 1
-const STICK_VOLT: int = 2
-const STICK_SPLIT: int = 3
-const STICK_WHITEOUT: int = 4
-const STICK_WOODIE: int = 5
+const PATTERN_SOLID: int = 0
+const PATTERN_KICK: int = 1
+const PATTERN_BLOCK: int = 2
+const PATTERN_SPLIT: int = 3
+const PATTERN_SOLID_WHITE: int = 4
+const PATTERN_WOOD: int = 5
 
-const NAME_KEYS: Array[StringName] = [
-	&"STICK_MODEL_STEALTH",
-	&"STICK_MODEL_REDLINE",
-	&"STICK_MODEL_VOLT",
-	&"STICK_MODEL_SPLIT",
-	&"STICK_MODEL_WHITEOUT",
-	&"STICK_MODEL_WOODIE",
+# Paint zones, the index into a pattern's colours and the tape code's paint.
+enum Zone { SHAFT, BAND1, BAND2, WORDMARK, BLADE }
+const ZONE_COUNT: int = 5
+const ZONE_NAME_KEYS: Array[StringName] = [
+	&"STICK_ZONE_SHAFT", &"STICK_ZONE_BAND1", &"STICK_ZONE_BAND2", &"STICK_ZONE_WORDMARK",
+	&"STICK_ZONE_BLADE",
 ]
 
-# The classic composite finish (kept off the team palette — modern sticks are
-# near-black) and the matte black a bare blade shows under its weave. Named so
-# rows and the goalie/ghost paths share one value.
-const SHAFT_CLASSIC := Color(0.06, 0.06, 0.07)
-const BLADE_CLASSIC := Color(0.05, 0.05, 0.05)
+const _TEAM: int = TapeColorRegistry.TEAM_INDEX
+const _WHITE: int = TapeColorRegistry.WHITE_INDEX
+const _BLACK: int = TapeColorRegistry.BLACK_INDEX
 
-# Row fields: `shaft` + `brand` always; `bands` is up to two
-# {color, from_m, to_m, anchor} spans (from < to, metres from the anchor end);
-# `blade` is {base, weave_a, weave_b} and only present when the model departs
-# from the carbon look. Index-aligned with NAME_KEYS.
-const _MODELS: Array[Dictionary] = [
-	# Stealth — the house MITTS stick: near-black composite, white wordmark.
-	{
-		"shaft": SHAFT_CLASSIC,
-		"brand": Color(1.0, 1.0, 1.0),
-	},
-	# Redline — black shaft with a red kick zone flooding up from the blade.
-	{
-		"shaft": SHAFT_CLASSIC,
-		"brand": Color(0.72, 0.08, 0.12),
+# The wood pattern's fixed finish.
+const WOOD_SHAFT := Color(0.50, 0.34, 0.16)
+const WOOD_BLADE_WEAVE: Array[Color] = [Color(0.47, 0.32, 0.15), Color(0.41, 0.27, 0.12)]
+const WOOD_BLADE_BASE := Color(0.45, 0.31, 0.15)
+
+# Row fields: `name` (locale key), `listed` (offered in the picker), `zones`
+# (the zones it paints), `bands` (geometry for BAND1/BAND2, in order),
+# `defaults` (a palette index per Zone), `wood` (fixed wood shaft and blade).
+const _PATTERNS: Array[Dictionary] = [
+	# Solid — one colour shaft with the wordmark: the house stick.
+	{"name": &"STICK_PATTERN_SOLID", "listed": true,
+		"zones": [Zone.SHAFT, Zone.WORDMARK, Zone.BLADE],
+		"defaults": [_BLACK, _TEAM, _TEAM, _WHITE, _BLACK]},
+	# Kick — a kick zone flooding up from the blade.
+	{"name": &"STICK_PATTERN_KICK", "listed": true,
+		"zones": [Zone.SHAFT, Zone.BAND1, Zone.WORDMARK, Zone.BLADE],
+		"bands": [{"from_m": 0.0, "to_m": 0.50, "anchor": ANCHOR_BLADE}],
+		"defaults": [_BLACK, _TEAM, _TEAM, _TEAM, _BLACK]},
+	# Block — a graphic block low on the shaft, the heel left bare so the hosel
+	# reads apart from it.
+	{"name": &"STICK_PATTERN_BLOCK", "listed": true,
+		"zones": [Zone.SHAFT, Zone.BAND1, Zone.WORDMARK, Zone.BLADE],
+		"bands": [{"from_m": 0.12, "to_m": 0.55, "anchor": ANCHOR_BLADE}],
+		"defaults": [_BLACK, _TEAM, _TEAM, _TEAM, _BLACK]},
+	# Split — an upper half over the lower shaft, with a seam ring between.
+	{"name": &"STICK_PATTERN_SPLIT", "listed": true,
+		"zones": [Zone.SHAFT, Zone.BAND1, Zone.BAND2, Zone.WORDMARK, Zone.BLADE],
 		"bands": [
-			{"color": Color(0.72, 0.08, 0.12), "from_m": 0.0, "to_m": 0.50,
-					"anchor": ANCHOR_BLADE},
+			{"from_m": 0.0, "to_m": 0.78, "anchor": ANCHOR_BUTT},
+			{"from_m": 0.44, "to_m": 0.52, "anchor": ANCHOR_BLADE},
 		],
-	},
-	# Volt — black shaft, acid-green graphic block low on the shaft (the heel
-	# stays black so the hosel reads apart from the graphic).
-	{
-		"shaft": SHAFT_CLASSIC,
-		"brand": Color(0.45, 0.82, 0.10),
-		"bands": [
-			{"color": Color(0.45, 0.82, 0.10), "from_m": 0.12, "to_m": 0.55,
-					"anchor": ANCHOR_BLADE},
-		],
-	},
-	# Split — grey upper half over a black lower, one orange seam ring. The
-	# wordmark sits inside the grey zone, so it goes black to keep reading.
-	{
-		"shaft": SHAFT_CLASSIC,
-		"brand": Color(0.05, 0.05, 0.05),
-		"bands": [
-			{"color": Color(0.60, 0.61, 0.63), "from_m": 0.0, "to_m": 0.78,
-					"anchor": ANCHOR_BUTT},
-			{"color": Color(0.93, 0.42, 0.05), "from_m": 0.44, "to_m": 0.52,
-					"anchor": ANCHOR_BLADE},
-		],
-	},
-	# Whiteout — the custom all-white pro look, wordmark flipped to black.
-	{
-		"shaft": Color(0.90, 0.90, 0.88),
-		"brand": Color(0.07, 0.07, 0.08),
-	},
-	# Woodie — varnished ash, burnt-in dark wordmark, and the one blade
-	# departure: wood tones instead of carbon weave.
-	{
-		"shaft": Color(0.50, 0.34, 0.16),
-		"brand": Color(0.15, 0.09, 0.04),
-		"blade": {
-			"base": Color(0.45, 0.31, 0.15),
-			"weave_a": Color(0.47, 0.32, 0.15),
-			"weave_b": Color(0.41, 0.27, 0.12),
-		},
-	},
+		"defaults": [_BLACK, _WHITE, _TEAM, _BLACK, _BLACK]},
+	# Solid in white — the alias (see the header).
+	{"name": &"STICK_PATTERN_SOLID", "listed": false,
+		"zones": [Zone.SHAFT, Zone.WORDMARK, Zone.BLADE],
+		"defaults": [_WHITE, _TEAM, _TEAM, _BLACK, _BLACK]},
+	# Wood — varnished ash with a burnt-in wordmark.
+	{"name": &"STICK_PATTERN_WOOD", "listed": true, "wood": true,
+		"zones": [Zone.WORDMARK],
+		"defaults": [_BLACK, _TEAM, _TEAM, _BLACK, _BLACK]},
 ]
 
 
 static func count() -> int:
-	return _MODELS.size()
+	return _PATTERNS.size()
 
 
-static func is_valid(model: int) -> bool:
-	return model >= 0 and model < _MODELS.size()
+static func is_valid(pattern: int) -> bool:
+	return pattern >= 0 and pattern < _PATTERNS.size()
 
 
-# An out-of-range model (a forged wire code, a future catalogue) reads as the
-# house stick, matching GearStyleConfig.from_code's clamp rather than throwing
-# at the paint seam.
-static func _row(model: int) -> Dictionary:
-	return _MODELS[model] if is_valid(model) else _MODELS[STICK_STEALTH]
+# The patterns the picker offers, in catalogue order.
+static func listed() -> Array[int]:
+	var out: Array[int] = []
+	for i: int in _PATTERNS.size():
+		if bool(_PATTERNS[i]["listed"]):
+			out.append(i)
+	return out
 
 
-static func shaft_color(model: int) -> Color:
-	return _row(model)["shaft"]
+static func name_key(pattern: int) -> StringName:
+	return _row(pattern)["name"]
 
 
-static func brand_color(model: int) -> Color:
-	return _row(model)["brand"]
+static func has_zone(pattern: int, zone: int) -> bool:
+	return (_row(pattern)["zones"] as Array).has(zone)
 
 
-# Up to two {color, from_m, to_m, anchor} spans; empty for a plain shaft.
-static func bands(model: int) -> Array:
-	return _row(model).get("bands", [])
+# Up to two {from_m, to_m, anchor} spans, in BAND1, BAND2 order.
+static func bands(pattern: int) -> Array:
+	return _row(pattern).get("bands", [])
 
 
-static func has_blade_override(model: int) -> bool:
-	return _row(model).has("blade")
+static func is_wood(pattern: int) -> bool:
+	return bool(_row(pattern).get("wood", false))
 
 
-# The matte color a bare blade shows (ghost stand-ins, under-weave).
-static func blade_base_color(model: int) -> Color:
-	var row: Dictionary = _row(model)
-	return row["blade"]["base"] if row.has("blade") else BLADE_CLASSIC
+static func default_zones(pattern: int) -> Array[int]:
+	var out: Array[int] = []
+	for c: Variant in _row(pattern)["defaults"]:
+		out.append(int(c))
+	return out
 
 
-# The blade's checker pair; the carbon defaults unless the row overrides.
-static func blade_weave_colors(model: int) -> Array[Color]:
-	var row: Dictionary = _row(model)
-	if row.has("blade"):
-		return [row["blade"]["weave_a"], row["blade"]["weave_b"]]
-	return []
+# The palette index each zone is painted: the tape job's paint once the player
+# has painted, otherwise the pattern's defaults.
+static func zone_colors(pattern: int, tape: StickTapeConfig) -> Array[int]:
+	if tape != null and tape.paint_custom:
+		return tape.paint.duplicate()
+	return default_zones(pattern)
 
 
-# The colors a UI swatch strip shows for one model: shaft, then each band,
-# then the wordmark — the parts of the design that read at chip size.
-static func swatch_colors(model: int) -> Array[Color]:
-	var colors: Array[Color] = [shaft_color(model)]
-	for band: Dictionary in bands(model):
-		colors.append(band["color"])
-	colors.append(brand_color(model))
-	return colors
+# A look saved with the white alias, rewritten as Solid painted white — the
+# same stick, on the pattern the picker lists. Anything else is left alone.
+static func unalias(gear: GearStyleConfig, tape: StickTapeConfig) -> void:
+	if gear.stick_model != PATTERN_SOLID_WHITE:
+		return
+	if not tape.paint_custom:
+		tape.set_paint(default_zones(PATTERN_SOLID_WHITE))
+	gear.stick_model = PATTERN_SOLID
+
+
+# An out-of-range pattern (a forged wire code, a future catalogue) reads as the
+# house stick rather than throwing at the paint seam.
+static func _row(pattern: int) -> Dictionary:
+	return _PATTERNS[pattern] if is_valid(pattern) else _PATTERNS[PATTERN_SOLID]

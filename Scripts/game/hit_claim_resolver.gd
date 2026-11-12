@@ -188,13 +188,10 @@ func receive_claim(hitter_peer_id: int, victim_peer_id: int, host_timestamp: flo
 			hitter_rewind_time, _state_buffer.newest_host_timestamp()):
 		return
 	var hit_pos: Vector3 = hitter_snap.position + _claimant.catch_up()
-	# Each build's own radius (Size scales it), and a locked pin pair's flat
-	# contact along the boards' normal, exactly as the live resolver measures it.
+	# Each build's own radius (Size scales it), as the live resolver measures it.
 	var hit_r: float = hitter_rec.skater.collision_radius()
 	var vic_r: float = victim_rec.skater.collision_radius()
-	var axis: Vector3 = BoardPinRules.locked_contact_axis(hit_pos, hitter_snap.pin_role, hit_r,
-			vic_pos, victim_snap.pin_role, vic_r)
-	if not in_contact_range(hit_pos, vic_pos, hit_r + vic_r, axis):
+	if not in_contact_range(hit_pos, vic_pos, hit_r + vic_r):
 		return
 	# Puck carrier read from the victim's rewind snapshot — that's the world the
 	# attacker saw when they committed to the check. The tracker's grace path
@@ -231,11 +228,9 @@ func receive_claim(hitter_peer_id: int, victim_peer_id: int, host_timestamp: flo
 
 
 # Whether two rewound bodies are close enough for the hitter to have touched the
-# victim: their collision radii plus CONTACT_SLACK_M, on the ice plane — or,
-# given a locked pin pair's `axis` (BoardPinRules.locked_contact_axis), along it.
+# victim: their collision radii plus CONTACT_SLACK_M, on the ice plane.
 static func in_contact_range(hitter_pos: Vector3, victim_pos: Vector3,
-		radii_sum_m: float, axis: Vector3 = Vector3.ZERO) -> bool:
+		radii_sum_m: float) -> bool:
 	var d: Vector3 = victim_pos - hitter_pos
 	d.y = 0.0
-	var dist: float = d.length() if axis == Vector3.ZERO else d.dot(axis)
-	return dist <= radii_sum_m + CONTACT_SLACK_M
+	return d.length() <= radii_sum_m + CONTACT_SLACK_M

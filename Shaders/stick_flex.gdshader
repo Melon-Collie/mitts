@@ -56,7 +56,7 @@ uniform vec4 brand_color : source_color = vec4(1.0);
 uniform float brand_from_butt_m = 0.55;
 uniform float brand_len_m = 0.194;
 
-// Colorway bands (StickModelRegistry): up to two painted spans along the
+// Pattern bands (StickModelRegistry): up to two painted spans along the
 // shaft, each in real metres from its anchor end (0 = butt, 1 = blade) —
 // the same metric placement as the brand, so a blade-anchored kick zone
 // stays pinned at the blade whatever the live length. from == to disables a

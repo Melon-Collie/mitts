@@ -67,3 +67,50 @@ func test_team_and_invalid_indices_resolve_to_accent() -> void:
 func test_palette_and_name_keys_stay_in_lockstep() -> void:
 	assert_eq(TapeColorRegistry.NAME_KEYS.size(), TapeColorRegistry.count(),
 			"every palette entry has a display key")
+
+
+func test_the_toe_color_round_trips_beside_every_other_field() -> void:
+	for toe: int in TapeColorRegistry.count():
+		var config := StickTapeConfig.new(TapeColorRegistry.BLACK_INDEX,
+				StickTapeConfig.Span.BOTTOM_STRIP, TapeColorRegistry.WHITE_INDEX,
+				StickTapeConfig.KnobStyle.FULL, toe)
+		var back: StickTapeConfig = StickTapeConfig.from_code(config.to_code())
+		assert_eq(back.toe_color, toe)
+		assert_eq(back.span, StickTapeConfig.Span.BOTTOM_STRIP)
+		assert_eq(back.knob_style, StickTapeConfig.KnobStyle.FULL)
+	assert_eq(StickTapeConfig.new().to_code(), StickTapeConfig.DEFAULT_CODE,
+			"a team toe keeps the untouched job at code 0")
+
+
+func test_only_the_bottom_strip_has_a_toe_cap() -> void:
+	for span: int in StickTapeConfig.Span.size():
+		assert_eq(StickTapeConfig.new(0, span).has_toe_cap(),
+				span == StickTapeConfig.Span.BOTTOM_STRIP)
+	assert_eq(StickTapeConfig.SPAN_NAME_KEYS.size(), StickTapeConfig.Span.size())
+
+
+func test_the_stick_paint_round_trips_beside_the_tape() -> void:
+	var config := StickTapeConfig.new(TapeColorRegistry.WHITE_INDEX, StickTapeConfig.Span.TOE,
+			TapeColorRegistry.BLACK_INDEX, StickTapeConfig.KnobStyle.FULL)
+	assert_false(StickTapeConfig.from_code(config.to_code()).paint_custom,
+			"an unpainted code reads as the pattern's defaults")
+	var painted: Array[int] = [TapeColorRegistry.count() - 1, 0, TapeColorRegistry.WHITE_INDEX,
+			TapeColorRegistry.BLACK_INDEX, TapeColorRegistry.TEAM_SECOND_INDEX]
+	config.set_paint(painted)
+	var back: StickTapeConfig = StickTapeConfig.from_code(config.to_code())
+	assert_true(back.paint_custom)
+	assert_eq(back.paint, painted)
+	assert_eq(back.blade_color, TapeColorRegistry.WHITE_INDEX, "the tape is untouched")
+	assert_eq(back.span, StickTapeConfig.Span.TOE)
+	assert_lt(config.to_code(), 1 << 53, "the code still fits a replay header's double")
+	back.clear_paint()
+	assert_eq(back.to_code(), StickTapeConfig.new(TapeColorRegistry.WHITE_INDEX,
+			StickTapeConfig.Span.TOE, TapeColorRegistry.BLACK_INDEX,
+			StickTapeConfig.KnobStyle.FULL).to_code(), "clearing drops the paint bits")
+
+
+func test_a_forged_paint_colour_is_clamped() -> void:
+	var config := StickTapeConfig.new()
+	config.set_paint([31, -4, 99, 1, 2])
+	for c: int in config.paint:
+		assert_true(TapeColorRegistry.is_valid(c))

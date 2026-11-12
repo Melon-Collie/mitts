@@ -258,8 +258,11 @@ const _HOLDER_RAIL_HALF_W: float = 0.0055
 const NECK_PROFILE: Array[Vector2] = [
 	Vector2(-0.095, 0.085),
 	Vector2(-0.175, 0.093),
+	Vector2(-0.200, 0.0955), # level with the collar's lip
 	Vector2(-0.245, 0.100),  # into the collar, a column rather than a cone
 ]
+# From this station down the neck stands in the collar (SkaterRigidParts).
+const NECK_COLLAR_STATION: int = 2
 
 static var _cache: Dictionary = {}
 
@@ -381,6 +384,14 @@ static func shared_helmet_shell(lon: int, lat: int) -> ArrayMesh:
 
 static func shared_helmet_assembly() -> ArrayMesh:
 	return _shared("helmet_assembly", _build_helmet_assembly)
+
+
+# The first of the neck's vertices in the assembly's skin surface: the head's
+# come before them.
+static func helmet_skin_neck_start() -> int:
+	var head: PackedVector3Array = _shared("head", _build_head).surface_get_arrays(0)[
+			Mesh.ARRAY_VERTEX]
+	return head.size()
 
 
 # The chin strap, helmet-local, a surface wearing its own fixed finish (black

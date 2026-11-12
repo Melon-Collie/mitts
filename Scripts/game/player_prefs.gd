@@ -177,7 +177,7 @@ const AA_LABELS: Array[String] = [
 const REBINDABLE_ACTIONS: PackedStringArray = [
 	"move_up", "move_down", "move_left", "move_right", "stance", "brake",
 	"shoot", "quick_pass", "slapshot", "hit", "block", "elevation_up", "elevation_down",
-	"stick_lift", "stick_check", "smart_ping",
+	"stick_lift", "stick_check", "smart_ping", "drop_gloves",
 ]
 
 # Gamepad button rebinds. Only the DISCRETE buttons are remappable — the sticks
@@ -190,7 +190,7 @@ const REBINDABLE_ACTIONS: PackedStringArray = [
 # a rebind applies without a respawn, like the gamepad toggle itself.
 const PAD_REBINDABLE_ACTIONS: PackedStringArray = [
 	"block", "brake", "hit", "stick_lift", "stick_check", "stance", "quick_pass",
-	"elevation_up", "elevation_down", "smart_ping",
+	"elevation_up", "elevation_down", "smart_ping", "drop_gloves",
 ]
 const PAD_DEFAULT_BUTTONS: Dictionary = {
 	"block": JOY_BUTTON_A,
@@ -208,6 +208,7 @@ const PAD_DEFAULT_BUTTONS: Dictionary = {
 	"elevation_up": JOY_BUTTON_DPAD_UP,
 	"elevation_down": JOY_BUTTON_DPAD_DOWN,
 	"smart_ping": JOY_BUTTON_DPAD_LEFT,
+	"drop_gloves": JOY_BUTTON_DPAD_RIGHT,
 }
 
 var player_name: String = "Player"
@@ -228,7 +229,7 @@ var preferred_color_slot: int = -1  # team color preset slot index; -1 → use t
 # Packed StickTapeConfig code (blade tape color + coverage + knob color +
 # handle style).
 var stick_tape_code: int = StickTapeConfig.DEFAULT_CODE
-# Packed GearStyleConfig code (skate/glove/stick models + lace color + helmet
+# Packed GearStyleConfig code (skate/glove models, stick pattern, lace color + helmet
 # face gear + jersey tuck, and the hair) — the gear cosmetics, carried through
 # the join handshake like the tape job.
 var gear_style_code: int = GearStyleConfig.DEFAULT_CODE
@@ -438,6 +439,11 @@ const REPLAY_KEEP_MAX: int = 100
 # version, and boot.gd routes an untouched course into its first part.
 const TUTORIAL_COURSE_VERSION: int = 4
 var tutorial_completion: Dictionary = {}
+# The stored part of the Game Pucks (TrophyLedger). Reconciled with Steam Cloud
+# as a union rather than newest-wins, since an earned puck is never un-earned.
+var trophy_ledger: TrophyLedger = TrophyLedger.new()
+# The Titles id the player wears, "" for none.
+var equipped_title: String = ""
 
 func _get_save_path() -> String:
 	for arg: String in OS.get_cmdline_user_args():
@@ -512,6 +518,22 @@ func _release_custom_cursor() -> void:
 		return
 	_cursor_released = true
 	Input.set_custom_mouse_cursor(null)
+
+
+# The saved tape and gear codes as the local player may wear them: a reward
+# option whose Game Puck is not earned is worn as the slot's default.
+func worn_tape_code() -> int:
+	return CosmeticUnlocks.worn_tape_code(stick_tape_code, earned_rewards())
+
+
+func worn_gear_style_code() -> int:
+	return CosmeticUnlocks.worn_gear_code(gear_style_code, earned_rewards())
+
+
+# The reward requirements (CosmeticUnlocks.reward_pucks) the player has met.
+func earned_rewards() -> Array[String]:
+	return GamePuckRules.met_requirements(CosmeticUnlocks.reward_pucks(),
+			SteamStatRecorder.new().totals(), trophy_ledger)
 
 
 func save() -> void:
@@ -595,6 +617,8 @@ func save() -> void:
 	cfg.set_value("replay", "keep_count", replay_keep_count)
 	cfg.set_value("tutorials", "completion", tutorial_completion)
 	cfg.set_value("tutorials", "course_version", TUTORIAL_COURSE_VERSION)
+	cfg.set_value("trophies", "pucks", trophy_ledger.to_dict())
+	cfg.set_value("trophies", "title", equipped_title)
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
 			continue
@@ -664,18 +688,35 @@ func _sync_from_cloud() -> void:
 			return  # already in sync — nothing to do
 		# Conflict: a copy was changed on another machine (cloud) and/or offline
 		# here (local). Keep whichever store was written most recently, and push
-		# a newer local back up so the other machine converges next launch.
+		# a newer local back up so the other machine converges next launch —
+		# except the trophy ledger, which keeps the pucks of both.
 		if FileAccess.get_modified_time(local_path) > SteamManager.cloud_file_timestamp(cloud_name):
-			_push_to_cloud()
+			if trophy_ledger.merge(ledger_from_prefs_text(cloud_bytes.get_string_from_utf8())):
+				save()
+			else:
+				_push_to_cloud()
 			return
-	# Adopt the cloud copy: write it to the local file and re-load from it.
+	# Adopt the cloud copy: write it to the local file and re-load from it, then
+	# fold back any pucks only this machine had.
+	var local_ledger: TrophyLedger = trophy_ledger
 	var f := FileAccess.open(local_path, FileAccess.WRITE)
 	if f == null:
 		return
 	f.store_buffer(cloud_bytes)
 	f = null
 	_load()
+	if trophy_ledger.merge(local_ledger):
+		save()
 	cloud_prefs_adopted.emit()
+
+
+# The trophy ledger a prefs file's text holds; empty when it holds none or does
+# not parse.
+static func ledger_from_prefs_text(text: String) -> TrophyLedger:
+	var cfg := ConfigFile.new()
+	if cfg.parse(text) != OK:
+		return TrophyLedger.new()
+	return TrophyLedger.from_variant(cfg.get_value("trophies", "pucks", {}))
 
 func apply_locale() -> void:
 	LocaleManager.apply(locale)
@@ -1103,11 +1144,21 @@ func _load() -> void:
 		preferred_team_size = 5 if stored_size == 5 else GameRules.DEFAULT_TEAM_SIZE
 		preferred_color_slot = int(cfg.get_value("player", "preferred_color_slot", -1))
 		# Round-trip through the config type so a hand-edited or future-version
-		# code coerces to a legal tape job instead of riding raw into the wire.
-		stick_tape_code = StickTapeConfig.from_code(int(cfg.get_value(
-				"player", "stick_tape", StickTapeConfig.DEFAULT_CODE))).to_code()
-		gear_style_code = GearStyleConfig.from_code(int(cfg.get_value(
-				"player", "gear_style", GearStyleConfig.DEFAULT_CODE))).to_code()
+		# code coerces to a legal tape job instead of riding raw into the wire. A
+		# colour no reward could ever unlock switches to the team colour here; one
+		# a Game Puck unlocks is kept, and worn_* decide once Steam says what is
+		# earned.
+		stick_tape_code = CosmeticUnlocks.worn_tape_code(int(cfg.get_value(
+				"player", "stick_tape", StickTapeConfig.DEFAULT_CODE)),
+				CosmeticUnlocks.reward_pucks())
+		gear_style_code = CosmeticUnlocks.worn_gear_code(int(cfg.get_value(
+				"player", "gear_style", GearStyleConfig.DEFAULT_CODE)),
+				CosmeticUnlocks.reward_pucks())
+		var stick_gear: GearStyleConfig = GearStyleConfig.from_code(gear_style_code)
+		var stick_tape: StickTapeConfig = StickTapeConfig.from_code(stick_tape_code)
+		StickModelRegistry.unalias(stick_gear, stick_tape)
+		gear_style_code = stick_gear.to_code()
+		stick_tape_code = stick_tape.to_code()
 		skin_tone = SkinToneRegistry.clamp_index(int(cfg.get_value(
 				"player", "skin_tone", SkinToneRegistry.DEFAULT_INDEX)))
 		# Only the v5 body+gear build loads; an older save keeps the neutral build
@@ -1196,6 +1247,8 @@ func _load() -> void:
 		# Course-version gate (see TUTORIAL_COURSE_VERSION).
 		if int(cfg.get_value("tutorials", "course_version", 1)) < TUTORIAL_COURSE_VERSION:
 			tutorial_completion = {}
+		trophy_ledger = TrophyLedger.from_variant(cfg.get_value("trophies", "pucks", {}))
+		equipped_title = Titles.coerce(str(cfg.get_value("trophies", "title", "")))
 		for action: String in REBINDABLE_ACTIONS:
 			var t: String = cfg.get_value("bindings", action + "_type", "")
 			if t == "key":

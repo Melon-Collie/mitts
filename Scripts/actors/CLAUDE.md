@@ -23,13 +23,15 @@ delegates to.
 | `_shadow` | `SkaterShadows` | the Player Shadows setting: whether the body's meshes and the stick cast, and a ghost never does |
 | `_paint` | `BodyZonePaint` | the body's one material: a zone per leg and upper surface, painted from `StandardMaterial3D` records through `Skater`'s surface seams |
 | `_anim_lod` | `SkaterAnimationLod` | how often the mesh is re-posed, by camera distance and the Animation Detail setting |
-| `_connected` | `SkaterConnectedRig` | the body's one mesh (`SkaterBodyMesh`: the skin and the rigid parts) and the skin's deform bones (below) |
+| `_connected` | `SkaterConnectedRig` | the body's one mesh (`SkaterBodyMesh`: the skin and the rigid parts) and the skin's deform bones (below); bare fists in it while `Skater.gloves_off()` |
+| `_dropped_gear` | `SkaterDroppedGear` | the stick and gloves a fighter drops: copied from where they are drawn as the gloves come off, fallen and lying on the ice, gone when they go back on; mesh only, on every machine |
 
 ## The body's skin
 
 `SkaterConnectedMesh` builds the torso, sleeves, pants and socks as ONE
 connected skin with blended weights; the head, gloves and skate blades are rigid
-parts on their bones (`SkaterRigidParts`). Each skate's upper is one closed
+parts on their bones (`SkaterRigidParts`), and the neck bends between the
+head and the collar (below). Each skate's upper is one closed
 shell (`SkateUpperMesh`, `test_skate_upper.gd`) whose cuff rides the SKATE bone
 and whose foot rides the FOOT bone, blended across the ankle through a bind of
 its own on the foot, so the ankle's give-back flexes the boot rather than
@@ -120,10 +122,22 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   `StripeOutline`; the jersey's stripes take the same, in `JerseyDecal`) drawn
   down a texture with the number on the outside near its top, U round the arm
   and V down its whole length, one paint zone per arm (`sleeve_surface`). The
+  shoulder's cap is the sleeve's, so a kit's yoke is cut off at the armhole's
+  seam (square) unless its `yoke_shape` is round, which the registry carries
+  over the cap as a sleeve stripe laid first (`SleevePaint.yoke_cap`). The
   goalie's jersey is a skin of the same build (`KeeperJerseyMesh`, its own
   CLAUDE.md), painted by the same two decals.
 - **The knees** blend through a middle bone at half the shin's turn
   (`Deform.KNEE_*`), so the back of the knee does not collapse.
+- **The neck stands in the collar.** It is built with the head, in the
+  helmet's frame, but only its top rides the helmet: from the collar's lip
+  down it rides its foot (`Deform.NECK_FOOT`, `SkaterRigidParts.neck_foot_share`),
+  the helmet's rest frame as the torso carries it. A head carried off the
+  trunk's line (a trunk folded under a level head puts it 3 cm back) then
+  bends the neck over the collar; rigid to the helmet, its column swings out
+  through the back of the collar and hides it. The foot turns about its own
+  axis as far as the head is turned, or the column is wrung between them.
+  `test_neck_stands_in_the_collar.gd`.
 - **The gloves are a right and a left.** The back of the hand is padded and
   the fingers are four chunky rolls with grooves between them, each bent over
   round the shaft toward the palm as a closed fist's are, so the flat palm side
@@ -207,8 +221,8 @@ HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
       NECK   takes back part of the trunk's lean; the helmet
     TAIL   the torso's placement hung from the waist: the share of the
            jersey's tail the hips carry
-deform   the skin's sleeves (roots) and knees (on the LEG bones), posed off
-         the bones above (SkaterConnectedRig)
+deform   the skin's sleeves (roots) and knees (on the LEG bones) and the
+         neck's foot (a root), posed off the bones above (SkaterConnectedRig)
 tail     roots, one pair per tail column: the jersey's tail below the belt,
          draped by SkaterHemFlaps (with the jersey's carry above, SkaterJerseyHem)
 arms     roots, solved from the spine's shoulders to the gameplay hands
@@ -362,12 +376,15 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Ten rules the rigs sit inside, all easy to break from in here:
+Twelve rules the rigs sit inside, all easy to break from in here:
 
 - **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
-  marker: the marker plus a render-only offset (the stride's pump), so the arm,
-  the stick and the blade's dressing pivot about a blade that has not moved.
-  The rebuild gate compares the drawn hand, or the pump would never redraw.
+  marker: the marker, which is where the hands hold the stick
+  (`Scripts/controllers/CLAUDE.md`, *Where the hands hold the stick*), plus a
+  small render-only offset (the stride's pump, the shaft's clearance), so the
+  arm, the stick and the blade's dressing pivot about a blade that has not
+  moved. The rebuild gate compares the drawn hand, or the offset would never
+  redraw.
 - **The rig reads the markers and the frames where the engine draws them**
   (`drawn_top_hand`, `Skater.drawn_blade`, `drawn_upper_body`,
   `drawn_lower_body`): between where the latest tick found them and where they
@@ -420,7 +437,11 @@ Ten rules the rigs sit inside, all easy to break from in here:
   speed stays continuous where it engages and where it reaches its stop. The
   ease is state, so the rebuild gate keeps redrawing while it settles
   (`SkaterArmRig.take_steering`). `test_elbow_steers_round_the_torso.gd` holds
-  the steer, `test_body_stays_smooth.gd` the jerk.
+  the steer, `test_body_stays_smooth.gd` the jerk. The pole itself swings out
+  to the arm's side as the hand rises past its shoulder
+  (`SkaterArmRig._raised_pole`): a raised arm's elbow points out, and on the
+  hanging arm's pole a fist rising in front of the chest passes the line
+  straight away from it, where the elbow turns half round in a few frames.
 - **The top fist rolls round the shaft.** A glove holds the stick like a sword
   (`SkaterArmPoses.glove_basis`), the wrist deviating in the plane of the
   forearm and the shaft; for the top hand, a shaft running down and away from a
@@ -435,6 +456,23 @@ Ten rules the rigs sit inside, all easy to break from in here:
   front. The bottom hand does not roll: the plane grip already holds the shaft
   from underneath, palm up, as a bottom hand does, which that twist measure
   reads as out of range. `test_glove_grips_the_shaft.gd`.
+- **The wrists roll the whole stick, and the top fist turns with it.** Every
+  face dressing is an axial twist of the blade about the hosel line
+  (`Skater._apply_blade_tilt`), and the stick is one piece: the shaft's faces
+  (`Skater.shaft_roll_up`) and the top fist (past its eased roll) turn by the
+  same angle (`Skater.stick_roll`), while the bottom hand lets the shaft turn
+  in its fingers. A stroke cups the face it pushes with over the puck
+  (`_BLADE_STROKE_CUP_DEG`, by the side the blade is drawn on, on a spring), so
+  a dangle rolls the top wrist over and back with every stroke. The cup stays
+  out of a slapshot's swing anchor and is laid back on as it fades, so the
+  blade comes through contact square. Through a wrister's or a pass's finish
+  the wrists roll on over (`_BLADE_FINISH_ROLL_DEG`, `set_finish_roll`): the
+  face that pushed the shot turns down and the toe comes round to the target,
+  on the envelope the gait already derives for the finish's legs on every
+  peer (`GaitShotLayer.wrist_roll`), so it turns over as the stick goes out
+  and squares as it comes down. The carry seat eases on and off with
+  the carry (`_seat_blend`): its slide grows with the roll, and snapped, a
+  pickup stepped the blade. `test_carry_hold.gd`, `test_slapper_stance.gd`.
 - **The arms have a C++ port** (`NativeArmRig`, which writes the arm bones
   itself and eases its own elbow turn and fist roll), held to `_update_arm` and
   the part poses (`SkaterArmPoses`) by `test_native_arm_rig_parity.gd`, landed

@@ -119,3 +119,48 @@ func test_the_drawn_grip_turns_no_corner_where_the_limit_begins() -> void:
 			_SHAFT_TOP, _SHAFT_BLADE, 0.5, 0.844, 0.14).x) / step)
 	assert_gt(hard_turn, 1.0, "the hard grip does turn a corner there")
 	assert_lt(worst_turn, 0.25 * hard_turn, "the slope eases where the hard grip snaps")
+
+
+# ── A posed stick brought to both hands ─────────────────────────────────────────
+
+const REACH_M: float = 0.67
+const SPACING_M: float = 0.12
+const IN_BAND_M: float = 0.06
+const SHOULDER := Vector3(-0.2, 1.3, 0.0)
+
+
+# The top hand `ahead` metres in front of the shoulder line and the blade a
+# stick's span on from it.
+func _stick_ahead(ahead: float) -> Array[Vector3]:
+	return [Vector3(0.2, 1.0, -ahead), Vector3(0.2, 0.1, -ahead - 1.0)]
+
+
+func _come_in(ahead: float) -> Vector3:
+	var stick: Array[Vector3] = _stick_ahead(ahead)
+	return BottomHandIK.drawn_in(SHOULDER, stick[0], stick[1], REACH_M, SPACING_M, IN_BAND_M)
+
+
+func test_a_stick_the_hand_can_hold_stays_where_it_was_posed() -> void:
+	assert_eq(_come_in(0.0), Vector3.ZERO, "well inside the arm's reach")
+
+
+func test_a_stick_carried_out_of_reach_comes_back_into_it() -> void:
+	for ahead: float in [0.7, 0.9, 1.2]:
+		var stick: Array[Vector3] = _stick_ahead(ahead)
+		var come: Vector3 = _come_in(ahead)
+		assert_almost_eq(come.y, 0.0, 1e-6, "it comes in across the ice, at the height posed")
+		var held: Vector2 = BottomHandIK.reachable_grip(SHOULDER, stick[0] + come,
+				stick[1] + come, 0.25, REACH_M, SPACING_M)
+		assert_almost_eq(held.y, 0.0, 1e-5, "%.1f m ahead: the hand holds it" % ahead)
+
+
+func test_the_stick_comes_in_with_no_step() -> void:
+	var last: float = 0.0
+	var last_step: float = 0.0
+	for i: int in range(1, 200):
+		var come: float = _come_in(i * 0.005).length()
+		assert_gte(come, last - 1e-6, "further out never comes in less")
+		assert_lt(absf((come - last) - last_step), 0.002, "nor does its rate jump (step %d)" % i)
+		last_step = come - last
+		last = come
+

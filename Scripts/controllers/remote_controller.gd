@@ -429,6 +429,7 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		_sample_scratch.velocity = newest.velocity
 		_sample_scratch.brake_intent = newest.brake_intent
 		_sample_scratch.hit_committed = newest.hit_committed
+		_sample_scratch.check_drive_phase = newest.check_drive_phase
 		_sample_scratch.shot_state = newest.shot_state
 		# Ghost gate for the reconcile replay's body-check re-resolution — left
 		# unset the scratch holds the constructor default (false) and replay
@@ -454,6 +455,7 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		# two had already moved past.
 		_sample_scratch.brake_intent = to.brake_intent
 		_sample_scratch.hit_committed = to.hit_committed
+		_sample_scratch.check_drive_phase = to.check_drive_phase
 		_sample_scratch.shot_state = to.shot_state
 		_sample_scratch.is_ghost = to.is_ghost
 		var fa: float = BufferedStateInterpolator.hermite_angle(
@@ -530,7 +532,7 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
 				newest.stagger_timer, _body_check_config(), first_tick)
 	# The cache holds the raw integration, so a resumed run continues from it; the
-	# pin's cap is a correction to each window's result, not part of the state.
+	# downed slide is a correction to each window's result, not part of the state.
 	_fwd_from = newest
 	_fwd_cfg = cfg
 	_fwd_ticks = ticks
@@ -541,15 +543,12 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 	_sample_scratch.velocity = _fp_result.velocity
 
 
-# A snapshot's downed slide and board pin over a forward window, on _fp_result —
-# the corrections LagCompRewind makes host-side too (render == rewind).
+# A snapshot's downed slide over a forward window, on _fp_result — the
+# correction LagCompRewind makes host-side too (render == rewind).
 func _correct_forward(snap: SkaterNetworkState, window_s: float) -> void:
 	if snap.knockdown_timer > 0.0:
 		SkaterMovementRules.slide_forward(_fp_result, snap.position, snap.velocity,
 				knockdown_friction, snap.knockdown_timer, window_s)
-	if snap.pin_role != BoardPinRules.Role.NONE:
-		BoardPinRules.forward_cap_locked(_fp_result, snap.position, skater.collision_radius(),
-				snap.pin_role, snap.pin_strength, window_s)
 
 
 func _interpolate(delta: float) -> void:
@@ -701,8 +700,7 @@ func _interpolate(delta: float) -> void:
 					1.0 / float(Constants.PHYSICS_TICK), fp_ticks,
 					Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
 					fp_stagger, _body_check_config())
-		# The interpolated base, as the host's rewind reads it (pin fields from the
-		# newer endpoint, the position interpolated).
+		# The interpolated base, as the host's rewind reads it.
 		_correct_forward(interpolated, float(fp_ticks) / float(Constants.PHYSICS_TICK))
 		interpolated.position = _fp_result.position
 		interpolated.velocity = _fp_result.velocity
@@ -785,7 +783,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# the fall's tip rate from the replicated slide velocity stamped above.
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = state.knockdown_timer
-	_set_down_flags(state.diving)
+	_set_down_flags(state.diving, state.stumbling)
 	_sync_knockdown_meta(prev_kd)
 	_sync_dive_layout()
 	# The torso's tilt is the frame the wire's blade is local to, so it too
@@ -802,7 +800,11 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
 	skater.stick_tied = state.stick_tied
-	_adopt_pin(state)
+	_adopt_fight(state)
+	# A remote fighter's hands are his own machine's (the local one keeps its
+	# own, predicted), so only a remote takes them off the wire.
+	skater.fight_grip = state.fight_grip
+	skater.fight_punch_side = state.fight_punch_side
 	_adopt_slapshot_pin(state)
 	skater.current_shot_state = state.shot_state
 	# The blade side, applied by state (the wire bit is garbage outside a wrister
@@ -822,6 +824,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# Replicated hit-commit so the body-check resolver reads this remote's brace /
 	# full-vs-passive delivery on this machine.
 	skater.hit_committed = state.hit_committed
+	skater.check_drive_phase = state.check_drive_phase
 	# The skid VFX (SkaterVFX trail marks + spray) keys off skater.is_braking,
 	# which only _process_input stamps — mirror it from the replicated brake
 	# bit so another player's hockey stop actually sprays on this machine.

@@ -83,7 +83,9 @@ const CAM_HAND_FOV: float = 22.0
 # partner (a second skater in the away kit, the two in contact: "offset" from
 # the posed skater, "face", and the "input" spec he holds every tick — the
 # press's other body), celebrate (the goal-celebration window started before the
-# first tick, in seconds). "readout": true also prints the pose's speed
+# first tick, in seconds), fight (the gloves off: FightRules.Role.FIGHTING on the
+# posed skater and any partner; fight_at, the tick it comes on instead).
+# "readout": true also prints the pose's speed
 # and body lean, which a tile can't be read for.
 const POSES: Array = [
 	{"name": "rest", "puck": false, "steps": [[40, {}]]},
@@ -248,7 +250,8 @@ const POSES: Array = [
 		[70, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(3.0, 0.0, -0.5)}],
 	]},
 	# The same reads from the game camera, where a pose has to work: from above,
-	# the stance has to read by WIDTH, the commit by being tall and narrow.
+	# the stance has to read by WIDTH and the chest folded over the stick, the
+	# commit by a narrow base under a chest kept up.
 	{"name": "rest_game", "puck": false, "game_cam": true, "steps": [[40, {}]]},
 	{"name": "stance_rest_game", "puck": false, "game_cam": true,
 			"steps": [[40, {"stance": true}]]},
@@ -296,16 +299,17 @@ const POSES: Array = [
 	{"name": "hit_commit_deep", "puck": false, "steps": [
 		[60, {"hit": true, "move": Vector2(0.84, -0.55), "aim": Vector3(1.6, 0.0, 2.4)}],
 	]},
-	# ── Board pin ───────────────────────────────────────────────────────────
-	# Both locked roles against the +x boards, facing them (the boards are not
-	# drawn here; the tiles are for the lean and the sit): the pinned skater
-	# pressed flat to the glass, the pinner a body off it, driving in.
-	# Shot side-on from the ice (the default camera would sit outside the boards).
-	{"name": "pin_pinned", "puck": false, "pin_role": BoardPinRules.Role.PINNED,
-		"cam": Vector3(-0.8, 0.6, 3.2), "steps": [[60, {"aim": Vector3(3.0, 0.0, 0.0)}]]},
-	{"name": "pin_pinner", "puck": false, "pin_role": BoardPinRules.Role.PINNER,
-		"cam": Vector3(-0.8, 0.6, 3.2),
-		"steps": [[60, {"stick": true, "aim": Vector3(3.0, 0.0, 0.0)}]]},
+	# Side on and skating: the knee bend under the load.
+	{"name": "hit_commit_side", "puck": false, "cam": Vector3(-3.4, 0.9, 0.3), "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
+	# The throw at the middle of its window (CheckDriveRules.DRIVE_S / 2): the dip
+	# and the trunk driven forward off the press.
+	{"name": "hit_throw_side", "puck": false, "cam": Vector3(-3.4, 0.9, 0.3), "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[14, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
 	# ── The press ───────────────────────────────────────────────────────────
 	# Two bodies pressed together (PressRules), framed from the side: the posed
 	# skater drives into the man ahead of him with Ctrl, and the man (the away
@@ -364,15 +368,27 @@ const POSES: Array = [
 	# the side and backward. These are the tiles that show where the fall
 	# pivots: a body lying a hip-height above the ice, or one sunk through it,
 	# is a proportion no display-less test catches.
-	{"name": "knockdown_mid_fall", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
-		"cam": Vector3(0.6, -0.2, 3.4), "cam_aim": Vector3(0.6, -0.5, 0.0),
+	{"name": "knockdown_mid_fall", "puck": false, "knockdown": Vector3(5.3, 0.0, 0.0),
+		"cam": Vector3(0.1, -0.2, 3.4), "cam_aim": Vector3(0.1, -0.5, 0.0),
 		"steps": [[30, {}]]},
-	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
-		"cam": Vector3(0.9, -0.45, 2.6), "cam_aim": Vector3(0.9, -0.95, 0.0),
-		"steps": [[100, {}]]},
-	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 6.0),
-		"cam": Vector3(2.6, -0.45, 0.9), "cam_aim": Vector3(0.0, -0.95, 0.9),
-		"steps": [[100, {}]]},
+	{"name": "knockdown_early_fall", "puck": false, "knockdown": Vector3(5.3, 0.0, 0.0),
+		"cam": Vector3(0.1, -0.2, 3.4), "cam_aim": Vector3(0.1, -0.5, 0.0),
+		"steps": [[18, {}]]},
+	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(5.3, 0.0, 0.0),
+		"cam": Vector3(0.15, -0.45, 2.6), "cam_aim": Vector3(0.15, -0.95, 0.0),
+		"steps": [[50, {}]]},
+	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 6.5),
+		"cam": Vector3(2.6, -0.45, 0.15), "cam_aim": Vector3(0.0, -0.95, 0.15),
+		"steps": [[50, {}]]},
+	# Past his balance and short of flat he stumbles: down onto the knee he was
+	# driven over, the other skate planted, the stick out on the ice. Hit from
+	# the side, seen from in front and from the side it came from.
+	{"name": "stumble_down", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+		"cam": Vector3(0.6, 0.0, -3.4), "cam_aim": Vector3(0.3, -0.5, 0.0),
+		"steps": [[30, {}]]},
+	{"name": "stumble_down_side", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+		"cam": Vector3(-3.4, 0.0, 0.4), "cam_aim": Vector3(0.0, -0.5, 0.0),
+		"steps": [[30, {}]]},
 	# A full check short of the knockdown line rocks him: the reel, the splayed
 	# catch, the stick jarred up. Hit from the side, seen from behind and from
 	# the side the hit came from.
@@ -392,6 +408,68 @@ const POSES: Array = [
 		"cam": Vector3(-3.4, 0.6, 0.3), "steps": [[120, {}]]},
 	{"name": "celebrate_game", "puck": false, "celebrate": GameRules.GOAL_CELEBRATION_DURATION,
 		"game_cam": true, "steps": [[120, {"move": Vector2(0.0, -1.0)}]]},
+	# ── Fighting ──────────────────────────────────────────────────────────────
+	# The gloves and stick coming off a skater holding them out, a moment after
+	# and once they lie on the ice; framed wide, from above.
+	{"name": "fight_drop_falling", "puck": false, "fight_at": 30,
+		"cam": Vector3(2.2, 1.4, -2.2), "cam_aim": Vector3(0.0, -0.4, -0.3),
+		"steps": [[38, {"aim": Vector3(0.8, 0.0, -2.0), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	{"name": "fight_drop_down", "puck": false, "fight_at": 30,
+		"cam": Vector3(2.2, 1.4, -2.2), "cam_aim": Vector3(0.0, -0.4, -0.3),
+		"steps": [[130, {"aim": Vector3(0.8, 0.0, -2.0), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	# Two fighters squared up an arm apart (the away kit ahead), from the side
+	# and from behind the posed one's shoulder: the guard (the cursor close in),
+	# a jab on its way and at full reach (the cursor out at him), a hook (the
+	# cursor out to his side), the sweater held (the grab button), and the hands
+	# swapped (the slap button), the bottom arm throwing.
+	{"name": "fight_guard", "puck": false, "fight": true,
+		"cam": Vector3(3.0, 0.5, -0.45), "cam_aim": Vector3(0.0, 0.4, -0.45),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.9), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	{"name": "fight_jab_flying", "puck": false, "fight": true,
+		"cam": Vector3(3.0, 0.5, -0.45), "cam_aim": Vector3(0.0, 0.4, -0.45),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.9), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}],
+			[4, {"aim": Vector3(0.0, 0.0, -2.0)}]]},
+	{"name": "fight_jab_reach", "puck": false, "fight": true,
+		"cam": Vector3(3.0, 0.5, -0.45), "cam_aim": Vector3(0.0, 0.4, -0.45),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.9), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}],
+			[30, {"aim": Vector3(0.0, 0.0, -2.0)}]]},
+	{"name": "fight_jab_behind", "puck": false, "fight": true,
+		"cam": Vector3(0.7, 0.9, 1.6), "cam_aim": Vector3(0.0, 0.4, -0.45),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.9), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}],
+			[30, {"aim": Vector3(0.0, 0.0, -2.0)}]]},
+	{"name": "fight_hook", "puck": false, "fight": true,
+		"cam": Vector3(0.7, 0.9, 1.6), "cam_aim": Vector3(0.0, 0.4, -0.45),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.9), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}],
+			[30, {"aim": Vector3(-1.5, 0.0, -0.6)}]]},
+	{"name": "fight_hold_jersey", "puck": false, "fight": true,
+		"cam": Vector3(0.7, 0.9, 1.6), "cam_aim": Vector3(0.0, 0.4, -0.45),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.9), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}],
+			[40, {"aim": Vector3(0.0, 0.0, -0.35), "shoot": true}]]},
+	{"name": "fight_catch_arm", "puck": false, "fight": true,
+		"cam": Vector3(3.0, 0.5, -0.45), "cam_aim": Vector3(0.0, 0.4, -0.45),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.9), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 3.0)}},
+		"steps": [[40, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}],
+			[40, {"aim": Vector3(0.0, 0.0, -0.35), "shoot": true}]]},
+	{"name": "fight_swapped", "puck": false, "fight": true,
+		"cam": Vector3(0.7, 0.9, 1.6), "cam_aim": Vector3(0.0, 0.4, -0.45),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.9), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[60, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}],
+			[2, {"aim": Vector3(0.0, 0.0, -0.35), "slap": true}],
+			[30, {"aim": Vector3(0.0, 0.0, -2.0), "shoot": true}]]},
 	# ── FACEOFF_PREP ──────────────────────────────────────────────────────────
 	# The locked-phase path (begin_approach → tick_faceoff_approach →
 	# apply_blade_aim_only), which _process_input never reaches, so the specs
@@ -641,6 +719,9 @@ func _build_partner(attrs: PlayerAttributes) -> void:
 	var both: Array = [_skater, _partner]
 	_skater.set_skater_collision_provider(func() -> Array: return both)
 	_partner.set_skater_collision_provider(func() -> Array: return both)
+	# Opposite teams: a fighter fights the other side's man.
+	_skater.set_team_id_resolver(func() -> int: return 0)
+	_partner.set_team_id_resolver(func() -> int: return 1)
 	var spec: Dictionary = (_poses[_pose_index] as Dictionary)["partner"]
 	_partner.global_position = _skater.global_position + (spec.get("offset", Vector3.ZERO) as Vector3)
 	var face: Vector2 = spec.get("face", Vector2(0.0, -1.0))
@@ -662,6 +743,12 @@ func _teardown() -> void:
 		_partner_controller = null
 
 
+func _set_fight_role(role: int) -> void:
+	_skater.fight_role = role
+	if _partner != null:
+		_partner.fight_role = role
+
+
 func _run_pose() -> void:
 	var pose: Dictionary = _poses[_pose_index]
 	if bool(pose.get("puck", false)):
@@ -673,10 +760,12 @@ func _run_pose() -> void:
 	_state.faceoff_prep = false
 	if pose.has("knockdown"):
 		_controller._on_body_check_received(pose["knockdown"] as Vector3)
-	if pose.has("pin_role"):
-		_place_for_pin(int(pose["pin_role"]))
 	if pose.has("celebrate"):
 		_controller.start_celebration(float(pose["celebrate"]))
+	_set_fight_role(FightRules.Role.FIGHTING if bool(pose.get("fight", false)) \
+			else FightRules.Role.NONE)
+	var fight_at: int = int(pose.get("fight_at", -1))
+	var tick: int = 0
 	var steps: Array = pose.get("steps", [])
 	for step: Array in steps:
 		var ticks: int = step[0]
@@ -686,6 +775,9 @@ func _run_pose() -> void:
 			_controller._pose.facing = Vector2(face.x, face.z).normalized()
 			_skater.set_facing(_controller._pose.facing)
 		for t: int in ticks:
+			if tick == fight_at:
+				_set_fight_role(FightRules.Role.FIGHTING)
+			tick += 1
 			_fill_input(input, spec, t == 0)
 			# Same order as a live tick: the controller runs at physics priority
 			# -1, ahead of the skater's own integration, and the cosmetic rig
@@ -891,22 +983,8 @@ func _run_faceoff(spec: Dictionary) -> void:
 			rad_to_deg(_skater.lower_body.rotation.y),
 			_skater.blade_mark_position(true).y,
 			_skater.blade_mark_position(false).y])
-	print("      dot %.3v stick_horiz %.3f blade %.3v" % [
-			dot, _controller._ik.stick_horiz(),
-			_skater.upper_body_to_global(_skater.get_blade_position())])
-
-
-# Against the +x boards as the role stands there: the pinned skater's edge at the
-# boards, the pinner one body and the lock's give further off.
-func _place_for_pin(role: int) -> void:
-	var r: float = _skater.collision_radius()
-	var gap: float = 0.05
-	if role == BoardPinRules.Role.PINNER:
-		gap += 2.0 * r + BoardPinRules.PIN_CONTACT_SLACK_M
-	_skater.global_position = Vector3(GameRules.INNER_HALF_WIDTH - r - gap,
-			GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
-	_skater.pin_role = role
-	_skater.pin_strength = 0.5
+	print("      dot %.3v blade %.3v" % [
+			dot, _skater.upper_body_to_global(_skater.get_blade_position())])
 
 
 # The partner's held input: `aim` and `move` as _fill_input reads them, relative

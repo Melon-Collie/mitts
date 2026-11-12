@@ -6,7 +6,8 @@ extends RefCounted
 # (SkaterBodyMesh). Every part is one zone of its mesh (BodyZoneMesh), zone =
 # UPPER_ZONE_BASE + SkaterMeshBuilder.UpperSurface or SkaterMeshBuilder.LegSurface,
 # rigid to its bone but for the skate's upper (SkateUpperMesh), which bends
-# across the ankle. The helmet's shell is drawn with a hockey helmet's ridge down
+# across the ankle, and the neck, which bends between the collar and the head
+# (neck_foot_share). The helmet's shell is drawn with a hockey helmet's ridge down
 # its crown and a rib either side of it; the hair and face gear fitted under the plain
 # shell still fit, as the crest only ever raises it and stops above the brow
 # the face gear hangs from.
@@ -48,15 +49,40 @@ const _BOX_FADE := Vector2(-0.25, 0.15)
 
 static var _cache: Dictionary = {}
 
+# A bare fist (the gloves off for a fight) is the glove's fist without its
+# padding: its shape at this share of the glove's size, in the skin's zone.
+const BARE_FIST_SCALE: float = 0.72
+# The wrist bridging it to the sleeve: the cuff's fist half alone (the cuff runs
+# along Y, its open end toward the elbow), its section at this share, so it
+# meets the sleeve's end without reaching up inside the sleeve, which narrows
+# there and lets anything wider show through.
+const BARE_WRIST_GIRTH: float = 0.5
+const BARE_WRIST_LENGTH: float = 0.5
 
-# `top_right`: the top hand is his right, as a left shot's is.
-static func upper_body_mesh(top_right: bool = true) -> ArrayMesh:
-	return _shared("upper_r" if top_right else "upper_l", func() -> ArrayMesh:
+
+# `top_right`: the top hand is his right, as a left shot's is. `bare`: the
+# gloves are off (FightRules.Role.FIGHTING), the hands drawn as bare fists.
+static func upper_body_mesh(top_right: bool = true, bare: bool = false) -> ArrayMesh:
+	var key: String = ("upper_r" if top_right else "upper_l") + ("_bare" if bare else "")
+	return _shared(key, func() -> ArrayMesh:
 		var b := BodyZoneMesh.new()
 		var cuff: ArrayMesh = SkaterMeshBuilder.shared_cuff()
+		var skin: int = SkaterMeshBuilder.UPPER_ZONE_BASE + _UpperSurface.HELMET_SKIN
+		var fist_xform := Transform3D(Basis.from_scale(Vector3.ONE * BARE_FIST_SCALE),
+				Vector3.ZERO)
+		var wrist_xform := Transform3D(Basis.from_scale(
+				Vector3(BARE_WRIST_GIRTH, BARE_WRIST_LENGTH, BARE_WRIST_GIRTH)),
+				Vector3(0.0, -SkaterMeshBuilder.CUFF_HEIGHT_M * (1.0 - BARE_WRIST_LENGTH) * 0.5, 0.0))
 		for top: bool in [true, false]:
 			var fist: ArrayMesh = SkaterMeshBuilder.shared_glove_fist(top == top_right)
 			var hand: int = _UpperBone.TOP_HAND if top else _UpperBone.BOTTOM_HAND
+			var cuff_bone: int = _UpperBone.TOP_CUFF if top else _UpperBone.BOTTOM_CUFF
+			if bare:
+				for part: int in [SkaterMeshBuilder.FIST_PART_BACK,
+						SkaterMeshBuilder.FIST_PART_FINGERS, SkaterMeshBuilder.FIST_PART_THUMB]:
+					b.add(fist.surface_get_arrays(part), skin, hand, fist_xform)
+				b.add(cuff.surface_get_arrays(0), skin, cuff_bone, wrist_xform)
+				continue
 			_add(b, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_BACK),
 					_UpperSurface.TOP_HAND if top else _UpperSurface.BOTTOM_HAND, hand)
 			_add(b, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_FINGERS),
@@ -64,16 +90,78 @@ static func upper_body_mesh(top_right: bool = true) -> ArrayMesh:
 			_add(b, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_THUMB),
 					_UpperSurface.TOP_HAND if top else _UpperSurface.BOTTOM_HAND, hand)
 			_add(b, cuff.surface_get_arrays(0),
-					_UpperSurface.TOP_CUFF if top else _UpperSurface.BOTTOM_CUFF,
-					_UpperBone.TOP_CUFF if top else _UpperBone.BOTTOM_CUFF)
-		_add(b, SkaterMeshBuilder.shared_helmet_assembly().surface_get_arrays(
-				SkaterMeshBuilder.HELMET_SURF_SKIN), _UpperSurface.HELMET_SKIN, _UpperBone.HELMET)
+					_UpperSurface.TOP_CUFF if top else _UpperSurface.BOTTOM_CUFF, cuff_bone)
+		b.add(_neck_weighted(SkaterMeshBuilder.shared_helmet_assembly().surface_get_arrays(
+				SkaterMeshBuilder.HELMET_SURF_SKIN)),
+				SkaterMeshBuilder.UPPER_ZONE_BASE + _UpperSurface.HELMET_SKIN)
 		_add(b, _crested(SkaterMeshBuilder.shared_helmet_shell(_HELMET_LON, _HELMET_LAT)),
 				_UpperSurface.HELMET_SHELL, _UpperBone.HELMET)
 		var hardware: ArrayMesh = SkaterMeshBuilder.shared_helmet_hardware()
 		_add(b, hardware.surface_get_arrays(SkaterMeshBuilder.HELMET_HARDWARE_STRAP),
 				_UpperSurface.HELMET_STRAP, _UpperBone.HELMET)
 		return b.commit())
+
+
+# One glove, unskinned, in its bones' frames, for a glove dropped on the ice
+# (SkaterDroppedGear): surface 0 the fist in the hand bone's, surface 1 the cuff
+# in the cuff bone's, both in the zones the body paints them in, so the body's
+# material draws them. `top`: the top hand's glove; `top_right`: as for
+# upper_body_mesh.
+static func glove_mesh(top: bool, top_right: bool) -> ArrayMesh:
+	var key: String = "glove_%s_%s" % ["top" if top else "bottom", "r" if top_right else "l"]
+	return _shared(key, func() -> ArrayMesh:
+		var fist: ArrayMesh = SkaterMeshBuilder.shared_glove_fist(top == top_right)
+		var hand := BodyZoneMesh.new()
+		_add(hand, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_BACK),
+				_UpperSurface.TOP_HAND if top else _UpperSurface.BOTTOM_HAND, -1)
+		_add(hand, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_FINGERS),
+				_UpperSurface.TOP_FINGERS if top else _UpperSurface.BOTTOM_FINGERS, -1)
+		_add(hand, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_THUMB),
+				_UpperSurface.TOP_HAND if top else _UpperSurface.BOTTOM_HAND, -1)
+		var cuff := BodyZoneMesh.new()
+		_add(cuff, SkaterMeshBuilder.shared_cuff().surface_get_arrays(0),
+				_UpperSurface.TOP_CUFF if top else _UpperSurface.BOTTOM_CUFF, -1)
+		var out := ArrayMesh.new()
+		for part: BodyZoneMesh in [hand, cuff]:
+			out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,
+					part.commit().surface_get_arrays(0), [], {}, ConnectedSkinBuilder.FACET_FORMAT)
+		return out)
+
+
+# Where the scene places the helmet in the trunk's frame (Scenes/Skater.tscn:
+# Helmet): the helmet's frame as the torso carries it is the neck's foot.
+const HELMET_REST := Transform3D(Basis(Vector3(0.75, 0.0, 0.0), Vector3(0.0, 0.75, 0.0),
+		Vector3(0.0, 0.0, 0.75)), Vector3(0.0, 0.7, 0.0))
+# The bind past the legs' and the skate uppers' feet (SkaterBodyMesh.shared_skin):
+# the neck's foot (SkaterConnectedMesh.Deform.NECK_FOOT).
+const NECK_FOOT_BIND: int = SkaterMeshBuilder.UPPER_BONE_COUNT \
+		+ SkaterMeshBuilder.LEG_BONE_COUNT + 2
+
+
+# How far the neck at helmet-local height `y` rides its foot rather than the
+# head: wholly from its collar station down, so it stands in the collar
+# wherever the head is carried, and less on up to its top inside the head.
+static func neck_foot_share(y: float) -> float:
+	var profile: Array[Vector2] = SkaterMeshBuilder.NECK_PROFILE
+	return clampf(inverse_lerp(profile[0].x,
+			profile[SkaterMeshBuilder.NECK_COLLAR_STATION].x, y), 0.0, 1.0)
+
+
+# The helmet assembly's skin with its neck weighted from the head onto its
+# foot (neck_foot_share); the head itself is rigid to the helmet.
+static func _neck_weighted(arrays: Array) -> Array:
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var neck_start: int = SkaterMeshBuilder.helmet_skin_neck_start()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	for i: int in verts.size():
+		var foot: float = neck_foot_share(verts[i].y) if i >= neck_start else 0.0
+		bones.append_array([_UpperBone.HELMET, NECK_FOOT_BIND, 0, 0])
+		weights.append_array([1.0 - foot, foot, 0.0, 0.0])
+	var out: Array = arrays.duplicate()
+	out[Mesh.ARRAY_BONES] = bones
+	out[Mesh.ARRAY_WEIGHTS] = weights
+	return out
 
 
 # The skate upper's zones, in SkateUpperMesh.Surface order, from a side's

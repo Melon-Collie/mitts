@@ -100,3 +100,15 @@ func test_focus_owner_null_for_detached_node() -> void:
 	assert_null(ControllerNav.focus_owner(orphan), "a node outside the tree has no viewport")
 	assert_null(ControllerNav.focus_owner(null), "null node is tolerated")
 	orphan.free()
+
+
+# A popup freed in the frame it opened (a test's teardown, a menu closed at
+# once) must not leave its deferred focus call erroring on a freed root.
+func test_a_root_freed_before_its_deferred_focus_is_skipped() -> void:
+	var root := Control.new()
+	root.add_child(Button.new())
+	add_child(root)
+	ControllerNav.focus_first(root)
+	root.free()
+	await get_tree().process_frame
+	assert_engine_error_count(0)

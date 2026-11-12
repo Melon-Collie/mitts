@@ -9,6 +9,7 @@ extends SceneTree
 #
 #   .claude/hooks/render-strip.sh                      # every scenario
 #   .claude/hooks/render-strip.sh turn45,keyD          # named scenarios only
+#   .claude/hooks/render-strip.sh wristdown --tile=640 # each view that many pixels square
 #
 # Scenarios and framing live in tools/gait_strip_runner.gd. PNGs go to
 # user://gait_strip (never the repo tree; the path prints on save).
@@ -22,8 +23,15 @@ var _started: bool = false
 
 
 func _init() -> void:
-	DisplayServer.window_set_size(Vector2i(TILE, TILE))
+	DisplayServer.window_set_size(Vector2i(_tile(), _tile()))
 	process_frame.connect(_on_frame)
+
+
+func _tile() -> int:
+	for a: String in OS.get_cmdline_user_args():
+		if a.begins_with("--tile="):
+			return maxi(int(a.trim_prefix("--tile=")), 64)
+	return TILE
 
 
 func _on_frame() -> void:
@@ -36,4 +44,5 @@ func _on_frame() -> void:
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--only="):
 			only = a.trim_prefix("--only=")
+	runner.set("tile", _tile())
 	runner.call("begin", only)

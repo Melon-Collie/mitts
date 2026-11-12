@@ -19,4 +19,8 @@ enum Phase {
 	                   # GameRules.GOAL_CELEBRATION_DURATION; replay starts then.
 	                   # Ordinal 6 (added at end) so existing serialized phases
 	                   # in .mreplay files stay valid.
+	FIGHT,             # two players agreed to fight and the play is whistled
+	                   # dead: movement allowed, puck pickup-locked, clock
+	                   # stopped, body contact off. FightTracker ends it into a
+	                   # faceoff. Ordinal 7, appended for the same reason.
 }

@@ -101,10 +101,9 @@ guard is against a new file crossing a limit. When it fires:
 
 Three deterministic netcode simulations under `tests/harness/`. None is a
 physics harness — nothing in any of them skates. (Two other files there are not
-netcode: `pin_race_harness.gd` ticks two real `SkaterController`s and a
-`BoardPinTracker` against the boards for the pin's escape race, read by
-`tests/slow/game/test_pin_escape_race.gd` and the instrument beside it; and
-`body_jerk_harness.gd` skates the real controller through scripted transitions
+netcode: `press_harness.gd` ticks two real `SkaterController`s in contact, in
+open ice or against the boards, read by `test_press.gd` and the press table;
+and `body_jerk_harness.gd` skates the real controller through scripted transitions
 (the press against a second real body) and measures every drawn bone's
 per-frame jerk, for the body-smoothness
 instrument and the `test_body_stays_smooth.gd` gate, which share its one

@@ -5,7 +5,7 @@ extends RefCounted
 # order (every controller, then every skater's own physics tick): the attacker
 # drives into the man in front of him. The man faces +z (up ice); "behind" puts
 # the attacker between him and the net, pushing along his blades, "beside" off
-# his side, pushing across them. Read by test_press.gd, test_press_reads_one_
+# his side, pushing across them — into the +x boards, with `at_boards`. Read by test_press.gd, test_press_reads_one_
 # instant.gd and the net-front press instrument.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
@@ -24,21 +24,42 @@ class HostStub:
 		return false
 
 
-# What each body does through the press.
+# What each body does through the press. Either body's check button is down
+# from before the contact, its drive (CheckDriveRules) spent, unless he
+# `shove`s: then his press is fresh, and lands as one.
 class Spec:
 	var man_lbs: int = 201
 	var attacker_lbs: int = 201
 	var side: String = "behind"
 	var man_stance: bool = false
+	var man_commit: bool = false    # engaged: the check button held
 	var man_back: bool = false      # skates back into the attacker
+	var man_faces_him: bool = false # turned to face the attacker, not up ice
+	var man_along: bool = false     # skates across the push (along the boards, at them)
+	var man_shove: bool = false     # his check button goes down as the press starts
+	var at_boards: bool = false     # the man against the +x boards ("beside" pushes into them)
 	var man_brake: bool = false
 	var man_stagger_s: float = 0.0  # a stagger he starts the press under
-	var attacker: String = "skate commit"   # "skate", "skate commit", "skate stance"
+	# Words: "skate", "commit" (engaged), "stance", "shove" (a fresh press),
+	# "side-on" (facing across the push instead of into it).
+	var attacker: String = "skate commit"
+
+	# What the man does, as words: "commit", "brake", "back", "stance", "facing",
+	# "along", "shove" (with "commit": a fresh press).
+	func man_does(words: String) -> void:
+		man_stance = words.contains("stance")
+		man_commit = words.contains("commit")
+		man_brake = words.contains("brake")
+		man_back = words.contains("back")
+		man_faces_him = words.contains("facing")
+		man_along = words.contains("along")
+		man_shove = words.contains("shove")
 
 
 class Result:
 	var gave_1s: float = 0.0        # m the man was moved along the push after 1 s
 	var gave: float = 0.0           # ... at the end
+	var slid: float = 0.0           # m the man moved across the push (along the boards)
 	var went: float = 0.0           # m the attacker travelled along the push
 	var gap_end: float = 0.0        # body edge to body edge along the push at the end
 	var man_speed: float = 0.0      # the man's speed along the push at the end
@@ -56,6 +77,7 @@ var attacker: SkaterController = null
 # The host runs its controllers in scene order; which comes first must not
 # change the press.
 var attacker_first: bool = false
+var _man_look := Vector3(0.0, 0.0, 1.0)
 var _test: GutTest = null
 
 
@@ -95,7 +117,7 @@ func _tick(mi: InputState, ai: InputState) -> void:
 	ai.delta = DT
 	mi.host_timestamp += DT
 	ai.host_timestamp += DT
-	mi.mouse_world_pos = man.skater.global_position + Vector3(0.0, 0.0, 3.0)
+	mi.mouse_world_pos = man.skater.global_position + _man_look * 3.0
 	if attacker_first:
 		attacker._process_input(ai, DT)
 		man._process_input(mi, DT)
@@ -104,6 +126,12 @@ func _tick(mi: InputState, ai: InputState) -> void:
 		attacker._process_input(ai, DT)
 	man.skater._physics_process(DT)
 	attacker.skater._physics_process(DT)
+
+
+# The button down since before the contact: the drive it threw is long spent.
+func _spend_drive(c: SkaterController) -> void:
+	c._check_drive.adopt(CheckDriveRules.Phase.SPENT, CheckDriveRules.REARM_S)
+	c.skater.check_drive_phase = CheckDriveRules.Phase.SPENT
 
 
 func _face(c: SkaterController, facing: Vector2) -> void:
@@ -117,12 +145,17 @@ func run(spec: Spec, seconds: float) -> Result:
 	var mi := InputState.new()
 	var ai := InputState.new()
 	# Both set, in contact and still, before the press starts: the man faces up
-	# ice, the attacker the push.
+	# ice, the attacker the push, or across it side-on.
 	var home := Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
-	_face(man, Vector2(0.0, 1.0))
-	_face(attacker, Vector2(push.x, push.z))
+	if spec.at_boards:
+		home.x = GameRules.INNER_HALF_WIDTH - man.skater.collision_radius() - 0.01
+	var look: Vector3 = Vector3(push.z, 0.0, -push.x) if spec.attacker.contains("side-on") else push
+	var man_look: Vector3 = -push if spec.man_faces_him else Vector3(0.0, 0.0, 1.0)
+	_man_look = man_look
+	_face(man, Vector2(man_look.x, man_look.z))
+	_face(attacker, Vector2(look.x, look.z))
 	for i: int in SETTLE_TICKS:
-		ai.mouse_world_pos = attacker.skater.global_position + push * 3.0
+		ai.mouse_world_pos = attacker.skater.global_position + look * 3.0
 		_tick(mi, ai)
 		var gap: float = man.skater.collision_radius() + attacker.skater.collision_radius()
 		man.skater.global_position = home
@@ -130,14 +163,22 @@ func run(spec: Spec, seconds: float) -> Result:
 		attacker.skater.global_position = home - push * gap
 		attacker.skater.velocity = Vector3.ZERO
 	man.stagger_timer = spec.man_stagger_s
+	if not spec.man_shove:
+		_spend_drive(man)
+	if not spec.attacker.contains("shove"):
+		_spend_drive(attacker)
 	var r := Result.new()
 	var man_from: Vector3 = man.skater.global_position
 	var attacker_from: Vector3 = attacker.skater.global_position
 	for i: int in int(seconds / DT):
 		mi.stance_held = spec.man_stance
+		mi.hit_held = spec.man_commit
 		mi.brake = spec.man_brake
 		mi.move_vector = Vector2(-push.x, -push.z) if spec.man_back else Vector2.ZERO
-		ai.mouse_world_pos = attacker.skater.global_position + push * 3.0
+		if spec.man_along:
+			mi.move_vector += Vector2(-push.z, push.x)
+			mi.move_vector = mi.move_vector.normalized()
+		ai.mouse_world_pos = attacker.skater.global_position + look * 3.0
 		ai.stance_held = spec.attacker.contains("stance")
 		ai.hit_held = spec.attacker.contains("commit")
 		ai.move_vector = Vector2(push.x, push.z)
@@ -150,6 +191,7 @@ func run(spec: Spec, seconds: float) -> Result:
 		if i == int(1.0 / DT) - 1:
 			r.gave_1s = (man.skater.global_position - man_from).dot(push)
 	r.gave = (man.skater.global_position - man_from).dot(push)
+	r.slid = absf((man.skater.global_position - man_from).dot(Vector3(push.z, 0.0, -push.x)))
 	r.went = (attacker.skater.global_position - attacker_from).dot(push)
 	r.gap_end = (man.skater.global_position - attacker.skater.global_position).dot(push) \
 			- man.skater.collision_radius() - attacker.skater.collision_radius()

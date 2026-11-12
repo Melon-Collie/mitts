@@ -19,18 +19,39 @@ func before_each() -> void:
 	_cfg.rocked_min_seconds = 0.5
 	_cfg.rocked_max_seconds = 0.8
 	_cfg.rocked_grip_penalty = 0.75
+	_cfg.flat_overshoot = 1.5
+	_cfg.stumble_min_seconds = 0.5
+	_cfg.stumble_max_seconds = 0.9
 	_cfg.knockdown_ref_overshoot = 2.0
 	_cfg.min_lie_seconds = 0.2
 	_cfg.max_lie_seconds = 0.6
 
 
+# The stumble band: past his balance, short of flat.
+
+func test_short_of_the_flat_line_it_is_a_stumble() -> void:
+	assert_false(BodyCheckRules.is_flat(1.0001, _cfg))
+	assert_false(BodyCheckRules.is_flat(_cfg.flat_overshoot, _cfg))
+	assert_true(BodyCheckRules.is_flat(_cfg.flat_overshoot + 0.0001, _cfg))
+
+func test_a_stumble_lasts_longer_the_further_past_his_balance() -> void:
+	assert_almost_eq(BodyCheckRules.stumble_seconds_from_overshoot(1.0001, _cfg), 0.5, 0.001)
+	assert_almost_eq(BodyCheckRules.stumble_seconds_from_overshoot(1.25, _cfg), 0.7, 0.0001)
+	assert_almost_eq(BodyCheckRules.stumble_seconds_from_overshoot(1.5, _cfg), 0.9, 0.0001)
+
+func test_a_stumble_has_room_to_go_down_and_come_up() -> void:
+	var live := BodyCheckRules.Config.new()
+	assert_gte(live.stumble_min_seconds,
+			KnockdownFallRules.STUMBLE_ENTRY_S + KnockdownFallRules.STUMBLE_RISE_S)
+
+
 # ── lie_seconds_from_overshoot ────────────────────────────────────────────────
 
-func test_just_past_his_balance_he_lies_the_min() -> void:
-	assert_almost_eq(BodyCheckRules.lie_seconds_from_overshoot(1.0001, _cfg), 0.2, 0.001)
+func test_just_past_the_flat_line_he_lies_the_min() -> void:
+	assert_almost_eq(BodyCheckRules.lie_seconds_from_overshoot(1.5001, _cfg), 0.2, 0.001)
 
 func test_the_lie_scales_to_max() -> void:
-	assert_almost_eq(BodyCheckRules.lie_seconds_from_overshoot(1.5, _cfg), 0.4, 0.0001,
+	assert_almost_eq(BodyCheckRules.lie_seconds_from_overshoot(1.75, _cfg), 0.4, 0.0001,
 			"halfway to the reference overshoot → halfway lie")
 	assert_almost_eq(BodyCheckRules.lie_seconds_from_overshoot(2.0, _cfg), 0.6, 0.0001)
 	assert_almost_eq(BodyCheckRules.lie_seconds_from_overshoot(9.0, _cfg), 0.6, 0.0001,

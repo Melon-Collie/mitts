@@ -54,15 +54,6 @@ const _FLEX_HINTS: Array[StringName] = [
 const _FRAME_KEYS: Array[StringName] = [
 	&"FRAME_LEAN", &"FRAME_LIGHT", &"FRAME_MEDIUM", &"FRAME_SOLID", &"FRAME_HEAVY"]
 
-const _SPAN_OPTIONS: Array[int] = [
-	StickTapeConfig.Span.FULL, StickTapeConfig.Span.HEEL_TO_MID,
-	StickTapeConfig.Span.MID_TO_TOE, StickTapeConfig.Span.MID,
-	StickTapeConfig.Span.TOE, StickTapeConfig.Span.NONE,
-]
-const _SPAN_KEYS: Array[StringName] = [
-	&"TAPE_SPAN_FULL", &"TAPE_SPAN_HEEL_TO_MID", &"TAPE_SPAN_MID_TO_TOE",
-	&"TAPE_SPAN_MID", &"TAPE_SPAN_TOE", &"TAPE_SPAN_NONE",
-]
 const _STYLE_OPTIONS: Array[int] = [
 	StickTapeConfig.KnobStyle.KNOB, StickTapeConfig.KnobStyle.CANDY_CANE,
 	StickTapeConfig.KnobStyle.FULL,
@@ -111,6 +102,7 @@ var _number_warning: Label = null
 var _shoots_btns: Array[Button] = []
 var _position_btns: Array[Button] = []
 var _color_dropdown: PaletteDropdown = null
+var _title_row: PlayerTitleRow = null
 # BODY.
 var _height_slider: HSlider = null
 var _height_value: Label = null
@@ -128,9 +120,10 @@ var _face_btns: Array[Button] = []
 # STICK and SKATES — the gear dials are _GearRow records.
 var _gear_rows: Array[_GearRow] = []
 var _flex_row: _GearRow = null
-var _stick_model_btn: OptionButton = null
+var _stick_paint: StickPaintRows = null
 var _blade_color_dd: SwatchDropdown = null
-var _span_btn: OptionButton = null
+var _coverage: TapeCoverageList = null
+var _toe_color_dd: SwatchDropdown = null
 var _knob_color_dd: SwatchDropdown = null
 var _style_btn: OptionButton = null
 var _skate_btn: OptionButton = null
@@ -163,6 +156,7 @@ func _ready() -> void:
 func open() -> void:
 	_saved = PlayerDraft.from_prefs()
 	_draft = _saved.copy()
+	_title_row.reload()
 	_painted_slot = -1
 	_sync_text_fields()
 	_refresh()
@@ -434,6 +428,10 @@ func _build_you(page: VBoxContainer) -> void:
 		_draft.color_slot = slot
 		_edited())
 	team_col.add_child(_color_dropdown)
+	_title_row = PlayerTitleRow.new(_row(page, &"PLAYER_TITLE_LABEL", false, full),
+			func(id: String) -> void:
+				_draft.title_id = id
+				_edited())
 
 
 func _warning(parent: Container) -> Label:
@@ -514,24 +512,20 @@ func _build_stick(page: VBoxContainer) -> void:
 	_gear_row(page, &"STICK_GEAR_CURVE", &"curve", _CURVE_KEYS, _CURVE_HINTS, blade)
 	_flex_row = _gear_row(page, &"STICK_GEAR_FLEX", &"flex", _FLEX_KEYS, _FLEX_HINTS, stick)
 
-	# Stick colorways are fixed designs with no kit zones, so their items fill once.
-	_stick_model_btn = PlayerRowKit.option_button(
-			_row(page, &"STICK_MODEL_LABEL", false, stick),
-			func(i: int) -> void: _edit_gear(&"stick_model", i))
-	for model: int in StickModelRegistry.count():
-		_stick_model_btn.add_icon_item(
-				PlayerRowKit.swatch_strip(StickModelRegistry.swatch_colors(model)),
-				tr(StickModelRegistry.NAME_KEYS[model]), model)
+	_stick_paint = StickPaintRows.new(
+			func(key: StringName, focus: int) -> VBoxContainer: return _row(page, key, false, focus),
+			_wire_reach, func() -> PlayerDraft: return _draft, _edited)
 	_blade_color_dd = _swatch_dropdown(_row(page, &"TAPE_BLADE_LABEL", false, blade),
 			func(i: int) -> void: _edit_tape(i, -1, -1, -1))
-	_span_btn = PlayerRowKit.option_list(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
-			_SPAN_KEYS, func(i: int) -> void: _edit_tape(-1, _SPAN_OPTIONS[i], -1, -1))
+	_coverage = TapeCoverageList.new(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
+			func(span: int) -> void: _edit_tape(-1, span, -1, -1))
+	_toe_color_dd = _swatch_dropdown(_row(page, &"TAPE_TOE_LABEL", false, blade),
+			func(i: int) -> void: _edit_tape(-1, -1, -1, -1, i))
 	_knob_color_dd = _swatch_dropdown(_row(page, &"TAPE_KNOB_LABEL", false, grip),
 			func(i: int) -> void: _edit_tape(-1, -1, i, -1))
 	_style_btn = PlayerRowKit.option_list(_row(page, &"TAPE_HANDLE_LABEL", false, grip),
 			_STYLE_KEYS, func(i: int) -> void: _edit_tape(-1, -1, -1, _STYLE_OPTIONS[i]))
-	_wire_reach([_stick_model_btn], stick)
-	_wire_reach([_blade_color_dd, _span_btn], blade)
+	_wire_reach([_blade_color_dd, _coverage.button(), _toe_color_dd], blade)
 	_wire_reach([_knob_color_dd, _style_btn], grip)
 
 
@@ -601,13 +595,15 @@ func _edit_gear(field: StringName, value: int) -> void:
 
 
 # −1 keeps a field.
-func _edit_tape(blade_color: int, span: int, knob_color: int, knob_style: int) -> void:
-	var t: StickTapeConfig = _draft.tape()
-	_draft.set_tape(StickTapeConfig.new(
-			t.blade_color if blade_color < 0 else blade_color,
-			t.span if span < 0 else span,
-			t.knob_color if knob_color < 0 else knob_color,
-			t.knob_style if knob_style < 0 else knob_style))
+func _edit_tape(blade_color: int, span: int, knob_color: int, knob_style: int,
+		toe_color: int = -1) -> void:
+	var t: StickTapeConfig = _draft.tape()  # edited in place: it carries the stick's paint
+	t.blade_color = t.blade_color if blade_color < 0 else blade_color
+	t.span = t.span if span < 0 else span
+	t.knob_color = t.knob_color if knob_color < 0 else knob_color
+	t.knob_style = t.knob_style if knob_style < 0 else knob_style
+	t.toe_color = t.toe_color if toe_color < 0 else toe_color
+	_draft.set_tape(t)
 	_edited()
 
 
@@ -672,6 +668,7 @@ func _refresh() -> void:
 	PlayerRowKit.select(_shoots_btns, 0 if _draft.is_left_handed else 1)
 	PlayerRowKit.select(_position_btns, _POSITION_ORDER.find(_draft.position))
 	_color_dropdown.set_selected(_draft.color_slot)
+	_title_row.select(_draft.title_id)
 
 	_height_slider.set_value_no_signal(_draft.height)
 	_height_value.text = PlayerAttributes.inches_label(_draft.height)
@@ -703,8 +700,6 @@ func _refresh() -> void:
 		flex_labels.append(tr(&"STICK_FLEX_ITEM")
 				% [tr(_FLEX_KEYS[i]), PlayerAttributes.flex_number_for(_draft.weight, i)])
 	PlayerRowKit.relabel(_flex_row.buttons, flex_labels)
-	_stick_model_btn.select(clampi(gear.stick_model, 0, StickModelRegistry.count() - 1))
-	_span_btn.select(maxi(_SPAN_OPTIONS.find(tape.span), 0))
 	_style_btn.select(maxi(_STYLE_OPTIONS.find(tape.knob_style), 0))
 
 	if _painted_slot != _draft.color_slot:
@@ -715,6 +710,10 @@ func _refresh() -> void:
 	_blade_color_dd.set_selected(tape.blade_color)
 	_knob_color_dd.set_selected(tape.knob_color)
 	_lace_dd.set_selected(gear.lace_color)
+	_coverage.select(tape.span)
+	_stick_paint.show(gear.stick_model, tape)
+	_toe_color_dd.set_selected(tape.toe_color)
+	_toe_color_dd.get_parent().get_parent().visible = tape.has_toe_cap()
 	_tongue_btn.select(gear.skate_tongue)
 	_refreshing = false
 
@@ -750,17 +749,13 @@ func _paint_team_rows() -> void:
 		_glove_btn.add_icon_item(PlayerRowKit.swatch_strip(zones),
 				tr(GearModelRegistry.GLOVE_NAME_KEYS[model]), model)
 
-	var tape_colors: Array[Color] = []
-	var names: Array[String] = []
-	var chips: Array[String] = []
-	for i: int in TapeColorRegistry.count():
-		tape_colors.append(TapeColorRegistry.resolve(i, team))
-		names.append(tr(TapeColorRegistry.NAME_KEYS[i]))
-		# The TEAM chip says so — it tracks the kit rather than being one more
-		# fixed colour.
-		chips.append(tr(&"TAPE_COLOR_TEAM_SHORT") if i == TapeColorRegistry.TEAM_INDEX else "")
-	for dd: SwatchDropdown in [_blade_color_dd, _knob_color_dd, _lace_dd]:
-		dd.set_palette(tape_colors, names, chips)
+	var raised: Array[String] = PlayerPrefs.earned_rewards()
+	CosmeticSwatches.fill(_blade_color_dd, CosmeticUnlocks.TAPE_BLADE, team, accent, raised)
+	CosmeticSwatches.fill(_knob_color_dd, CosmeticUnlocks.TAPE_KNOB, team, accent, raised)
+	CosmeticSwatches.fill(_lace_dd, CosmeticUnlocks.LACES, team, accent, raised)
+	CosmeticSwatches.fill(_toe_color_dd, CosmeticUnlocks.TAPE_TOE, team, accent, raised)
+	_stick_paint.reload(team, accent, raised)
+	_coverage.reload(raised)
 
 
 func _update_apply_state() -> void:

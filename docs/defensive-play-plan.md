@@ -4,7 +4,10 @@ Status: **Phases 1–3 implemented** (v70–v72), playtest pending.
 - **The tie revision is built** (v73): two sticks tied together, off the ice and
   slowed, held by either player (*Tie revision*).
 - **The pin revision is built** (v74): a locked position contest
-  (*Pin revision*), replacing 3b's grip-and-budget pin.
+  (*Pin revision*), replacing 3b's grip-and-budget pin. **Retired at v101**: a
+  man is held on the boards by the press (`docs/net-front-battles-plan.md`
+  Phase 5), and the pin's code is gone. Phase 3a's backstop stands, in
+  `BoardWallRules`.
 - **Phase 4 is built** (v75): bots block shots, and the dive (*Phase 4*, as built).
 
 Each phase is meant to ship as its own PR, with its own protocol

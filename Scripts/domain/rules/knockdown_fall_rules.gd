@@ -1,13 +1,14 @@
 class_name KnockdownFallRules
 
-# Pure math for the knockdown fall pose: a checked player tips about the skates
-# in the hit direction, bounces off the ice, and lies flat until the get-up.
+# Pure math for the knockdown fall pose: a checked player goes over in the hit
+# direction, his skates going out from under him the other way (feet_out), lands
+# on the ice, and lies there until the get-up. A hit short of flat is a stumble
+# instead, down onto a knee on the get-up's own stages (stumble_getup_left).
 #
-# Grounded model, not an authored curve: the body is a rigid rod pivoting at the
-# ice under a constant angular acceleration (gravity torque), seeded with the
-# tip rate the hit's shove actually imparted (shove speed / COM height — the
-# angular momentum the impulse put about the skate pivot). Ice contact reflects
-# the tip rate through a restitution, so the bounce count and rhythm fall out of
+# Grounded model, not an authored curve: the body is a rigid rod tipping under a
+# constant angular acceleration (gravity torque), seeded with the tip rate the
+# hit's shove actually imparted (shove speed / COM height). Ice contact reflects
+# the tip rate through a restitution, so whether it rebounds at all falls out of
 # the impact speed instead of being keyframed. The lying pose is solved, not
 # authored: the waist fold resolves to the ground-plane complement (fold_at)
 # and the limbs scatter from first impact by the hit's own momentum and side
@@ -20,13 +21,17 @@ class Config:
 	var buckle_seconds: float = 0.1   # knees give before the tip starts (the gait's drop covers it)
 	var fall_accel: float = 6.0       # rad/s² — tipping-rod gravity torque, (3g/2L)·sin θ averaged over the arc for L ≈ 1.7 m
 	var settle_angle: float = 1.466   # rad — lying tilt; short of π/2 because the body rests on its own bulk
-	var restitution: float = 0.3      # fraction of tip rate kept through an ice bounce
+	var restitution: float = 0.1      # fraction of tip rate kept through an ice bounce: a padded body barely rebounds
 	var rest_omega: float = 0.7       # rad/s — an impact slower than this doesn't visibly rebound
 	var com_height: float = 0.95      # m — the shove-speed → tip-rate lever arm (belt height)
 	var max_entry_omega: float = 4.2  # rad/s cap on the seeded tip rate (a freight-train hit still reads as a fall, not a spin)
 	var sprawl_in_seconds: float = 0.25  # the limbs scatter over this window after first ice contact
 	var sprawl_splay: float = 0.31       # rad — free-leg outward splay of a maximal sprawl
 	var bulk_half_width: float = 0.15    # m — the hips' half-width with their pads: the side the lying body rests on
+	# Height (m) over the ice the body turns about as it goes over. Blades do not
+	# hold against a shove at the shoulders, so it turns between its feet and its
+	# belt and the skates go out the far side; 0 tips it about planted skates.
+	var pivot_height: float = 0.75
 
 
 # Tilt (radians, about the skate pivot) after `elapsed` seconds of down-time,
@@ -142,6 +147,12 @@ static func bulk_roll(tilt: float, cfg: Config) -> Vector2:
 	return Vector2(out * (1.0 - cos(tilt)), out * sin(tilt))
 
 
+# How far (m) the skates have gone out from under him, against the fall, at
+# `tilt` radians.
+static func feet_out(tilt: float, cfg: Config) -> float:
+	return cfg.pivot_height * sin(tilt)
+
+
 # Scratch for sprawl_into — caller-owned and refilled per frame (the hot-path
 # "build once, fill scratch" idiom; a downed skater renders every frame).
 class SprawlPose:
@@ -241,6 +252,24 @@ static func step_share(kd_t: float) -> float:
 # the held pose takes over the live one.
 static func stand_hold(kd_t: float) -> float:
 	return 1.0 - _ease((1.0 - kd_t - GETUP_STEP_END) / (1.0 - GETUP_STEP_END))
+
+
+# A stumble goes down on the get-up's rail, entered from standing: onto the
+# one-knee stage over STUMBLE_ENTRY_S, held there, and up off the knee over the
+# last STUMBLE_RISE_S of its window.
+const STUMBLE_ENTRY_S: float = 0.18
+const STUMBLE_RISE_S: float = 0.3
+
+
+# The get-up tail (kd_t) a stumble with `timer` seconds left sits at: the
+# one-knee stage until the rise, then up off it.
+static func stumble_getup_left(timer: float) -> float:
+	return (1.0 - GETUP_STEP_END) * clampf(timer / STUMBLE_RISE_S, 0.0, 1.0)
+
+
+# How far down onto the knee a stumble `elapsed` seconds old has gone, 0..1.
+static func stumble_entry(elapsed: float) -> float:
+	return _ease(elapsed / STUMBLE_ENTRY_S)
 
 
 static func _ease(x: float) -> float:

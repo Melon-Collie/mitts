@@ -28,15 +28,25 @@ var stick_check_phase: int = 0
 var stick_check_elapsed: float = 0.0
 # Skater.stick_tied: host-authoritative, applied every broadcast like is_ghost.
 var stick_tied: bool = false
-# Board pin (BoardPinTracker): the role (BoardPinRules.Role) and the pinner's
-# weight share. Host-authoritative, applied every broadcast like stick_tied, and
-# fed to the forward prediction (BoardPinRules.forward_cap) on the render and the
-# rewind.
-var pin_role: int = 0
-var pin_strength: float = 0.0
+# The timed check's phase (CheckDriveRules.Phase) and seconds into it. A contact
+# reads whether each body is inside its drive, and the local reconcile adopts
+# the pair before replay.
+var check_drive_phase: int = 0
+var check_drive_elapsed: float = 0.0
+# Skater.fight_role (FightRules.Role): host-authoritative, applied every
+# broadcast like stick_tied.
+var fight_role: int = 0
+# What a fighter's holding hand holds and which arm punches
+# (FightHoldRules.Grip / Side): the fighter's own, simulated where he is.
+var fight_grip: int = 0
+var fight_punch_side: int = 0
+# Skater.fight_rattle (FightPunchRules): host-authoritative, seconds.
+var fight_rattle: float = 0.0
 # Skater.is_diving: a dive's down window rides knockdown_timer and recoil_dir;
 # this says it is a dive (its stick still plays, its body blocks low).
 var diving: bool = false
+# Skater.is_stumbling: the down window is a stumble's, on a knee.
+var stumbling: bool = false
 # Skater.is_slapshot_pinning: the carried puck holds its spot on the ice instead
 # of riding the blade — through a slapshot's wind-up, and through the recovery
 # after one is called off, while the blade comes back down to it. Remotes and
@@ -149,23 +159,33 @@ func to_array() -> Array:
 		stick_check_phase,
 		stick_check_elapsed,
 		stick_tied,
-		pin_role,
-		pin_strength,
 		diving,
 		slapshot_pinned,
+		check_drive_phase,
+		check_drive_elapsed,
+		stumbling,
+		fight_role,
+		fight_grip,
+		fight_punch_side,
+		fight_rattle,
 	]
 
-# The stick-play, pin and dive fields, which are discrete: a reader between two
-# snapshots (interpolation, the rewind buffer, replay playback) takes them whole
-# from one, never blends them.
+# The stick-play, dive, check-drive and fight fields, which are discrete: a reader
+# between two snapshots (interpolation, the rewind buffer, replay playback)
+# takes them whole from one, never blends them.
 func copy_stick_play_from(s: SkaterNetworkState) -> void:
 	blade_up = s.blade_up
+	check_drive_phase = s.check_drive_phase
+	check_drive_elapsed = s.check_drive_elapsed
 	stick_check_phase = s.stick_check_phase
 	stick_check_elapsed = s.stick_check_elapsed
 	stick_tied = s.stick_tied
-	pin_role = s.pin_role
-	pin_strength = s.pin_strength
+	fight_role = s.fight_role
+	fight_grip = s.fight_grip
+	fight_punch_side = s.fight_punch_side
+	fight_rattle = s.fight_rattle
 	diving = s.diving
+	stumbling = s.stumbling
 	slapshot_pinned = s.slapshot_pinned
 
 
@@ -199,10 +219,15 @@ func copy_from(s: SkaterNetworkState) -> void:
 	stick_check_phase = s.stick_check_phase
 	stick_check_elapsed = s.stick_check_elapsed
 	stick_tied = s.stick_tied
-	pin_role = s.pin_role
-	pin_strength = s.pin_strength
+	fight_role = s.fight_role
+	fight_grip = s.fight_grip
+	fight_punch_side = s.fight_punch_side
+	fight_rattle = s.fight_rattle
 	diving = s.diving
 	slapshot_pinned = s.slapshot_pinned
+	check_drive_phase = s.check_drive_phase
+	check_drive_elapsed = s.check_drive_elapsed
+	stumbling = s.stumbling
 	slapshot_pin_offset = s.slapshot_pin_offset
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
@@ -253,11 +278,20 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.stick_check_elapsed = data[27]
 	if data.size() > 28:
 		state.stick_tied = data[28]
+	if data.size() > 29:
+		state.diving = data[29]
 	if data.size() > 30:
-		state.pin_role = data[29]
-		state.pin_strength = data[30]
-	if data.size() > 31:
-		state.diving = data[31]
+		state.slapshot_pinned = data[30]
 	if data.size() > 32:
-		state.slapshot_pinned = data[32]
+		state.check_drive_phase = data[31]
+		state.check_drive_elapsed = data[32]
+	if data.size() > 33:
+		state.stumbling = data[33]
+	if data.size() > 34:
+		state.fight_role = data[34]
+	if data.size() > 36:
+		state.fight_grip = data[35]
+		state.fight_punch_side = data[36]
+	if data.size() > 37:
+		state.fight_rattle = data[37]
 	return state

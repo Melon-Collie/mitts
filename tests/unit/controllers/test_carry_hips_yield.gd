@@ -126,7 +126,9 @@ func test_the_hips_carry_the_puck_round_into_the_pivot() -> void:
 	gut.p("hips peak %.0f°/s held on the line, %.0f°/s yielding; face changes %d, %d" % [
 			held.fastest_hips_deg_s, yielded.fastest_hips_deg_s, held.face_changes,
 			yielded.face_changes])
-	assert_gt(held.fastest_hips_deg_s, 2.5 * deg_s, "held on the line, the pivot whips the hips")
+	# Neither turns faster than a tick's widest turn (FacingRules.turned_toward); what
+	# the yield spares is the puck.
+	assert_lt(held.fastest_hips_deg_s, 1.5 * deg_s, "held on the line, the pivot is no whip")
 	assert_lt(yielded.fastest_hips_deg_s, 1.5 * deg_s, "yielding, they turn with the sweep")
 	assert_lt(yielded.face_changes, held.face_changes,
 			"and the puck is not left at the stop and thrown on")

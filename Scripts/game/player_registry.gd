@@ -162,6 +162,7 @@ func spawn(
 	spawned.skater.set_tape_config(StickTapeConfig.from_code(record.tape_code))
 	record.gear_style_code = NetworkManager.get_peer_gear_style(peer_id)
 	spawned.skater.set_gear_style(GearStyleConfig.from_code(record.gear_style_code))
+	record.title_id = NetworkManager.get_peer_title(peer_id)
 	record.skin_tone = NetworkManager.get_peer_skin_tone(peer_id)
 	spawned.skater.set_skin_tone(record.skin_tone)
 	spawned.skater.set_uniform(colors)
@@ -437,6 +438,7 @@ func get_slot_roster() -> Array[Dictionary]:
 			entry["player_name"]    = rec.display_name()
 			entry["jersey_number"]  = rec.jersey_number
 			entry["is_left_handed"] = rec.is_left_handed
+			entry["title"]          = rec.title_id
 		else:
 			entry["player_name"]    = ""
 			entry["jersey_number"]  = 10

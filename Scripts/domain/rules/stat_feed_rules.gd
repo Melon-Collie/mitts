@@ -20,6 +20,7 @@ const EVENT_SHOT_ON_GOAL := &"shot_on_goal"
 const EVENT_BLOCKED_SHOT := &"blocked_shot"
 const EVENT_HIT := &"hit"
 const EVENT_TAKEAWAY := &"takeaway"
+const EVENT_INTERCEPTION := &"interception"
 const EVENT_FACEOFF_WIN := &"faceoff_win"
 
 
@@ -38,6 +39,8 @@ static func feed_events(prev: PlayerStats, now: PlayerStats) -> Array[StringName
 		events.append(EVENT_HIT)
 	if now.takeaways > prev.takeaways:
 		events.append(EVENT_TAKEAWAY)
+	if now.interceptions > prev.interceptions:
+		events.append(EVENT_INTERCEPTION)
 	if now.faceoff_wins > prev.faceoff_wins:
 		events.append(EVENT_FACEOFF_WIN)
 	return events

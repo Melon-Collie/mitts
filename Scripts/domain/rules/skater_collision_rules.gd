@@ -15,6 +15,10 @@ class_name SkaterCollisionRules
 #      so an attacker is never pushed backward past a stop. The pinball bounce is
 #      structurally impossible here, not merely tuned to zero.
 #
+#   3. Each body's leg drive (CheckDriveRules), on a closing contact: a kick on
+#      the OTHER body along the axis, with no reaction on the driver, whose
+#      skates take it.
+#
 # All the gameplay attributes AND the hit button enter through ONE caller-supplied
 # scalar, `transfer` (0..1), from contact_transfer. It scales the shared impulse, so:
 #   * transfer → 1  : full inelastic transfer. Equal masses converge to a shared
@@ -49,6 +53,8 @@ class Result:
 	var dvel_a: Vector3 = Vector3.ZERO     # velocity delta for A (attacker; its decel / drive-through)
 	var dvel_b: Vector3 = Vector3.ZERO     # velocity delta for B (victim; the knockback the stagger keys off)
 	var closing_speed: float = 0.0         # >0 when A was closing on B along the axis (0 if separating/apart)
+	var kick_on_a: float = 0.0             # m/s of dvel_a that is B's leg drive (inside dvel_a)
+	var kick_on_b: float = 0.0             # m/s of dvel_b that is A's leg drive (inside dvel_b)
 	var overlapping: bool = false          # discs overlap this tick (separation was applied)
 	var impulse_applied: bool = false      # a closing impulse was applied (a real contact hit)
 
@@ -58,6 +64,8 @@ class Result:
 		dvel_a = Vector3.ZERO
 		dvel_b = Vector3.ZERO
 		closing_speed = 0.0
+		kick_on_a = 0.0
+		kick_on_b = 0.0
 		overlapping = false
 		impulse_applied = false
 
@@ -65,13 +73,13 @@ class Result:
 # Resolve one skater pair on the XZ plane, filling `out`. Y is ignored (skaters are
 # axis-locked in Y). `transfer` (clamped 0..1) scales the inelastic impulse — the
 # caller builds it from the attacker's delivery × hit-commit and the victim's brace.
-# A non-zero `axis` (unit, A -> B) replaces the disc axis and measures the overlap
-# along it: a flat contact (BoardPinRules.locked_contact_axis).
+# `kick_on_b` and `kick_on_a` (m/s) are what A's and B's leg drives add to the
+# other body (drive_kick), on a closing contact.
 static func resolve(
 		out: Result,
 		pos_a: Vector3, vel_a: Vector3, mass_a: float, radius_a: float,
 		pos_b: Vector3, vel_b: Vector3, mass_b: float, radius_b: float,
-		transfer: float, axis: Vector3 = Vector3.ZERO) -> void:
+		transfer: float, kick_on_b: float = 0.0, kick_on_a: float = 0.0) -> void:
 	out.clear()
 
 	# Center-to-center axis on XZ, n pointing A -> B.
@@ -79,10 +87,7 @@ static func resolve(
 	d.y = 0.0
 	var dist: float = d.length()
 	var n: Vector3
-	if axis != Vector3.ZERO:
-		n = axis
-		dist = d.dot(axis)
-	elif dist < _EPS:
+	if dist < _EPS:
 		# Coincident centers (spawn overlap, teleport): pick a deterministic axis
 		# so the pair still separates instead of producing a NaN normal. +X is
 		# arbitrary but identical on every machine, preserving replay determinism.
@@ -123,8 +128,10 @@ static func resolve(
 	# every PREDICTOR of it (the AI's check-commit gate) on one formula.
 	var kick_b: float = victim_kick(s, mass_a, mass_b, transfer)
 	# Equal-and-opposite momentum: Δv_a = J/m_a = kick_b · m_b/m_a.
-	out.dvel_a = -n * (kick_b * mass_b * inv_a)   # attacker decelerates (drive-through emerges)
-	out.dvel_b = n * kick_b                       # victim launched along the hit line
+	out.kick_on_a = kick_on_a
+	out.kick_on_b = kick_on_b
+	out.dvel_a = -n * (kick_b * mass_b * inv_a + out.kick_on_a)   # attacker decelerates (drive-through emerges)
+	out.dvel_b = n * (kick_b + out.kick_on_b)                     # victim launched along the hit line
 	out.impulse_applied = true
 
 
@@ -146,18 +153,21 @@ static func victim_kick(closing_speed: float, mass_a: float, mass_b: float,
 
 # The transfer a contact between bodies A and B lands at: the one rule the live
 # resolver, the reconcile replay and the puck strip read, symmetric in A and B.
-# A committed checker (Ctrl held without the puck) delivers his whole transfer,
-# whichever of the two is moving faster; with neither committed it is the
-# passive bump; a carrier holding Ctrl braces, cutting it by his resistance.
+# A committed checker (Ctrl held without the puck) delivers his whole transfer
+# inside his drive (CheckDriveRules) and its held share past it, whichever of
+# the two is moving faster; with neither committed it is the passive bump; a
+# carrier holding Ctrl braces, cutting it by his resistance.
 static func contact_transfer(
-		a_transfer: float, a_committed: bool, a_has_puck: bool, a_brace: float,
-		b_transfer: float, b_committed: bool, b_has_puck: bool, b_brace: float,
-		passive_mult: float) -> float:
+		a_transfer: float, a_committed: bool, a_driving: bool, a_has_puck: bool,
+		a_brace: float,
+		b_transfer: float, b_committed: bool, b_driving: bool, b_has_puck: bool,
+		b_brace: float, passive_mult: float) -> float:
 	var a_delivers: bool = a_committed and not a_has_puck
 	var b_delivers: bool = b_committed and not b_has_puck
 	var t: float
 	if a_delivers or b_delivers:
-		t = maxf(a_transfer if a_delivers else 0.0, b_transfer if b_delivers else 0.0)
+		t = maxf(_delivered(a_transfer, a_delivers, a_driving),
+				_delivered(b_transfer, b_delivers, b_driving))
 	else:
 		t = maxf(a_transfer, b_transfer) * passive_mult
 	if a_committed and a_has_puck:
@@ -165,3 +175,20 @@ static func contact_transfer(
 	if b_committed and b_has_puck:
 		t *= b_brace
 	return t
+
+
+static func _delivered(transfer: float, delivers: bool, driving: bool) -> float:
+	if not delivers:
+		return 0.0
+	return transfer if driving else transfer * CheckDriveRules.HELD_SHARE
+
+
+# The Δv (m/s) a body's leg drive adds to the body it hits (resolve's
+# kick_on_*): CheckDriveRules.kick_dv while he is a checker inside his drive,
+# cut by the brace of a carrier holding Ctrl as the transfer is, else nothing.
+static func drive_kick(driving: bool, committed: bool, has_puck: bool, thrust: float,
+		mass: float, other_mass: float, other_braced: bool, other_brace: float) -> float:
+	if not driving or not committed or has_puck:
+		return 0.0
+	var kick: float = CheckDriveRules.kick_dv(thrust, mass, other_mass)
+	return kick * other_brace if other_braced else kick

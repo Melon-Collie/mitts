@@ -162,6 +162,9 @@ var _state: State = State.OFF_PUCK
 
 # Identity / orientation
 var _peer_id: int = 0
+# The man this bot is skating after to fight (FightHunts), or -1. Stamped on
+# the main thread before each batch (AIController.prep_for_decide).
+var _hunt_peer_id: int = -1
 var _team_id: int = 0
 # The pass this bot is on: who released the puck it is chasing or holds, and
 # where he stood (RoleContext.fed_from). -1 / INF: not a teammate's release.
@@ -1023,6 +1026,8 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		input.mouse_world_pos = _step_mouse_face(_ready_stance_aim(
 				self_pos, tag_up, snapshot, FACE_TRAVEL_TAG_UP_NEAR_M))
 		_set_one_timer_ready(false)
+	elif _hunt_peer_id != -1 and snapshot.skater_states.has(_hunt_peer_id):
+		_hunt(input, snapshot, self_pos)
 	else:
 		var ctx: RoleContext = _build_role_context(snapshot, self_pos, self_state)
 		# Role-argmax throttle (ROLE_DECISION_PERIOD_TICKS). Bypassed for
@@ -1191,8 +1196,8 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		# puck: chasing would lose the goal-aim lock. The exception is a puck
 		# coming into the camper's own reach band — he takes it.
 		pass
-	elif _should_chase_loose_puck(snapshot, self_pos) \
-			or _reception.incoming_pass(snapshot, self_pos):
+	elif _hunt_peer_id == -1 and (_should_chase_loose_puck(snapshot, self_pos)
+			or _reception.incoming_pass(snapshot, self_pos)):
 		# Chase either the loose puck we're closest to, OR a pass released our way —
 		# the latter gets us into the squared reception setup before the fast puck
 		# arrives, rather than reacting only once it's on top of us.
@@ -2572,6 +2577,11 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 func apply_offside_guard(input: InputState, snapshot: WorldSnapshot) -> void:
 	if snapshot == null or snapshot.puck_state == null:
 		return
+	# A hunter follows his man over the line: the whistle is his team's price for
+	# the hunt. An owed tag-up still comes first (_state_off_puck), and a hunter
+	# carrying the puck holds the line like any carrier.
+	if _hunt_peer_id != -1 and snapshot.real_puck_carrier_peer_id != _peer_id:
+		return
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state == null:
 		return
@@ -2712,7 +2722,7 @@ func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 
 # Meeting a carrier about to skate into us with the shoulder
 # (SkaterAgentStandUp), every physics tick after dispatch and before the board
-# play, which may turn that check at the wall into a pin.
+# play, which holds a man it has leaned on at the wall.
 func apply_stand_up(input: InputState, snapshot: WorldSnapshot) -> void:
 	_stand_up.apply(input, snapshot, _check_aggression)
 
@@ -2831,6 +2841,9 @@ const FACE_THREAT_MIN_DIST_HYSTERESIS_M: float = 0.15
 # travel direction until nearly there — the tag-up is a race, not
 # positioning, so it keeps a tight face-travel threshold.
 const FACE_TRAVEL_TAG_UP_NEAR_M: float = 2.0
+# Where a hunter stands off the man he is after: inside the challenge's reach,
+# outside a body's contact.
+const HUNT_STAND_OFF_M: float = 1.2
 
 # Persistent cursor position, stepped by `_step_mouse_internal`. The first call
 # snaps to the target; the bool (not `_mouse_pos == ZERO`) gates the snap, since
@@ -3330,6 +3343,25 @@ func _update_loose_reaction_clock(snapshot: WorldSnapshot, delta: float) -> void
 	_control_elapsed_s += delta
 	if _control_elapsed_s >= CONTROL_CONFIRM_S:
 		_loose_elapsed_s = 0.0
+
+
+func set_hunt_peer(peer_id: int) -> void:
+	_hunt_peer_id = peer_id
+
+
+# Off the play and after the man: to a stand a body off him on our side, riding
+# his skate, facing him so the challenge's cone has him. No slot, no puck: a
+# hunter leaves the loose pucks and the feeds to the rest of the team.
+func _hunt(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3) -> void:
+	var him: SkaterNetworkState = snapshot.skater_states[_hunt_peer_id]
+	var off := Vector3(self_pos.x - him.position.x, 0.0, self_pos.z - him.position.z)
+	var stand: Vector3 = him.position
+	if off.length_squared() > 1e-4:
+		stand += off.normalized() * HUNT_STAND_OFF_M
+	_apply_steering(input, snapshot, self_pos, stand, true, _self_max_speed,
+			him.velocity, _hunt_peer_id)
+	input.mouse_world_pos = _step_mouse_face(him.position)
+	_set_one_timer_ready(false)
 
 
 func _should_chase_loose_puck(snapshot: WorldSnapshot, self_pos: Vector3) -> bool:

@@ -35,6 +35,7 @@ var _player_card_callout_tween: Tween = null
 var _player_popup: PlayerSettingsPopup = null
 var _play_popup: PlayPopup = null
 var _career_screen: CareerStatsScreen = null
+var _trophy_case: TrophyCaseScreen = null
 var _options_container: Control = null
 var _options_panel: OptionsPanel = null
 var _exit_container: Control = null
@@ -86,7 +87,7 @@ func _wire_focus_wall() -> void:
 
 func _modal_layers() -> Array[Control]:
 	return [_options_container, _exit_container, _tutorial_container, _drills_container,
-			_player_popup, _play_popup, _career_screen]
+			_player_popup, _play_popup, _career_screen, _trophy_case]
 
 
 func _sync_nav_focus_wall() -> void:
@@ -151,6 +152,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	elif _career_screen != null and _career_screen.visible:
 		# CareerStatsScreen handles its own ui_cancel — let it through.
+		return
+	elif _trophy_case != null and _trophy_case.visible:
+		# TrophyCaseScreen handles its own ui_cancel — let it through.
 		return
 	else:
 		close()
@@ -255,6 +259,7 @@ func _build_panel() -> void:
 	# tab, so the row is never gated — the stats tabs surface their own
 	# stat-sharing notice, while replays always work.
 	_add_row(vbox, "Career", false, _on_career_pressed)
+	_add_row(vbox, tr(&"MENU_TROPHY_CASE"), false, _on_trophy_case_pressed)
 	_add_row(vbox, "Options", false, _on_options_pressed)
 	_add_row(vbox, "Exit Game", true, _on_exit_pressed)
 
@@ -560,6 +565,8 @@ func _build_popups() -> void:
 
 	_career_screen = CareerStatsScreen.new()
 	add_child(_career_screen)
+	_trophy_case = TrophyCaseScreen.new()
+	add_child(_trophy_case)
 
 	_build_options_overlay()
 	_build_exit_overlay()
@@ -567,7 +574,8 @@ func _build_popups() -> void:
 	_build_drills_overlay()
 
 	# Controller: when a launched popup closes, return focus to the menu list.
-	for popup: CanvasItem in [_player_popup, _play_popup, _career_screen, _options_container]:
+	for popup: CanvasItem in [_player_popup, _play_popup, _career_screen, _trophy_case,
+			_options_container]:
 		popup.visibility_changed.connect(_on_child_popup_hidden.bind(popup))
 
 	_loading_screen = LoadingScreen.new()
@@ -903,6 +911,10 @@ func _launch_drill(id: String) -> void:
 
 func _on_career_pressed() -> void:
 	_career_screen.open()
+
+
+func _on_trophy_case_pressed() -> void:
+	_trophy_case.open()
 
 
 func _on_options_pressed() -> void:

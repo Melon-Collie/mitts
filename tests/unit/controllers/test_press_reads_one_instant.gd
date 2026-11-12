@@ -7,8 +7,8 @@ extends GutTest
 # - the host's controllers run in scene order, and which runs first must not
 #   change the press;
 # - a client reads the other body from the host's snapshots, which it can place
-#   on the host's tick only to within a tick, so the contact must hold through a
-#   tick of the other body's travel at any speed a press reaches;
+#   on the host's tick only to within its timing, so the contact must hold
+#   through that much of the other body's travel at any speed a press reaches;
 # - a client's live step reads the other body from the same buffered sample its
 #   replay does, not from the node drawn on screen.
 
@@ -40,7 +40,7 @@ func test_the_host_presses_the_same_whichever_controller_runs_first() -> void:
 
 
 # A man doing nothing, carried by a committed drive from behind: the pair runs up
-# to the power-limited stride.
+# to the press's walking pace.
 func _carried() -> PressHarness:
 	var h := PressHarness.new(self)
 	var s := PressHarness.Spec.new()
@@ -81,14 +81,15 @@ func _lost_ticks(h: PressHarness, touching: Callable, ticks_off: float) -> int:
 	return lost
 
 
-func test_a_fixed_slack_loses_a_carried_man_a_tick_off() -> void:
+func test_a_fixed_slack_loses_a_carried_man_inside_a_clients_timing() -> void:
 	var h: PressHarness = _carried()
 	var r: PressHarness.Result = h.get_meta("result")
-	assert_gt(r.man_speed, PressRules.CONTACT_SLACK_M / DT,
-			"carried past a slack's worth of travel a tick")
+	assert_gt(r.man_speed * LocalController.PRESS_READ_TIMING_S, PressRules.CONTACT_SLACK_M,
+			"carried past a slack's worth of travel inside the client's timing")
 	var fixed := func(gap: float, _speed_along: float) -> bool:
 		return gap < PressRules.CONTACT_SLACK_M
-	assert_gt(_lost_ticks(h, fixed, 1.0), 0, "the read a tick off is what the slack must cover")
+	assert_gt(_lost_ticks(h, fixed, LocalController.PRESS_READ_TIMING_S / DT), 0,
+			"the read that far off is what the slack must cover")
 
 
 func test_a_client_keeps_a_carried_man_through_its_timing() -> void:

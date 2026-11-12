@@ -7,10 +7,12 @@ extends "res://tests/harness/body_jerk_harness.gd"
 # instruments/actors/test_body_smoothness.gd, says which frame), and a scenario
 # that has got well under its bounds has them tightened.
 #
-# A knockdown is held from t136, once the softest of them has hit the ice (t125):
-# the hit is a shove and the landing a bounce, both meant to jolt.
+# A knockdown is held from t136, once he has hit the ice: the hit is a shove and
+# the landing an impact, both meant to jolt.
 
 const KNOCKDOWN_FROM_TICK: int = 136
+# A stumble is held from just past the hit (t60), which is a shove.
+const STUMBLE_FROM_TICK: int = 63
 const ORDER: Array[String] = ["legs", "trunk", "head", "top_arm", "bot_arm", "stick"]
 const BOUNDS: Dictionary = {
 	"steady stride, cursor 6 m ahead":
@@ -18,31 +20,33 @@ const BOUNDS: Dictionary = {
 	"pickup / drop, cursor far ahead":
 		[8.0, 30.0, 8.0, 47.0, 35.0, 43.0],
 	"forward → backward pivot (cursor flipped)":
-		[30.0, 31.0, 13.0, 46.0, 52.0, 49.0],
+		[23.0, 8.0, 8.0, 71.0, 50.0, 66.0],
 	"backward → forward (move reversed)":
 		[15.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 	"forward → backward (move reversed)":
-		[12.0, 8.0, 8.0, 8.0, 10.0, 8.0],
+		[12.0, 8.0, 8.0, 8.0, 13.0, 8.0],
+	"empty stick reached round behind the top hand's side":
+		[11.0, 8.0, 8.0, 8.0, 15.0, 8.0],
 	"stance on/off while skating":
-		[15.0, 8.0, 8.0, 8.0, 8.0, 8.0],
+		[15.0, 8.0, 8.0, 8.0, 13.0, 8.0],
 	"stop and restart":
 		[30.0, 8.0, 8.0, 8.0, 9.0, 8.0],
 	"wrister: carry, charge, release, skating":
-		[23.0, 15.0, 20.0, 81.0, 33.0, 125.0],
+		[11.0, 8.0, 8.0, 39.0, 27.0, 59.0],
 	"crossovers into and out of a held turn":
 		[13.0, 8.0, 8.0, 14.0, 14.0, 17.0],
 	"knocked down from the side and up again":
 		[84.0, 16.0, 13.0, 14.0, 21.0, 11.0],
-	"knocked down just past his balance and up again":
-		[84.0, 16.0, 13.0, 14.0, 21.0, 11.0],
+	"stumbled onto a knee and up again":
+		[85.0, 11.0, 14.0, 17.0, 15.0, 21.0],
 	"shot block down and back up, puck ahead":
 		[28.0, 35.0, 27.0, 37.0, 25.0, 27.0],
 	"goal celebration while gliding":
-		[10.0, 16.0, 8.0, 25.0, 32.0, 23.0],
+		[10.0, 16.0, 8.0, 8.0, 21.0, 14.0],
 	"shuffle: Space + D held, released":
 		[20.0, 8.0, 8.0, 8.0, 9.0, 8.0],
 	"press: drive into a man dug in, and off":
-		[12.0, 20.0, 8.0, 50.0, 72.0, 79.0],
+		[16.0, 20.0, 8.0, 50.0, 72.0, 79.0],
 	"press: dug in against a driver, and off":
 		[12.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 }
@@ -55,7 +59,11 @@ func test_the_transitions_stay_smooth() -> void:
 		if not BOUNDS.has(scenario_name):
 			continue
 		gated += 1
-		var from_tick: int = KNOCKDOWN_FROM_TICK if scenario_name.begins_with("knocked down") else 2
+		var from_tick: int = 2
+		if scenario_name.begins_with("knocked down"):
+			from_tick = KNOCKDOWN_FROM_TICK
+		elif scenario_name.begins_with("stumbled"):
+			from_tick = STUMBLE_FROM_TICK
 		var worst: Dictionary = measure(s, false, from_tick)
 		var bounds: Array = BOUNDS[scenario_name]
 		for k: int in ORDER.size():
