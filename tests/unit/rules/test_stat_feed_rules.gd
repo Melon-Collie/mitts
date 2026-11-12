@@ -37,6 +37,10 @@ func test_each_ticker_stat_fires_its_event() -> void:
 			[StatFeedRules.EVENT_TAKEAWAY] as Array[StringName])
 	assert_eq(StatFeedRules.feed_events(_stats(), _stats(0, 0, 0, 0, 0, 0, 0, 1)),
 			[StatFeedRules.EVENT_FACEOFF_WIN] as Array[StringName])
+	var picked := _stats()
+	picked.interceptions = 1
+	assert_eq(StatFeedRules.feed_events(_stats(), picked),
+			[StatFeedRules.EVENT_INTERCEPTION] as Array[StringName])
 
 
 func test_goal_and_assist_do_not_toast() -> void:

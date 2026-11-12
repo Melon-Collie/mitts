@@ -78,6 +78,7 @@ var _stripe:       Array = [[], []]   # Panel — left edge band, rounded outsid
 var _stripe_style: Array = [[], []]   # StyleBoxFlat backing each stripe (for recolor)
 var _num_labels:   Array = [[], []]
 var _name_labels:  Array = [[], []]
+var _title_labels: Array = [[], []]   # the worn title under a human's name
 var _pos_labels:   Array = [[], []]
 var _right_cols:   Array = [[], []]   # VBoxContainer holding pos + status
 var _status_box:   Array = [[], []]   # HBoxContainer holding ping/AI
@@ -184,6 +185,7 @@ func _build_grid() -> void:
 		_stripe_style[team_id].resize(PlayerRules.MAX_PER_TEAM)
 		_num_labels[team_id].resize(PlayerRules.MAX_PER_TEAM)
 		_name_labels[team_id].resize(PlayerRules.MAX_PER_TEAM)
+		_title_labels[team_id].resize(PlayerRules.MAX_PER_TEAM)
 		_pos_labels[team_id].resize(PlayerRules.MAX_PER_TEAM)
 		_right_cols[team_id].resize(PlayerRules.MAX_PER_TEAM)
 		_status_box[team_id].resize(PlayerRules.MAX_PER_TEAM)
@@ -389,8 +391,24 @@ func _build_card(team_id: int, slot: int) -> PanelContainer:
 	name_lbl.clip_text = true
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_lbl.resized.connect(_fit_name.bind(name_lbl))
-	main_row.add_child(name_lbl)
+	# The name and, under it, the worn title; centered as a pair, so a card with
+	# no title keeps its name where it always sat.
+	var name_col := VBoxContainer.new()
+	name_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	name_col.add_theme_constant_override("separation", -2)
+	name_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_row.add_child(name_col)
+	name_col.add_child(name_lbl)
 	_name_labels[team_id][slot] = name_lbl
+	var title_lbl := Label.new()
+	title_lbl.add_theme_font_override("font", MenuStyle.UI_FONT)
+	title_lbl.add_theme_font_size_override("font_size", 12)
+	title_lbl.clip_text = true
+	title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_lbl.visible = false
+	name_col.add_child(title_lbl)
+	_title_labels[team_id][slot] = title_lbl
 
 	# Right column: position letter pinned to top, status (ping or AI)
 	# pinned to bottom. The middle spacer eats any leftover height so the
@@ -588,6 +606,7 @@ func _update_card(team_id: int, slot: int, entry) -> void:
 	var stripe_style: StyleBoxFlat = _stripe_style[team_id][slot]
 	var num_lbl:  Label = _num_labels[team_id][slot]
 	var name_lbl: Label = _name_labels[team_id][slot]
+	var title_lbl: Label = _title_labels[team_id][slot]
 	var pos_lbl:  Label = _pos_labels[team_id][slot]
 	var right_col: VBoxContainer = _right_cols[team_id][slot]
 	var ping_lbl: Label = _ping_label[team_id][slot]
@@ -607,6 +626,7 @@ func _update_card(team_id: int, slot: int, entry) -> void:
 
 	var slot_key: int = LobbySlotKey.encode(team_id, slot)
 	var is_bot_slot: bool = entry == null and _bot_slots.get(slot_key, false)
+	title_lbl.visible = false
 
 	if entry == null and not is_bot_slot:
 		# === Empty slot ============================================
@@ -679,6 +699,10 @@ func _update_card(team_id: int, slot: int, entry) -> void:
 	name_lbl.text = p_name.to_upper() if not p_name.is_empty() else tr(&"SLOT_PLAYER")
 	name_lbl.add_theme_color_override("font_color", text_c)
 	_fit_name(name_lbl)
+	var title_id: String = String(entry.get("title", ""))
+	title_lbl.visible = Titles.is_known(title_id)
+	title_lbl.text = TrophyCopy.title_name(title_id).to_upper()
+	title_lbl.add_theme_color_override("font_color", _muted(text_c, 0.8))
 	_hand_state[team_id][slot] = 0 if bool(entry.get("is_left_handed", true)) else 1
 	_stamp_position(team_id, slot)
 	pos_lbl.add_theme_color_override("font_color", _muted(text_c, 0.7))

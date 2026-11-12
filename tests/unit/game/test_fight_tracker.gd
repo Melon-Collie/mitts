@@ -25,6 +25,7 @@ var _made: Array = []
 var _lapsed: Array[Skater] = []
 var _started: Array = []
 var _over: int = 0
+var _won: Array = []
 var _hunts_started: Array = []
 var _hunts_ended: Array[Skater] = []
 
@@ -45,6 +46,7 @@ func before_each() -> void:
 	_lapsed.clear()
 	_started.clear()
 	_over = 0
+	_won.clear()
 	_hunts_started.clear()
 	_hunts_ended.clear()
 	_fights = FightTracker.new()
@@ -54,6 +56,7 @@ func before_each() -> void:
 	_fights.challenge_lapsed.connect(func(c: Skater) -> void: _lapsed.append(c))
 	_fights.fight_started.connect(func(a: Skater, b: Skater) -> void: _started.append([a, b]))
 	_fights.fights_over.connect(func() -> void: _over += 1)
+	_fights.fight_won.connect(func(w: Skater, l: Skater) -> void: _won.append([w, l]))
 	_fights.hunt_started.connect(func(h: Skater, t: Skater) -> void: _hunts_started.append([h, t]))
 	_fights.hunt_ended.connect(func(h: Skater) -> void: _hunts_ended.append(h))
 	# Home and away face each other a body's width apart; the teammate stands
@@ -401,3 +404,14 @@ func test_a_man_put_down_ends_the_fight() -> void:
 	_fights.tick(TICK, true, GamePhase.Phase.FIGHT)
 	assert_false(_fights.is_fighting(_home))
 	assert_eq(_over, 1)
+	assert_eq(_won, [[_home, _away]], "the man left standing won it")
+
+
+func test_a_fight_that_ends_standing_has_no_winner() -> void:
+	_press(_home)
+	_press(_away)
+	for i: int in int(FightRules.FIGHT_MAX_S / TICK) + 2:
+		_now += TICK
+		_fights.tick(TICK, true, GamePhase.Phase.FIGHT)
+	assert_false(_fights.is_fighting(_home), "the linesmen stepped in")
+	assert_true(_won.is_empty())

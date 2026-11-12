@@ -18,9 +18,11 @@ var _skater: Skater
 var _kit: SkaterKitPaint
 var _blade_mesh: MeshInstance3D
 var _blade_tape: MeshInstance3D                    # team-colored tape band, child of _blade_mesh
+var _blade_toe_tape: MeshInstance3D                # a bottom strip's toe cap, child of _blade_mesh
 # colors.primary, cached from the last apply_uniform so a live tape pick
 # repaints without one: TEAM for tape.
 var _team_accent: Color = Color.WHITE
+var _team_secondary: Color = Color.WHITE
 # Whether the skater is currently ghost-faded — read by the face-gear repaint,
 # whose design alpha is not 1.0 and so can't be restored by _fade_material.
 var _ghosted: bool = false
@@ -34,6 +36,7 @@ func setup(skater: Skater, paint: BodyZonePaint) -> void:
 
 func apply_uniform(colors: Dictionary) -> void:
 	_team_accent = colors.primary
+	_team_secondary = colors.secondary
 	_kit.apply_uniform(colors)
 	_kit.apply_gear(_skater.gear_style)
 	_resize_cuffs()
@@ -70,10 +73,10 @@ func _resize_cuffs() -> void:
 
 
 func _make_stick_shaft_mat() -> ShaderMaterial:
-	# StickStyle owns the design (the picked model's paint + wordmark); the
-	# grip wrap is the player's tape job, layered here.
+	# StickStyle owns the design (the pattern's paint + wordmark); the grip wrap
+	# is the player's tape job, layered here.
 	var mat: ShaderMaterial = StickStyle.make_shaft_material(
-			_skater.gear_style.stick_model)
+			_skater.gear_style.stick_model, _stick_zones(), _team_accent, _team_secondary)
 	_write_grip_uniforms(mat)
 	# Fresh material, default uniforms — the skater's dirty guards must
 	# forget their last-written flex/length or they never re-send.
@@ -86,7 +89,7 @@ func _make_stick_shaft_mat() -> ShaderMaterial:
 func _write_grip_uniforms(mat: ShaderMaterial) -> void:
 	mat.set_shader_parameter(&"grip_mode", _skater.tape_config.knob_style)
 	mat.set_shader_parameter(&"grip_color",
-			TapeColorRegistry.resolve(_skater.tape_config.knob_color, _team_accent))
+			TapeColorRegistry.resolve(_skater.tape_config.knob_color, _team_accent, _team_secondary))
 
 
 # Dresses the blade in the picked model's weave and (re)builds the tape wrap
@@ -99,27 +102,36 @@ func _write_grip_uniforms(mat: ShaderMaterial) -> void:
 # of the blade mesh, inherits it.
 func _rebuild_blade() -> void:
 	_blade_mesh.material_override = StickStyle.make_blade_material(
-			_skater.gear_style.stick_model)
+			_skater.gear_style.stick_model, _stick_zones(), _team_accent, _team_secondary)
 
-	if _blade_tape != null and is_instance_valid(_blade_tape):
-		_blade_mesh.remove_child(_blade_tape)
-		_blade_tape.queue_free()
-	_blade_tape = null
-	var tape_mesh: ArrayMesh = _skater.build_blade_tape_mesh()
-	if tape_mesh == null:
-		return  # bare blade — no tape node at all
-	_blade_tape = MeshInstance3D.new()
-	_blade_tape.name = "BladeTape"
-	_blade_tape.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_blade_tape.mesh = tape_mesh
-	_blade_tape.material_override = UniformPaint.solid(
-			TapeColorRegistry.resolve(_skater.tape_config.blade_color, _team_accent),
+	_blade_tape = _replace_tape_node(_blade_tape, "BladeTape", _skater.build_blade_tape_mesh(),
+			_skater.tape_config.blade_color)
+	_blade_toe_tape = _replace_tape_node(_blade_toe_tape, "BladeToeTape",
+			_skater.build_blade_toe_cap_mesh(), _skater.tape_config.toe_color)
+
+
+# Swaps `old` for a node drawing `mesh` in palette color `color`; null (and no
+# node at all) when the tape job draws nothing there.
+func _replace_tape_node(old: MeshInstance3D, node_name: String, mesh: ArrayMesh,
+		color: int) -> MeshInstance3D:
+	if old != null and is_instance_valid(old):
+		_blade_mesh.remove_child(old)
+		old.queue_free()
+	if mesh == null:
+		return null
+	var node := MeshInstance3D.new()
+	node.name = node_name
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.mesh = mesh
+	node.material_override = UniformPaint.solid(
+			TapeColorRegistry.resolve(color, _team_accent, _team_secondary),
 			UniformPaint.ROUGH_CLOTH)
-	_blade_mesh.add_child(_blade_tape)
+	_blade_mesh.add_child(node)
+	return node
 
 
 # Repaints the gear-style pieces (both skates, both gloves, the laces, the
-# stick's colorway) for a live model or lace change without touching the rest
+# stick's paint) for a live model or lace change without touching the rest
 # of the uniform. Same live-cosmetic contract as refresh_tape below — the
 # stick rebuild skips the ghost window (a translucent standard mat holds the
 # override there; un-ghost rebuilds from the live config anyway).
@@ -135,15 +147,19 @@ func refresh_gear_style() -> void:
 # Re-renders the tape-colored pieces (blade wrap, knob, handle-wrap paint) for
 # a live tape-job change without touching the rest of the uniform. Safe before
 # the first apply_uniform — the accent default just gets repainted when it
-# lands. The shaft write skips the ghost window (a plain translucent standard
-# mat holds the override there); un-ghost rebuilds the shader mat from the
-# live config anyway.
+# lands. The tape code carries the stick's paint too, so the shaft is rebuilt —
+# except in the ghost window (a plain translucent standard mat holds the
+# override there); un-ghost rebuilds the shader mat from the live config anyway.
 func refresh_tape() -> void:
 	_rebuild_blade()
 	_rebuild_stick_knob()
-	var shaft_mat: ShaderMaterial = _skater.stick_mesh.material_override as ShaderMaterial
-	if shaft_mat != null:
-		_write_grip_uniforms(shaft_mat)
+	if _skater.stick_mesh.material_override is ShaderMaterial:
+		_skater.stick_mesh.material_override = _make_stick_shaft_mat()
+
+
+# The palette index each of the stick pattern's zones is painted.
+func _stick_zones() -> Array[int]:
+	return StickModelRegistry.zone_colors(_skater.gear_style.stick_model, _skater.tape_config)
 
 
 # (Re)builds the butt-end knob cylinder, stored on the skater so update_stick_mesh
@@ -151,7 +167,7 @@ func refresh_tape() -> void:
 # tracks kit changes — same pattern as the glove cuffs.
 func _rebuild_stick_knob() -> void:
 	var color: Color = TapeColorRegistry.resolve(
-			_skater.tape_config.knob_color, _team_accent)
+			_skater.tape_config.knob_color, _team_accent, _team_secondary)
 	if _skater.stick_knob_mesh != null and is_instance_valid(_skater.stick_knob_mesh):
 		_skater.upper_body.remove_child(_skater.stick_knob_mesh)
 		_skater.stick_knob_mesh.queue_free()
@@ -208,23 +224,24 @@ func apply_ghost(ghost: bool) -> void:
 	# (the flex driver no-ops on a non-ShaderMaterial override by design) and
 	# rebuild the real design materials on un-ghost.
 	if ghost:
-		var model: int = _skater.gear_style.stick_model
-		var stick_ghost: StandardMaterial3D = UniformPaint.solid(
-				StickModelRegistry.shaft_color(model), StickStyle.SHAFT_ROUGHNESS)
+		var pattern: int = _skater.gear_style.stick_model
+		var stick_ghost: StandardMaterial3D = UniformPaint.solid(StickStyle.shaft_color(
+				pattern, _stick_zones(), _team_accent, _team_secondary), StickStyle.SHAFT_ROUGHNESS)
 		stick_ghost.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		stick_ghost.albedo_color.a = 0.3
 		_skater.stick_mesh.material_override = stick_ghost
-		var blade_ghost: StandardMaterial3D = UniformPaint.solid(
-				StickModelRegistry.blade_base_color(model), 0.5)
+		var blade_ghost: StandardMaterial3D = UniformPaint.solid(StickStyle.blade_color(
+				pattern, _stick_zones(), _team_accent, _team_secondary), 0.5)
 		blade_ghost.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		blade_ghost.albedo_color.a = 0.3
 		_blade_mesh.material_override = blade_ghost
 	else:
 		_skater.stick_mesh.material_override = _make_stick_shaft_mat()
 		_blade_mesh.material_override = StickStyle.make_blade_material(
-				_skater.gear_style.stick_model)
+				_skater.gear_style.stick_model, _stick_zones(), _team_accent, _team_secondary)
 	var meshes: Array[MeshInstance3D] = [
 			_blade_tape,
+			_blade_toe_tape,
 			_skater.stick_knob_mesh,
 		]
 	for mesh: MeshInstance3D in meshes:

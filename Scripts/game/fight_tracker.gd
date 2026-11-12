@@ -20,10 +20,12 @@ extends RefCounted
 #
 # A fight ends when either man goes down, when the pair have been apart long
 # enough or at the linesmen's cap (FightRules.end_of), or when either man is gone.
+# Its result is FightRules.result_of; a fight someone won says so (fight_won).
 
 signal challenge_made(challenger: Skater, target: Skater)
 signal challenge_lapsed(challenger: Skater)
 signal fight_started(a: Skater, b: Skater)
+signal fight_won(winner: Skater, loser: Skater)
 signal fights_over
 signal hunt_started(hunter: Skater, target: Skater)
 signal hunt_ended(hunter: Skater)
@@ -269,6 +271,11 @@ func _step_fights(delta: float) -> void:
 		var a: Skater = key as Skater
 		var b: Skater = other as Skater
 		if a.is_knocked_down or b.is_knocked_down:
+			match FightRules.result_of(a.is_knocked_down, b.is_knocked_down):
+				FightRules.Result.A_WON:
+					fight_won.emit(a, b)
+				FightRules.Result.B_WON:
+					fight_won.emit(b, a)
 			_end(a, b)  # put down: that is the fight
 			continue
 		var apart: float = FightRules.step_apart(float(_apart_s.get(a, 0.0)),

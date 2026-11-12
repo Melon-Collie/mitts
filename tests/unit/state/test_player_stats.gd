@@ -24,13 +24,16 @@ func _full() -> PlayerStats:
 	s.shot_attempts_blocked = 15
 	s.xg_for = 2.5
 	s.icings = 3
+	s.interceptions = 16
+	s.fights = 2
+	s.fight_wins = 1
 	s.toi_seconds = 123.4
 	return s
 
 
-func test_to_array_has_eighteen_fields_in_order() -> void:
+func test_to_array_has_twenty_one_fields_in_order() -> void:
 	var a := _full().to_array()
-	assert_eq(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 11, 12, 13, 14, 15, 2.5, 3])
+	assert_eq(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 11, 12, 13, 14, 15, 2.5, 3, 16, 2, 1])
 	assert_eq(a.size() + 1, WorldStateCodec.STATS_PLAYER_RECORD_SIZE,
 			"the codec's record is peer_id + this array")
 
@@ -52,13 +55,16 @@ func test_round_trip_preserves_broadcast_counters() -> void:
 	assert_eq(restored.shot_attempts_blocked, 15)
 	assert_almost_eq(restored.xg_for, 2.5, 0.0001)
 	assert_eq(restored.icings, 3)
+	assert_eq(restored.interceptions, 16)
+	assert_eq(restored.fights, 2)
+	assert_eq(restored.fight_wins, 1)
 
 
 func test_update_from_array_preserves_local_toi() -> void:
 	# toi_seconds never crosses the wire; a decode must not zero a client's count.
 	var s := PlayerStats.new()
 	s.toi_seconds = 42.0
-	s.update_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 2, 3, 4, 16, 5, 1.75, 0])
+	s.update_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 2, 3, 4, 16, 5, 1.75, 0, 0, 0, 0])
 	assert_eq(s.faceoff_wins, 9)
 	assert_eq(s.faceoff_losses, 10)
 	assert_eq(s.one_timer_goals, 2)
@@ -74,6 +80,7 @@ func test_to_dict_includes_new_stats() -> void:
 	var d := _full().to_dict()
 	assert_eq(d["hits_taken"], 6)
 	assert_eq(d["takeaways"], 7)
+	assert_eq(d["interceptions"], 16)
 	assert_eq(d["giveaways"], 8)
 	assert_eq(d["faceoff_wins"], 9)
 	assert_eq(d["faceoff_losses"], 10)

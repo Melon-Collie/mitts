@@ -156,6 +156,7 @@ func _ready() -> void:
 	GameManager.shots_on_goal_changed.connect(_scorebug.set_shots)
 	GameManager.stats_updated.connect(_stat_feed.poll)
 	GameManager.roster_announced.connect(func(n: String, key: StringName, c: Dictionary) -> void: _toast_stack.push_pair(n, tr(key), c))
+	GameManager.game_puck_earned.connect(func(id: String, target: int) -> void: _toast_stack.push(TrophyCopy.puck_toast(id, target), MenuStyle.GOLD))
 	GameManager.puck_out_of_play.connect(_on_puck_out_of_play)
 	GameManager.icing_called.connect(_on_icing_called)
 	GameManager.icing_race_changed.connect(_icing_race.on_icing_race_changed)
@@ -753,8 +754,11 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 	var star_names: Array[String] = []
 	var star_lines: Array[String] = []
 	var star_stripes: Array[Color] = []
+	var star_titles: Array[String] = []
 	for star: PlayerRecord in GameManager.get_stars_of_game():
 		star_names.append(star.display_name())
+		star_titles.append(TrophyCopy.title_name(star.title_id)
+				if Titles.is_known(star.title_id) else "")
 		if star.is_goalie:
 			var opp: int = 1 - star.team.team_id
 			star_lines.append(_goalie_star_line(GameManager.get_team_shots(opp),
@@ -765,7 +769,7 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 	_game_over_popup.present(_scorebug.home_score(), _scorebug.away_score(),
 			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
 			result_text, result_color,
-			star_names, star_lines, star_stripes)
+			star_names, star_lines, star_stripes, star_titles)
 	_refresh_goal_saving()
 
 # Compact stat line for a star row. Scorers show goals/assists (plus the GWG

@@ -21,7 +21,7 @@ faceoff, and both stay on.
 | Controls | **The cursor drives the fist, and a button grabs.** The fist uses the stick's IK, reach and speed limits; punch power is the fist's speed at contact. Holding a button grabs with the other hand and keeps the grip. A key swaps the hands. |
 | Bots | A **grudge** per bot per opponent, filled by his body checks: past one level the bot accepts, past a higher one it challenges (2026-11-11, below). Before that, bots accepted every challenge and never challenged. |
 | Setting | **A lobby toggle, "Fighting: On / Off".** Fights are **never** possible in free play or in the `OFF` ruleset, even if free play ever goes multiplayer. |
-| Stat | **Deferred.** No "Fights" column yet. |
+| Stat | **Fights and fight wins, per game** (`PlayerStats.fights`, `fight_wins`), for the fight Game Pucks (`docs/game-pucks-plan.md`); a fight is won by the man left standing when the other goes down (`FightRules.result_of`), and a disengage or the linesmen is a draw. Career fight wins are a Steam stat (`STAT_FIGHT_WINS`). No "Fights" column on the career screen or in Supabase yet. |
 
 ## 1. Lifecycle (host-authoritative)
 

@@ -501,3 +501,22 @@ here whenever you bump, in the same format.
 #      notify_punch_landed shifts the RPC index set. Replay FORMAT_VERSION
 #      unchanged at 21: the bits were zero, and still are in a file older
 #      than this.
+# v103: Game Pucks (docs/game-pucks-plan.md), one bump for the branch's
+#      wire changes, none of which shipped on its own:
+#      - PlayerStats gained `interceptions`, `fights` and `fight_wins`
+#        (appended to to_array), three values more in the stats player record.
+#      - Titles: request_join and spawn_remote_skater carry the Titles id the
+#        player wears as a trailing String; the lobby roster entry's look
+#        (PlayerLook.cosmetics_to_wire) appends it, and the existing-player
+#        sync carries it. Replay header rosters gain an optional "title_id".
+#      - A new host→peer RPC, notify_feat(puck_id), shifts the RPC index set.
+#      - The tape palette gains TEAM_SECOND at index 11 (the kit's secondary
+#        colour) for the tape and lace codes.
+#      - Two tape spans (StickTapeConfig.Span.SPACED, BOTTOM_STRIP) fill the
+#        span's 3 bits, and the tape code grows a toe-cap colour (5 bits).
+#      - Sticks are patterns: the gear code's stick_model is a
+#        StickModelRegistry pattern, and the tape code grows a paint flag and
+#        five 5-bit zone colours above the toe colour (46 bits in all).
+#      An older peer reads none of this, so mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged: an older replay's codes decode as
+#      before and its header simply lacks the title.

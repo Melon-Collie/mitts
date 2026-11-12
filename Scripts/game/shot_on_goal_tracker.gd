@@ -101,6 +101,12 @@ var _pending_ctx: Array = []
 # One-Timer achievement's goal-flavor tag. Set by on_shot_started, cleared with
 # the rest of the pending state.
 var _pending_one_timer: bool = false
+# How the pending shot left the stick (ShotMechanics loft level, which hand), for
+# the goal's feats. Set by note_release_style, cleared with the pending state.
+var _pending_loft_level: int = ShotMechanics.ELEVATION_FLAT
+var _pending_backhand: bool = false
+# The peers credit_assists last credited, primary first.
+var _last_assist_ids: Array[int] = []
 # The pending shot has been redirected since its release: the keeper set on the
 # shot, not on the man it came off last (release_history).
 var _pending_tipped: bool = false
@@ -230,6 +236,8 @@ func on_shot_started(shooter_peer_id: int, is_one_timer: bool = false) -> void:
 	_block_window_remaining = BLOCK_WINDOW
 	_shot_on_goal_counted = false
 	_pending_one_timer = is_one_timer
+	_pending_loft_level = ShotMechanics.ELEVATION_FLAT
+	_pending_backhand = false
 	_pending_tipped = false
 	# Assume on net until the caller's ballistic read (note_trajectory, run
 	# right after the authoritative release) says otherwise — a missed read
@@ -303,6 +311,32 @@ func note_shot_origin(origin: Vector3) -> void:
 	if _shooter_peer_id == -1:
 		return
 	_pending_origin = origin
+
+
+# Records how the pending shot left the stick. No-op without a pending shot.
+func note_release_style(loft_level: int, is_backhand: bool) -> void:
+	if _shooter_peer_id == -1:
+		return
+	_pending_loft_level = loft_level
+	_pending_backhand = is_backhand
+
+
+# The pending shot's release position, loft level and hand; only meaningful
+# while has_pending_shot().
+func pending_origin() -> Vector3:
+	return _pending_origin
+
+
+func pending_loft_level() -> int:
+	return _pending_loft_level
+
+
+func pending_is_backhand() -> bool:
+	return _pending_backhand
+
+
+func last_assist_ids() -> Array[int]:
+	return _last_assist_ids
 
 
 # A shot off the pipes is a MISS in NHL scoring — it was never "on goal", so a
@@ -439,6 +473,7 @@ func on_goal_confirmed(scorer_peer_id: int, origin: Vector3 = Vector3.ZERO) -> v
 func credit_assists(scorer_peer_id: int) -> Array[String]:
 	var names: Array[String] = []
 	var credited: Array[int] = []
+	_last_assist_ids = credited
 	var scorer_team_id: int = _registry.resolve_team_id_for_peer(scorer_peer_id)
 	if scorer_team_id == -1:
 		return names
@@ -536,6 +571,8 @@ func clear_pending() -> void:
 	_pending_origin = Vector3.ZERO
 	_pending_ctx = []
 	_pending_one_timer = false
+	_pending_loft_level = ShotMechanics.ELEVATION_FLAT
+	_pending_backhand = false
 	_pending_tipped = false
 	_pending_event = null
 

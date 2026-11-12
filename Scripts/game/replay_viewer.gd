@@ -210,6 +210,7 @@ func _spawn_skater_from_roster(entry: Dictionary) -> void:
 	var record := PlayerRecord.new(peer_id, team_slot, false, team_obj)
 	record.tape_code = tape.to_code()
 	record.gear_style_code = gear.to_code()
+	record.title_id = Titles.coerce(str(entry.get("title_id", "")))
 	record.skin_tone = skin
 	record.skater = skater
 	record.controller = controller

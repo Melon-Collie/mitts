@@ -391,8 +391,8 @@ func _on_local_file_changed() -> void:
 
 # ── Achievements / Stats (User Stats) ────────────────────────────────────────
 # The thin Steam-side surface for achievements. Conditions live in the domain
-# (Achievements / AchievementRules); AchievementService decides what to unlock
-# and calls in here. Every call is a no-op when Steam is unavailable, so the
+# (GamePucks / GamePuckRules); TrophyService decides what to unlock and calls in
+# here. Every call is a no-op when Steam is unavailable, so the
 # whole feature is inert in headless CI and non-Steam builds.
 #
 # Each achievement's `api_name` MUST exist + be published in the Steamworks
@@ -425,8 +425,8 @@ func is_achievement_unlocked(api_name: String) -> bool:
 func reset_all_achievements() -> void:
 	if not is_available or not OS.is_debug_build():
 		return
-	for entry in Achievements.ALL:
-		Steam.clearAchievement(String(entry["id"]))
+	for id: String in GamePucks.all_steam_ids():
+		Steam.clearAchievement(id)
 	for entry in SteamStats.ALL:
 		Steam.setStatInt(String(entry["id"]), 0)
 	Steam.storeStats()

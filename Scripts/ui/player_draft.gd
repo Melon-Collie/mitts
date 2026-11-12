@@ -26,6 +26,8 @@ var length: int = PlayerAttributes.GEAR_BALANCED
 var tape_code: int = StickTapeConfig.DEFAULT_CODE
 # Packed GearStyleConfig: equipment models, face, tuck, and the hair.
 var gear_code: int = GearStyleConfig.DEFAULT_CODE
+# Titles id worn, "" for none.
+var title_id: String = ""
 
 
 static func from_prefs() -> PlayerDraft:
@@ -41,8 +43,9 @@ static func from_prefs() -> PlayerDraft:
 			PlayerPrefs.attr_profile, PlayerPrefs.attr_curve, PlayerPrefs.attr_flex,
 			PlayerPrefs.attr_length)
 	d.set_attributes(attrs)
-	d.tape_code = PlayerPrefs.stick_tape_code
-	d.gear_code = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	d.tape_code = PlayerPrefs.worn_tape_code()
+	d.gear_code = PlayerPrefs.worn_gear_style_code()
+	d.title_id = Titles.coerce(PlayerPrefs.equipped_title)
 	return d
 
 
@@ -62,6 +65,7 @@ func copy() -> PlayerDraft:
 	d.length = length
 	d.tape_code = tape_code
 	d.gear_code = gear_code
+	d.title_id = title_id
 	return d
 
 
@@ -110,6 +114,25 @@ func set_tape(t: StickTapeConfig) -> void:
 	tape_code = t.to_code()
 
 
+# A new pattern starts in its own default colours.
+func set_stick_pattern(pattern: int) -> void:
+	var g: GearStyleConfig = gear()
+	g.stick_model = pattern
+	set_gear(g)
+	var t: StickTapeConfig = tape()
+	t.clear_paint()
+	set_tape(t)
+
+
+# Paints one zone of the stick, the others keeping the colours they wear now.
+func set_stick_zone(zone: int, color: int) -> void:
+	var t: StickTapeConfig = tape()
+	var colors: Array[int] = StickModelRegistry.zone_colors(gear().stick_model, t)
+	colors[zone] = color
+	t.set_paint(colors)
+	set_tape(t)
+
+
 func team_colors() -> Dictionary:
 	return TeamColorRegistry.get_colors(maxi(color_slot, 0), 0)
 
@@ -123,7 +146,8 @@ func differs(other: PlayerDraft) -> bool:
 	return build_differs(other) or player_name != other.player_name \
 			or jersey_number != other.jersey_number or is_left_handed != other.is_left_handed \
 			or position != other.position or color_slot != other.color_slot \
-			or skin != other.skin or tape_code != other.tape_code or gear_code != other.gear_code
+			or skin != other.skin or tape_code != other.tape_code or gear_code != other.gear_code \
+			or title_id != other.title_id
 
 
 # Saves and applies every field that differs from `since`.
@@ -162,4 +186,7 @@ func commit(since: PlayerDraft) -> void:
 	if gear_code != since.gear_code:
 		PlayerPrefs.gear_style_code = gear_code
 		NetworkManager.apply_local_gear_style(gear_code)
+	if title_id != since.title_id:
+		PlayerPrefs.equipped_title = title_id
+		NetworkManager.apply_local_title(title_id)
 	PlayerPrefs.save()

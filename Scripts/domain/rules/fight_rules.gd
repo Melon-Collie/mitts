@@ -27,6 +27,7 @@ const DISENGAGE_S: float = 1.5
 const FIGHT_MAX_S: float = 20.0
 
 enum End { NONE, DISENGAGED, LINESMEN }
+enum Result { DRAW, A_WON, B_WON }
 # Skater.fight_role: written by the host's FightTracker alone and replicated,
 # so every machine draws a fighter's gear off and his guard from it.
 enum Role { NONE, CHALLENGING, FIGHTING }
@@ -66,6 +67,14 @@ static func can_accept(from: Vector2, to: Vector2) -> bool:
 # past DISENGAGE_M, and starts over the moment they close again.
 static func step_apart(apart_s: float, dist: float, delta: float) -> float:
 	return apart_s + delta if dist > DISENGAGE_M else 0.0
+
+
+# A fight is won by the man left standing when the other goes down. Both down,
+# or neither (they disengaged, or the linesmen stepped in), is a draw.
+static func result_of(a_down: bool, b_down: bool) -> Result:
+	if a_down == b_down:
+		return Result.DRAW
+	return Result.B_WON if a_down else Result.A_WON
 
 
 static func end_of(elapsed_s: float, apart_s: float) -> End:

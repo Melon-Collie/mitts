@@ -18,6 +18,9 @@ var shots_blocked: int = 0
 #                    faceoff win % has a real denominator.
 var hits_taken: int = 0
 var takeaways: int = 0
+# A pass picked off: credited to the opponent whose pickup first ended its flight,
+# when the passer's giveaway lands (TurnoverTracker). Takeaways stay strips only.
+var interceptions: int = 0
 var giveaways: int = 0
 var faceoff_wins: int = 0
 var faceoff_losses: int = 0
@@ -65,6 +68,11 @@ var xg_for: float = 0.0
 # released the puck that opened the race). Broadcast like the counters above;
 # absent from to_dict() — the career_stats table has no column for it.
 var icings: int = 0
+# Fights this player was in (FightTracker.fight_started) and those he won
+# (FightRules.result_of). Broadcast like the counters above, for the fight
+# Game Pucks; absent from to_dict() — the career_stats table has no column.
+var fights: int = 0
+var fight_wins: int = 0
 # Tracked locally on every peer (game_manager._physics_process) rather than
 # host-authoritative + broadcast like the counters above. Each peer's own
 # value is what ships to Supabase, since report() runs per-peer at game-over.
@@ -79,7 +87,8 @@ func to_array() -> Array:
 	return [goals, assists, shots_on_goal, hits, shots_blocked,
 			hits_taken, takeaways, giveaways, faceoff_wins, faceoff_losses,
 			game_winning_goals, one_timer_goals, tip_goals, ot_goals,
-			shot_attempts, shot_attempts_blocked, xg_for, icings]
+			shot_attempts, shot_attempts_blocked, xg_for, icings, interceptions,
+			fights, fight_wins]
 
 static func from_array(a: Array) -> PlayerStats:
 	var s := PlayerStats.new()
@@ -110,6 +119,9 @@ func update_from_array(a: Array) -> void:
 	shot_attempts_blocked = a[15]
 	xg_for = a[16]
 	icings = a[17]
+	interceptions = a[18]
+	fights = a[19]
+	fight_wins = a[20]
 
 func to_dict() -> Dictionary:
 	return {
@@ -120,6 +132,7 @@ func to_dict() -> Dictionary:
 		"shots_blocked": shots_blocked,
 		"hits_taken": hits_taken,
 		"takeaways": takeaways,
+		"interceptions": interceptions,
 		"giveaways": giveaways,
 		"faceoff_wins": faceoff_wins,
 		"faceoff_losses": faceoff_losses,

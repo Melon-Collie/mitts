@@ -144,6 +144,9 @@ signal punch_landed(victim_peer_id: int, intensity: float)
 # (-1, waved_off saying how). Hosts emit from _announce_icing_race; clients
 # from the RPC handler.
 signal icing_race_changed(icing_team_id: int, waved_off: bool)
+# The local player earned a Game Puck (a ladder tier when `target` > 0;
+# TrophyService). HUD toasts it.
+signal game_puck_earned(puck_id: String, target: int)
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -326,6 +329,8 @@ var _fighters_scratch: Array[Skater] = []
 var _stick_tie_draw := StickTieDraw.new()
 var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
+# Host-only: who won the current possession back, for the goal feats.
+var _feat_tracker: FeatTracker = null
 var _possession_tracker: PossessionTracker = null
 var _advanced_stats_tracker: AdvancedStatsTracker = null
 # A CLIENT's copy of the game's shot log, pushed by the host at game-over
@@ -398,7 +403,7 @@ var _net_session_reporter: NetworkSessionReporter = null
 # "host_lost", …) — whichever fires first wins. Re-armed at world spawn and on
 # rematch reset (each game posts its own row).
 var _net_session_reported: bool = false
-var _achievements: AchievementService = null
+var _trophies: TrophyService = null
 var _stat_recorder: SteamStatRecorder = null
 # Streams broadcast frames and events to user://replays/<game_id>.mreplay on a
 # worker thread. Lives on every peer (host + client + spectator) for any session
@@ -529,8 +534,9 @@ func _ready() -> void:
 	ThemeDB.fallback_font = MenuStyle.UI_FONT
 	_career_reporter = CareerStatsReporter.new()
 	_net_session_reporter = NetworkSessionReporter.new()
-	_achievements = AchievementService.new()
 	_stat_recorder = SteamStatRecorder.new()
+	_trophies = TrophyService.new(_stat_recorder.totals)
+	_trophies.puck_earned.connect(game_puck_earned.emit)
 	# End-of-tick capture + broadcast (physics priority 2, after all actor
 	# integration). The callback body carries all the session gates, so the hook
 	# is safe to run from boot.
@@ -554,6 +560,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.set_world_state_provider(get_world_state)
 	NetworkManager.set_keeper_wire_provider(_append_keeper_wire)
 	NetworkManager.host_ready.connect(on_host_started)
+	NetworkManager.feat_received.connect(_on_feat_received)
 	NetworkManager.client_connected.connect(on_connected_to_server)
 	NetworkManager.disconnected_from_server.connect(on_scene_exit)
 	NetworkManager.peer_joined.connect(on_player_connected)
@@ -591,6 +598,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.local_tape_changed.connect(_on_local_tape_changed)
 	NetworkManager.local_skin_changed.connect(_on_local_skin_changed)
 	NetworkManager.local_gear_style_changed.connect(_on_local_gear_style_changed)
+	NetworkManager.local_title_changed.connect(_on_local_title_changed)
 	NetworkManager.local_preferred_color_changed.connect(_on_local_preferred_color_changed)
 	NetworkManager.pickup_claim_received.connect(_on_pickup_claim_received)
 	NetworkManager.pickup_claim_rejected_received.connect(_on_pickup_claim_rejected)
@@ -1028,8 +1036,22 @@ func _on_fight_started(a: Skater, b: Skater) -> void:
 	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
 	var pa: int = _registry.resolve_peer_id(a)
 	var pb: int = _registry.resolve_peer_id(b)
+	for pid: int in [pa, pb]:
+		var rec: PlayerRecord = _registry.get_record(pid)
+		if rec != null and rec.stats != null:
+			rec.stats.fights += 1
+	_stats_sync_gate.mark_dirty()
 	fight_called.emit(pa, pb)
 	NetworkManager.notify_fight_called_to_all(pa, pb)
+
+
+# Host: a fight ended with `winner` standing over `loser` (FightRules.result_of).
+func _on_fight_won(winner: Skater, _loser: Skater) -> void:
+	var rec: PlayerRecord = _registry.get_record(_registry.resolve_peer_id(winner))
+	if rec == null or rec.stats == null:
+		return
+	rec.stats.fight_wins += 1
+	_stats_sync_gate.mark_dirty()
 
 
 # Host: a punch landed (FightPunchJudge). The victim takes it (Δv along the
@@ -1099,6 +1121,8 @@ func _on_stoppage_flush_stat_trackers(phase: GamePhase.Phase) -> void:
 		_hit_tracker.on_play_stopped()
 	if _possession_tracker != null:
 		_possession_tracker.reset()
+	if _feat_tracker != null:
+		_feat_tracker.reset()
 	# A whistled play is not a bottled-in breakout — resolve any open episode
 	# as STOPPAGE rather than letting it age into the TIMEOUT bucket.
 	breakout_episodes.close_on_stoppage()
@@ -1567,6 +1591,8 @@ func sync_existing_players(player_data: Array) -> void:
 		NetworkManager.set_peer_skin_tone(peer_id, skin_tone)
 		var gear_style: int = int(entry[17]) if entry.size() > 17 else GearStyleConfig.DEFAULT_CODE
 		NetworkManager.set_peer_gear_style(peer_id, gear_style)
+		NetworkManager.set_peer_title(peer_id, String(entry[ROSTER_TITLE])
+				if entry.size() > ROSTER_TITLE and entry[ROSTER_TITLE] is String else "")
 		var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_slot, team_id)
 		_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 		_registry.spawn(peer_id, team_slot, teams[team_id],
@@ -1879,6 +1905,7 @@ func _wire_subsystems() -> void:
 	_fights.challenge_made.connect(_on_fight_challenge_made)
 	_fights.challenge_lapsed.connect(_on_fight_challenge_lapsed)
 	_fights.fight_started.connect(_on_fight_started)
+	_fights.fight_won.connect(_on_fight_won)
 	_fights.fights_over.connect(_on_fights_over)
 	_fights.hunt_started.connect(_on_hunt_started)
 	_fights.hunt_ended.connect(_on_hunt_ended)
@@ -1897,6 +1924,9 @@ func _wire_subsystems() -> void:
 	# covered past the shot's flight.
 	_turnover_tracker = TurnoverTracker.new()
 	_turnover_tracker.setup(_registry)
+	_feat_tracker = FeatTracker.new()
+	_feat_tracker.setup(_registry)
+	_turnover_tracker.possession_won.connect(_feat_tracker.on_possession_won)
 	_shot_tracker.shot_attempted.connect(_turnover_tracker.note_shot)
 	_shot_tracker.shot_on_goal_recorded.connect(_turnover_tracker.note_shot)
 
@@ -1977,6 +2007,7 @@ func _wire_subsystems() -> void:
 			get_tree(), NetworkManager.is_host, force_record,
 			_is_pregame_intro_faceoff)
 	_phase_coord.goal_scored.connect(goal_scored.emit)
+	_phase_coord.goal_credited.connect(_on_goal_credited)
 	_phase_coord.goal_scored.connect(_on_goal_for_replay_event)
 	_phase_coord.goal_scored.connect(_stash_goal_clip_meta)
 	_phase_coord.goal_scored.connect(_trigger_scorer_celebration)
@@ -2987,6 +3018,7 @@ func _build_replay_footer() -> Dictionary:
 				"shots_blocked": r.stats.shots_blocked,
 				"hits_taken": r.stats.hits_taken,
 				"takeaways": r.stats.takeaways,
+				"interceptions": r.stats.interceptions,
 				"giveaways": r.stats.giveaways,
 				"faceoff_wins": r.stats.faceoff_wins,
 				"faceoff_losses": r.stats.faceoff_losses,
@@ -3500,15 +3532,20 @@ func _on_server_puck_released_by_carrier(peer_id: int) -> void:
 			and _state_machine.current_phase == GamePhase.Phase.PLAYING:
 		_hit_tracker.note_possession_released(peer_id)
 	# A non-shot release with no teammate in its flight corridor is a dump / clear
-	# / rim, not a pass — mark the dump window so recovering it reads as a
-	# concession, not a giveaway (mirrors the shot window). Gated to live play (a
-	# whistle drop lands here too); shots already opened the window via note_shot,
-	# so skip when a shot is pending to keep the pass/dump geometry off them.
+	# / rim — mark the dump window so recovering it reads as a concession, not a
+	# giveaway (mirrors the shot window). Otherwise it is a pass, and an opponent
+	# picking it off is an interception. Gated to live play (a whistle drop lands
+	# here too); shots already opened the window via note_shot, so skip when a
+	# shot is pending to keep the pass/dump geometry off them.
 	if _turnover_tracker != null and _state_machine != null \
 			and _state_machine.current_phase == GamePhase.Phase.PLAYING \
-			and (_shot_tracker == null or not _shot_tracker.has_pending_shot()) \
-			and _is_dump_release(peer_id):
-		_turnover_tracker.note_dump(peer_id)
+			and (_shot_tracker == null or not _shot_tracker.has_pending_shot()):
+		var launch: Vector3 = puck.get_release_velocity() if puck != null else Vector3.ZERO
+		if _is_dump_release(peer_id):
+			_turnover_tracker.note_dump(peer_id)
+		elif Vector2(launch.x, launch.z).length() >= 0.001:
+			# A puck dropped dead (a ghosted or departing carrier) was never passed.
+			_turnover_tracker.note_pass(peer_id)
 	if _possession_tracker != null:
 		_possession_tracker.on_puck_lost(peer_id)
 	record.controller.on_puck_released_network()
@@ -3598,6 +3635,8 @@ func _on_server_puck_poke_checked_by(peer_id: int) -> void:
 func _on_possession_established(peer_id: int, team_id: int) -> void:
 	if _shot_tracker != null:
 		_shot_tracker.on_possession_established(peer_id)
+	if _feat_tracker != null:
+		_feat_tracker.on_possession_established(peer_id, team_id)
 	# A turnover/faceoff stat landed — mark for the per-broadcast-interval flush
 	# (≤ one broadcast interval of delay for the HUD stat feed / client
 	# scoreboards) instead of re-encoding the full roster per event.
@@ -3610,6 +3649,47 @@ func _on_possession_established(peer_id: int, team_id: int) -> void:
 	if _state_machine != null and puck != null:
 		_state_machine.notify_possession_established(team_id, puck.global_position.z)
 		_consume_pending_faceoff()
+
+
+# Host: the goal's feats (FeatRules), read before the shot tracker's pending state
+# clears. Only a real match earns them, as with every Game Puck.
+func _on_goal_credited(scorer_id: int, is_own_goal: bool, goal_line_z: float) -> void:
+	if not _achievements_active() or _shot_tracker == null:
+		return
+	var ctx := GoalFeatContext.new()
+	ctx.scorer = scorer_id
+	ctx.is_own_goal = is_own_goal
+	var assists: Array[int] = _shot_tracker.last_assist_ids()
+	ctx.primary_assist = assists[0] if not assists.is_empty() else -1
+	if _shot_tracker.has_pending_shot():
+		ctx.shooter = _shot_tracker.get_shooter_peer_id()
+		ctx.is_one_timer = _shot_tracker.pending_is_one_timer()
+		ctx.loft_level = _shot_tracker.pending_loft_level()
+		ctx.is_backhand = _shot_tracker.pending_is_backhand()
+		var origin: Vector3 = _shot_tracker.pending_origin()
+		ctx.release_distance_m = absf(origin.z - goal_line_z)
+		ctx.release_xz = Vector2(origin.x, origin.z * signf(goal_line_z))
+	if _feat_tracker != null:
+		_feat_tracker.fill(ctx, _registry.resolve_team_id_for_peer(scorer_id))
+	for earned: Dictionary in FeatRules.goal_feats(ctx):
+		_award_feat(int(earned["peer"]), String(earned["feat"]))
+
+
+# A feat for `peer_id`: earned here for the local player, sent to a remote one,
+# and nothing for a bot.
+func _award_feat(peer_id: int, feat: String) -> void:
+	var record: PlayerRecord = _registry.get_record(peer_id)
+	if record == null or record.is_bot:
+		return
+	if record.is_local:
+		_trophies.on_feat(feat)
+	else:
+		NetworkManager.send_feat(peer_id, feat)
+
+
+func _on_feat_received(feat: String) -> void:
+	if _trophies != null and _achievements_active():
+		_trophies.on_feat(feat)
 
 
 # Host: a goal ends any still-unresolved draw scramble — the draw goes to the
@@ -3854,6 +3934,7 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater) -
 	# work — without this, get_last_toucher() returns the passer at goal time.
 	_shot_tracker.on_deflection(pid)
 	_shot_tracker.on_shot_started(pid, true)  # one-timer tag → One-Timer achievement
+	_shot_tracker.note_release_style(skater.elevation_level, false)
 	_loose_puck_released_by = pid
 	puck.set_carrier(skater)
 	puck.release(direction, power)
@@ -3951,6 +4032,8 @@ func _start_pending_shot_from_carrier() -> void:
 	var shooter: PlayerRecord = _registry.get_record(shooter_peer_id)
 	if shooter != null and shooter.controller != null:
 		_shot_tracker.note_release_intent(shooter.controller.last_release_was_shot)
+		_shot_tracker.note_release_style(puck.carrier.elevation_level,
+				shooter.controller.last_release_hand == "BH")
 
 
 # Re-reads the pending shot's on-net flag from the puck's live ballistic
@@ -4388,9 +4471,9 @@ func _on_hit_landed(hitter_peer_id: int, victim: Skater, impulse_magnitude: floa
 		const KICK_FULL_SPAN: float = 4.0
 		local_player_impact.emit(hit_dir, clampf(
 				(impulse_magnitude - HitRules.MIN_HIT_IMPULSE) / KICK_FULL_SPAN, 0.0, 1.0))
-		# Live achievement — excluded in free play / drills (no achievements there).
-		if _achievements != null and _achievements_active():
-			_achievements.on_local_hit(impulse_magnitude)
+		# Live Game Puck — excluded in free play / drills (no pucks there).
+		if _trophies != null and _achievements_active():
+			_trophies.on_local_hit(impulse_magnitude)
 
 
 # Host-only (impact_landed fires only on the host, from the deduped contact
@@ -4670,23 +4753,20 @@ func _finalize_game_stats() -> void:
 			outcome = "win"
 		elif gf < ga:
 			outcome = "loss"
-		# Achievements + Steam career stats count any real match — online OR a
+		# Game Pucks + Steam career stats count any real match — online OR a
 		# configured "Play vs Bots" game — but never free play or tutorial/drill
 		# practice (see _achievements_active). Steam Stats are the player's own
-		# account data, so they're NOT gated on share_gameplay_stats or online;
-		# increment first, then evaluate against the updated totals so a threshold
-		# unlocks on the game that crosses it. No Supabase dependency.
-		if _achievements_active():
-			if _achievements != null:
-				_achievements.evaluate_single_game(local.stats, outcome, gf, ga)
-				# Roster achievements — read the live Steam lobby membership so any
-				# machine (host or client) can award "played a game with X".
-				_achievements.evaluate_roster(
-						SteamManager.lobby_member_steam_ids(), SteamManager.steam_id)
-			if _stat_recorder != null:
-				_stat_recorder.record_game(local.stats, outcome)
-				if _achievements != null:
-					_achievements.evaluate_career(_stat_recorder.totals())
+		# account data, so they're NOT gated on share_gameplay_stats or online.
+		# The totals are read before this game is recorded so a ladder tier lands
+		# on the game that crosses it. No Supabase dependency.
+		if _achievements_active() and _trophies != null and _stat_recorder != null:
+			var totals_before: Dictionary = _stat_recorder.totals()
+			_stat_recorder.record_game(local.stats, outcome)
+			# The roster comes from the live Steam lobby membership, so any machine
+			# (host or client) can award "played a game with X".
+			_trophies.evaluate_game_over(local.stats,
+					{"outcome": outcome, "goals_for": gf, "goals_against": ga},
+					SteamManager.lobby_member_steam_ids(), SteamManager.steam_id, totals_before)
 	# Supabase career row: EVERY real match counts, offline vs bots exactly like
 	# online. Most play happens offline, and a career page that ignores it isn't
 	# the player's career. The online/offline distinction is preserved as a column
@@ -4761,17 +4841,17 @@ func _achievements_active() -> bool:
 
 
 # Called from the tutorial-completion paths (TutorialManager / TutorialHUD) each
-# time a tutorial is marked complete. Fires the "Student of the Game" achievement
-# once the whole course is done. Deliberately outside _achievements_active — the
+# time a tutorial is marked complete. Earns the "Student of the Game" puck once
+# the whole course is done. Deliberately outside _achievements_active — the
 # course runs in tutorial mode, where that gate is closed, so the meta hook is
-# called directly. Idempotent downstream (AchievementService de-dupes).
+# called directly. Idempotent downstream (the ledger earns a puck once).
 func notify_tutorial_completed() -> void:
-	if _achievements == null:
+	if _trophies == null:
 		return
 	for id: String in TutorialRegistry.ALL_IDS:
 		if not PlayerPrefs.is_tutorial_complete(id):
 			return
-	_achievements.on_tutorials_complete()
+	_trophies.on_tutorials_complete()
 
 
 # Latches _ranked_match (see its doc) once two humans share the match, and tracks
@@ -5120,6 +5200,12 @@ func _on_local_skin_changed(skin_tone: int) -> void:
 
 # Repaints the local skater's gear (skate/glove color) live. Same
 # cosmetic-and-local-only contract as the tape and skin handlers above.
+func _on_local_title_changed(title_id: String) -> void:
+	var record: PlayerRecord = _registry.get_local() if _registry != null else null
+	if record != null:
+		record.title_id = title_id
+
+
 func _on_local_gear_style_changed(gear_style_code: int) -> void:
 	if _registry == null:
 		return
@@ -5143,10 +5229,10 @@ func _on_local_attributes_changed(attrs: PlayerAttributes) -> void:
 	if record == null:
 		return
 	record.attributes = attrs
-	# Customized your build — a meta achievement, fired directly (this signal only
+	# Customized your build — a moment puck, fired directly (this signal only
 	# fires from the free-play picker Apply, where the game-over sweep never runs).
-	if _achievements != null:
-		_achievements.on_build_edited()
+	if _trophies != null:
+		_trophies.on_build_edited()
 	if NetworkManager.is_in_online_match():
 		return
 	if record.controller != null:
@@ -5555,7 +5641,7 @@ func _collect_existing_player_data() -> Array[Array]:
 				r.is_left_handed, r.player_name, r.jersey_number,
 				attrs.height, attrs.weight, attrs.profile,
 				attrs.curve, attrs.flex, attrs.length,
-				r.tape_code, r.skin_tone, r.gear_style_code,
+				r.tape_code, r.skin_tone, r.gear_style_code, r.title_id,
 				carrier != null and r.skater == carrier])
 	return existing
 
@@ -5563,7 +5649,9 @@ func _collect_existing_player_data() -> Array[Array]:
 # The roster entry's carrier flag: a joiner's only word of who holds the puck,
 # since carrier events outlive the snapshot block by a second at most and the
 # carrier view is never read off world state. -1 when nobody carries.
-const ROSTER_CARRIES_PUCK: int = 18
+const ROSTER_CARRIES_PUCK: int = 19
+# The roster entry's Titles id, "" for none.
+const ROSTER_TITLE: int = 18
 
 static func roster_carrier_peer_id(player_data: Array) -> int:
 	for entry: Array in player_data:

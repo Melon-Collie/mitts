@@ -274,6 +274,66 @@ func test_tape_span_none_returns_null() -> void:
 	assert_null(_tape_mesh(Vector2(0.0, 0.0)), "degenerate span builds nothing")
 
 
+func _job(span: int) -> StickTapeConfig:
+	return StickTapeConfig.new(TapeColorRegistry.BLACK_INDEX, span)
+
+
+func _y_range(mesh: ArrayMesh) -> Vector2:
+	var lo: float = INF
+	var hi: float = -INF
+	for v: Vector3 in _verts(mesh):
+		lo = minf(lo, v.y)
+		hi = maxf(hi, v.y)
+	return Vector2(lo, hi)
+
+
+func test_spaced_tape_is_a_few_narrow_wraps_with_bare_blade_between() -> void:
+	var p := StickBladeMeshBuilder.Params.new()
+	var mesh: ArrayMesh = StickBladeMeshBuilder.build_tape_job(p, _job(StickTapeConfig.Span.SPACED))
+	assert_not_null(mesh)
+	# Bucket the vertices by distance along the blade (−z) into 5 mm slots; the
+	# wraps fill a few clusters with empty slots between them.
+	var filled: Dictionary = {}
+	for v: Vector3 in _verts(mesh):
+		filled[int(floorf(-v.z / 0.005))] = true
+	var clusters: int = 0
+	var slots: Array = filled.keys()
+	slots.sort()
+	for i: int in slots.size():
+		if i == 0 or int(slots[i]) - int(slots[i - 1]) > 1:
+			clusters += 1
+	assert_eq(clusters, StickBladeMeshBuilder.SPACED_WRAP_COUNT, "separate wraps")
+
+
+func test_bottom_strip_runs_along_the_bottom_edge_and_caps_the_toe() -> void:
+	var p := StickBladeMeshBuilder.Params.new()
+	var job: StickTapeConfig = _job(StickTapeConfig.Span.BOTTOM_STRIP)
+	var strip: ArrayMesh = StickBladeMeshBuilder.build_tape_job(p, job)
+	var blade: Vector2 = _y_range(StickBladeMeshBuilder.build(StickBladeMeshBuilder.Params.new()))
+	var reach: Vector2 = _y_range(strip)
+	assert_lt(reach.y - blade.x, StickBladeMeshBuilder.STRIP_HEIGHT_M + 0.004,
+			"the strip stays on the lower part of the face")
+	assert_lt(reach.y, blade.y - 0.02, "it never wraps over the top edge")
+	var cap: ArrayMesh = StickBladeMeshBuilder.build_toe_cap(p, job)
+	assert_not_null(cap, "the toe gets its own cap")
+	var cap_y: Vector2 = _y_range(cap)
+	assert_gt(cap_y.y, reach.y, "the cap wraps the full toe height")
+	assert_null(StickBladeMeshBuilder.build_toe_cap(p, _job(StickTapeConfig.Span.FULL)),
+			"no other job has a toe cap")
+
+
+func test_a_toe_cap_after_a_strip_is_not_itself_a_strip() -> void:
+	# build_tape_job and build_toe_cap share the caller's Params; the strip's
+	# height cap must not leak into the cap built after it.
+	var p := StickBladeMeshBuilder.Params.new()
+	var job: StickTapeConfig = _job(StickTapeConfig.Span.BOTTOM_STRIP)
+	StickBladeMeshBuilder.build_tape_job(p, job)
+	var after: Vector2 = _y_range(StickBladeMeshBuilder.build_toe_cap(p, job))
+	var fresh: Vector2 = _y_range(StickBladeMeshBuilder.build_toe_cap(
+			StickBladeMeshBuilder.Params.new(), job))
+	assert_almost_eq(after.y, fresh.y, 0.0001)
+
+
 func test_hosel_extends_up_the_shaft_line() -> void:
 	var p := StickBladeMeshBuilder.Params.new()
 	p.hosel_length = 0.085

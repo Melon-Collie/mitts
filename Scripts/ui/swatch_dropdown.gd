@@ -9,7 +9,9 @@ extends Control
 #
 # Owns no domain state. Caller supplies colors + tooltip names via
 # set_palette (re-supply on open to re-resolve live entries like the TEAM
-# accent), listens to `selected`, and maps the index itself.
+# accent) and listens to `selected`. With `ids`, a shown entry stands for that
+# id — a filtered palette still reports and takes the caller's own indices —
+# and `selected` carries the id; without, it carries the entry's position.
 
 signal selected(index: int)
 
@@ -24,6 +26,7 @@ var _names: Array[String] = []
 # color only; the tape palette labels its TEAM entry so players know that
 # chip tracks the team color rather than being one more fixed pick.
 var _chip_labels: Array[String] = []
+var _ids: Array[int] = []
 var _selected_index: int = 0
 var _disabled: bool = false
 var _closed_btn: Button = null
@@ -72,16 +75,19 @@ func focus_target() -> Control:
 # color-only entries. Re-supply whenever a live entry (the TEAM accent) may
 # have changed.
 func set_palette(colors: Array[Color], names: Array[String],
-		chip_labels: Array[String] = []) -> void:
+		chip_labels: Array[String] = [], ids: Array[int] = []) -> void:
 	_colors = colors
 	_names = names
 	_chip_labels = chip_labels
+	_ids = ids
 	_selected_index = clampi(_selected_index, 0, maxi(colors.size() - 1, 0))
 	_apply_closed_chip()
 
 
+# Takes an id when the palette has ids (one not shown selects the first entry).
 func set_selected(index: int) -> void:
-	_selected_index = clampi(index, 0, maxi(_colors.size() - 1, 0))
+	var at: int = index if _ids.is_empty() else maxi(_ids.find(index), 0)
+	_selected_index = clampi(at, 0, maxi(_colors.size() - 1, 0))
 	_apply_closed_chip()
 
 
@@ -134,8 +140,9 @@ func _input(event: InputEvent) -> void:
 func _cycle(dir: int) -> void:
 	if _colors.is_empty():
 		return
-	set_selected((_selected_index + dir + _colors.size()) % _colors.size())
-	selected.emit(_selected_index)
+	_selected_index = (_selected_index + dir + _colors.size()) % _colors.size()
+	_apply_closed_chip()
+	selected.emit(_id_at(_selected_index))
 
 
 func _on_closed_pressed() -> void:
@@ -189,10 +196,15 @@ func _build_swatch(index: int) -> Button:
 
 
 func _on_swatch_pressed(index: int) -> void:
-	set_selected(index)
+	_selected_index = index
+	_apply_closed_chip()
 	if _popup != null:
 		_popup.hide()
-	selected.emit(index)
+	selected.emit(_id_at(index))
+
+
+func _id_at(index: int) -> int:
+	return _ids[index] if index < _ids.size() else index
 
 
 func _exit_tree() -> void:

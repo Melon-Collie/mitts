@@ -805,6 +805,7 @@ func _build_slot_grid_roster() -> Array[Dictionary]:
 			"jersey_number":  entry.get("jersey_number", 10),
 			"is_left_handed": entry.is_left_handed,
 			"is_ready":       _ready_states.get(entry.peer_id, false),
+			"title":          _bench.look_for(entry).title_id,
 		})
 	return result
 

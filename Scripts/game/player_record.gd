@@ -41,6 +41,8 @@ var tape_code: int = StickTapeConfig.DEFAULT_CODE
 var skin_tone: int = SkinToneRegistry.DEFAULT_INDEX
 # Packed GearStyleConfig code (skate/glove color) — same late-joiner contract.
 var gear_style_code: int = GearStyleConfig.DEFAULT_CODE
+# Titles id worn, "" for none (always none for a bot).
+var title_id: String = ""
 # Per-player gameplay attribute levels (Speed/Agility/Size/Shot). Default to
 # all-medium so a record built without attribute data behaves like the
 # pre-attributes baseline.
@@ -66,4 +68,5 @@ func look() -> PlayerLook:
 	out.skin_tone = skin_tone
 	out.tape_code = tape_code
 	out.gear_style_code = gear_style_code
+	out.title_id = title_id
 	return out

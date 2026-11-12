@@ -187,6 +187,10 @@ signal local_skin_changed(skin_tone: int)
 # map (apply_local_gear_style). Cosmetic — carries the packed GearStyleConfig
 # code.
 signal local_gear_style_changed(gear_style_code: int)
+# The host saw the local player make a feat play (a FeatRules id).
+signal feat_received(puck_id: String)
+# Fires after a local title pick lands in the peer map (apply_local_title).
+signal local_title_changed(title_id: String)
 
 # Local player picked a different attribute spread (Speed/Agility/Size/Skill).
 # Fires after the new picks land in PlayerPrefs and _peer_attributes[1] is
@@ -293,6 +297,9 @@ var _peer_shot_sensitivity: Dictionary[int, float] = {}
 var _peer_tape_codes: Dictionary[int, int] = {}
 var _peer_skin_tones: Dictionary[int, int] = {}
 var _peer_gear_styles: Dictionary[int, int] = {}
+# The Titles id each peer wears ("" for none), sent once at join like the
+# cosmetics above. Bots never hold one.
+var _peer_titles: Dictionary[int, String] = {}
 # Preferred position (PlayerRules.POSITION_NAMES index) — read by the lobby's
 # host-side seat assignment, never by spawn.
 var _peer_positions: Dictionary[int, int] = {}
@@ -474,10 +481,11 @@ func _ready() -> void:
 	local_is_left_handed = PlayerPrefs.is_left_handed
 	PlayerPrefs.cloud_prefs_adopted.connect(_on_cloud_prefs_adopted)
 	_peer_attributes[1] = PlayerPrefs.get_player_attributes()
-	_peer_tape_codes[1] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[1] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones[1] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
-	_peer_gear_styles[1] = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[1] = PlayerPrefs.worn_gear_style_code()
 	_peer_positions[1] = PlayerPrefs.preferred_position
+	_peer_titles[1] = Titles.coerce(PlayerPrefs.equipped_title)
 
 
 # Routed through apply_local_identity so a mid-session adopt (Deck resume)
@@ -501,10 +509,11 @@ func start_offline() -> void:
 	_peer_names[1] = local_player_name
 	_peer_numbers[1] = local_jersey_number
 	_peer_attributes[1] = PlayerPrefs.get_player_attributes()
-	_peer_tape_codes[1] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[1] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones[1] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
-	_peer_gear_styles[1] = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[1] = PlayerPrefs.worn_gear_style_code()
 	_peer_positions[1] = PlayerPrefs.preferred_position
+	_peer_titles[1] = Titles.coerce(PlayerPrefs.equipped_title)
 	pending_game_config = {"num_periods": 1, "period_duration": 0.0, "ot_enabled": false, "ot_duration": 0.0,
 			"rule_set": GameRules.DEFAULT_RULE_SET,
 			"team_size": GameRules.DEFAULT_TEAM_SIZE}
@@ -774,6 +783,7 @@ func _on_peer_disconnected(id: int) -> void:
 	_peer_tape_codes.erase(id)
 	_peer_skin_tones.erase(id)
 	_peer_gear_styles.erase(id)
+	_peer_titles.erase(id)
 	_peer_positions.erase(id)
 	pending_color_votes.erase(id)
 	# NOTE: _peer_steam_ids is deliberately NOT erased before the emit below —
@@ -811,18 +821,19 @@ func _on_connected_to_server() -> void:
 	# all-medium. Valid here — the unique id is assigned before
 	# connected_to_server.
 	_peer_attributes[local_peer_id()] = local_attrs
-	_peer_tape_codes[local_peer_id()] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[local_peer_id()] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones[local_peer_id()] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
-	_peer_gear_styles[local_peer_id()] = GearStyleConfig.from_code(
-			PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[local_peer_id()] = PlayerPrefs.worn_gear_style_code()
+	_peer_titles[local_peer_id()] = Titles.coerce(PlayerPrefs.equipped_title)
 	_peer_positions[local_peer_id()] = PlayerPrefs.preferred_position
 	request_join.rpc_id(1, local_is_left_handed, local_player_name, local_jersey_number,
 			local_attrs.height, local_attrs.weight, local_attrs.profile,
 			local_attrs.curve, local_attrs.flex, local_attrs.length,
 			SteamManager.steam_id, BuildInfo.PROTOCOL_VERSION,
 			SteamManager.get_app_build_id(), PlayerPrefs.shot_power_sensitivity,
-			PlayerPrefs.stick_tape_code, PlayerPrefs.skin_tone,
-			PlayerPrefs.gear_style_code, PlayerPrefs.preferred_position)
+			PlayerPrefs.worn_tape_code(), PlayerPrefs.skin_tone,
+			PlayerPrefs.worn_gear_style_code(), PlayerPrefs.preferred_position,
+			Titles.coerce(PlayerPrefs.equipped_title))
 	client_connected.emit()
 
 func _on_connection_failed() -> void:
@@ -928,11 +939,13 @@ func reset() -> void:
 	_peer_attributes.clear()
 	_peer_attributes[1] = PlayerPrefs.get_player_attributes()
 	_peer_tape_codes.clear()
-	_peer_tape_codes[1] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[1] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones.clear()
 	_peer_skin_tones[1] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
 	_peer_gear_styles.clear()
-	_peer_gear_styles[1] = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[1] = PlayerPrefs.worn_gear_style_code()
+	_peer_titles.clear()
+	_peer_titles[1] = Titles.coerce(PlayerPrefs.equipped_title)
 	_peer_positions.clear()
 	_peer_positions[1] = PlayerPrefs.preferred_position
 	pending_game_config = {}
@@ -1218,7 +1231,7 @@ func request_join(is_left_handed: bool, player_name: String, jersey_number: int 
 		tape_code: int = StickTapeConfig.DEFAULT_CODE,
 		skin_tone: int = SkinToneRegistry.DEFAULT_INDEX,
 		gear_style_code: int = GearStyleConfig.DEFAULT_CODE,
-		preferred_position: int = 0) -> void:
+		preferred_position: int = 0, title_id: String = "") -> void:
 	if not is_host:
 		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
@@ -1266,6 +1279,9 @@ func request_join(is_left_handed: bool, player_name: String, jersey_number: int 
 	_peer_skin_tones[sender_id] = SkinToneRegistry.clamp_index(skin_tone)
 	# Cosmetic gear style — round-trip coerces a forged code to a legal one.
 	_peer_gear_styles[sender_id] = GearStyleConfig.from_code(gear_style_code).to_code()
+	# Not checked against what the peer has earned (docs/game-pucks-plan.md, "No
+	# anti-cheat"); an id this build does not know wears none.
+	_peer_titles[sender_id] = Titles.coerce(title_id)
 	_peer_positions[sender_id] = clampi(preferred_position, 0,
 			PlayerRules.POSITION_NAMES.size() - 1)
 	# Seed the host-measured RTT immediately instead of waiting up to a full
@@ -1385,6 +1401,24 @@ func get_peer_gear_style(peer_id: int) -> int:
 
 func set_peer_gear_style(peer_id: int, gear_style_code: int) -> void:
 	_peer_gear_styles[peer_id] = GearStyleConfig.from_code(gear_style_code).to_code()
+
+
+# A peer's title (Titles id), "" for none and for bots and absent peers.
+func get_peer_title(peer_id: int) -> String:
+	return _peer_titles.get(peer_id, "")
+
+
+func set_peer_title(peer_id: int, title_id: String) -> void:
+	_peer_titles[peer_id] = Titles.coerce(title_id)
+
+
+# Live title pick, the same local-only contract as the gear style: remote peers
+# keep the title from this session's join handshake.
+func apply_local_title(title_id: String) -> void:
+	var coerced: String = Titles.coerce(title_id)
+	_peer_titles[1] = coerced
+	_peer_titles[local_peer_id()] = coerced
+	local_title_changed.emit(coerced)
 
 
 # A peer's preferred position (PlayerRules.POSITION_NAMES index). Absent
@@ -2090,13 +2124,15 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_colo
 		attr_length: int = PlayerAttributes.GEAR_BALANCED,
 		tape_code: int = StickTapeConfig.DEFAULT_CODE,
 		skin_tone: int = SkinToneRegistry.DEFAULT_INDEX,
-		gear_style_code: int = GearStyleConfig.DEFAULT_CODE, from_spectator: bool = false) -> void:
+		gear_style_code: int = GearStyleConfig.DEFAULT_CODE, from_spectator: bool = false,
+		title_id: String = "") -> void:
 	var attrs := PlayerAttributes.new(attr_height, attr_weight,
 			attr_profile, attr_curve, attr_flex, attr_length)
 	_peer_attributes[peer_id] = attrs
 	_peer_tape_codes[peer_id] = StickTapeConfig.from_code(tape_code).to_code()
 	_peer_skin_tones[peer_id] = SkinToneRegistry.clamp_index(skin_tone)
 	_peer_gear_styles[peer_id] = GearStyleConfig.from_code(gear_style_code).to_code()
+	_peer_titles[peer_id] = Titles.coerce(title_id)
 	remote_skater_spawn_requested.emit(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number, attrs, from_spectator)
 
 @rpc("authority", "reliable")
@@ -2184,6 +2220,18 @@ func notify_puck_stolen(event_seq: int, forced_lift_ms: int) -> void:
 func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String) -> void:
 	for peer_id in connected_peer_ids():
 		notify_goal.rpc_id(peer_id, scoring_team_id, score0, score1, scorer_name, assist1_name, assist2_name)
+
+func send_feat(peer_id: int, puck_id: String) -> void:
+	if is_offline_mode or not is_real_peer(peer_id):
+		return
+	notify_feat.rpc_id(peer_id, puck_id)
+
+@rpc("authority", "reliable")
+func notify_feat(puck_id: String) -> void:
+	NetworkSimManager.send(
+		func(id: String) -> void:
+			feat_received.emit(id),
+		[puck_id], true)
 
 func notify_puck_dropped_to_carrier(carrier_peer_id: int) -> void:
 	if not is_real_peer(carrier_peer_id):
@@ -2402,7 +2450,7 @@ func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey
 	spawn_remote_skater.rpc(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number,
 			attrs.height, attrs.weight, attrs.profile, attrs.curve, attrs.flex, attrs.length,
 			get_peer_tape_code(peer_id), get_peer_skin_tone(peer_id),
-			get_peer_gear_style(peer_id), from_spectator)
+			get_peer_gear_style(peer_id), from_spectator, get_peer_title(peer_id))
 
 func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)

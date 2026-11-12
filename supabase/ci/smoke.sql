@@ -16,14 +16,14 @@ insert into public.career_stats
      toi_seconds, goals_for, goals_against, outcome, team_size,
      faceoff_wins, faceoff_losses, shot_attempts, shot_attempts_blocked,
      team_sog_for, team_sog_against, xg_for, team_xg_for, team_xg_against,
-     period_scores, num_periods)
+     period_scores, num_periods, interceptions)
 values
     (1001, 'Smoke Home', '11111111-1111-1111-1111-111111111111', 0,
      2, 1, 5, 900, 4, 2, 'win', 3, 6, 4, 11, 2, 20, 14, 1.5, 3.2, 2.1,
-     '[[1,2,1],[1,0,1]]'::jsonb, 3),
+     '[[1,2,1],[1,0,1]]'::jsonb, 3, 4),
     (1002, 'Smoke Away', '11111111-1111-1111-1111-111111111111', 1,
      1, 0, 3, 900, 2, 4, 'loss', 3, 4, 6, 7, 1, 14, 20, 0.8, 2.1, 3.2,
-     '[[1,2,1],[1,0,1]]'::jsonb, 3);
+     '[[1,2,1],[1,0,1]]'::jsonb, 3, 0);
 
 insert into public.shot_events
     (game_id, steam_id, team_id, x, z, xg, outcome, shot_type, on_net,
@@ -43,6 +43,9 @@ begin
     if r.games_played <> 1 or r.goals <> 2 or r.points <> 3 then
         raise exception 'career_totals_for(pooled) wrong: games=% goals=% points=%',
             r.games_played, r.goals, r.points;
+    end if;
+    if r.interceptions <> 4 then
+        raise exception 'career_totals_for interceptions wrong: %', r.interceptions;
     end if;
     if r.faceoff_pct is null or r.xgf_pct is null or r.pdo is null then
         raise exception 'career_totals_for derived ratios null: fo=% xgf=% pdo=%',

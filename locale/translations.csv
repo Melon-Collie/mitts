@@ -70,12 +70,6 @@ TAPE_HANDLE_FULL,Full grip,Empuñadura completa
 STICK_GAMEPLAY_LEGEND,* affects gameplay,* afecta a la jugabilidad
 TAPE_COLOR_TEAM_SHORT,Team,Equipo
 STICK_MODEL_LABEL,Model,Modelo
-STICK_MODEL_STEALTH,Stealth,Stealth
-STICK_MODEL_REDLINE,Redline,Redline
-STICK_MODEL_VOLT,Volt,Volt
-STICK_MODEL_SPLIT,Split,Dividido
-STICK_MODEL_WHITEOUT,Whiteout,Todo blanco
-STICK_MODEL_WOODIE,Woodie,Madera
 EDIT_PENDING_NOTE,Unapplied changes,Cambios sin aplicar
 PLAYER_SKIN_LABEL,Skin,Piel
 PLAYER_POSITION_LABEL,Position,Posición
@@ -267,6 +261,7 @@ TAPE_FACEOFF_PCT,Faceoff %,% de saques ganados
 TAPE_HITS,Hits,Cargas
 TAPE_BLOCKED_SHOTS,Blocked shots,Tiros bloqueados
 TAPE_TAKEAWAYS,Takeaways,Robos
+TAPE_INTERCEPTIONS,Interceptions,Intercepciones
 TAPE_GIVEAWAYS,Giveaways,Pérdidas
 TAPE_ADVANCED,Advanced,Avanzadas
 TAPE_CORSI,Shot attempts (Corsi),Intentos de tiro (Corsi)
@@ -301,6 +296,8 @@ STAT_FEED_SHOT_ON_GOAL,SHOT ON GOAL,TIRO A PUERTA
 STAT_FEED_BLOCKED_SHOT,BLOCKED SHOT,TIRO BLOQUEADO
 STAT_FEED_HIT,HIT,CARGA
 STAT_FEED_TAKEAWAY,TAKEAWAY,ROBO
+STAT_FEED_INTERCEPTION,INTERCEPTION,INTERCEPCIÓN
+CAREER_INTERCEPTIONS,Interceptions,Intercepciones
 STAT_FEED_FACEOFF_WIN,FACEOFF WON,SAQUE GANADO
 CONFIRM_RETURN_FREE_PLAY,Return to free play?,¿Volver al juego libre?
 CONFIRM_RETURN_FREE_PLAY_HOST,Return to free play? This ends the match for everyone.,¿Volver al juego libre? Esto termina el partido para todos.
@@ -406,3 +403,134 @@ CUSTOM_FILE_CONFIRM_USE_BUILT_IN,Delete your edited copy?,¿Borrar tu copia edit
 CUSTOM_FILE_ERROR_NO_BUILT_IN,Error: the built-in file is missing.,Error: falta el archivo original.
 CUSTOM_FILE_ERROR_WRITE,Error: couldn't write to your user data folder.,Error: no se pudo escribir en tu carpeta de datos.
 CUSTOM_FILE_ERROR_DELETE,Error: couldn't delete your edited copy.,Error: no se pudo borrar tu copia editada.
+PUCK_GOALS,Goal Scorer,Goleador
+PUCK_GOALS_DESC,Score %d goals.,Marca %d goles.
+PUCK_ASSISTS,Setup Man,Pasador
+PUCK_ASSISTS_DESC,Record %d assists.,Da %d asistencias.
+PUCK_POINTS,Point Producer,Productor de puntos
+PUCK_POINTS_DESC,Put up %d points.,Suma %d puntos.
+PUCK_HITS,Hitter,Pegador
+PUCK_HITS_DESC,Land %d hits.,Da %d cargas.
+PUCK_INTERCEPTIONS,Lane Reader,Lector de pases
+PUCK_INTERCEPTIONS_DESC,Intercept %d passes.,Intercepta %d pases.
+PUCK_TAKEAWAYS,Thief,Ladrón
+PUCK_TAKEAWAYS_DESC,Record %d takeaways.,Consigue %d robos.
+PUCK_SHOTS_BLOCKED,Shot Blocker,Bloqueador
+PUCK_SHOTS_BLOCKED_DESC,Block %d shots.,Bloquea %d tiros.
+PUCK_FACEOFF_WINS,Faceoff Ace,As del saque
+PUCK_FACEOFF_WINS_DESC,Win %d faceoffs.,Gana %d saques.
+PUCK_WINS,Winner,Ganador
+PUCK_WINS_DESC,Win %d games.,Gana %d partidos.
+PUCK_GAMES_PLAYED,Veteran,Veterano
+PUCK_GAMES_PLAYED_DESC,Play %d games.,Juega %d partidos.
+PUCK_FIRST_GOAL,Lamp Lighter,Enciende la luz
+PUCK_FIRST_GOAL_DESC,Score your first goal.,Marca tu primer gol.
+PUCK_HAT_TRICK,Hat Trick,Hat trick
+PUCK_HAT_TRICK_DESC,Score 3 goals in a single game.,Marca 3 goles en un partido.
+PUCK_PLAYMAKER,Playmaker,Organizador
+PUCK_BIG_NIGHT,Big Night,Gran noche
+PUCK_BIG_NIGHT_DESC,Put up 5 points in a single game.,Suma 5 puntos en un partido.
+PUCK_BRICK_WALL,Brick Wall,Muro de ladrillo
+PUCK_BRICK_WALL_DESC,Block 3 shots in a single game.,Bloquea 3 tiros en un partido.
+PUCK_ONE_TIMER,One-Timer,Tiro a la primera
+PUCK_ONE_TIMER_DESC,Score off a one-timer.,Marca con un tiro a la primera.
+PUCK_TIP_IN,Redirect,Desvío
+PUCK_TIP_IN_DESC,Tip a teammate's shot into the net.,Desvía a la red el tiro de un compañero.
+PUCK_OVERTIME_HERO,Overtime Hero,Héroe de la prórroga
+PUCK_OVERTIME_HERO_DESC,Score the overtime winner.,Marca el gol de la victoria en la prórroga.
+PUCK_FACEOFF_BOSS,Master of the Dot,Amo del círculo
+PUCK_FACEOFF_BOSS_DESC,Win 5 faceoffs in a single game.,Gana 5 saques en un partido.
+PUCK_PICKPOCKET,Pickpocket,Carterista
+PUCK_PICKPOCKET_DESC,Record 5 takeaways in a single game.,Consigue 5 robos en un partido.
+PUCK_SHUTOUT,Shutout,Portería a cero
+PUCK_SHUTOUT_DESC,Win a game without conceding a goal.,Gana un partido sin encajar goles.
+PUCK_FIRST_WIN,W,V
+PUCK_FIRST_WIN_DESC,Win your first game.,Gana tu primer partido.
+PUCK_FREIGHT_TRAIN,Freight Train,Tren de mercancías
+PUCK_FREIGHT_TRAIN_DESC,Land a bone-rattling body check.,Da una carga demoledora.
+PUCK_STUDENT,Student of the Game,Estudiante del juego
+PUCK_STUDENT_DESC,Complete every tutorial.,Completa todos los tutoriales.
+PUCK_CUSTOM_BUILD,Make It Yours,Hazlo tuyo
+PUCK_CUSTOM_BUILD_DESC,Edit your player's build.,Edita el físico de tu jugador.
+PUCK_PLAY_WITH_BUUKIE,Buukie's Buddy,Colega de Buukie
+PUCK_PLAY_WITH_BUUKIE_DESC,Play an online game with Buukie.,Juega un partido online con Buukie.
+MENU_TROPHY_CASE,Trophy Case,Vitrina
+TROPHY_CASE_TITLE,TROPHY CASE,VITRINA
+TROPHY_PROGRESS,%d / %d,%d / %d
+TROPHY_LADDER_DONE,Every tier earned,Todos los niveles conseguidos
+TROPHY_EARNED_ON,Earned %s,Conseguido el %s
+TROPHY_EARNED,Earned,Conseguido
+TROPHY_NOT_YET,Not yet,Aún no
+TROPHY_HIDDEN,Hidden puck,Disco oculto
+TROPHY_HIDDEN_DESC,Keep playing to find out.,Sigue jugando para descubrirlo.
+TROPHY_TIER_NAME,%s %s,%s %s
+TROPHY_TIER_1,I,I
+TROPHY_TIER_2,II,II
+TROPHY_TIER_3,III,III
+TROPHY_TIER_4,IV,IV
+TROPHY_TIER_5,V,V
+TROPHY_NEEDS_STEAM,Career pucks count through Steam. Launch Mitts from Steam to track them.,Los discos de carrera se cuentan a través de Steam. Abre Mitts desde Steam para seguirlos.
+TOAST_GAME_PUCK,GAME PUCK · %s,DISCO · %s
+TROPHY_SUMMARY,%d / %d game pucks,%d / %d discos
+TROPHY_REQUIREMENT_PROGRESS,%s  ·  %d / %d,%s  ·  %d / %d
+TITLE_POWER_FORWARD,Power Forward,Delantero de potencia
+TITLE_SHUTDOWN,Shutdown,Cerrojo
+TITLE_TWO_WAY,Two-Way,Ida y vuelta
+TITLE_IRON_MAN,Iron Man,Hombre de hierro
+PLAYER_TITLE_LABEL,Title,Título
+PLAYER_TITLE_NONE,None,Ninguno
+PLAYER_TITLE_HINT,Earn Game Pucks in the Trophy Case to unlock a title.,Consigue discos en la vitrina para desbloquear un título.
+SCOREBOARD_NAME_TITLE,%s  ·  %s,%s  ·  %s
+PUCK_SNIPE,Snipe,Tiro certero
+PUCK_SNIPE_DESC,Score a high-loft shot from beyond the faceoff dots.,Marca con un tiro alto desde más allá de los puntos de saque.
+PUCK_BACKHAND_SHELF,Backhand Shelf,Revés a la escuadra
+PUCK_BACKHAND_SHELF_DESC,Score a lofted backhand.,Marca de revés con el disco elevado.
+PUCK_ONE_TIMER_FEED,One-Timer Feed,Pase al tiro a la primera
+PUCK_ONE_TIMER_FEED_DESC,Set up a one-timer goal with the primary assist.,Da la primera asistencia de un gol con tiro a la primera.
+PUCK_PICK_AND_FINISH,Pick and Finish,Intercepta y remata
+PUCK_PICK_AND_FINISH_DESC,Score on the possession your own interception started.,Marca en la posesión que empezó tu propia intercepción.
+PUCK_STRIP_AND_FINISH,Strip and Finish,Roba y remata
+PUCK_STRIP_AND_FINISH_DESC,Score on the possession your own takeaway started.,Marca en la posesión que empezó tu propio robo.
+PUCK_ONE_TIMER_DOT,The Office,La oficina
+PUCK_ONE_TIMER_DOT_DESC,Score a one-timer from inside an offensive-zone faceoff circle.,Marca con un tiro a la primera desde dentro de un círculo de saque ofensivo.
+PUCK_BREADMAN,Breadman,Breadman
+PUCK_DROPPED_GLOVES,Dropped the Gloves,Guantes al suelo
+PUCK_DROPPED_GLOVES_DESC,Get into a fight.,Métete en una pelea.
+PUCK_WON_FIGHT,Won the Fight,Pelea ganada
+PUCK_WON_FIGHT_DESC,Win a fight: stay on your feet when your opponent goes down.,Gana una pelea: sigue en pie cuando tu rival caiga.
+PUCK_GORDIE_HOWE,Gordie Howe Hat Trick,Hat trick Gordie Howe
+PUCK_GORDIE_HOWE_DESC,"Score a goal, record an assist and fight in a single game.","Marca un gol, da una asistencia y pelea en un mismo partido."
+PUCK_FIGHT_WINS,Heavyweight,Peso pesado
+PUCK_FIGHT_WINS_DESC,Win %d fights.,Gana %d peleas.
+PUCK_ENFORCER,Enforcer,Matón
+PUCK_THREE_HELPERS,Three Helpers,Tres asistencias
+PUCK_THREE_HELPERS_DESC,Record 3 assists in a single game.,Da 3 asistencias en un partido.
+PUCK_POWER_FORWARD,Power Forward,Delantero de potencia
+PUCK_SHUTDOWN,Shutdown,Cerrojo
+PUCK_TWO_WAY,Two-Way,Ida y vuelta
+PUCK_IRON_MAN,Iron Man,Hombre de hierro
+PUCK_SNIPER,Sniper,Francotirador
+TROPHY_UNLOCKS_TITLE,Unlocks the %s title,Desbloquea el título %s
+TROPHY_UNLOCKS_TAPE,Unlocks the %s tape job,Desbloquea el encintado %s
+TROPHY_UNLOCKS_LACES,Unlocks %s laces,Desbloquea cordones: %s
+TROPHY_UNLOCKS_COLOR,Unlocks %s,Desbloquea %s
+TROPHY_TIER_UNLOCK,%s: %s,%s: %s
+TITLE_PLAYMAKER,Playmaker,Organizador
+TITLE_SNIPER,Sniper,Francotirador
+TITLE_ENFORCER,Enforcer,Matón
+TAPE_COLOR_TEAM_SECOND,Team color 2,Color del equipo 2
+TAPE_COLOR_TEAM_SECOND_SHORT,Team 2,Equipo 2
+TAPE_SPAN_SPACED,Spaced,Espaciada
+TAPE_SPAN_BOTTOM_STRIP,Bottom strip,Tira inferior
+TAPE_TOE_LABEL,Toe cap,Puntera
+STICK_PATTERN_LABEL,Pattern,Diseño
+STICK_PATTERN_SOLID,Solid,Liso
+STICK_PATTERN_KICK,Kick zone,Zona de flexión
+STICK_PATTERN_BLOCK,Block,Bloque
+STICK_PATTERN_SPLIT,Split,Dividido
+STICK_PATTERN_WOOD,Wood,Madera
+STICK_ZONE_SHAFT,Shaft,Caña
+STICK_ZONE_BAND1,Band,Franja
+STICK_ZONE_BAND2,Second band,Segunda franja
+STICK_ZONE_WORDMARK,Wordmark,Logotipo
+STICK_ZONE_BLADE,Blade,Pala
