@@ -83,11 +83,20 @@ var fight_wins: int = 0
 #   pp_assists         — his assists on a teammate's power-play goal.
 #   penalty_shot_goals — his goals on a penalty shot. Absent from to_dict():
 #                        the career_stats table has no column for it.
+#   pp_opportunities, pp_on_ice_goals — the power plays he was on the ice for,
+#                        and his team's goals on them with him out there.
+#   pk_opportunities, pk_on_ice_goals_against — the same for the kills. A man
+#                        in the box is on the ice for neither
+#                        (SpecialTeamsTally).
 var pim: int = 0
 var pp_goals: int = 0
 var sh_goals: int = 0
 var penalty_shot_goals: int = 0
 var pp_assists: int = 0
+var pp_opportunities: int = 0
+var pp_on_ice_goals: int = 0
+var pk_opportunities: int = 0
+var pk_on_ice_goals_against: int = 0
 # Tracked locally on every peer (game_manager._physics_process) rather than
 # host-authoritative + broadcast like the counters above. Each peer's own
 # value is what ships to Supabase, since report() runs per-peer at game-over.
@@ -103,7 +112,8 @@ func to_array() -> Array:
 			hits_taken, takeaways, giveaways, faceoff_wins, faceoff_losses,
 			game_winning_goals, one_timer_goals, tip_goals, ot_goals,
 			shot_attempts, shot_attempts_blocked, xg_for, icings, interceptions,
-			fights, fight_wins, pim, pp_goals, sh_goals, penalty_shot_goals, pp_assists]
+			fights, fight_wins, pim, pp_goals, sh_goals, penalty_shot_goals, pp_assists,
+			pp_opportunities, pp_on_ice_goals, pk_opportunities, pk_on_ice_goals_against]
 
 static func from_array(a: Array) -> PlayerStats:
 	var s := PlayerStats.new()
@@ -142,6 +152,10 @@ func update_from_array(a: Array) -> void:
 	sh_goals = a[23]
 	penalty_shot_goals = a[24]
 	pp_assists = a[25]
+	pp_opportunities = a[26]
+	pp_on_ice_goals = a[27]
+	pk_opportunities = a[28]
+	pk_on_ice_goals_against = a[29]
 
 
 # Power-play points: goals and assists with his team a man up.
@@ -179,5 +193,9 @@ func to_dict() -> Dictionary:
 		"pp_goals": pp_goals,
 		"pp_assists": pp_assists,
 		"sh_goals": sh_goals,
+		"pp_opportunities": pp_opportunities,
+		"pp_on_ice_goals": pp_on_ice_goals,
+		"pk_opportunities": pk_opportunities,
+		"pk_on_ice_goals_against": pk_on_ice_goals_against,
 		"toi_seconds": roundi(toi_seconds),
 	}

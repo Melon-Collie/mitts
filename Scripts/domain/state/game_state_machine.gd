@@ -72,6 +72,8 @@ var short_handed_team_id: int = -1
 # On every peer: they ride the stats sync.
 var power_plays: Array[int] = [0, 0]
 var power_play_goals: Array[int] = [0, 0]
+# Host: the power play running now has not been scored on.
+var _power_play_open: bool = false
 # Host: the game clock is stopped though the puck is live, for a penalty shot.
 var clock_held: bool = false
 
@@ -159,6 +161,7 @@ func on_goal_scored(defending_team_id: int) -> int:
 	period_scores[scoring_team_id][current_period - 1] += 1
 	if short_handed_team_id == defending_team_id:
 		power_play_goals[scoring_team_id] += 1
+		_power_play_open = false
 	last_scoring_team_id = scoring_team_id
 	_set_phase(GamePhase.Phase.GOAL_CELEBRATION)
 	return scoring_team_id
@@ -260,11 +263,16 @@ func _apply_icing_call(icing_call: InfractionRules.IcingCall) -> void:
 # is whistled dead and faces off in that team's end, on the puck's side.
 # A team going short gives the other one power play, however many of its men
 # sit before it is back to even: a second minor that makes it five on three
-# is not counted as a second.
-func set_short_handed_team(team_id: int) -> void:
-	if team_id != -1 and team_id != short_handed_team_id:
+# is not counted as a second. A goal ends a power play, so a team still short
+# after one is on a new one. Returns whether a power play began.
+func set_short_handed_team(team_id: int) -> bool:
+	var began: bool = team_id != -1 \
+			and (team_id != short_handed_team_id or not _power_play_open)
+	if began:
 		power_plays[1 - team_id] += 1
+	_power_play_open = team_id != -1
 	short_handed_team_id = team_id
+	return began
 
 
 func request_penalty_faceoff(offending_team_id: int, puck_x: float) -> void:
@@ -637,6 +645,7 @@ func reset_all() -> void:
 	power_plays[1] = 0
 	power_play_goals[0] = 0
 	power_play_goals[1] = 0
+	_power_play_open = false
 	clock_held = false
 	_last_touch_team_id = -1
 	_offside_peer_ids.clear()

@@ -302,6 +302,15 @@ func test_a_team_going_short_gives_the_other_a_power_play() -> void:
 	sm.set_short_handed_team(1)
 	assert_eq(sm.power_plays, [2, 1], "the advantage changed hands")
 
+func test_a_team_still_short_after_a_power_play_goal_is_on_a_new_one() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	assert_true(sm.set_short_handed_team(1))
+	assert_false(sm.set_short_handed_team(1), "a second man sat: the same power play")
+	sm.on_goal_scored(1)
+	assert_true(sm.set_short_handed_team(1), "one man came out, the other still sits")
+	assert_eq(sm.power_plays, [2, 0])
+	assert_eq(sm.power_play_goals, [1, 0])
+
 func test_a_goal_against_the_shorter_team_is_counted_for_the_power_play() -> void:
 	sm.current_phase = GamePhase.Phase.PLAYING
 	sm.set_short_handed_team(1)

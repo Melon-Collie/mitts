@@ -4,10 +4,12 @@
 --   pp_goals   — his goals with his team a man up.
 --   pp_assists — his assists on a goal scored with his team a man up.
 --   sh_goals   — his goals with his team a man down.
--- And his team's special teams this game, on every player's row as team_sog_*
--- are:
---   team_pp_goals / team_pp_opportunities         — scored on, and had.
---   team_pk_goals_against / team_pk_opportunities — given up, and times short.
+-- And his special teams, on the ice: a man in the box is out there for
+-- neither, so nobody is credited with killing his own penalty.
+--   pp_opportunities / pp_on_ice_goals         — power plays he was on the ice
+--                                                for, and his team's goals on
+--                                                them with him out there.
+--   pk_opportunities / pk_on_ice_goals_against — the same for the kills.
 --
 -- Rows from before this migration read 0: none of it was recorded for them,
 -- and no match outside the NHL rule set records any.
@@ -17,10 +19,10 @@ alter table public.career_stats
     add column if not exists pp_goals integer default 0 not null,
     add column if not exists pp_assists integer default 0 not null,
     add column if not exists sh_goals integer default 0 not null,
-    add column if not exists team_pp_goals integer default 0 not null,
-    add column if not exists team_pp_opportunities integer default 0 not null,
-    add column if not exists team_pk_goals_against integer default 0 not null,
-    add column if not exists team_pk_opportunities integer default 0 not null;
+    add column if not exists pp_opportunities integer default 0 not null,
+    add column if not exists pp_on_ice_goals integer default 0 not null,
+    add column if not exists pk_opportunities integer default 0 not null,
+    add column if not exists pk_on_ice_goals_against integer default 0 not null;
 
 alter table public.career_stats drop constraint if exists career_stats_penalties_range;
 alter table public.career_stats add constraint career_stats_penalties_range check (
@@ -28,10 +30,10 @@ alter table public.career_stats add constraint career_stats_penalties_range chec
     and pp_goals between 0 and 500
     and pp_assists between 0 and 1000
     and sh_goals between 0 and 500
-    and team_pp_goals between 0 and 500
-    and team_pp_opportunities between 0 and 500
-    and team_pk_goals_against between 0 and 500
-    and team_pk_opportunities between 0 and 500
+    and pp_opportunities between 0 and 500
+    and pp_on_ice_goals between 0 and 500
+    and pk_opportunities between 0 and 500
+    and pk_on_ice_goals_against between 0 and 500
 );
 
 -- career_totals_for() gains the lifetime sums and the two rates. Its return
@@ -87,12 +89,12 @@ as $function$
     round(sum(cs.goals)::numeric - sum(cs.xg_for), 2),
     round(sum(cs.team_xg_for) / NULLIF(sum(cs.team_xg_for) + sum(cs.team_xg_against), 0) * 100::numeric, 1),
     sum(cs.pim), sum(cs.pp_goals), sum(cs.pp_goals + cs.pp_assists), sum(cs.sh_goals),
-    -- Special teams are his team's: goals over power plays, and one less the
-    -- goals against over times short. Null with no power play (or kill) on record.
-    round(sum(cs.team_pp_goals)::numeric
-          / NULLIF(sum(cs.team_pp_opportunities), 0)::numeric * 100::numeric, 1),
-    round((1::numeric - sum(cs.team_pk_goals_against)::numeric
-          / NULLIF(sum(cs.team_pk_opportunities), 0)::numeric) * 100::numeric, 1)
+    -- On-ice special teams: goals over the power plays he was out for, and one
+    -- less the goals against over the kills he was. Null with none on record.
+    round(sum(cs.pp_on_ice_goals)::numeric
+          / NULLIF(sum(cs.pp_opportunities), 0)::numeric * 100::numeric, 1),
+    round((1::numeric - sum(cs.pk_on_ice_goals_against)::numeric
+          / NULLIF(sum(cs.pk_opportunities), 0)::numeric) * 100::numeric, 1)
   FROM career_stats cs
   WHERE cs.steam_id = player_steam_id
     AND (p_team_size IS NULL OR cs.team_size = p_team_size)

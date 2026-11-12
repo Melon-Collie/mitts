@@ -32,14 +32,18 @@ func _full() -> PlayerStats:
 	s.sh_goals = 2
 	s.penalty_shot_goals = 1
 	s.pp_assists = 5
+	s.pp_opportunities = 6
+	s.pp_on_ice_goals = 2
+	s.pk_opportunities = 4
+	s.pk_on_ice_goals_against = 1
 	s.toi_seconds = 123.4
 	return s
 
 
-func test_to_array_has_twenty_six_fields_in_order() -> void:
+func test_to_array_has_thirty_fields_in_order() -> void:
 	var a := _full().to_array()
 	assert_eq(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 11, 12, 13, 14, 15, 2.5, 3, 16, 2, 1,
-			4, 3, 2, 1, 5])
+			4, 3, 2, 1, 5, 6, 2, 4, 1])
 	assert_eq(a.size() + 1, WorldStateCodec.STATS_PLAYER_RECORD_SIZE,
 			"the codec's record is peer_id + this array")
 
@@ -71,7 +75,7 @@ func test_update_from_array_preserves_local_toi() -> void:
 	var s := PlayerStats.new()
 	s.toi_seconds = 42.0
 	s.update_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 2, 3, 4, 16, 5, 1.75, 0, 0, 0, 0,
-			0, 0, 0, 0, 0])
+			0, 0, 0, 0, 0, 0, 0, 0, 0])
 	assert_eq(s.faceoff_wins, 9)
 	assert_eq(s.faceoff_losses, 10)
 	assert_eq(s.one_timer_goals, 2)
@@ -107,6 +111,8 @@ func test_the_penalty_counters_cross_the_wire() -> void:
 	assert_eq(restored.penalty_shot_goals, 1)
 	assert_eq(restored.pp_assists, 5)
 	assert_eq(restored.pp_points(), 8, "his goals and his assists a man up")
+	assert_eq([restored.pp_opportunities, restored.pp_on_ice_goals], [6, 2])
+	assert_eq([restored.pk_opportunities, restored.pk_on_ice_goals_against], [4, 1])
 
 
 func test_a_goal_is_credited_to_the_situation_it_came_in() -> void:
@@ -125,4 +131,6 @@ func test_the_career_row_carries_the_penalty_columns() -> void:
 	assert_eq(row["pp_goals"], 3)
 	assert_eq(row["pp_assists"], 5)
 	assert_eq(row["sh_goals"], 2)
+	assert_eq([row["pp_opportunities"], row["pp_on_ice_goals"]], [6, 2])
+	assert_eq([row["pk_opportunities"], row["pk_on_ice_goals_against"]], [4, 1])
 	assert_false(row.has("penalty_shot_goals"), "the table has no column for it")

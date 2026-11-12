@@ -406,16 +406,26 @@ Known gaps, each small enough to leave for the playtest to rank:
 - **A team's special teams** (`GameStateMachine.power_plays`,
   `power_play_goals`, on the same sync, so every peer holds them): a power
   play is counted each time a team goes short, and a second minor that makes
-  it five on three is not a second one. The tale of the tape shows penalty
-  minutes, power plays and power-play goals under `NHL`.
+  it five on three is not a second one. A goal ends a power play, so a team
+  still short after one is on a new one, and no power play is scored on
+  twice. The tale of the tape shows penalty minutes, power plays and
+  power-play goals under `NHL`.
+- **PP% and PK% are on-ice** (`SpecialTeamsTally`, host). Each skater on the
+  ice when a power play begins is counted one opportunity (`pp_opportunities`
+  a man up, `pk_opportunities` a man down), and each on the ice for a goal
+  scored on it is counted that goal (`pp_on_ice_goals`,
+  `pk_on_ice_goals_against`). A man in the box is on the ice for neither, so
+  nobody is credited with killing his own penalty, or charged with the goal
+  scored while he sat. One who steps out into a kill still running (a
+  teammate's minor) joins it there. With no line changes, on the ice means
+  not in the box.
 - **The career page** gets a Special teams card: PP%, PK%, power-play goals
-  and points, short-handed goals, penalty minutes. PP% and PK% are his
-  *team's* in the games he played (goals over power plays; one less the goals
-  against over times short), since a kill is nobody's alone. Each career row
-  carries the four team counts and `career_totals_for()` divides the sums
-  (`supabase/migrations/20261112120000_career_penalties.sql`), so the rates
-  slice by roster size like every other. They read "—" until a game with a
-  power play is on record. Penalty-shot goals have no career column.
+  and points, short-handed goals, penalty minutes. Each career row carries
+  the four on-ice counts and `career_totals_for()` divides the sums
+  (`supabase/migrations/20261112120000_career_penalties.sql`): goals over
+  opportunities, and one less the goals against over opportunities. They
+  slice by roster size like every other rate and read "—" until a game with
+  a power play is on record. Penalty-shot goals have no career column.
 - **Steam stats**: `STAT_PIM`, `STAT_PP_GOALS`, `STAT_PP_POINTS`
   (`steam/STATS.md`: each must be defined in Steamworks on both apps before a
   build that writes it goes out). No ladder reads them yet.
@@ -432,7 +442,7 @@ Known gaps, each small enough to leave for the playtest to rank:
   man and a `SHOT` state, and the penalty whistle says whether it is a shot
   ending without a goal. No phase was added.
 - **Phase 6 (still v105, unreleased):** the stats sync's player record grows
-  from 21 fields to 26, and its footer gains each team's power plays and
+  from 21 fields to 30, and its footer gains each team's power plays and
   power-play goals.
 
 ## Not in this plan

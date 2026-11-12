@@ -555,9 +555,10 @@ here whenever you bump, in the same format.
 #      the existing ghost bit, and a penalty shot is set up and taken in the
 #      faceoff's own phases.
 #      The stats sync (reliable) grows with them: PlayerStats.to_array goes
-#      from 21 fields to 26 (pim, pp_goals, sh_goals, penalty_shot_goals,
-#      pp_assists), and each team's power plays and power-play goals follow
-#      the team shots in its footer.
+#      from 21 fields to 30 (pim, pp_goals, sh_goals, penalty_shot_goals,
+#      pp_assists, pp_opportunities, pp_on_ice_goals, pk_opportunities,
+#      pk_on_ice_goals_against), and each team's power plays and power-play
+#      goals follow the team shots in its footer.
 #      A v104 peer would cast a boxed centre onto the dot, never lock or hide
 #      a boxed skater, skate freely through a penalty shot and refuse every
 #      stats payload as malformed, so mixed builds must be refused.
