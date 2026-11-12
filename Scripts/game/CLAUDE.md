@@ -25,6 +25,34 @@ Playtester builds ship via GitHub Releases (`latest` tag). `deploy.yml` computes
 
 **Supabase backend:** `Scripts/game/supabase_config.gd` holds the project URL and publishable (anon) key — safe to commit, RLS restricts it to INSERT/SELECT (there is deliberately no UPDATE grant — the key ships in every client). `CareerStatsReporter` (`Scripts/game/career_stats_reporter.gd`) POSTs one row to `career_stats` at game-over and GETs from the `career_totals` view for the career screen. `BugReporter` (`Scripts/game/bug_reporter.gd`) POSTs to `bug_reports` with a telemetry snapshot. `NetworkSessionReporter` (`Scripts/game/network_session_reporter.gd`) POSTs one connection-quality row per online game to `network_sessions` at game-over — the playtesting telemetry pipeline (see `ARCHITECTURE.md` → **Playtesting telemetry**; schema + analysis views in `supabase/migrations/*_network_sessions.sql`). All use fire-and-forget `HTTPRequest` nodes added to the scene tree root and fail silently. The secret key must never be committed — use only the publishable key in `SupabaseConfig`. **Table/view/RPC schemas are version-controlled as migrations in `supabase/migrations/`**, applied to the hosted project by `.github/workflows/supabase.yml` on merge to `main` — a schema change ships with the code that needs it rather than being pasted into the SQL editor. Migrations are idempotent DDL and CI pins that (it replays them onto a populated DB); every view needs `with (security_invoker = true)` or it bypasses RLS. `supabase/README.md` is the full workflow, including the one repo secret the pipeline stays inert without. All backend rows key on `steam_id` — there is no per-player `uuid` (`game_id` is still a UUID, minted by `PlayerPrefs.generate_uuid`).
 
+## A tournament is a session over ordinary matches
+
+`GameManager.tournament` (`TournamentCoordinator`) holds the bracket a session
+is playing (`active`, null outside one) and its one save, a section of the
+preferences file. Nothing in a match knows a tournament exists: the lobby's
+`LobbyTournamentMode` writes the bracket's two clubs and its latched settings
+into the game-start config, and the host hands the final score back at
+`GAME_OVER`. Design and what is not built yet: `docs/tournament-plan.md`.
+
+- **`active` ends with the session.** `NetworkManager.reset()` emits
+  `session_reset`, and that ends it, so any match played while `active` is set
+  was started from a tournament's lobby. Start a tournament AFTER the reset
+  (`SideMenu._enter_offline_lobby`, then `begin_new` / `resume`), never before.
+- **One start, one result.** `record_result` takes a score only for a game the
+  lobby began with `begin_match()`. A game that never reaches `GAME_OVER` stays
+  unplayed and is played again.
+- **Home is side 0.** The better seed takes it, so the player's club changes
+  sides between games; the lobby re-seats the humans and carries the club's bot
+  teammates across (`roster_side` is the side they currently hold).
+- **The host owns it; a client mirrors it.** `sync_tournament` carries the
+  whole bracket to a joiner (ahead of the lobby roster, so the client's lobby
+  opens knowing) and to everyone on each change. A client's copy is never
+  stored and never recorded into.
+- **Humans sit only on the player's side**, in the lobby and mid-match
+  (`TournamentCoordinator.may_seat`). After re-seating, the host sends clients
+  the whole roster and bot table rather than the individual moves: a client
+  still loading the lobby scene only keeps what `NetworkManager` holds.
+
 ## Recording a match to disk
 
 `ReplayFileRecorder` streams the match to `user://replays/<game_id>.mreplay` on

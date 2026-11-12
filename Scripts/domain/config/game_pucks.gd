@@ -34,6 +34,7 @@ class_name GamePucks
 const FREIGHT_TRAIN := "freight_train"
 const STUDENT := "student"
 const CUSTOM_BUILD := "custom_build"
+const CUP_WINNER := "cup_winner"
 const PLAY_WITH_BUUKIE := "play_with_buukie"
 const COMBO := "combo"
 
@@ -103,6 +104,7 @@ const ALL: Array[Dictionary] = [
 		"cond": {"kind": "event", "key": "tutorials_done"}},
 	{"id": CUSTOM_BUILD, "steam": "ACH_CUSTOM_BUILD",
 		"cond": {"kind": "event", "key": "build_edited"}},
+	{"id": CUP_WINNER, "cond": {"kind": "event", "key": "cup_won"}},
 	# ── Plays (FeatRules) ────────────────────────────────────────────────────
 	{"id": "snipe", "cond": {"kind": "feat"}},
 	{"id": "backhand_shelf", "cond": {"kind": "feat"}},

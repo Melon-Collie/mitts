@@ -540,3 +540,7 @@ here whenever you bump, in the same format.
 #      A v103 peer would read the check drive as a pin strength and predict a
 #      different outcome for the same hit, so mixed builds must be refused.
 #      Replay FORMAT_VERSION 21 -> 22: the frames hold the block.
+# v105: added the sync_tournament RPC (host -> client: the session's bracket, so
+#      a client's lobby and game-over screen can show it). A new @rpc method
+#      shifts the method table, so mixed builds must be refused. No match-time
+#      wire change.

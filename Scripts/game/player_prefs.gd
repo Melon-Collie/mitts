@@ -442,6 +442,9 @@ var tutorial_completion: Dictionary = {}
 # The stored part of the Game Pucks (TrophyLedger). Reconciled with Steam Cloud
 # as a union rather than newest-wins, since an earned puck is never un-earned.
 var trophy_ledger: TrophyLedger = TrophyLedger.new()
+# The one saved tournament, as TournamentState.to_dict() wrote it; empty for
+# none. Read and written through GameManager.tournament.
+var tournament_save: Dictionary = {}
 # The Titles id the player wears, "" for none.
 var equipped_title: String = ""
 
@@ -619,6 +622,7 @@ func save() -> void:
 	cfg.set_value("tutorials", "course_version", TUTORIAL_COURSE_VERSION)
 	cfg.set_value("trophies", "pucks", trophy_ledger.to_dict())
 	cfg.set_value("trophies", "title", equipped_title)
+	cfg.set_value("tournament", "state", tournament_save)
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
 			continue
@@ -1249,6 +1253,8 @@ func _load() -> void:
 			tutorial_completion = {}
 		trophy_ledger = TrophyLedger.from_variant(cfg.get_value("trophies", "pucks", {}))
 		equipped_title = Titles.coerce(str(cfg.get_value("trophies", "title", "")))
+		var saved_tournament: Variant = cfg.get_value("tournament", "state", {})
+		tournament_save = saved_tournament if saved_tournament is Dictionary else {}
 		for action: String in REBINDABLE_ACTIONS:
 			var t: String = cfg.get_value("bindings", action + "_type", "")
 			if t == "key":

@@ -1,0 +1,348 @@
+# Tournament — design plan
+
+Status: **approved; all four phases built.** A whole cup can be played alone or
+with friends on the player's side. Phases 2 to 4 await a local playtest, and
+Phase 3 has not run over Steam. Where what is built differs from the text
+below, the *as built* sections say how.
+
+A tournament is an eight-club single-elimination bracket. The player picks a
+club, is drawn a seed, and wins three games to take the cup: quarterfinal,
+semifinal, final. Every opponent is a team of bots. The player's own side is the
+host plus whoever joins the lobby, with bots in the seats nobody takes. The
+bracket is saved on the host's machine after every game and picked up again from
+the Play menu.
+
+**Club** in this document means one of the twelve fruit teams in
+`data/team_colors.json` (a `TeamColorRegistry` slot). **Side** means team 0 or
+team 1 on the ice. A club plays on a different side from one game to the next;
+the two are kept apart in the names below for that reason.
+
+## Decisions already made (from chat, 2026-11-12)
+
+| Question | Answer |
+|---|---|
+| Format | **Eight clubs, single elimination.** The player's club plus seven drawn from the other eleven. Three wins takes the cup. |
+| Opponents | **Bots only.** No human ever sits on the opposing side. |
+| Opponent strength | **Seeding is cosmetic.** One Bot Difficulty and one Goalie setting apply to every bot on the ice, as they do in any lobby match. A seed decides who meets whom and who is at home; it does not make a club play better. No per-side skill plumbing. |
+| Persistence | **Saved on the host.** The bracket outlives the session. Human teammates may differ from round to round; whoever is in the lobby plays the next game. |
+| The player's seed | **A random draw.** One cup is a favorite's run and the next an eighth seed's. |
+| Simulated games | **Seeds weigh lightly.** The better seed wins a game nobody plays somewhat more often than not (`TournamentRules.SIM_SEED_EDGE`), so the bracket behaves like one on paper, with upsets. |
+| An abandoned game | **Unplayed, not lost.** A game that does not reach `GAME_OVER` is played again. That lets a player quit a game they are losing; counting it as a loss would let a crash or a dropped host end a cup. Worth revisiting once the mode has been played. |
+| Home ice | **The better seed is at home.** The player's side is sometimes side 1, in the away kit and on the away bench. |
+| Difficulty | **Latched for the whole tournament.** Bot Difficulty and Goalie are picked in the setup popup and stored with the other settings, so a cup is won at one difficulty. |
+
+## 1. The bracket (domain)
+
+Two new pure files, no engine APIs.
+
+**`Scripts/domain/state/tournament_state.gd`** (`TournamentState`, RefCounted)
+holds only what cannot be derived:
+
+| Field | Meaning |
+|---|---|
+| `version` | Save format. A save with another version is discarded, not migrated. |
+| `rng_seed` | Drew the field and the seeds; also seeds every simulated game. |
+| `clubs_by_seed` | Eight club slots, index 0 = first seed. |
+| `player_club` | The club slot the player picked. |
+| `team_size`, `num_periods`, `period_duration`, `rule_set`, `fighting`, `bot_difficulty`, `goalie_difficulty` | Match settings, latched when the tournament is created. |
+| results | Seven entries in bracket order, each a home score, an away score and an overtime flag, or empty for a game not yet played. |
+
+Who advanced, which round is current, the player's next opponent and whether
+the tournament is over are all read off the results by `TournamentRules`, never
+stored. `to_dict` / `from_variant` are the save format and the wire format;
+`from_variant` returns null for anything that is not a tournament of this
+version and shape.
+
+**`Scripts/domain/rules/tournament_rules.gd`** (`TournamentRules`, static):
+
+- `draw(rng_seed, player_club, all_clubs)` picks the seven other clubs and
+  shuffles the eight into seeds.
+- `home_club(state, game)` and `away_club(state, game)` are the two clubs of a
+  game, home being the better seed, or -1 while a feeder game is unplayed.
+  Home takes side 0, the home kit and the home bench. Quarterfinals pair 1v8
+  and 4v5 in the top half, 3v6 and 2v7 in the bottom, so the first and second
+  seeds can meet only in the final. `entrant(state, game, line)` gives one
+  line of a game on its own, for a bracket drawn with one club still unknown.
+- `winner(state, game)` and `champion(state)` read a result.
+- `player_game(state)` is the index of the game the player plays next, or -1
+  once eliminated or champion; `status(state)` says which.
+- `record(state, game, home_score, away_score, overtime)` writes one result.
+  A level score is refused: an elimination game has a winner.
+- `simulate_round(state, round)` fills in every unplayed game of that round
+  that has both clubs, except the player's own. Each game's RNG is seeded from
+  `rng_seed` and its game index, so a result does not depend on the order games
+  are resolved in. `simulate_to_end(state)` does every round, which finishes
+  the bracket once the player is out.
+- `is_valid(state)` says whether the bracket is a possible one. A save or a
+  peer's copy that fails it is discarded.
+- `round_name_key(round)` returns `TOURNAMENT_ROUND_QF` / `_SF` / `_FINAL`;
+  the UI runs it through `tr()`. `last_player_game(state)` is the latest game
+  the player's club played, which is how a finished tournament says which round
+  it went out in.
+
+A simulated score is sized from the match length by
+`TournamentRules.SIM_GOALS_PER_MINUTE`, which is a guess. It only shapes scores
+nobody watched, and wants setting from real box scores once there are some.
+
+Tests: `tests/unit/rules/test_tournament_rules.gd` (the draw always contains
+the player's club and eight distinct clubs; the pairing table; a result
+advances the right club into the right slot; simulation is deterministic per
+seed and never ties; a full bracket of seven results names one champion) and
+`tests/unit/state/test_tournament_state.gd` (the dict round trip, and a
+wrong-version dict is refused).
+
+## 2. A tournament game is an ordinary match
+
+Nothing about the match itself changes. The tournament decides its inputs and
+reads its final score.
+
+- **Inputs.** The lobby's Start builds the same config dictionary it builds
+  today. In a tournament the two color slots are the home and away clubs of the
+  player's game, the match settings come from `TournamentState`, and
+  `ot_enabled` is forced on. `GameManager.on_host_started` reads the two
+  difficulties from the tournament in place of the host's lobby preferences.
+  `GameStateMachine` already plays further overtime periods until someone
+  scores, so a game cannot end level.
+- **Result.** On the host, at `GAME_OVER`, the score is recorded, the rest of
+  that round is simulated, and the state is saved and sent to clients. If the
+  player's club lost, every later round is simulated too, so the bracket shows a
+  champion.
+- **A game that does not reach `GAME_OVER` was not played.** Leaving, a crash,
+  or the pause menu's instant Return to Lobby all leave the bracket where it
+  was, and the game is played again.
+- **Stats and Game Pucks count as they do in any match against bots.** No new
+  gate; `_achievements_active()` already covers it.
+
+## 3. Session and persistence (application)
+
+**`Scripts/game/tournament_coordinator.gd`** (`TournamentCoordinator`,
+RefCounted, owned by `GameManager`) holds the live `TournamentState`, or null
+outside a tournament. `GameManager` is past the god-class limits, so it gets
+three call sites and no logic: read the two difficulties in `on_host_started`,
+hand over the score in `_on_game_over`, and end the tournament's session when
+`NetworkManager.session_reset` fires. That signal is emitted at the end of every
+`NetworkManager.reset()`, so no way of leaving a session can forget to end the
+tournament with it.
+
+The lobby calls `begin_match()` as it starts a game, and `record_result` only
+takes a score for a game begun that way. One start records one result, however
+many times a game-over is reported.
+
+The save is a `[tournament]` section of the preferences file, written the way
+the trophy ledger is. That file already mirrors to Steam Cloud, so a bracket
+follows the player between machines with no new Cloud file. There is one save:
+starting a new tournament replaces the one in progress, behind a confirm.
+
+A finished tournament stays in the save as finished, which is what lets the
+Play menu say how the last one ended, until a new one replaces it.
+
+## 4. Networking
+
+The host owns the bracket. Clients hold a mirror so their lobby and game-over
+screens can draw it.
+
+- One new reliable host-to-client RPC, `sync_tournament(data: Dictionary)`,
+  sent to a peer when they join and to everyone when a result lands. An empty
+  dictionary means the session is not a tournament. It surfaces as a
+  `tournament_synced` signal wired in `GameManager._wire_network_signals()`.
+- Adding an RPC shifts the method table, so `BuildInfo.PROTOCOL_VERSION` goes
+  104 → 105, with an entry in `docs/protocol-history.md`.
+- No match-time wire changes: nothing in the world state, inputs or claims
+  knows a tournament exists.
+
+Seating is where a tournament differs from a lobby match, and it has three
+paths that all need the same rule (*a human sits on the player's side or
+spectates, never on the opponent's*):
+
+1. The lobby's slot picker and `_find_balanced_slot`.
+2. A mid-match joiner, which today goes through auto-balance in
+   `GameManager.on_player_connected`.
+3. A reconnect reservation, which already restores the original seat and needs
+   no change, but gets a test.
+
+A human who joins a full side spectates. A human who takes a seat a bot held
+replaces the bot, as the lobby does now.
+
+## 5. Screens
+
+All new strings are `KEY,en,es` rows in `locale/translations.csv`. Every popup
+closes on `ui_cancel`.
+
+- **Play popup.** A **Tournament** button beside Start Game. With a tournament
+  in progress it reads as a continue ("Continue: Semifinal vs Plum") with a
+  smaller New Tournament beside it.
+- **Setup popup** (`TournamentSetupPopup`, new). Pick a club from the twelve
+  crests; set Mode, Periods, Period Length, Rules, Fighting, Bot Difficulty and
+  Goalie. Overtime is not offered. Confirming draws the bracket, saves it and
+  opens the lobby.
+- **Bracket panel** (`BracketPanel`, new). One control that draws the eight
+  clubs, their seeds, the scores so far and the path still to play, with the
+  player's club marked. Used by the lobby, the game-over screen and the Play
+  popup's continue row. Club colors on the dark panel go through
+  `TeamColorRegistry.get_score_ink_pair`, never a raw primary.
+- **Lobby in tournament mode.** A `LobbyTournamentMode` collaborator, so the
+  rules below are one object and not conditions spread through `LobbyManager`:
+  - The header names the round and the matchup; a Bracket button opens the
+    bracket panel.
+  - The opponent's side is all bots and cannot be edited. Open seats on the
+    player's side are filled with bots at Start, so both rosters are always
+    full.
+  - Color pickers and color votes are hidden; the bracket chose the kits.
+  - Match settings are shown read-only.
+  - The visibility selector works as it does today. Flipping it to Friends or
+    Public is how teammates get in.
+  - When the tournament is over the lobby shows the finished bracket and one
+    **Finish** button for the host. Finish ends tournament mode and leaves
+    everyone in a normal lobby.
+- **Game over.** Rematch is hidden. Return to Lobby reads **Continue**, and the
+  top block gains one line: the round the club advances to, *Eliminated*, or
+  *Champions*.
+- **Matchup intro.** The existing overlay gains the round name above the two
+  rosters.
+
+`tools/ui_preview_runner.gd` gets shots for the setup popup, the tournament
+lobby, the bracket mid-run and the bracket finished.
+
+## Phase 2 as built
+
+- **The Play popup** has a **Tournament** button. With a tournament in progress
+  it reads *Continue Tournament*, with the round and opponent on a line under it
+  ("Semifinal vs Plum") and a smaller New Tournament below. With a finished one
+  the line says how it ended.
+- **The bracket is shown in the lobby only**, as an overlay that opens by
+  itself each time a tournament lobby loads (the draw the first time, the round
+  just played after that) and again from the Bracket button. The game-over
+  screen carries the outcome line and Continue, which leads to that lobby. The
+  Play popup is too narrow for a bracket and shows the status line.
+- **The player's club is marked with a teal bar**, not teal lettering:
+  `MenuStyle.TEAL` is too close to the body text color to read as a mark. Club
+  names are lettered in the neutral text color and each club's color appears
+  only in its crest, so no team color is used as ink.
+- **The club's bot teammates stay with it.** The bots seated on the player's
+  side keep their seats from round to round, moved across when the club changes
+  sides (`LobbyTournamentMode.carry_bot_teammates`); the opponent's seats are
+  emptied and redrawn for each new club.
+- **The host cannot spectate** a tournament game: with no other human it would
+  be a game nobody played.
+- **Finish reopens the lobby** as an ordinary one.
+- **The pause menu's Rematch** still restarts a tournament game in progress. It
+  is the same as abandoning it: nothing was recorded, and the fresh game's
+  result is.
+
+## Phase 3 as built
+
+- **The bracket reaches a joiner before the roster does.** `GameManager` sends
+  it on `peer_joined` ahead of the lobby's own handler, and a client loads its
+  lobby scene on the roster, so the lobby always opens knowing whether it is a
+  tournament's. The same send covers a mid-match joiner. Every later change
+  (a result, the session ending) goes to everyone off the coordinator's
+  `changed` signal.
+- **A client's bracket is a mirror** (`TournamentCoordinator.adopt_remote`): it
+  is never stored, and `record_result` does nothing with it. An empty or
+  impossible copy clears it.
+- **The host sends whole pictures after re-seating**, not the moves. When the
+  club changes sides the host re-seats the humans and carries the bots, then
+  sends each client the full roster and the full bot table. A client still
+  loading its lobby keeps what `NetworkManager` holds for it and would miss
+  individual seat changes.
+- **The mid-match seating paths are closed twice.** A tournament match starts
+  with both rosters full, bots included, and bots hold seats in the state
+  machine, so a joiner already spectates and no seat on the opponent's side is
+  ever open. On top of that `TournamentCoordinator.may_seat` refuses the
+  opponent's side in the mid-match swap and in a joiner's auto-balance, so the
+  rule does not rest on the rosters staying full.
+- **A reconnect needed no change and got no test.** It restores the seat the
+  player held, which was on the player's side. Nothing in it reads the
+  tournament, so there was nothing tournament-specific to assert.
+- **The game-over outcome line waits for the result.** A client's copy of the
+  result arrives after the horn, so the line is read off the game itself
+  (`TournamentRules.game_between` names it by the match's two kits) and stays
+  empty until that game is played in the client's mirror. Rematch is hidden
+  either way.
+- **Finish takes everyone along.** It ends the tournament, clears the bots, and
+  uses the return-to-lobby path from inside the lobby, which reloads the lobby
+  scene on every machine with the roster intact.
+- **A lobby reopened on the same game keeps its bots** (an abandoned game, or
+  the last game of a finished tournament); they are redrawn only for a new
+  opponent.
+- **The Steam lobby carries the round** (`tournament_round` metadata), and the
+  game browser shows it under the lobby's name. Untested here: there is no
+  Steam in the build container.
+- **Clients may spectate; the host may not.**
+
+What was run: a host and a client as two headless processes over a local ENet
+peer standing in for Steam, through two rounds, a side change and Finish, with
+the two lobbies compared seat for seat each round. No game was played out: the
+host forced each final score.
+
+## Phase 4 as built
+
+- **The matchup intro names the round and the clubs.** In a tournament game its
+  title reads "TOURNAMENT · SEMIFINAL" in place of "TONIGHT'S MATCHUP", and the
+  HOME and AWAY headers become the two clubs with their seeds ("#2
+  POMEGRANATE"). `MatchupIntroOverlay.present` takes the three strings and
+  falls back to the ordinary ones.
+- **The champion moment is on the game-over screen.** When the game just won
+  the cup, the outcome line is the club's crest beside "CHAMPIONS" in gold at
+  twice the size, and it lands with the spring a first star has. On a client it
+  plays when the host's result arrives, which can be after the screen is up.
+  The bracket's champion is lettered in gold too. There is no new sound or
+  on-ice effect: the final horn's own flash and chyron come first, as in any
+  game.
+- **Cup Winner** is a Game Puck (`cup_winner`, an event puck). Each machine
+  earns its own: `TournamentCoordinator.cup_won` fires on the host as the final
+  is recorded and on a client as that result reaches it, and `GameManager`
+  earns the puck only for a player who has a skater in the match, so a
+  spectator of the final does not get one. A lobby joined after the final was
+  won earns nothing. It is not mirrored to Steam.
+- **Spanish was checked by rendering** the Play popup, the setup popup, the
+  lobby and the bracket with the game in Spanish. Every string fit. One layout
+  fault came out of it: the lobby's matchup column put the side beside each
+  club, and "VISITANTE" widened the column until the spectators column wrapped.
+  The side is now a caption above each club.
+- **Preview shots** `tournament_intro` and `tournament_champion` start a final
+  from its lobby. The intro is the real one. The cup-winning screen is staged
+  during it: the result is recorded as the host records one and the HUD's own
+  presenter is called, because playing a final out takes the software renderer
+  many minutes. Stepping the match faster is not a way round that: past the
+  engine's default of 8 physics steps a frame, the movement-locked phases
+  break the bots' stick aim (from about 32) and the skater's cosmetic rig.
+
+## 6. Phases
+
+Each phase ends with the suite green and something to test locally.
+
+1. **The bracket.** `TournamentState`, `TournamentRules`, their tests. Nothing
+   visible in the game.
+2. **Playable alone.** The coordinator, the save, the Play popup entry, the
+   setup popup, the bracket panel, the lobby's tournament mode, result
+   recording and the game-over changes. The visibility selector is held at
+   Offline in tournament mode for this phase, so a whole cup can be played with
+   bot teammates before any networking changes.
+3. **With friends.** The sync RPC and protocol bump, the client's mirror, the
+   three seating paths, and a tournament tag on the Steam lobby so the browser
+   can say what a joiner is walking into.
+4. **Dressing.** The matchup intro's round line, a champion moment after the
+   final, Spanish strings checked in context, the preview shots, and a Game
+   Puck for winning a cup (`GamePucks.ALL`, per `docs/game-pucks-plan.md`).
+
+Phases 2 and 3 change gameplay flow and networking, so each stops for a local
+playtest before the next begins.
+
+## Not in the first version
+
+- **Human opponents.** Two human sides in one bracket need the bracket to span
+  sessions, which is a different feature.
+- **A season** (a schedule, standings, then playoffs). `TournamentState` is the
+  playoff half of one; a season would add a schedule and a table in front of it.
+- **Clubs that play differently.** Decided against for now (seeding is
+  cosmetic). The route, if it is wanted later, is a skill profile per side in
+  place of the single `GameManager.bot_skill_profile` and
+  `goalie_skill_profile`, and a shot model (`AIGoalieModel`) that knows which
+  goalie it is shooting at.
+- **Fixed rosters per club.** Opposing bots are drawn from
+  `data/bot_identities.json` as lobby bots are today, so a club's players can
+  change between rounds. Thirty identities cannot give eight clubs five skaters
+  each without repeats.
+- **A tournament column in `career_stats`.** Each game still posts its usual
+  row; nothing marks it as a cup game.
