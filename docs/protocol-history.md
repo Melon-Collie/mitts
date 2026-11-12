@@ -554,7 +554,11 @@ here whenever you bump, in the same format.
 #      No snapshot field changed and no phase was added: a boxed skater rides
 #      the existing ghost bit, and a penalty shot is set up and taken in the
 #      faceoff's own phases.
+#      The stats sync (reliable) grows with them: PlayerStats.to_array goes
+#      from 21 fields to 26 (pim, pp_goals, sh_goals, penalty_shot_goals,
+#      pp_assists), and each team's power plays and power-play goals follow
+#      the team shots in its footer.
 #      A v104 peer would cast a boxed centre onto the dot, never lock or hide
-#      a boxed skater, and skate freely through a penalty shot, so mixed
-#      builds must be refused.
+#      a boxed skater, skate freely through a penalty shot and refuse every
+#      stats payload as malformed, so mixed builds must be refused.
 #      Replay FORMAT_VERSION unchanged.

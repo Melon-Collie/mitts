@@ -23,6 +23,8 @@ const MINOR_PERIOD_SHARE: float = 0.1
 const MINOR_MIN_S: float = 15.0
 # A team is never put below this many skaters: a further minor waits its turn.
 const MIN_SKATERS: int = 3
+# What a minor is in the book, whatever it lasts on this match's clock.
+const MINOR_PIM: int = 2
 
 
 # Fouls are called under NHL rules.
@@ -97,6 +99,22 @@ static func judge(impulse_magnitude: float, attacker_committed: bool,
 	if not victim_eligible:
 		return Foul.INTERFERENCE
 	return Foul.NONE
+
+
+# What a goal was scored in, for the scorer's stats.
+enum GoalSituation { EVEN, POWER_PLAY, SHORT_HANDED, PENALTY_SHOT }
+
+
+# `short_handed_team_id` is the team with fewer skaters on the ice as the goal
+# goes in, -1 at even strength (four on four included).
+static func goal_situation(scoring_team_id: int, short_handed_team_id: int,
+		on_a_penalty_shot: bool) -> GoalSituation:
+	if on_a_penalty_shot:
+		return GoalSituation.PENALTY_SHOT
+	if short_handed_team_id == -1:
+		return GoalSituation.EVEN
+	return GoalSituation.SHORT_HANDED if short_handed_team_id == scoring_team_id \
+			else GoalSituation.POWER_PLAY
 
 
 # Locale key for the foul's name; the UI calls tr() on it.

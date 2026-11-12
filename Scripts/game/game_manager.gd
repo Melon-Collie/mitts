@@ -1253,10 +1253,21 @@ func _on_goal_for_penalties(scoring_team: Team, _scorer: String, _a1: String,
 
 
 func _on_penalty_ledger_changed() -> void:
-	_state_machine.short_handed_team_id = \
-			_penalties.short_handed_team(_state_machine.team_size)
+	var short_before: int = _state_machine.short_handed_team_id
+	_state_machine.set_short_handed_team(
+			_penalties.short_handed_team(_state_machine.team_size))
+	if _state_machine.short_handed_team_id != short_before:
+		_stats_sync_gate.mark_dirty()
 	NetworkManager.send_penalty_ledger_to_all(_penalties.ledger.to_wire())
 	penalties_changed.emit()
+
+
+func _on_penalty_assessed(peer_id: int) -> void:
+	var record: PlayerRecord = _registry.get_record(peer_id) if _registry != null else null
+	if record == null or record.stats == null:
+		return
+	record.stats.pim += PenaltyRules.MINOR_PIM
+	_stats_sync_gate.mark_dirty()
 
 
 func _on_skater_boxed(peer_id: int) -> void:
@@ -2166,6 +2177,7 @@ func _wire_subsystems() -> void:
 	_penalties.shot_staged.connect(_on_penalty_shot_staged)
 	_penalties.shot_over.connect(_on_penalty_shot_over)
 	_penalties.shot_missed.connect(_on_penalty_shot_missed)
+	_penalties.penalty_assessed.connect(_on_penalty_assessed)
 	_hit_tracker.opposing_contact.connect(_on_opposing_contact)
 	if not _latest_penalty_wire.is_empty():
 		_penalties.apply_remote(_latest_penalty_wire)
@@ -4931,6 +4943,14 @@ func _goalie_star_record(team_id: int) -> PlayerRecord:
 
 # Replicated team shots-on-goal (NHL convention: goals count as shots). The
 # HUD reads this at podium time to caption a starred goalie's saves line.
+func get_power_plays(team_id: int) -> int:
+	return _state_machine.power_plays[team_id] if _state_machine != null else 0
+
+
+func get_power_play_goals(team_id: int) -> int:
+	return _state_machine.power_play_goals[team_id] if _state_machine != null else 0
+
+
 func get_team_shots(team_id: int) -> int:
 	if _state_machine == null:
 		return 0
@@ -5066,7 +5086,10 @@ func _finalize_game_stats() -> void:
 	_career_reporter.report(local, gf, ga, outcome,
 			_game_id, team_id, _state_machine.period_scores, _state_machine.num_periods,
 			_state_machine.team_shots[team_id], _state_machine.team_shots[1 - team_id],
-			_team_xg_sum(team_id), _team_xg_sum(1 - team_id), is_online, _peak_humans,
+			_team_xg_sum(team_id), _team_xg_sum(1 - team_id),
+			_state_machine.power_play_goals[team_id], _state_machine.power_plays[team_id],
+			_state_machine.power_play_goals[1 - team_id],
+			_state_machine.power_plays[1 - team_id], is_online, _peak_humans,
 			_state_machine.team_size, _state_machine.rule_set,
 			roundi(_state_machine.period_duration))
 	# Shot-event log (B1) — host-only: it holds the authoritative per-game buffer,

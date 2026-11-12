@@ -68,6 +68,10 @@ var icing: IcingRace = IcingRace.new()
 # The team with fewer skaters on the ice for a penalty, -1 at even strength
 # (host, from the PenaltyLedger). A short-handed team may ice the puck.
 var short_handed_team_id: int = -1
+# Power plays each team has had this match, and the goals each scored on one.
+# On every peer: they ride the stats sync.
+var power_plays: Array[int] = [0, 0]
+var power_play_goals: Array[int] = [0, 0]
 # Host: the game clock is stopped though the puck is live, for a penalty shot.
 var clock_held: bool = false
 
@@ -153,6 +157,8 @@ func on_goal_scored(defending_team_id: int) -> int:
 		return -1
 	scores[scoring_team_id] += 1
 	period_scores[scoring_team_id][current_period - 1] += 1
+	if short_handed_team_id == defending_team_id:
+		power_play_goals[scoring_team_id] += 1
 	last_scoring_team_id = scoring_team_id
 	_set_phase(GamePhase.Phase.GOAL_CELEBRATION)
 	return scoring_team_id
@@ -252,6 +258,15 @@ func _apply_icing_call(icing_call: InfractionRules.IcingCall) -> void:
 
 # Host-side: the team a penalty is pending against has the puck, so the play
 # is whistled dead and faces off in that team's end, on the puck's side.
+# A team going short gives the other one power play, however many of its men
+# sit before it is back to even: a second minor that makes it five on three
+# is not counted as a second.
+func set_short_handed_team(team_id: int) -> void:
+	if team_id != -1 and team_id != short_handed_team_id:
+		power_plays[1 - team_id] += 1
+	short_handed_team_id = team_id
+
+
 func request_penalty_faceoff(offending_team_id: int, puck_x: float) -> void:
 	if current_phase != GamePhase.Phase.PLAYING \
 			or pending_faceoff_reason != FaceoffReason.NONE:
@@ -618,6 +633,10 @@ func reset_all() -> void:
 	time_remaining = period_duration
 	icing.reset()
 	short_handed_team_id = -1
+	power_plays[0] = 0
+	power_plays[1] = 0
+	power_play_goals[0] = 0
+	power_play_goals[1] = 0
 	clock_held = false
 	_last_touch_team_id = -1
 	_offside_peer_ids.clear()

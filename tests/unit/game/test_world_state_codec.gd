@@ -67,6 +67,21 @@ func test_stats_round_trip_preserves_per_player_counters() -> void:
 	assert_eq(sm.period_scores[1][0], 0)
 
 
+func test_stats_round_trip_carries_each_teams_power_plays() -> void:
+	_add_player(10, 0, 2, 1, 5, 3, 2)
+	sm.power_plays = [3, 1]
+	sm.power_play_goals = [2, 0]
+	sm.period_scores[0][0] = 2
+	var encoded: Array = codec.encode_stats()
+	sm.power_plays = [0, 0]
+	sm.power_play_goals = [0, 0]
+	sm.period_scores[0][0] = 0
+	codec.decode_stats(encoded)
+	assert_eq(sm.power_plays, [3, 1])
+	assert_eq(sm.power_play_goals, [2, 0])
+	assert_eq(sm.period_scores[0][0], 2, "the footer behind them still lines up")
+
+
 func test_decode_stats_preserves_locally_tracked_toi() -> void:
 	# Regression: TOI is tracked locally per-peer and never crosses the wire.
 	# Decoding must update the existing stats object in place, not replace it,

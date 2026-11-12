@@ -291,6 +291,40 @@ func test_a_short_handed_team_may_ice_the_puck() -> void:
 	sm.check_icing_for_loose_puck(-30.0)
 	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE)
 
+func test_a_team_going_short_gives_the_other_a_power_play() -> void:
+	sm.set_short_handed_team(1)
+	assert_eq(sm.power_plays, [1, 0])
+	sm.set_short_handed_team(1)
+	assert_eq(sm.power_plays, [1, 0], "still the same power play")
+	sm.set_short_handed_team(-1)
+	sm.set_short_handed_team(0)
+	assert_eq(sm.power_plays, [1, 1])
+	sm.set_short_handed_team(1)
+	assert_eq(sm.power_plays, [2, 1], "the advantage changed hands")
+
+func test_a_goal_against_the_shorter_team_is_counted_for_the_power_play() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.set_short_handed_team(1)
+	sm.on_goal_scored(1)
+	assert_eq(sm.power_play_goals, [1, 0])
+
+func test_a_short_handed_or_even_strength_goal_is_not_a_power_play_goal() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.set_short_handed_team(0)
+	sm.on_goal_scored(1)
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.set_short_handed_team(-1)
+	sm.on_goal_scored(1)
+	assert_eq(sm.power_play_goals, [0, 0])
+
+func test_a_rematch_clears_the_power_play_counts() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.set_short_handed_team(1)
+	sm.on_goal_scored(1)
+	sm.reset_all()
+	assert_eq([sm.power_plays, sm.power_play_goals, sm.short_handed_team_id],
+			[[0, 0], [0, 0], -1])
+
 func test_the_team_on_the_power_play_is_still_called_for_icing() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
 	sm.short_handed_team_id = 1

@@ -119,6 +119,14 @@ func shooter_peer_id() -> int:
 	return -1
 
 
+# The man whose foul the penalty shot on is for, -1 with none on.
+func shot_offender_peer_id() -> int:
+	for entry: Entry in entries:
+		if entry.state == State.SHOT:
+			return entry.peer_id
+	return -1
+
+
 # The team defending a penalty shot now (the one that fouled), -1 with none on.
 func shot_defending_team_id() -> int:
 	for entry: Entry in entries:

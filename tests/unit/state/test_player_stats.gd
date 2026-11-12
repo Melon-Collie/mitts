@@ -27,13 +27,19 @@ func _full() -> PlayerStats:
 	s.interceptions = 16
 	s.fights = 2
 	s.fight_wins = 1
+	s.pim = 4
+	s.pp_goals = 3
+	s.sh_goals = 2
+	s.penalty_shot_goals = 1
+	s.pp_assists = 5
 	s.toi_seconds = 123.4
 	return s
 
 
-func test_to_array_has_twenty_one_fields_in_order() -> void:
+func test_to_array_has_twenty_six_fields_in_order() -> void:
 	var a := _full().to_array()
-	assert_eq(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 11, 12, 13, 14, 15, 2.5, 3, 16, 2, 1])
+	assert_eq(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 11, 12, 13, 14, 15, 2.5, 3, 16, 2, 1,
+			4, 3, 2, 1, 5])
 	assert_eq(a.size() + 1, WorldStateCodec.STATS_PLAYER_RECORD_SIZE,
 			"the codec's record is peer_id + this array")
 
@@ -64,7 +70,8 @@ func test_update_from_array_preserves_local_toi() -> void:
 	# toi_seconds never crosses the wire; a decode must not zero a client's count.
 	var s := PlayerStats.new()
 	s.toi_seconds = 42.0
-	s.update_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 2, 3, 4, 16, 5, 1.75, 0, 0, 0, 0])
+	s.update_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 2, 3, 4, 16, 5, 1.75, 0, 0, 0, 0,
+			0, 0, 0, 0, 0])
 	assert_eq(s.faceoff_wins, 9)
 	assert_eq(s.faceoff_losses, 10)
 	assert_eq(s.one_timer_goals, 2)
@@ -88,3 +95,34 @@ func test_to_dict_includes_new_stats() -> void:
 	assert_eq(d["shot_attempts_blocked"], 15)
 	assert_almost_eq(d["xg_for"], 2.5, 0.0001)
 	assert_eq(d["toi_seconds"], 123)  # rounded
+
+
+# ── Penalties ────────────────────────────────────────────────────────────────
+
+func test_the_penalty_counters_cross_the_wire() -> void:
+	var restored := PlayerStats.from_array(_full().to_array())
+	assert_eq(restored.pim, 4)
+	assert_eq(restored.pp_goals, 3)
+	assert_eq(restored.sh_goals, 2)
+	assert_eq(restored.penalty_shot_goals, 1)
+	assert_eq(restored.pp_assists, 5)
+	assert_eq(restored.pp_points(), 8, "his goals and his assists a man up")
+
+
+func test_a_goal_is_credited_to_the_situation_it_came_in() -> void:
+	var s := PlayerStats.new()
+	s.credit_goal_situation(PenaltyRules.GoalSituation.EVEN)
+	assert_eq([s.pp_goals, s.sh_goals, s.penalty_shot_goals], [0, 0, 0])
+	s.credit_goal_situation(PenaltyRules.GoalSituation.POWER_PLAY)
+	s.credit_goal_situation(PenaltyRules.GoalSituation.SHORT_HANDED)
+	s.credit_goal_situation(PenaltyRules.GoalSituation.PENALTY_SHOT)
+	assert_eq([s.pp_goals, s.sh_goals, s.penalty_shot_goals], [1, 1, 1])
+
+
+func test_the_career_row_carries_the_penalty_columns() -> void:
+	var row: Dictionary = _full().to_dict()
+	assert_eq(row["pim"], 4)
+	assert_eq(row["pp_goals"], 3)
+	assert_eq(row["pp_assists"], 5)
+	assert_eq(row["sh_goals"], 2)
+	assert_false(row.has("penalty_shot_goals"), "the table has no column for it")

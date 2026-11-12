@@ -255,7 +255,7 @@ func _enter_faceoff_prep(puck: Puck) -> void:
 	var last_arrival: float = 0.0
 	var positions: Array = []
 	faceoff_placement_starting.emit()
-	if _placement.penalty_shot_is_staged():
+	if _placement.penalty_shooter() != null:
 		_place_penalty_shot(puck)
 		return
 	var placed: Array[int] = []
@@ -423,10 +423,15 @@ func on_goal_scored_into(defending_team: Team) -> void:
 			# Overtime winner: any non-own goal in sudden-death OT wins the game.
 			if not is_own_goal and _state_machine.is_overtime():
 				record.stats.ot_goals += 1
+			var situation: int = PenaltyRules.goal_situation(scoring_team_id,
+					_state_machine.short_handed_team_id,
+					record.skater != null and record.skater.takes_penalty_shot)
+			record.stats.credit_goal_situation(situation)
 			# Tag one-timer / tip goal flavor BEFORE clear_pending() below wipes
 			# the shot-tracker state these reads depend on.
 			_tag_goal_flavor(record, scorer_id, carrier_peer_id, is_own_goal)
-			var assist_names: Array[String] = _shot_tracker.credit_assists(scorer_id)
+			var assist_names: Array[String] = _shot_tracker.credit_assists(scorer_id,
+					situation == PenaltyRules.GoalSituation.POWER_PLAY)
 			assist1_name = assist_names[0] if assist_names.size() > 0 else ""
 			assist2_name = assist_names[1] if assist_names.size() > 1 else ""
 			var line_z: float = defending_team.defended_goal.goal_line_z() \
@@ -639,6 +644,10 @@ func on_faceoff_positions(positions: Array, preroll: float) -> void:
 func _place_penalty_shot(puck: Puck) -> void:
 	var last_arrival: float = 0.0
 	var positions: Array = []
+	if puck != null:
+		# First: the reset clears every cooldown, and the sidelined get one below.
+		puck.reset(PlayerRules.penalty_shot_puck_spot(_placement.penalty_shooter().team.team_id))
+		puck.pickup_locked = true
 	for peer_id: int in _registry.all():
 		var record: PlayerRecord = _registry.get_record(peer_id)
 		if record == null or record.skater == null or record.controller == null:
@@ -650,15 +659,8 @@ func _place_penalty_shot(puck: Puck) -> void:
 		record.controller.begin_approach(record.skater.global_position, pos,
 				_placement.held_out_facing(record), glide, record.skater.velocity)
 		positions.append_array([peer_id, pos.x, pos.y, pos.z])
-		if record.skater.takes_penalty_shot and puck != null:
-			puck.reset(PlayerRules.penalty_shot_puck_spot(record.team.team_id))
-			puck.pickup_locked = true
-	if puck != null:
-		# After the reset, which clears every cooldown.
-		for peer_id: int in _registry.all():
-			var record: PlayerRecord = _registry.get_record(peer_id)
-			if record != null and record.skater != null and record.skater.sidelined:
-				puck.set_skater_cooldown(record.skater, _SIDELINE_PUCK_COOLDOWN_S)
+		if record.skater.sidelined and puck != null:
+			puck.set_skater_cooldown(record.skater, _SIDELINE_PUCK_COOLDOWN_S)
 	last_prep_preroll = last_arrival + GameRules.FACEOFF_SET_BEAT
 	_state_machine.set_faceoff_prep_extra(last_prep_preroll)
 	faceoff_positions_ready.emit(positions, last_prep_preroll)

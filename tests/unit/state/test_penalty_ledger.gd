@@ -226,3 +226,10 @@ func test_a_team_short_only_for_a_fight_gets_nobody_back_on_a_goal() -> void:
 	ledger.tick(0.5, MAX_SERVING)
 	assert_eq(ledger.release_for_goal(0, SIZE, MAX_SERVING), 21)
 	assert_true(ledger.is_boxed(20), "his fighting minor runs its course")
+
+
+func test_the_shot_remembers_whose_foul_it_is_for() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	assert_eq(ledger.shot_offender_peer_id(), -1, "no shot is on yet")
+	ledger.stage_shot()
+	assert_eq(ledger.shot_offender_peer_id(), 10)

@@ -41,6 +41,16 @@ func test_a_goal_ends_a_minor_for_a_foul_but_not_for_a_fight() -> void:
 	assert_false(PenaltyRules.ends_on_a_goal(PenaltyRules.Foul.FIGHTING))
 
 
+func test_a_goal_reads_who_was_short_as_it_went_in() -> void:
+	var gs := PenaltyRules.GoalSituation
+	assert_eq(PenaltyRules.goal_situation(0, -1, false), gs.EVEN)
+	assert_eq(PenaltyRules.goal_situation(0, 1, false), gs.POWER_PLAY,
+			"the other team is the one short")
+	assert_eq(PenaltyRules.goal_situation(0, 0, false), gs.SHORT_HANDED)
+	assert_eq(PenaltyRules.goal_situation(0, 1, true), gs.PENALTY_SHOT,
+			"a penalty shot is its own situation")
+
+
 # ── The clean hit ────────────────────────────────────────────────────────────
 
 func test_a_full_check_on_the_carrier_in_open_ice_is_clean() -> void:

@@ -14,6 +14,8 @@ func report(record: PlayerRecord, goals_for: int, goals_against: int, outcome: S
 		game_id: String, team_id: int, period_scores: Array, num_periods: int,
 		team_sog_for: int, team_sog_against: int,
 		team_xg_for: float, team_xg_against: float,
+		team_pp_goals: int, team_pp_opportunities: int,
+		team_pk_goals_against: int, team_pk_opportunities: int,
 		is_online: bool, human_players: int,
 		team_size: int, rule_set: int, period_seconds: int) -> void:
 	var body: Dictionary = record.stats.to_dict()
@@ -39,6 +41,12 @@ func report(record: PlayerRecord, goals_for: int, goals_against: int, outcome: S
 	# denominator. Team quantities like team_sog_*, so every player's row carries them.
 	body["team_xg_for"] = snappedf(team_xg_for, 0.001)
 	body["team_xg_against"] = snappedf(team_xg_against, 0.001)
+	# The career PP% and PK% are these summed: goals over power plays, and one
+	# less the goals against over times short.
+	body["team_pp_goals"] = team_pp_goals
+	body["team_pp_opportunities"] = team_pp_opportunities
+	body["team_pk_goals_against"] = team_pk_goals_against
+	body["team_pk_opportunities"] = team_pk_opportunities
 	# Offline (vs bots) games count toward the career the same as online ones;
 	# these record WHAT a row was, so the kinds can still be told apart later
 	# without having gated the upload. `is_online` is the session type;

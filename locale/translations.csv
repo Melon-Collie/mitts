@@ -254,6 +254,9 @@ ICING_RACE_DEFEND,Reach the faceoff dots first for the whistle,Llega primero a l
 ICING_RACE_WATCH,Race to the end-zone faceoff dots,Carrera a los puntos de saque de la zona
 ICING_WAVED_OFF,ICING WAVED OFF,DESPEJE PROHIBIDO ANULADO
 TAPE_ICINGS,Icings,Despejes prohibidos
+TAPE_PIM,Penalty minutes,Minutos de penalización
+TAPE_POWER_PLAYS,Power plays,Superioridades
+TAPE_PP_GOALS,Power-play goals,Goles en superioridad
 TAPE_TITLE,Tale of the tape,Cara a cara
 TAPE_GOALS,Goals,Goles
 TAPE_SHOTS_ON_GOAL,Shots on goal,Tiros a puerta
@@ -298,6 +301,13 @@ STAT_FEED_HIT,HIT,CARGA
 STAT_FEED_TAKEAWAY,TAKEAWAY,ROBO
 STAT_FEED_INTERCEPTION,INTERCEPTION,INTERCEPCIÓN
 CAREER_INTERCEPTIONS,Interceptions,Intercepciones
+CAREER_GROUP_SPECIAL_TEAMS,Special teams,Equipos especiales
+CAREER_PP_GOALS,Power-play goals,Goles en superioridad
+CAREER_SH_GOALS,Short-handed goals,Goles en inferioridad
+CAREER_PP_POINTS,Power-play points,Puntos en superioridad
+CAREER_PP_PCT,Power play %,% en superioridad
+CAREER_PK_PCT,Penalty kill %,% en inferioridad
+CAREER_PIM,Penalty minutes,Minutos de penalización
 STAT_FEED_FACEOFF_WIN,FACEOFF WON,SAQUE GANADO
 CONFIRM_RETURN_FREE_PLAY,Return to free play?,¿Volver al juego libre?
 CONFIRM_RETURN_FREE_PLAY_HOST,Return to free play? This ends the match for everyone.,¿Volver al juego libre? Esto termina el partido para todos.
@@ -516,6 +526,12 @@ PUCK_WON_FIGHT,Won the Fight,Pelea ganada
 PUCK_WON_FIGHT_DESC,Win a fight: stay on your feet when your opponent goes down.,Gana una pelea: sigue en pie cuando tu rival caiga.
 PUCK_GORDIE_HOWE,Gordie Howe Hat Trick,Hat trick Gordie Howe
 PUCK_GORDIE_HOWE_DESC,"Score a goal, record an assist and fight in a single game.","Marca un gol, da una asistencia y pelea en un mismo partido."
+PUCK_POWER_PLAY_GOAL,Man Advantage,Superioridad numérica
+PUCK_POWER_PLAY_GOAL_DESC,Score with your team a man up.,Marca con tu equipo en superioridad.
+PUCK_SHORTY,Shorty,En inferioridad
+PUCK_SHORTY_DESC,Score with your team a man down.,Marca con tu equipo en inferioridad.
+PUCK_PENALTY_SHOT_GOAL,Ice in the Veins,Sangre fría
+PUCK_PENALTY_SHOT_GOAL_DESC,Score on a penalty shot.,Marca en un tiro penal.
 PUCK_FIGHT_WINS,Heavyweight,Peso pesado
 PUCK_FIGHT_WINS_DESC,Win %d fights.,Gana %d peleas.
 PUCK_ENFORCER,Enforcer,Matón

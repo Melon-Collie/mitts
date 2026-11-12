@@ -38,6 +38,17 @@ func test_increments_map_extended_stat_fields() -> void:
 	assert_eq(d[SteamStats.INTERCEPTIONS], 9)
 
 
+func test_increments_map_the_penalty_stats() -> void:
+	var s := _stats(0, 0, 0, 0, 0)
+	s.pim = 4
+	s.pp_goals = 2
+	s.pp_assists = 3
+	var d := SteamStatRecorder.increments(s, "win")
+	assert_eq(d[SteamStats.PIM], 4)
+	assert_eq(d[SteamStats.PP_GOALS], 2)
+	assert_eq(d[SteamStats.PP_POINTS], 5, "his goals and his assists a man up")
+
+
 func test_games_played_always_increments_by_one() -> void:
 	assert_eq(SteamStatRecorder.increments(_stats(0, 0, 0, 0, 0), "loss")[SteamStats.GAMES], 1)
 	assert_eq(SteamStatRecorder.increments(_stats(9, 9, 9, 9, 9), "win")[SteamStats.GAMES], 1)

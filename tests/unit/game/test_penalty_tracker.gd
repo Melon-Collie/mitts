@@ -183,6 +183,30 @@ func test_a_power_play_goal_releases_him() -> void:
 	assert_eq(_released, [HITTER] as Array[int])
 
 
+# ── What it costs, for the stat sheet ────────────────────────────────────────
+
+func test_a_minor_and_a_penalty_shot_are_each_a_penalty_to_the_man_who_fouled() -> void:
+	var assessed: Array[int] = []
+	_tracker.penalty_assessed.connect(func(p: int) -> void: assessed.append(p))
+	_tracker.ledger.call_foul(HITTER, 0, PenaltyRules.Foul.BOARDING, VICTIM)
+	assert_eq(assessed, [] as Array[int], "a call is not a penalty until it is paid for")
+	_tracker.assess_pending(PERIOD_S, SIZE)
+	assert_eq(assessed, [HITTER] as Array[int])
+	_tracker.clear()
+	_tracker.ledger.call_foul(VICTIM, 1, PenaltyRules.Foul.INTERFERENCE, HITTER)
+	_tracker.assess_pending(PERIOD_S, 3)
+	assert_eq(assessed, [HITTER, VICTIM] as Array[int], "the shot is VICTIM's foul")
+
+
+func test_a_call_washed_out_by_a_goal_is_no_penalty() -> void:
+	var assessed: Array[int] = []
+	_tracker.penalty_assessed.connect(func(p: int) -> void: assessed.append(p))
+	_tracker.ledger.call_foul(HITTER, 0, PenaltyRules.Foul.BOARDING, VICTIM)
+	_tracker.on_goal(1, SIZE)
+	_tracker.assess_pending(PERIOD_S, SIZE)
+	assert_eq(assessed, [] as Array[int])
+
+
 # ── A fight ──────────────────────────────────────────────────────────────────
 
 func test_both_fighters_are_called_when_the_fights_are_over() -> void:

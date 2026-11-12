@@ -54,8 +54,9 @@ extends RefCounted
 #                      Scripts/networking/CLAUDE.md).
 #
 # 2. Stats  (reliable, event-driven):
-#      [pid, G, A, SOG, HITS, BLK] × N players
+#      [pid, PlayerStats.to_array()] × N players
 #      team_shots[0], team_shots[1]
+#      power_plays[0], power_plays[1], power_play_goals[0], power_play_goals[1]
 #      period_scores[0][0..P-1], period_scores[1][0..P-1]
 #      num_periods (trailing sentinel)
 #
@@ -88,7 +89,8 @@ const SKATER_BLOCK_SIZE: int = SKATER_STATE_BYTES + 5  # + u32 peer_id + u8 queu
 const PUCK_BLOCK_SIZE: int = 13    # 12B pos+vel + 1B carrier_idx
 const GOALIE_BLOCK_SIZE: int = 12 + KeeperPoseCodec.SIZE  # root + the keeper's pose
 const GAME_STATE_BLOCK_SIZE: int = 6  # 4×u8 + u16 time_remaining
-const STATS_PLAYER_RECORD_SIZE: int = 22  # peer_id + PlayerStats.to_array() (21)
+const _STATS_TEAM_FIELDS: int = 6
+const STATS_PLAYER_RECORD_SIZE: int = 27  # peer_id + PlayerStats.to_array() (26)
 
 var _ws_sequence: int = 0
 var _last_period: int = -1
@@ -420,6 +422,8 @@ func encode_stats() -> Array:
 		data.append_array(players[pid].stats.to_array())
 	data.append(_state_machine.team_shots[0])
 	data.append(_state_machine.team_shots[1])
+	data.append_array(_state_machine.power_plays)
+	data.append_array(_state_machine.power_play_goals)
 	for team_id: int in 2:
 		data.append_array(_state_machine.period_scores[team_id])
 	data.append(_state_machine.period_scores[0].size())  # sentinel
@@ -435,7 +439,8 @@ func decode_stats(data: Array) -> void:
 		push_warning("WorldStateCodec: malformed stats payload (empty or non-int footer)")
 		return
 	var num_periods: int = data[-1]
-	var footer_size: int = 2 + 2 * num_periods + 1  # shots×2 + scores×2P + sentinel
+	# shots×2 + power plays×2 + their goals×2 + scores×2P + sentinel
+	var footer_size: int = _STATS_TEAM_FIELDS + 2 * num_periods + 1
 	if num_periods < 0 or num_periods > 64 or data.size() < footer_size:
 		push_warning("WorldStateCodec: malformed stats payload (periods=%d, size=%d)" % [num_periods, data.size()])
 		return
@@ -460,7 +465,11 @@ func decode_stats(data: Array) -> void:
 		i += STATS_PLAYER_RECORD_SIZE
 	_state_machine.team_shots[0] = data[i]
 	_state_machine.team_shots[1] = data[i + 1]
-	i += 2
+	_state_machine.power_plays[0] = data[i + 2]
+	_state_machine.power_plays[1] = data[i + 3]
+	_state_machine.power_play_goals[0] = data[i + 4]
+	_state_machine.power_play_goals[1] = data[i + 5]
+	i += _STATS_TEAM_FIELDS
 	while _state_machine.period_scores[0].size() < num_periods:
 		_state_machine.period_scores[0].append(0)
 		_state_machine.period_scores[1].append(0)

@@ -42,12 +42,14 @@ func in_penalty_shot(record: PlayerRecord) -> bool:
 			and (record.skater.takes_penalty_shot or record.skater.sidelined)
 
 
-func penalty_shot_is_staged() -> bool:
+# The skater a penalty shot is staged for, null with none.
+func penalty_shooter() -> PlayerRecord:
 	for peer_id: int in _registry.all():
 		var record: PlayerRecord = _registry.get_record(peer_id)
-		if record != null and record.skater != null and record.skater.takes_penalty_shot:
-			return true
-	return false
+		if record != null and record.skater != null and record.skater.takes_penalty_shot \
+				and record.team != null:
+			return record
+	return null
 
 
 # Where a skater in a penalty shot stands for it.

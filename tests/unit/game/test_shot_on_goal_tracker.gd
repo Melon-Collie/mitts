@@ -351,6 +351,25 @@ func test_credit_assists_up_to_two_same_team_carriers() -> void:
 	assert_eq(scorer.stats.assists, 0)
 
 
+func test_assists_on_a_power_play_goal_are_power_play_assists() -> void:
+	var helper := _add_player(10, 0, "Helper")
+	var scorer := _add_player(12, 0, "Scorer")
+	tracker.on_pickup(10)
+	tracker.on_pickup(12)
+	tracker.credit_assists(12, true)
+	assert_eq([helper.stats.assists, helper.stats.pp_assists], [1, 1])
+	assert_eq(scorer.stats.pp_assists, 0)
+
+
+func test_assists_at_even_strength_are_not() -> void:
+	var helper := _add_player(10, 0, "Helper")
+	_add_player(12, 0, "Scorer")
+	tracker.on_pickup(10)
+	tracker.on_pickup(12)
+	tracker.credit_assists(12)
+	assert_eq([helper.stats.assists, helper.stats.pp_assists], [1, 0])
+
+
 func test_credit_assists_stops_at_opposing_established_possession() -> void:
 	var team_assist := _add_player(10, 0, "TeamA1")
 	_add_player(11, 1, "Opponent")  # opposing ESTABLISHED possession breaks chain

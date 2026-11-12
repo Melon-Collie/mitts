@@ -1,9 +1,10 @@
 # Penalties — the NHL ruleset calls fouls
 
-Status: **Phases 1–5 built** (faceoff formations; the calls, the box and
+Status: **all six phases built** (faceoff formations; the calls, the box and
 playing short in 5v5; the penalty shot in 3v3; a fight's minors; the bots'
-penalty kill), playtest pending. Phase 6 not started. Where what is built differs from the proposal, *Phase 2 as built*
-and the penalty shot's own section say how.
+penalty kill; the stats), playtest pending. Where what is built differs from
+the proposal, *Phase 2 as built*, *Phase 6 as built* and the penalty shot's
+own section say how.
 Amends `docs/fighting-plan.md` ("No penalty. Both stay on."), the "Deliberately
 out" line of `docs/defensive-play-plan.md`, and the rule-set paragraph of
 `docs/gameplay-design.md`. Each phase is its own PR and playtest.
@@ -351,7 +352,7 @@ The bots learn each rule in the phase that adds it.
 | 3 | The penalty shot (3v3), bots shooting (**built**) | a foul in 3v3 |
 | 4 | Fights' coincidental minors (5v5) (**built**) | a fight under `NHL` |
 | 5 | The bots' penalty kill: the wedge and one (**built**). A man up keeps the ordinary offense | 5-on-4 against bots |
-| 6 | Stats (`PlayerStats` penalties, power-play and short-handed goals), career columns, Game Pucks | — |
+| 6 | Stats (PIM, power-play goals and points, short-handed and penalty-shot goals), the career page's PP% and PK%, Steam stats, Game Pucks (**built**) | the tale of the tape and the career page after a match with a power play |
 
 ## Phase 2 as built
 
@@ -391,8 +392,36 @@ Known gaps, each small enough to leave for the playtest to rank:
   numbers and has not been rendered or played.
 - **A foul after the whistle** is not judged, and neither is contact in the
   goal celebration.
-- **No stat** is kept for a penalty yet (Phase 6), and the replay records no
-  event for a call.
+- **The replay records no event for a call.**
+
+## Phase 6 as built
+
+- **A player's own stats** (`PlayerStats`, on the stats sync): `pim`, two a
+  minor he was assessed (a fight's included) and two a penalty shot his foul
+  gave up, counted when the stoppage makes him pay and never for a call a
+  goal washed out; `pp_goals` and `pp_assists` (their sum is his power-play
+  points); `sh_goals`; `penalty_shot_goals`. A goal's situation is the
+  strength as it goes in (`PenaltyRules.goal_situation`), read before the
+  goal releases the minor. Four on four is even strength.
+- **A team's special teams** (`GameStateMachine.power_plays`,
+  `power_play_goals`, on the same sync, so every peer holds them): a power
+  play is counted each time a team goes short, and a second minor that makes
+  it five on three is not a second one. The tale of the tape shows penalty
+  minutes, power plays and power-play goals under `NHL`.
+- **The career page** gets a Special teams card: PP%, PK%, power-play goals
+  and points, short-handed goals, penalty minutes. PP% and PK% are his
+  *team's* in the games he played (goals over power plays; one less the goals
+  against over times short), since a kill is nobody's alone. Each career row
+  carries the four team counts and `career_totals_for()` divides the sums
+  (`supabase/migrations/20261112120000_career_penalties.sql`), so the rates
+  slice by roster size like every other. They read "—" until a game with a
+  power play is on record. Penalty-shot goals have no career column.
+- **Steam stats**: `STAT_PIM`, `STAT_PP_GOALS`, `STAT_PP_POINTS`
+  (`steam/STATS.md`: each must be defined in Steamworks on both apps before a
+  build that writes it goes out). No ladder reads them yet.
+- **Game Pucks**: Man Advantage (a power-play goal), Shorty (a short-handed
+  goal) and Ice in the Veins (a penalty-shot goal), each a single-game puck
+  with nothing to set up on Steam.
 
 ## Wire summary
 
@@ -402,6 +431,9 @@ Known gaps, each small enough to leave for the playtest to rank:
 - **Phase 3 (still v105, unreleased):** the ledger's wire gains the fouled
   man and a `SHOT` state, and the penalty whistle says whether it is a shot
   ending without a goal. No phase was added.
+- **Phase 6 (still v105, unreleased):** the stats sync's player record grows
+  from 21 fields to 26, and its footer gains each team's power plays and
+  power-play goals.
 
 ## Not in this plan
 

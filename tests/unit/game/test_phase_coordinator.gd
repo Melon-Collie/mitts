@@ -153,6 +153,44 @@ func test_goal_credits_carrier_and_updates_score() -> void:
 	assert_eq(sm.current_phase, GamePhase.Phase.GOAL_CELEBRATION)
 
 
+func _score_for_team_0(short_handed_team_id: int) -> PlayerStats:
+	var scorer: PlayerRecord = _add_player(10, 0)
+	_drop_return = 10
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.short_handed_team_id = short_handed_team_id
+	coord.on_goal_scored_into(teams[1])
+	return scorer.stats
+
+
+func test_a_goal_against_the_shorter_team_is_a_power_play_goal() -> void:
+	var stats: PlayerStats = _score_for_team_0(1)
+	assert_eq([stats.goals, stats.pp_goals, stats.sh_goals], [1, 1, 0])
+
+
+func test_a_goal_by_the_shorter_team_is_short_handed() -> void:
+	var stats: PlayerStats = _score_for_team_0(0)
+	assert_eq([stats.goals, stats.pp_goals, stats.sh_goals], [1, 0, 1])
+
+
+func test_a_goal_at_even_strength_is_neither() -> void:
+	var stats: PlayerStats = _score_for_team_0(-1)
+	assert_eq([stats.goals, stats.pp_goals, stats.sh_goals], [1, 0, 0])
+
+
+func test_a_penalty_shot_goal_is_its_own_stat() -> void:
+	var scorer: PlayerRecord = _add_player(10, 0)
+	scorer.skater = SKATER_SCENE.instantiate() as Skater
+	add_child_autofree(scorer.skater)
+	scorer.skater.set_physics_process(false)
+	scorer.skater.set_process(false)
+	scorer.skater.takes_penalty_shot = true
+	_drop_return = 10
+	sm.current_phase = GamePhase.Phase.PLAYING
+	coord.on_goal_scored_into(teams[1])
+	assert_eq([scorer.stats.goals, scorer.stats.penalty_shot_goals, scorer.stats.pp_goals],
+			[1, 1, 0])
+
+
 func test_own_goal_does_not_credit_the_own_goaler() -> void:
 	_add_player(10, 1)        # carrier is on the DEFENDING team → own goal
 	_drop_return = 10
