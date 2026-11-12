@@ -183,6 +183,32 @@ func test_a_power_play_goal_releases_him() -> void:
 	assert_eq(_released, [HITTER] as Array[int])
 
 
+# ── A fight ──────────────────────────────────────────────────────────────────
+
+func test_both_fighters_are_called_when_the_fights_are_over() -> void:
+	_tracker.note_fight(HITTER, VICTIM)
+	assert_true(_tracker.ledger.is_empty(), "nothing is called while they fight")
+	_tracker.call_fighters()
+	assert_eq(_called, [[HITTER, PenaltyRules.Foul.FIGHTING], [VICTIM, PenaltyRules.Foul.FIGHTING]])
+	_tracker.assess_pending(PERIOD_S, SIZE)
+	assert_true(_skater(HITTER).in_box)
+	assert_true(_skater(VICTIM).in_box)
+	assert_eq(_tracker.short_handed_team(SIZE), -1, "four on four: nobody is the short team")
+
+
+func test_a_fight_is_called_once() -> void:
+	_tracker.note_fight(HITTER, VICTIM)
+	_tracker.call_fighters()
+	_tracker.call_fighters()
+	assert_eq(_called.size(), 2)
+
+
+func test_a_fighter_who_has_left_is_not_called() -> void:
+	_tracker.note_fight(HITTER, 99)
+	_tracker.call_fighters()
+	assert_eq(_called, [[HITTER, PenaltyRules.Foul.FIGHTING]])
+
+
 # ── The penalty shot (3v3) ───────────────────────────────────────────────────
 
 func _stage_a_shot_for_the_victim() -> Array:

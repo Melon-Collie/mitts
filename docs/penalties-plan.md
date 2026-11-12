@@ -1,8 +1,8 @@
 # Penalties — the NHL ruleset calls fouls
 
-Status: **Phases 1–3 built** (faceoff formations; the calls, the box and
-playing short in 5v5; the penalty shot in 3v3), playtest pending. Phases 4–6
-not started. Where what is built differs from the proposal, *Phase 2 as built*
+Status: **Phases 1–4 built** (faceoff formations; the calls, the box and
+playing short in 5v5; the penalty shot in 3v3; a fight's minors), playtest
+pending. Phases 5–6 not started. Where what is built differs from the proposal, *Phase 2 as built*
 and the penalty shot's own section say how.
 Amends `docs/fighting-plan.md` ("No penalty. Both stay on."), the "Deliberately
 out" line of `docs/defensive-play-plan.md`, and the rule-set paragraph of
@@ -260,13 +260,28 @@ does on a phase change had to learn a new phase.
 Known gaps: a player who joins while a shot is on is not sidelined until the
 next ledger change; and the shot's banner stays up over the play.
 
-## 6. Fights
+## 6. Fights (Phase 4, as built)
 
-Under `NHL` in 5v5, when a fight ends each fighter is assessed a minor, and the
-two are coincidental: both sit, the teams play 4-on-4, and a goal releases
-neither. The faceoff after the fight is where it is today. A fight in 3v3 is
-not penalized. `ARCADE` fights stay unpenalized.
+Under `NHL` in 5v5 each man who fought sits a minor: both go to the box at the
+faceoff after the fight and the teams play 4-on-4. A fight in 3v3 is not
+penalized, and neither is one under `ARCADE` (`PenaltyRules.penalizes_fights`).
 A challenge that lapses costs nothing, so there is no instigator.
+
+- **Called when the fights are over, not as they start.** The host notes each
+  pair as they drop the gloves and calls them all as the fight's stoppage ends
+  (`PenaltyTracker.note_fight` / `call_fighters`), so nothing reads as a
+  delayed call while they fight. The faceoff placed next assesses them with
+  whatever else is pending, and the toast says the minor is assessed rather
+  than delayed.
+- **A goal never ends a fight's minor** (`PenaltyRules.ends_on_a_goal`). Both
+  teams sit a man for it, so neither is short because of it. With a foul's
+  minor running as well (4-on-3), a goal against the shorter team ends the
+  foul's minor and leaves the fighter where he is.
+- **They count toward the floor of three** like any minor, so a fighter whose
+  team already has two in the box waits his turn.
+- **The faceoff after the fight** is where it was, with four a side.
+- **The bots fight as before.** A grudge still sends a bot after a man, and
+  nothing prices the minor: it costs both teams the same.
 
 ## 7. Bots
 
@@ -296,7 +311,7 @@ The bots learn each rule in the phase that adds it.
 | 1 | Faceoff formations by headcount, and the draw-taker (**built**) | a faceoff with a seat empty: a lobby started short, or a reservation |
 | 2 | `PenaltyRules`, the ledger, the delayed call, the box, short-handed play, the box camera, the scorebug strip, bots that avoid fouls and serve them (5v5) (**built**) | a penalty start to finish |
 | 3 | The penalty shot (3v3), bots shooting (**built**) | a foul in 3v3 |
-| 4 | Fights' coincidental minors (5v5) | a fight under `NHL` |
+| 4 | Fights' coincidental minors (5v5) (**built**) | a fight under `NHL` |
 | 5 | Bots a man up and a man down | 5-on-4 against bots |
 | 6 | Stats (`PlayerStats` penalties, power-play and short-handed goals), career columns, Game Pucks | — |
 

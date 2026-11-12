@@ -161,8 +161,9 @@ func tick_mirror(delta: float) -> void:
 
 
 # A goal against a team with fewer skaters ends the minor of theirs nearest
-# its end. Returns the man released, -1 when the teams were even or the
-# scoring team was the one short.
+# its end, of those a goal can end (PenaltyRules.ends_on_a_goal). Returns the
+# man released, -1 when the teams were even, the scoring team was the one
+# short, or the shorter team has only a fight's minors running.
 func release_for_goal(scoring_team_id: int, team_size: int, max_serving: int) -> int:
 	var conceding_team_id: int = 1 - scoring_team_id
 	if strength(conceding_team_id, team_size) >= strength(scoring_team_id, team_size):
@@ -170,7 +171,8 @@ func release_for_goal(scoring_team_id: int, team_size: int, max_serving: int) ->
 	var soonest: int = -1
 	for i: int in entries.size():
 		var entry: Entry = entries[i]
-		if entry.state != State.SERVING or entry.team_id != conceding_team_id:
+		if entry.state != State.SERVING or entry.team_id != conceding_team_id \
+				or not PenaltyRules.ends_on_a_goal(entry.foul):
 			continue
 		if soonest == -1 or entry.remaining < entries[soonest].remaining:
 			soonest = i

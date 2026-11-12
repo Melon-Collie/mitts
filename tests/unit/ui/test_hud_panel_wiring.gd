@@ -79,6 +79,7 @@ func test_icing_race_reaches_its_banner() -> void:
 
 func test_penalty_signals_reach_the_hud() -> void:
 	GameManager.penalty_called.emit(7, PenaltyRules.Foul.BOARDING)
+	GameManager.penalty_called.emit(7, PenaltyRules.Foul.FIGHTING)
 	GameManager.penalty_whistled.emit(false)
 	GameManager.penalty_whistled.emit(true)
 	GameManager.penalties_changed.emit()

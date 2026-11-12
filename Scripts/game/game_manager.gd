@@ -1087,6 +1087,10 @@ func _on_fight_started(a: Skater, b: Skater) -> void:
 	_stats_sync_gate.mark_dirty()
 	fight_called.emit(pa, pb)
 	NetworkManager.notify_fight_called_to_all(pa, pb)
+	var practice: bool = NetworkManager.is_free_play_mode or NetworkManager.is_drill_mode()
+	if PenaltyRules.penalizes_fights(_state_machine.rule_set, _state_machine.team_size,
+			practice):
+		_penalties.note_fight(pa, pb)
 
 
 # Host: a fight ended with `winner` standing over `loser` (FightRules.result_of).
@@ -1140,6 +1144,7 @@ func _play_punch(victim_peer_id: int, intensity: float, dir_x: float, dir_z: flo
 
 # Host: the last fight is over; play restarts with a faceoff.
 func _on_fights_over() -> void:
+	_penalties.call_fighters()
 	if _state_machine.end_fight():
 		_phase_coord.handle_phase_entered()
 
@@ -1215,7 +1220,8 @@ func _on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float
 
 
 func _on_penalty_foul_called(peer_id: int, foul: int) -> void:
-	print("[penalty] %s" % _penalties.last_call_facts)
+	if foul != PenaltyRules.Foul.FIGHTING:
+		print("[penalty] %s" % _penalties.last_call_facts)
 	penalty_called.emit(peer_id, foul)
 	NetworkManager.notify_penalty_called_to_all(peer_id, foul)
 

@@ -5,7 +5,7 @@ class_name PenaltyRules
 # before he committed: who had the puck, where the boards were, which way his
 # man was facing.
 
-enum Foul { NONE, BOARDING, INTERFERENCE }
+enum Foul { NONE, BOARDING, INTERFERENCE, FIGHTING }
 
 # How far off the boards a man can be thrown into them (body edge to board).
 const BOARDING_ZONE_M: float = 1.5
@@ -28,6 +28,19 @@ const MIN_SKATERS: int = 3
 # Fouls are called under NHL rules.
 static func calls_fouls(rule_set: int, practice: bool) -> bool:
 	return rule_set == GameRules.RuleSet.NHL and not practice
+
+
+# A fight costs each fighter a minor where a foul is a minor. In 3v3 it costs
+# nothing: both would sit, and two-on-two is not the game.
+static func penalizes_fights(rule_set: int, team_size: int, practice: bool) -> bool:
+	return calls_fouls(rule_set, practice) and not awards_penalty_shot(team_size)
+
+
+# Whether a goal against the shorter team can end a minor for this foul. A
+# fight's minors are served in full: both teams sit a man for it, so neither
+# is short because of it.
+static func ends_on_a_goal(foul: int) -> bool:
+	return foul != Foul.FIGHTING
 
 
 # What a foul costs: a minor in 5v5, and a penalty shot for the man fouled in
@@ -93,4 +106,6 @@ static func name_key(foul: int) -> String:
 			return "PENALTY_BOARDING"
 		Foul.INTERFERENCE:
 			return "PENALTY_INTERFERENCE"
+		Foul.FIGHTING:
+			return "PENALTY_FIGHTING"
 	return ""

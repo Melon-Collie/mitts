@@ -711,10 +711,13 @@ func _on_fight_called(a_peer_id: int, b_peer_id: int) -> void:
 
 
 func _on_penalty_called(peer_id: int, foul: int) -> void:
-	if _toast_stack != null:
-		_toast_stack.push(tr(&"TOAST_PENALTY_CALLED")
-				% [_peer_name(peer_id), tr(PenaltyRules.name_key(foul))],
-				MenuStyle.BROADCAST_CREAM)
+	if _toast_stack == null:
+		return
+	# A fight's minor is assessed at once; every other call waits on the play.
+	var key: StringName = &"TOAST_PENALTY_ASSESSED" \
+			if foul == PenaltyRules.Foul.FIGHTING else &"TOAST_PENALTY_CALLED"
+	_toast_stack.push(tr(key) % [_peer_name(peer_id), tr(PenaltyRules.name_key(foul))],
+			MenuStyle.BROADCAST_CREAM)
 
 
 func _on_penalty_whistled(shot_missed: bool) -> void:

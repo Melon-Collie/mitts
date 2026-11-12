@@ -27,6 +27,20 @@ func test_a_foul_is_a_minor_in_5v5_and_a_penalty_shot_in_3v3() -> void:
 	assert_true(PenaltyRules.awards_penalty_shot(3))
 
 
+func test_a_fight_costs_a_minor_only_where_a_foul_is_one() -> void:
+	assert_true(PenaltyRules.penalizes_fights(GameRules.RuleSet.NHL, 5, false))
+	assert_false(PenaltyRules.penalizes_fights(GameRules.RuleSet.NHL, 3, false),
+			"3v3 does not sit two men for a fight")
+	assert_false(PenaltyRules.penalizes_fights(GameRules.RuleSet.ARCADE, 5, false))
+	assert_false(PenaltyRules.penalizes_fights(GameRules.RuleSet.NHL, 5, true), "practice")
+
+
+func test_a_goal_ends_a_minor_for_a_foul_but_not_for_a_fight() -> void:
+	assert_true(PenaltyRules.ends_on_a_goal(PenaltyRules.Foul.BOARDING))
+	assert_true(PenaltyRules.ends_on_a_goal(PenaltyRules.Foul.INTERFERENCE))
+	assert_false(PenaltyRules.ends_on_a_goal(PenaltyRules.Foul.FIGHTING))
+
+
 # ── The clean hit ────────────────────────────────────────────────────────────
 
 func test_a_full_check_on_the_carrier_in_open_ice_is_clean() -> void:

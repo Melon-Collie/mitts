@@ -190,3 +190,39 @@ func test_the_wire_carries_who_takes_the_shot() -> void:
 	mirror.from_wire(ledger.to_wire())
 	assert_eq(mirror.shooter_peer_id(), 20)
 	assert_eq(mirror.shot_defending_team_id(), 0)
+
+
+# ── A fight's minors ─────────────────────────────────────────────────────────
+
+func _box_the_fighters(home_peer: int, away_peer: int) -> void:
+	ledger.call_foul(home_peer, 0, PenaltyRules.Foul.FIGHTING)
+	ledger.call_foul(away_peer, 1, PenaltyRules.Foul.FIGHTING)
+	ledger.assess(MINOR, MAX_SERVING)
+
+
+func test_a_fight_sits_a_man_from_each_team() -> void:
+	_box_the_fighters(10, 20)
+	assert_true(ledger.is_boxed(10))
+	assert_true(ledger.is_boxed(20))
+	assert_eq(ledger.strength(0, SIZE), SIZE - 1)
+	assert_eq(ledger.strength(1, SIZE), SIZE - 1, "four on four")
+
+
+func test_a_goal_never_ends_a_fights_minor() -> void:
+	_box_the_fighters(10, 20)
+	_box(11, 0)
+	assert_eq(ledger.strength(0, SIZE), SIZE - 2, "four on three")
+	ledger.tick(20.0, MAX_SERVING)
+	assert_eq(ledger.release_for_goal(1, SIZE, MAX_SERVING), 11,
+			"the foul's minor ends, though the fighter's has less time left")
+	assert_true(ledger.is_boxed(10))
+	assert_eq(ledger.release_for_goal(1, SIZE, MAX_SERVING), -1, "back to four on four")
+
+
+func test_a_team_short_only_for_a_fight_gets_nobody_back_on_a_goal() -> void:
+	_box_the_fighters(10, 20)
+	ledger.tick(MINOR - 1.0, MAX_SERVING)
+	_box(21, 1)
+	ledger.tick(0.5, MAX_SERVING)
+	assert_eq(ledger.release_for_goal(0, SIZE, MAX_SERVING), 21)
+	assert_true(ledger.is_boxed(20), "his fighting minor runs its course")

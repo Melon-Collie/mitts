@@ -215,8 +215,8 @@ too.
 | Heavyweight (`fight_wins`) | ladder | 5 / 10 / 25 / 50 fights won (`STAT_FIGHT_WINS`) |
 | Enforcer | combo | `hits@100` + `fight_wins@10`: the Enforcer title |
 
-The ladder counts wins, not fights: there is no penalty for fighting, so a
-ladder on fights would pay for starting them. A game puck's condition is a
+The ladder counts wins, not fights: outside `NHL` 5v5 a fight costs nothing,
+so a ladder on fights would pay for starting them. A game puck's condition is a
 `mins` map of game stats, so one puck can ask for several at once.
 
 ## Architecture

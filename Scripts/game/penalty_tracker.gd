@@ -42,6 +42,8 @@ var _shot := PenaltyShotAttempt.new()
 var _staged_shooter: int = -1
 # The goalie has the puck: the shot on is over at the next tick_shot.
 var _shot_saved: bool = false
+# Host: the men who have fought in the stoppage under way.
+var _fighters: Array[int] = []
 
 
 func setup(registry: PlayerRegistry, state_buffer: StateBufferManager,
@@ -53,6 +55,7 @@ func setup(registry: PlayerRegistry, state_buffer: StateBufferManager,
 
 func clear() -> void:
 	ledger.clear()
+	_fighters.clear()
 	apply_box_state()
 
 
@@ -100,6 +103,24 @@ func on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
 			% [eligible, victim_is_carrier, seconds_since_victim_lost_puck, puck_dist, puck_loose]
 	foul_called.emit(hitter_peer_id, foul)
 	ledger_changed.emit()
+
+
+# Host: two men have dropped the gloves.
+func note_fight(a_peer_id: int, b_peer_id: int) -> void:
+	_fighters.append(a_peer_id)
+	_fighters.append(b_peer_id)
+
+
+# Host: the fights are over, and each man who fought is called for it. The
+# faceoff placed next assesses the calls and tells the other peers, so the
+# ledger is not announced from here.
+func call_fighters() -> void:
+	for peer_id: int in _fighters:
+		var fighter: PlayerRecord = _registry.get_record(peer_id)
+		if fighter != null and fighter.team != null and ledger.call_foul(
+				peer_id, fighter.team.team_id, PenaltyRules.Foul.FIGHTING):
+			foul_called.emit(peer_id, PenaltyRules.Foul.FIGHTING)
+	_fighters.clear()
 
 
 func on_possession_established(team_id: int) -> void:
