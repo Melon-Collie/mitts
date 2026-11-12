@@ -2,7 +2,8 @@ extends GutTest
 
 # A pass is a paced wrister, so every release from carry arms ShotOnGoalTracker's
 # pending shot. What the release was for the TURNOVER stats is read afterwards,
-# from its trajectory (TurnoverRules.release_kind). Two things hold that here:
+# from its trajectory and its button (TurnoverRules.release_kind). Two things
+# hold that here:
 # the real trackers through the host's call sequence, and GameManager's source
 # for the sequence itself, which needs a live match to reach.
 
@@ -38,14 +39,16 @@ func _add_player(peer_id: int, team_id: int) -> PlayerRecord:
 
 # GameManager's sequence for one release from carry, the puck 20 m/s up the ice
 # from the origin with a teammate at `mate`.
-func _release(peer_id: int, directed_at_net: bool, mate: Vector2) -> void:
+func _release(peer_id: int, directed_at_net: bool, mate: Vector2,
+		shot_button: bool = true) -> void:
 	shots.on_pickup(peer_id)
 	turnovers.on_carrier_gained(peer_id, false)
 	turnovers.on_possession_established(peer_id)
 	shots.on_shot_started(peer_id)
+	shots.note_release_intent(shot_button)
 	shots.note_directed_at_net(directed_at_net)
 	var mates: Array[Vector2] = [mate]
-	match TurnoverRules.release_kind(shots.pending_directed_at_net(),
+	match TurnoverRules.release_kind(shots.pending_is_shot_attempt(),
 			Vector2.ZERO, Vector2(0.0, 20.0), mates):
 		TurnoverRules.Release.SHOT:
 			turnovers.note_shot(peer_id)
@@ -69,13 +72,6 @@ func test_a_pass_picked_off_is_an_interception_though_it_armed_a_shot() -> void:
 	assert_eq(passer.stats.giveaways, 1)
 
 
-func test_a_shot_recovered_is_a_rebound() -> void:
-	_release(10, true, Vector2(0.5, 10.0))
-	_pick_off(20)
-	assert_eq(picker.stats.interceptions, 0)
-	assert_eq(passer.stats.giveaways, 0)
-
-
 func test_a_dump_recovered_is_a_concession() -> void:
 	_release(10, false, Vector2(8.0, 10.0))
 	_pick_off(20)
@@ -83,12 +79,31 @@ func test_a_dump_recovered_is_a_concession() -> void:
 	assert_eq(passer.stats.giveaways, 0)
 
 
-func test_a_release_reads_as_a_shot_until_its_trajectory_is_read() -> void:
+func test_a_pass_button_feed_through_the_mouth_picked_off_is_an_interception() -> void:
+	_release(10, true, Vector2(0.5, 10.0), false)
+	_pick_off(20)
+	assert_eq(picker.stats.interceptions, 1)
+	assert_eq(picker.stats.shots_blocked, 0, "a pass is not a blocked shot")
+	assert_eq(passer.stats.giveaways, 1)
+
+
+func test_a_shot_picked_off_is_a_block_and_no_interception() -> void:
+	_release(10, true, Vector2(0.5, 10.0))
+	_pick_off(20)
+	assert_eq(picker.stats.shots_blocked, 1)
+	assert_eq(picker.stats.interceptions, 0)
+	assert_eq(passer.stats.giveaways, 0)
+
+
+func test_a_release_reads_as_a_shot_until_it_is_read_otherwise() -> void:
 	shots.on_pickup(10)
 	shots.on_shot_started(10)
-	assert_true(shots.pending_directed_at_net())
+	assert_true(shots.pending_is_shot_attempt())
 	shots.note_directed_at_net(false)
-	assert_false(shots.pending_directed_at_net())
+	assert_false(shots.pending_is_shot_attempt())
+	shots.on_shot_started(10)
+	shots.note_release_intent(false)
+	assert_false(shots.pending_is_shot_attempt())
 
 
 # ── GameManager's sequence ───────────────────────────────────────────────────

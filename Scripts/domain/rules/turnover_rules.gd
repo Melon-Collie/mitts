@@ -35,8 +35,7 @@ const GIVEAWAY := "giveaway"
 const RECEIVER_CORRIDOR_M: float = 3.5
 const RECEIVER_MAX_DIST_M: float = 30.0
 
-# What a release from carry was, read from its geometry alone: a pass is a paced
-# wrister, so the button cannot say.
+# What a release from carry was.
 enum Release { NONE, SHOT, PASS, DUMP }
 
 
@@ -81,16 +80,17 @@ static func is_dump_release(launch: Vector2, launch_dir: Vector2,
 	return true
 
 
-# What a release from carry was. `directed_at_net` is the shot tracker's read of
-# it against the opposing net (ShotOnNetRules.is_directed_at_net, own-half
-# releases refused); the rest are is_dump_release's. A feed aimed through the
-# mouth at a teammate in the crease is therefore a shot. NONE is a puck let go
-# with no launch at all.
-static func release_kind(directed_at_net: bool, launch: Vector2, launch_dir: Vector2,
+# What a release from carry was. `is_shot_attempt` is the shot tracker's read
+# (ShotOnGoalTracker.pending_is_shot_attempt): directed at the opposing net and
+# not thrown with the pass button. A charged wrister is a shot or a pass by where
+# it goes, since a pass is a paced wrister; the pass button is a pass wherever it
+# goes, so a feed through the mouth that a defender picks off is an interception.
+# The rest are is_dump_release's. NONE is a puck let go with no launch at all.
+static func release_kind(is_shot_attempt: bool, launch: Vector2, launch_dir: Vector2,
 		teammate_positions: Array[Vector2]) -> Release:
 	if launch_dir.length() < 0.001:
 		return Release.NONE
-	if directed_at_net:
+	if is_shot_attempt:
 		return Release.SHOT
 	if is_dump_release(launch, launch_dir, teammate_positions):
 		return Release.DUMP

@@ -271,10 +271,11 @@ func note_directed_at_net(directed: bool) -> void:
 	_pending_directed_at_net = directed
 
 
-# The pending release's directed-at-net read. True from the release until
-# note_directed_at_net says otherwise; false without a pending shot.
-func pending_directed_at_net() -> bool:
-	return _pending_directed_at_net
+# Whether the pending release is a shot attempt: released as a shot and directed
+# at the net, the two reads a miss needs to count. Both are assumed from the
+# release until noted otherwise; false without a pending shot.
+func pending_is_shot_attempt() -> bool:
+	return _pending_is_shot and _pending_directed_at_net
 
 
 # Records what the release was INTENDED as, read from the shooter's input rather
