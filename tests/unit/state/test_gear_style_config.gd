@@ -14,7 +14,7 @@ func test_default_decodes_to_the_kit_look() -> void:
 	assert_eq(config.skate_model, GearModelRegistry.SKATE_BLACKOUT, "skates default all-black")
 	assert_eq(config.glove_model, GearModelRegistry.GLOVE_TEAM, "gloves default to the kit")
 	assert_eq(config.lace_color, GearStyleConfig.LACE_DEFAULT_INDEX, "laces default white")
-	assert_eq(config.stick_model, StickModelRegistry.STICK_STEALTH,
+	assert_eq(config.stick_model, StickModelRegistry.PATTERN_SOLID,
 			"the stick defaults to the house model")
 	assert_eq(config.helmet_face, GearModelRegistry.FACE_NONE, "the face defaults bare")
 	assert_eq(config.hair_style, HairStyleRegistry.HAIR_SHORT, "hair defaults short")

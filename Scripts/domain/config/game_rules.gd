@@ -68,6 +68,8 @@ const INTERMISSION_SETTLE: float   = 2.0
 const INTERMISSION_DURATION: float = 20.0
 const OT_ENABLED: bool             = true
 const OT_DURATION: float           = 4.0 * 60.0   # 240 s per OT period
+# The lobby's Fighting toggle, as a new lobby opens (FightRules.allowed).
+const FIGHTING_ENABLED: bool       = true
 
 # ── Rink Geometry ─────────────────────────────────────────────────────────────
 const GOAL_LINE_Z: float = 26.65  # rink_length / 2 - distance_from_end (30 - 3.35)
@@ -425,6 +427,8 @@ const CREASE_DWELL_DURATION: float = 0.6  # seconds in the crease before ghostin
 # value as the dot players sprint toward in hybrid icing.
 const END_ZONE_FACEOFF_DOT_X: float = 6.7056
 const ICING_FACEOFF_DOT_Z: float = GOAL_LINE_Z - 6.096   # 20.554
+# Faceoff circle radius round each end-zone dot — NHL spec, 15' (4.572m).
+const FACEOFF_CIRCLE_RADIUS_M: float = 4.572
 # Neutral-zone faceoff dots — NHL spec. Painted 5' (1.524m) from each blue
 # line on the neutral-zone side. Used as the faceoff spot when an offside is
 # called and as candidates when the puck goes out of play in the neutral zone.

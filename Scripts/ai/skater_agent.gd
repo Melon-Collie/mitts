@@ -30,6 +30,11 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_sm.apply_capabilities(caps)
 
 
+# Main thread, before the batch: the man this bot is hunting to fight, or -1.
+func set_hunt_peer(peer_id: int) -> void:
+	_sm.set_hunt_peer(peer_id)
+
+
 # Main thread only, after dispatch: the worker never writes team state.
 func push_one_timer_ready() -> void:
 	_sm.push_one_timer_ready()
@@ -130,6 +135,7 @@ static func zero_input(input: InputState, delta: float, host_timestamp: float) -
 	input.stick_check_held = false
 	input.stick_check_pressed = false
 	input.stick_lift_pressed = false
+	input.fight_pressed = false
 	# The committed charge power and its flag are re-set by every press tick
 	# that reads them; between presses they hold their defaults.
 	input.bot_wrister_power_t = 1.0

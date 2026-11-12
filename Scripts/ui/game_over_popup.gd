@@ -56,6 +56,7 @@ var _stars_tag: Label = null
 var _star_rows: Array[Control] = []
 var _star_name_labels: Array[Label] = []
 var _star_line_labels: Array[Label] = []
+var _star_title_labels: Array[Label] = []
 var _star_stripe_styles: Array[StyleBoxFlat] = []
 var _save_goal_btn: Button = null
 var _rematch_btn: Button = null
@@ -198,6 +199,12 @@ func _build_star_row(rank: int) -> Control:
 	_star_name_labels.append(name_label)
 	content.add_child(name_label)
 
+	var title_label := _lbl("", _RANK_LINE_SIZES[rank], _GOLD)
+	title_label.uppercase = true
+	title_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_star_title_labels.append(title_label)
+	content.add_child(title_label)
+
 	var line_label := _lbl("", _RANK_LINE_SIZES[rank], _DIM)
 	line_label.add_theme_font_override("font", MenuStyle.UI_FONT)
 	line_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -279,12 +286,12 @@ func _build_bottom_block(root: Control) -> void:
 # Fill the screen with this game's data and play the reveal: scrim + bands
 # fade in, then the stars land 3rd → 2nd → 1st. `star_names` is ranked best
 # first and may be shorter than three (empty = a nothing game, the whole
-# stars block stays hidden).
+# stars block stays hidden); `star_titles` runs beside it, "" for no title.
 func present(home_score: int, away_score: int,
 		home_stripe: Color, away_stripe: Color,
 		result_text: String, result_color: Color,
 		star_names: Array[String], star_lines: Array[String],
-		star_stripes: Array[Color]) -> void:
+		star_stripes: Array[Color], star_titles: Array[String] = []) -> void:
 	_home_score_label.text = str(home_score)
 	_away_score_label.text = str(away_score)
 	_home_stripe_style.bg_color = home_stripe
@@ -299,6 +306,9 @@ func present(home_score: int, away_score: int,
 		_star_rows[rank].visible = filled
 		if filled:
 			_star_name_labels[rank].text = star_names[rank]
+			var title: String = star_titles[rank] if rank < star_titles.size() else ""
+			_star_title_labels[rank].text = title
+			_star_title_labels[rank].visible = not title.is_empty()
 			_star_line_labels[rank].text = star_lines[rank]
 			_star_line_labels[rank].visible = not star_lines[rank].is_empty()
 			_star_stripe_styles[rank].bg_color = star_stripes[rank]

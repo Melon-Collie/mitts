@@ -18,6 +18,10 @@ signal period_synced(new_period: int)
 signal clock_updated(time_remaining: float)
 signal game_over
 signal stats_need_sync
+# Host: a goal was just credited to `scorer_id`, before the shot tracker's
+# pending state clears, so a listener can still read how the shot left the stick
+# (GameManager's feat detection). `goal_line_z` is the defended goal's line.
+signal goal_credited(scorer_id: int, is_own_goal: bool, goal_line_z: float)
 # Host → broadcast to clients. `preroll` is last_prep_preroll: the host measured
 # every skater's glide, which a client cannot (it never sees remotes' starts).
 signal faceoff_positions_ready(positions: Array, preroll: float)
@@ -188,6 +192,12 @@ func handle_phase_entered() -> void:
 			# GameManager._on_remote_phase_changed).
 			# This is where the replay cinematic actually kicks in.
 			start_goal_replay()
+		GamePhase.Phase.FIGHT:
+			# The whistle is dead play: the carrier loses the puck where it lies
+			# and nobody plays it until the faceoff after the fight.
+			_puck_drop_requester.call()
+			if puck != null:
+				puck.pickup_locked = true
 		GamePhase.Phase.END_OF_PERIOD:
 			_puck_drop_requester.call()
 			if puck != null:
@@ -388,6 +398,9 @@ func on_goal_scored_into(defending_team: Team) -> void:
 			var assist_names: Array[String] = _shot_tracker.credit_assists(scorer_id)
 			assist1_name = assist_names[0] if assist_names.size() > 0 else ""
 			assist2_name = assist_names[1] if assist_names.size() > 1 else ""
+			var line_z: float = defending_team.defended_goal.goal_line_z() \
+					if defending_team.defended_goal != null else 0.0
+			goal_credited.emit(scorer_id, is_own_goal, line_z)
 			if not is_own_goal:
 				_shot_tracker.on_goal_confirmed(scorer_id, _goal_origin(record))
 			scorer_name = record.display_name()

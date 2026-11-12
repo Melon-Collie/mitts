@@ -315,6 +315,9 @@ func _refresh() -> void:
 		var s := record.stats
 		var pts := s.goals + s.assists
 		var display_name: String = record.display_name()
+		if Titles.is_known(record.title_id):
+			display_name = tr(&"SCOREBOARD_NAME_TITLE") % [display_name,
+					TrophyCopy.title_name(record.title_id)]
 		var ping_str: String = _ping_label(record.peer_id)
 		var is_5v5: bool = int(team_counts.get(record.team.team_id, 0)) >= 5
 		var pos_str: String = tr(PositionLabels.badge_key(record.team_slot, is_5v5))

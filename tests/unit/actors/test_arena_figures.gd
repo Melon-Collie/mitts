@@ -191,6 +191,45 @@ func test_pose_bounds_hold_any_raise_of_the_arms() -> void:
 				assert_true(bounds.has_point(v), "a raised arm at %v should stay in bounds" % v)
 
 
+# crowd.gdshader's turn_y, copied: a fan turning to watch the ice.
+func _turn_y(v: Vector3, a: float) -> Vector3:
+	return Vector3(v.x * cos(a) + v.z * sin(a), v.y, -v.x * sin(a) + v.z * cos(a))
+
+
+func test_turn_y_faces_the_figure_where_the_shader_aims_it() -> void:
+	# The shader aims by atan(-x, -z) of the watched point: forward is -Z.
+	var to_it := Vector3(3.0, 0.0, -1.0)
+	var a: float = atan2(-to_it.x, -to_it.z)
+	var forward: Vector3 = _turn_y(Vector3(0.0, 0.0, -1.0), a)
+	assert_almost_eq(forward.normalized().dot(to_it.normalized()), 1.0, 1e-5)
+
+
+func test_pose_bounds_hold_a_fan_turned_to_watch() -> void:
+	var bounds: AABB = ArenaFigureMesh.crowd_pose_bounds().grow(0.0001)
+	var turns: Array[float] = [-1.0, -0.6, -0.25, 0.0, 0.3, 0.7, 1.0]
+	for mesh: ArrayMesh in [ArenaFigureMesh.head_mesh(), ArenaFigureMesh.far_head_mesh()]:
+		for v: Vector3 in mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+			for t: float in turns:
+				var w: Vector3 = _turn_y(v, t * ArenaFigureMesh.HEAD_TURN_MAX)
+				assert_true(bounds.has_point(w), "a turned head at %v" % w)
+	for mesh: ArrayMesh in _crowd_bodies():
+		var arrays: Array = mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+		for i: int in verts.size():
+			var part: float = uvs[i].x
+			if part == ArenaFigureMesh.PART_LEG or part == ArenaFigureMesh.PART_SHOE:
+				continue
+			var v: Vector3 = verts[i]
+			if part != ArenaFigureMesh.PART_BODY:
+				var shoulder: Vector3 = ArenaFigureMesh.SHOULDER * Vector3(signf(v.x), 1.0, 1.0)
+				v = shoulder + Basis(Vector3.RIGHT, 2.9) * (v - shoulder)
+			var share: float = smoothstep(0.0, ArenaFigureMesh.BODY_TOP_Y, v.y)
+			for t: float in turns:
+				var w: Vector3 = _turn_y(v, t * ArenaFigureMesh.TRUNK_TURN_MAX * share)
+				assert_true(bounds.has_point(w), "a turned trunk at %v" % w)
+
+
 # ── The crowd figure in its seat ─────────────────────────────────────────────
 # Each holds for both crowd figures, near and far: a far fan sits in the same
 # seat as a near one.

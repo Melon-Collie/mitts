@@ -24,7 +24,14 @@ static func is_movement_locked(phase: GamePhase.Phase) -> bool:
 # is_dead_puck_phase that adds GOAL_CELEBRATION (movement allowed, but the
 # puck sits in the net with pickup_locked = true until the replay starts).
 static func is_puck_pickup_locked_phase(phase: GamePhase.Phase) -> bool:
-	return is_dead_puck_phase(phase) or phase == GamePhase.Phase.GOAL_CELEBRATION
+	return is_dead_puck_phase(phase) or phase == GamePhase.Phase.GOAL_CELEBRATION \
+			or phase == GamePhase.Phase.FIGHT
+
+# Phases in which skaters pass through each other: every locked one (a skate-in
+# crossing the centre is not a check), and the fight's stoppage, where nobody
+# can hit a fighter or be hit.
+static func suspends_contact(phase: GamePhase.Phase) -> bool:
+	return is_movement_locked(phase) or phase == GamePhase.Phase.FIGHT
 
 # The puck is in the net: the celebration and the replay after it. Takes the
 # raw phase byte because replays ask it of recorded frames, whose goal-moment

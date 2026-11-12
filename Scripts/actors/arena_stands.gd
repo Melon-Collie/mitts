@@ -283,6 +283,10 @@ extends Node3D
 const _EXCITE_RISE_TIME: float = 0.25
 const _EXCITE_HOLD_TIME: float = 3.5
 const _EXCITE_DECAY_TIME: float = 3.0
+# Through a fight's stoppage the bowl is on its feet the whole time, arms up,
+# turned to the fight; it turns there quicker than it settles back after.
+const _FIGHT_EXCITEMENT: float = 0.9
+const _LOOK_TURN_TIME: float = 0.6
 
 # The ceiling rig's housings and its intro cue. Outlives rebuilds (see _ready).
 const _HOUSE_LIGHTS_NAME: StringName = &"ArenaHouseLights"
@@ -292,6 +296,12 @@ const _REFLECTION_NAME: StringName = &"ArenaReflection"
 
 var _excitement: float = 0.0
 var _excite_tween: Tween = null
+# The look at a fight: how far the bowl has turned to it, and where it is.
+var _look_weight: float = 0.0
+var _look_tween: Tween = null
+var _look_at: Vector3 = Vector3.ZERO
+var _watching_fight: bool = false
+var _gm: Node = null
 # Whether a replay is on screen, and whether its frame has reached the goal.
 var _replaying: bool = false
 var _replay_after_goal: bool = false
@@ -373,6 +383,7 @@ func _ready() -> void:
 	# mid-celebration when the scene changed would otherwise carry its excitement
 	# into the fresh arena. New bowls start at the idle murmur.
 	_set_excitement(0.0)
+	_set_look_weight(0.0)
 	_wire_game_signals()
 
 
@@ -380,6 +391,7 @@ func _wire_game_signals() -> void:
 	var gm: Node = get_node_or_null("/root/GameManager")
 	if gm == null:
 		return
+	_gm = gm if gm.has_method("fight_focus") else null
 	if gm.has_signal("team_colors_ready"):
 		gm.team_colors_ready.connect(setup)
 	if gm.has_signal("goal_scored"):
@@ -606,6 +618,11 @@ func _get_or_build_layout() -> Dictionary:
 func _process(delta: float) -> void:
 	if _signage != null:
 		_signage.scroll_ribbon(delta, ribbon_scroll_speed)
+	if _watching_fight and _gm != null:
+		var at: Vector3 = _gm.fight_focus(_look_at)
+		if at.is_finite():
+			_look_at = at
+			_set_look_weight(_look_weight)
 
 
 # ── Crowd excitement ─────────────────────────────────────────────────────────
@@ -621,8 +638,33 @@ func _on_goal_scored(_team: Variant, _scorer: String, _a1: String, _a2: String) 
 
 
 func _on_phase_changed(new_phase: int) -> void:
+	var fight: bool = new_phase == GamePhase.Phase.FIGHT
+	if fight != _watching_fight:
+		_watch_fight(fight)
 	if new_phase == GamePhase.Phase.END_OF_PERIOD or new_phase == GamePhase.Phase.GAME_OVER:
 		excite(0.7)
+
+
+# The gloves are off: the bowl gets up, arms raised, and turns to the fight
+# (followed in _process), held there until the stoppage ends, then settles.
+func _watch_fight(on: bool) -> void:
+	_watching_fight = on
+	if _excite_tween != null and _excite_tween.is_valid():
+		_excite_tween.kill()
+	_excite_tween = create_tween()
+	_excite_tween.tween_method(_set_excitement, _excitement,
+			_FIGHT_EXCITEMENT if on else 0.0, _EXCITE_RISE_TIME if on else _EXCITE_DECAY_TIME)
+	if _look_tween != null and _look_tween.is_valid():
+		_look_tween.kill()
+	_look_tween = create_tween()
+	_look_tween.tween_method(_set_look_weight, _look_weight, 1.0 if on else 0.0,
+			_LOOK_TURN_TIME if on else _EXCITE_DECAY_TIME)
+
+
+func _set_look_weight(w: float) -> void:
+	_look_weight = w
+	if _crowd != null:
+		_crowd.set_look(_look_at, w)
 
 
 # A replay plays the crowd as it was: idle through the play it re-runs, on its

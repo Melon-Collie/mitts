@@ -521,7 +521,7 @@ func _build_ice_texture() -> ImageTexture:
 	# Dot and circle sizes from NHL Official Rules — 2' diameter filled dot,
 	# 15' radius surrounding circle.
 	var dot_r:    float = 0.3048 * _px_per_meter
-	var circle_r: float = 4.572  * _px_per_meter
+	var circle_r: float = GameRules.FACEOFF_CIRCLE_RADIUS_M * _px_per_meter
 
 	# Center ice circle + filled dot
 	_draw_circle(img, img_w / 2.0, img_h / 2.0, circle_r, thin_line, blue_line_color)

@@ -66,6 +66,10 @@ class Params:
 	# this near zero so the wrap hugs the bottom edge instead of hanging the
 	# whole inflate below the blade (the blade would ride on a tape shelf).
 	var sole_inflate_cap: float = INF
+	# How far above the bottom edge the cross-section may reach: a strip of
+	# tape laid along the blade rather than wrapped round it. INF is the whole
+	# face height.
+	var strip_height_m: float = INF
 	var u_start: float = 0.0           # span start, fraction heel→toe
 	var u_end: float = 1.0             # span end, fraction heel→toe
 	var segments: int = 16
@@ -180,6 +184,7 @@ static func _emit_band(st: SurfaceTool, p: Params) -> void:
 			var x: float = p.toe_round_m - d_toe
 			top_y -= p.toe_round_m - sqrt(maxf(p.toe_round_m * p.toe_round_m - x * x, 0.0))
 			top_y = maxf(top_y, bottom_y + 0.002)
+		top_y = minf(top_y, bottom_y + p.strip_height_m)
 		# Face-open twist: lean the TOP corners toward the convex side about
 		# the bottom edge (the sole never leaves the ice), growing with the
 		# bow profile so the face rolls open where the pattern bends.
@@ -248,11 +253,79 @@ static func build_tape(p: Params, span: Vector2) -> ArrayMesh:
 	p.segments = _TAPE_SEGMENTS
 	p.sole_inflate_cap = _TAPE_SOLE_CAP_M
 	p.hosel_length = 0.0
+	p.strip_height_m = INF
 	for i in count:
 		p.u_start = span.x + step * float(i)
 		p.u_end = minf(p.u_start + width_u, span.y)
 		p.inflate = _TAPE_INFLATE_SNUG_M if i % 2 == 0 else _TAPE_INFLATE_PROUD_M
 		_emit_band(st, p)
+	st.generate_normals()
+	return st.commit()
+
+
+# The narrow wraps SPACED spreads over its span, evenly, ends included.
+const SPACED_WRAP_COUNT: int = 4
+const SPACED_WRAP_WIDTH_M: float = 0.010
+# BOTTOM_STRIP: one width of tape laid lengthwise along the bottom edge, and a
+# toe cap of about two wraps' worth closing it.
+const STRIP_HEIGHT_M: float = TAPE_WRAP_WIDTH_M
+const TOE_CAP_M: float = 0.04
+
+
+# The blade tape a tape job draws in its blade color, or null for none.
+static func build_tape_job(p: Params, tape: StickTapeConfig) -> ArrayMesh:
+	if not tape.has_blade_tape():
+		return null
+	match tape.span:
+		StickTapeConfig.Span.SPACED:
+			return _build_spaced(p, tape.span_range())
+		StickTapeConfig.Span.BOTTOM_STRIP:
+			return _build_strip(p, Vector2(tape.span_range().x, _toe_cap_start(p)))
+	return build_tape(p, tape.span_range())
+
+
+# The toe cap a tape job draws in its toe color, or null when it has none.
+static func build_toe_cap(p: Params, tape: StickTapeConfig) -> ArrayMesh:
+	if not tape.has_toe_cap():
+		return null
+	return build_tape(p, Vector2(_toe_cap_start(p), 1.0))
+
+
+static func _toe_cap_start(p: Params) -> float:
+	return 1.0 - TOE_CAP_M / maxf(p.length, 0.001)
+
+
+static func _build_spaced(p: Params, span: Vector2) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	var width_u: float = SPACED_WRAP_WIDTH_M / maxf(p.length, 0.001)
+	var step: float = (span.y - span.x - width_u) / float(SPACED_WRAP_COUNT - 1)
+	p.segments = _TAPE_SEGMENTS
+	p.sole_inflate_cap = _TAPE_SOLE_CAP_M
+	p.hosel_length = 0.0
+	p.inflate = _TAPE_INFLATE_SNUG_M
+	p.strip_height_m = INF
+	for i in SPACED_WRAP_COUNT:
+		p.u_start = span.x + step * float(i)
+		p.u_end = p.u_start + width_u
+		_emit_band(st, p)
+	st.generate_normals()
+	return st.commit()
+
+
+static func _build_strip(p: Params, span: Vector2) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	p.segments = _TAPE_SEGMENTS * 8
+	p.sole_inflate_cap = _TAPE_SOLE_CAP_M
+	p.hosel_length = 0.0
+	p.inflate = _TAPE_INFLATE_SNUG_M
+	p.strip_height_m = STRIP_HEIGHT_M
+	p.u_start = span.x
+	p.u_end = span.y
+	_emit_band(st, p)
 	st.generate_normals()
 	return st.commit()
 

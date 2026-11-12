@@ -127,7 +127,8 @@ pose to `.preview/body/` (`tools/body_preview_runner.gd`); `--pants` draws the
 pants alone, and `--audit` skins the body on the CPU per pose and counts the
 faces folded inside out, by paint zone — what shows as a hole; `--head` frames
 the helmet, `--shoulders` the yoke square on, `--waist` the belt, where a tuck
-goes in, and `--skate` the near skate; `--tile=900` draws each view that many
+goes in, `--skate` the near skate and `--hands` the top hand (a glove, or a
+fighter's bare fist); `--tile=900` draws each view that many
 pixels square, which is what a seam needs. `BODY_PREVIEW_RENDERER=forward_plus`
 draws it on the renderer the game ships instead (software Vulkan here): the
 check for a change to the body's shader.
@@ -396,6 +397,7 @@ that file can't tell you:
 | New HUD panel | Class in `Scripts/ui/hud/` owning its widgets and its state; `HUD` holds a reference, calls methods and never writes its fields — upward flow is a signal. `test_hud_panel_wiring.gd` holds both (see `Scripts/ui/CLAUDE.md`) |
 | New team | Its palette and kits in `data/team_colors.json` → its fruit's drawing in `CrestFruits` (keyed by the team's name, colors listed as the real fruit's — `TeamCrest` snaps them to the team's own). `test_team_crest.gd` fails until it has one; `tools/crest_gallery.gd` lays every crest out |
 | New sound cue | Master the file with `python3 tools/normalize_sfx.py --apply <file>` → `SoundManager.Sound` + `_SOUND_PATHS` (several takes: a `%02d` path numbered from 1 plus its count in `_TAKE_COUNTS`, level-matched to each other) → its level in `_MIX_DB` (the mix; `test_audio_streams.gd` holds the order) and any shortfall the tool reports in `_UNDER_REFERENCE_DB`. Call sites pass only situational gain (speed, power), never the cue's base level |
+| New Game Puck or title | A row in `GamePucks.ALL` (a combo is a row whose `needs` lists other pucks and tiers) or `Titles.ALL` plus its `PUCK_<ID>` / `PUCK_<ID>_DESC` (a combo has no `_DESC`; `TITLE_<ID>`, reading as its puck does) rows in `locale/translations.csv`; a ladder's counter is a `SteamStats` row, and a title names the puck that unlocks it; a feat puck also needs its branch in `FeatRules.goal_feats` (and its id in `FeatRules.ALL`). A cosmetic reward is a `CosmeticUnlocks.REWARDS` row: one slot, one option, the puck or tier (`goals@50`) that unlocks it. Mirroring to Steam is opt-in per puck (`steam/ACHIEVEMENTS.md`). `test_game_puck_catalogue.gd` holds all of it; design in `docs/game-pucks-plan.md` |
 | New user-facing UI string | `KEY,en,es` row in `locale/translations.csv`, then `tr("KEY")` at the display seam; `test_ui_uses_the_locale_seam.gd` ratchets the files that still hold English (see `Scripts/ui/CLAUDE.md`) |
 
 ## Code Conventions

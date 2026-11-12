@@ -1,13 +1,14 @@
 extends SceneTree
 
-# Dev visualizer: renders the whole stick-model catalogue offscreen — every
-# colorway standing on its blade above its name — and saves PNGs from two
+# Dev visualizer: renders the whole stick-pattern catalogue offscreen — every
+# pattern in its default colours, standing on its blade above its name, the
+# team entries painted a sample red and white — and saves PNGs from two
 # angles, so stick designs can be SEEN without launching the game. Each stick
 # is built from the rink's own pieces (procedural blade at the M92 pattern,
 # shaft box on the flex shader, butt knob) painted through
-# StickStyle/StickModelRegistry, so the COLORWAY in the PNG is the one the game
+# StickStyle/StickModelRegistry, so the PAINT in the PNG is the one the game
 # renders. The lie and the shelf layout are this tool's own — a stick stood up
-# for reading, not the locker mannequin's carried pose. Bare blade and bare grip on purpose: the sheet shows the colorway,
+# for reading, not the locker mannequin's carried pose. Bare blade and bare grip on purpose: the sheet shows the paint,
 # not a tape job over it.
 #
 # Needs a real (software) renderer, not --headless. On the web container:
@@ -24,7 +25,9 @@ const _HOSEL_LEN_M: float = 0.085
 const _SHAFT_CROSS := Vector2(0.04, 0.05)
 const _KNOB_HEIGHT_M: float = 0.05
 const _KNOB_COLOR := Color(0.88, 0.88, 0.86)
-# The M92 all-rounder — one pattern across the sheet so only the colorway
+const _TEAM_PRIMARY := Color(0.72, 0.08, 0.12)
+const _TEAM_SECONDARY := Color(0.92, 0.92, 0.92)
+# The M92 all-rounder — one pattern across the sheet so only the paint
 # varies between columns.
 const _PATTERN: int = 1
 
@@ -100,7 +103,7 @@ func _init() -> void:
 		_build_stick(holder, model)
 
 		var label := Label3D.new()
-		label.text = tr(StickModelRegistry.NAME_KEYS[model])
+		label.text = tr(StickModelRegistry.name_key(model))
 		label.pixel_size = 0.0011
 		label.font_size = 64
 		label.position = Vector3(x, -_LABEL_DROP_M, 0.4)
@@ -134,16 +137,19 @@ func _build_stick(holder: Node3D, model: int) -> void:
 	p.hosel_angle_deg = _LIE_DEG
 	var blade := MeshInstance3D.new()
 	blade.mesh = StickBladeMeshBuilder.build(p)
-	blade.material_override = StickStyle.make_blade_material(model)
+	var zones: Array[int] = StickModelRegistry.default_zones(model)
+	blade.material_override = StickStyle.make_blade_material(model, zones, _TEAM_PRIMARY,
+			_TEAM_SECONDARY)
 	holder.add_child(blade)
 
 	var shaft := MeshInstance3D.new()
 	var shaft_box := BoxMesh.new()
 	shaft_box.size = Vector3(_SHAFT_CROSS.x, _SHAFT_CROSS.y, 1.0)
 	shaft.mesh = shaft_box
-	var shaft_mat: ShaderMaterial = StickStyle.make_shaft_material(model)
+	var shaft_mat: ShaderMaterial = StickStyle.make_shaft_material(model, zones, _TEAM_PRIMARY,
+			_TEAM_SECONDARY)
 	# Live uniforms the rink drives per frame: the real length (band anchoring
-	# reads it) and a bare grip so nothing covers the colorway.
+	# reads it) and a bare grip so nothing covers the paint.
 	shaft_mat.set_shader_parameter(&"shaft_len_m", _stick_len)
 	shaft_mat.set_shader_parameter(&"grip_mode", 0)
 	shaft.material_override = shaft_mat

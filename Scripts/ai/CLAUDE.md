@@ -59,7 +59,8 @@ the dispatched input: the stick lift, the stand-up (`apply_stand_up`), board pla
 block (`SkaterAgentShotBlock`) and the press (`SkaterAgentPress`). The offside brake (`apply_offside_guard`)
 runs after all of them as the last write to the move, so no writer — the rolled
 carry inside dispatch, the slide out of a hold after it — can carry a bot over the line
-(`test_agent_offside_guard.gd`).
+(`test_agent_offside_guard.gd`). The one bot it stands down for is a hunter
+without the puck, who follows the man he is after wherever he goes.
 
 ### The dispatch throttle
 

@@ -1018,6 +1018,37 @@ func test_shots_on_goal_changed_signal_fires() -> void:
 	assert_signal_emitted_with_parameters(tracker, "shots_on_goal_changed", [1, 0])
 
 
+# ── Feat context ─────────────────────────────────────────────────────────────
+
+func test_release_style_rides_the_pending_shot() -> void:
+	_add_player(10, 0)
+	tracker.note_release_style(ShotMechanics.ELEVATION_HIGH, true)
+	assert_eq(tracker.pending_loft_level(), ShotMechanics.ELEVATION_FLAT,
+			"no pending shot, nothing recorded")
+	tracker.on_shot_started(10)
+	tracker.note_release_style(ShotMechanics.ELEVATION_HIGH, true)
+	assert_eq(tracker.pending_loft_level(), ShotMechanics.ELEVATION_HIGH)
+	assert_true(tracker.pending_is_backhand())
+	tracker.on_shot_started(10)
+	assert_eq(tracker.pending_loft_level(), ShotMechanics.ELEVATION_FLAT,
+			"a new release starts from flat")
+	tracker.note_release_style(ShotMechanics.ELEVATION_MID, false)
+	tracker.clear_pending()
+	assert_eq(tracker.pending_loft_level(), ShotMechanics.ELEVATION_FLAT)
+	assert_false(tracker.pending_is_backhand())
+
+
+func test_last_assist_ids_name_the_credited_players_primary_first() -> void:
+	_add_player(10, 0)
+	_add_player(11, 0)
+	_add_player(12, 0)
+	tracker.on_pickup(10)
+	tracker.on_pickup(11)
+	tracker.on_pickup(12)
+	tracker.credit_assists(12)
+	assert_eq(tracker.last_assist_ids(), [11, 10] as Array[int])
+
+
 # ── The play the keeper saw (the xG stat's history) ──────────────────────────
 
 func test_a_shot_off_a_pass_reads_its_side_until_the_keeper_resets() -> void:

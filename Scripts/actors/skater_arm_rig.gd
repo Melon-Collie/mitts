@@ -173,7 +173,7 @@ func build(skeleton: Skeleton3D) -> void:
 # once, for the callers with no clock.
 func update_top_arm(delta: float = -1.0) -> void:
 	var hand: Vector3 = _skater.drawn_top_hand()
-	_update_arm(0, delta, _skater.shoulder.position, hand, _skater.stick_grip_axis(hand),
+	_update_arm(0, delta, _skater.shoulder.position, hand, _grip_axis(hand),
 			1.0 if _skater.is_left_handed else -1.0,
 			SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM,
 			SkaterMeshBuilder.UpperBone.TOP_FOREARM,
@@ -186,8 +186,9 @@ func update_top_arm(delta: float = -1.0) -> void:
 # gameplay stick, the hand goes where the bent shaft actually is.
 func update_bottom_arm(delta: float = -1.0) -> void:
 	var hand: Vector3 = _skater.bottom_hand.position
-	var grip: Vector3 = _skater.stick_grip_axis(hand)
-	hand += _skater.stick_bow_offset(hand)
+	var grip: Vector3 = _grip_axis(hand)
+	if not _skater.gloves_off():
+		hand += _skater.stick_bow_offset(hand)
 	_update_arm(1, delta, _skater.bottom_shoulder.position, hand, grip,
 			-1.0 if _skater.is_left_handed else 1.0,
 			SkaterMeshBuilder.UpperBone.BOTTOM_UPPER_ARM,
@@ -195,6 +196,14 @@ func update_bottom_arm(delta: float = -1.0) -> void:
 			SkaterMeshBuilder.UpperBone.BOTTOM_CUFF,
 			SkaterMeshBuilder.UpperBone.BOTTOM_ELBOW,
 			SkaterMeshBuilder.UpperBone.BOTTOM_HAND)
+
+
+# The shaft's direction through a hand on the stick; with the gloves off, the
+# axis that draws a bare fist thumb up (FightGuardRules.FIST_GRIP_AXIS).
+func _grip_axis(hand: Vector3) -> Vector3:
+	if _skater.gloves_off():
+		return FightGuardRules.FIST_GRIP_AXIS
+	return _skater.stick_grip_axis(hand)
 
 
 # `grip_local` is the shaft's direction at this hand (upper-body space), ZERO for

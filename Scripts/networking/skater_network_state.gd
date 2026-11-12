@@ -33,6 +33,15 @@ var stick_tied: bool = false
 # the pair before replay.
 var check_drive_phase: int = 0
 var check_drive_elapsed: float = 0.0
+# Skater.fight_role (FightRules.Role): host-authoritative, applied every
+# broadcast like stick_tied.
+var fight_role: int = 0
+# What a fighter's holding hand holds and which arm punches
+# (FightHoldRules.Grip / Side): the fighter's own, simulated where he is.
+var fight_grip: int = 0
+var fight_punch_side: int = 0
+# Skater.fight_rattle (FightPunchRules): host-authoritative, seconds.
+var fight_rattle: float = 0.0
 # Skater.is_diving: a dive's down window rides knockdown_timer and recoil_dir;
 # this says it is a dive (its stick still plays, its body blocks low).
 var diving: bool = false
@@ -155,9 +164,13 @@ func to_array() -> Array:
 		check_drive_phase,
 		check_drive_elapsed,
 		stumbling,
+		fight_role,
+		fight_grip,
+		fight_punch_side,
+		fight_rattle,
 	]
 
-# The stick-play, pin, dive and check-drive fields, which are discrete: a reader
+# The stick-play, dive, check-drive and fight fields, which are discrete: a reader
 # between two snapshots (interpolation, the rewind buffer, replay playback)
 # takes them whole from one, never blends them.
 func copy_stick_play_from(s: SkaterNetworkState) -> void:
@@ -167,6 +180,10 @@ func copy_stick_play_from(s: SkaterNetworkState) -> void:
 	stick_check_phase = s.stick_check_phase
 	stick_check_elapsed = s.stick_check_elapsed
 	stick_tied = s.stick_tied
+	fight_role = s.fight_role
+	fight_grip = s.fight_grip
+	fight_punch_side = s.fight_punch_side
+	fight_rattle = s.fight_rattle
 	diving = s.diving
 	stumbling = s.stumbling
 	slapshot_pinned = s.slapshot_pinned
@@ -202,6 +219,10 @@ func copy_from(s: SkaterNetworkState) -> void:
 	stick_check_phase = s.stick_check_phase
 	stick_check_elapsed = s.stick_check_elapsed
 	stick_tied = s.stick_tied
+	fight_role = s.fight_role
+	fight_grip = s.fight_grip
+	fight_punch_side = s.fight_punch_side
+	fight_rattle = s.fight_rattle
 	diving = s.diving
 	slapshot_pinned = s.slapshot_pinned
 	check_drive_phase = s.check_drive_phase
@@ -266,4 +287,11 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.check_drive_elapsed = data[32]
 	if data.size() > 33:
 		state.stumbling = data[33]
+	if data.size() > 34:
+		state.fight_role = data[34]
+	if data.size() > 36:
+		state.fight_grip = data[35]
+		state.fight_punch_side = data[36]
+	if data.size() > 37:
+		state.fight_rattle = data[37]
 	return state

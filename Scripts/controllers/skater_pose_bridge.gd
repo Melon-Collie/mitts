@@ -13,7 +13,7 @@ extends RefCounted
 # bridge advanced through a replay would play its ease twice. Its effect rides
 # the hand and blade the wire already carries.
 
-enum Owner { TRACKED, SLAPPER, FOLLOW_THROUGH, BLOCK }
+enum Owner { TRACKED, SLAPPER, FOLLOW_THROUGH, BLOCK, FIGHT }
 
 const State = SkaterStateMachine.State
 
@@ -40,8 +40,12 @@ var _next_span: float = 0.0
 # taking the puck to the strike spot; the wind-up owns the stick from there.
 # `slap_finish`: a follow-through that is a slapper's, whose downswing starts
 # from the pose its wind-up ended on — one owner, so nothing holds the stick
-# while the shoulders come through.
-static func owner_of(state: State, slapper_set: bool = true, slap_finish: bool = false) -> Owner:
+# while the shoulders come through. `fighting`: the gloves are off and the
+# fists (SkaterFightHands) own the hands, whatever the shot state.
+static func owner_of(state: State, slapper_set: bool = true, slap_finish: bool = false,
+		fighting: bool = false) -> Owner:
+	if fighting:
+		return Owner.FIGHT
 	match state:
 		State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK, \
 				State.ONE_TIMER_RETENTION:
@@ -62,13 +66,18 @@ func ease_next_change(span: float) -> void:
 # After the tick's last write to the hand and blade: start an ease if the owner
 # changed, lay it on, and remember what was drawn.
 func settle(skater: Skater, state: State, delta: float, slapper_set: bool = true,
-		slap_finish: bool = false) -> void:
-	var owner: Owner = owner_of(state, slapper_set, slap_finish)
+		slap_finish: bool = false, fighting: bool = false) -> void:
+	var owner: Owner = owner_of(state, slapper_set, slap_finish, fighting)
 	if owner != _owner and _have_last:
 		_from_hand = _last_hand
 		_from_blade = _last_blade
 		_age = 0.0
-		_span = FOLLOW_THROUGH_SPAN_S if owner == Owner.FOLLOW_THROUGH else SPAN_S
+		# Into a fight the fists ease themselves from where the stick was
+		# (SkaterFightHands); out of one the stick comes back to the hands.
+		_span = 0.0 if owner == Owner.FIGHT \
+				else FOLLOW_THROUGH_SPAN_S if owner == Owner.FOLLOW_THROUGH \
+				else FightGuardRules.EASE_S if _owner == Owner.FIGHT \
+				else SPAN_S
 		if _next_span > 0.0:
 			_span = _next_span
 	_next_span = 0.0

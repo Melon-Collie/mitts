@@ -72,6 +72,7 @@ static func roster_entry(record: PlayerRecord) -> Dictionary:
 		"tape_code": record.tape_code,
 		"skin_tone": record.skin_tone,
 		"gear_style_code": record.gear_style_code,
+		"title_id": record.title_id,
 	}
 
 

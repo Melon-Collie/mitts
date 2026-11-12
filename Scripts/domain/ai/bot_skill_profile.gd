@@ -161,6 +161,10 @@ var ties_sticks: bool
 # and a 2-on-1's last defender dives across the pass (AIShotBlockRead). False =
 # neither, so a newcomer's shots and cross-ice feeds are never taken away.
 var blocks_shots: bool
+# In a fight (AIFightBrain): catches the other man's thrown punching arm and
+# frees its own held one by swapping hands. Closed, it only guards, holds the
+# sweater and throws.
+var ties_up_arms: bool = true
 
 
 func _init(p_carrier_reaction_delay_s: float,
@@ -253,9 +257,11 @@ static func normal() -> BotSkillProfile:
 # past a poke that reads only where it is, and the cross-crease 2-on-1 glory
 # feed all genuinely work.
 static func easy() -> BotSkillProfile:
-	return BotSkillProfile.new(0.34, 0.075, 0.055, 0.0225, 0.24, 0.85, 0.55,
+	var p := BotSkillProfile.new(0.34, 0.075, 0.055, 0.0225, 0.24, 0.85, 0.55,
 			3.0, 0.75, 0.0, 0.2,
 			false, false, false, false, false, false, false, false, false, false)
+	p.ties_up_arms = false
+	return p
 
 
 static func for_difficulty(difficulty: int) -> BotSkillProfile:

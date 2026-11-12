@@ -477,21 +477,66 @@ here whenever you bump, in the same format.
 #      before confirming a snapshot within the box tolerance. A v97 peer would
 #      read the digest as bits past the blob's end, so mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged.
-# v99: the skater block grows a byte, to 59: the timed check's phase and ticks
-#      into it (CheckDriveRules.pack), which a contact reads on both bodies
-#      (full transfer and the legs' kick inside the drive, the held share past
-#      it) and the local reconcile adopts. The hit button's meaning changed
-#      with it: a contact outside the drive lands at CheckDriveRules.HELD_SHARE
-#      of the transfer. Replay FORMAT_VERSION 21: the frames hold the block.
-# v100: the body-lock byte's bit 4 is `stumbling`: a down window that is a
-#      stumble, on a knee (BodyCheckRules.flat_overshoot), where it was always a
-#      knockdown flat on the ice, and the knockdown's own line moved up to
-#      flat_overshoot. A v99 peer would predict a different outcome for the same
-#      hit and draw a stumble lying down, so mixed builds must be refused.
-#      Replay FORMAT_VERSION unchanged: the block's layout did not move.
-# v101: the board pin is gone. The skater block loses its pin_strength byte (58
-#      bytes) and the body-state byte's bits 0-1 (pin_role) are unused; a man is
-#      held on the boards by the press's squeeze instead (BoardWallRules), which
-#      every machine lays from state already replicated. A v100 peer would read
-#      the check drive where the pin strength was, so mixed builds must be
-#      refused. Replay FORMAT_VERSION 22.
+# v99: fighting, phase 1. The input record grows 24 -> 25 bytes (a second flag
+#      byte, fight_pressed in bit 0); the lobby settings and game-config RPCs
+#      carry the Fighting toggle; new reliable RPCs notify_fight_challenge,
+#      notify_fight_called and notify_fight_challenge_lapsed shift the RPC
+#      index set; GamePhase gains FIGHT (ordinal 7) on the world-state phase
+#      byte. Replay FORMAT_VERSION unchanged: the recorders store snapshots,
+#      not inputs, and FIGHT is appended so every older file's phases still
+#      read the same.
+# v100: fighting, phase 2. The skater's body-lock byte carries fight_role
+#      (FightRules.Role) in bits 4-5, which every machine draws a fighter's
+#      gear off and guard up from. A v99 peer reads the bits as zero and draws
+#      a fighter holding his stick, so mixed builds must be refused. Replay
+#      FORMAT_VERSION unchanged: the byte was there, and an older file's bits
+#      are zero.
+# v101: fighting, phase 3. The skater block grows 58 -> 59 bytes: a fight
+#      byte with what the holding hand holds (FightHoldRules.Grip, 2 bits) and
+#      which arm punches (FightHoldRules.Side, 1 bit). The fists ride the
+#      existing hand and blade markers. Replay FORMAT_VERSION 20 -> 21, since
+#      the recorded frames carry the block.
+# v102: fighting, phase 4. The skater block's fight byte carries the rattle
+#      (FightPunchRules, seconds @0.1 s) in bits 3-7, and the new reliable RPC
+#      notify_punch_landed shifts the RPC index set. Replay FORMAT_VERSION
+#      unchanged at 21: the bits were zero, and still are in a file older
+#      than this.
+# v103: Game Pucks (docs/game-pucks-plan.md), one bump for the branch's
+#      wire changes, none of which shipped on its own:
+#      - PlayerStats gained `interceptions`, `fights` and `fight_wins`
+#        (appended to to_array), three values more in the stats player record.
+#      - Titles: request_join and spawn_remote_skater carry the Titles id the
+#        player wears as a trailing String; the lobby roster entry's look
+#        (PlayerLook.cosmetics_to_wire) appends it, and the existing-player
+#        sync carries it. Replay header rosters gain an optional "title_id".
+#      - A new host→peer RPC, notify_feat(puck_id), shifts the RPC index set.
+#      - The tape palette gains TEAM_SECOND at index 11 (the kit's secondary
+#        colour) for the tape and lace codes.
+#      - Two tape spans (StickTapeConfig.Span.SPACED, BOTTOM_STRIP) fill the
+#        span's 3 bits, and the tape code grows a toe-cap colour (5 bits).
+#      - Sticks are patterns: the gear code's stick_model is a
+#        StickModelRegistry pattern, and the tape code grows a paint flag and
+#        five 5-bit zone colours above the toe colour (46 bits in all).
+#      An older peer reads none of this, so mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged: an older replay's codes decode as
+#      before and its header simply lacks the title.
+# v104: hitting and the boards, one bump for the branch's wire changes, none of
+#      which shipped on its own. The skater block stays 59 bytes with a new
+#      layout:
+#      - The board pin is gone: its pin_strength byte and the body-state byte's
+#        bits 0-1 (pin_role) leave the block. A man is held on the boards by the
+#        press's squeeze instead (BoardWallRules), which every machine lays from
+#        state already replicated.
+#      - A check-drive byte takes the pin strength's place: the timed check's
+#        phase and ticks into it (CheckDriveRules.pack), which a contact reads
+#        on both bodies (full transfer and the legs' kick inside the drive, the
+#        held share past it) and the local reconcile adopts. The hit button's
+#        meaning changed with it: a contact outside the drive lands at
+#        CheckDriveRules.HELD_SHARE of the transfer.
+#      - The body-state byte's bit 6 is `stumbling`: a down window that is a
+#        stumble, on a knee (BodyCheckRules.flat_overshoot), where it was always
+#        a knockdown flat on the ice, and the knockdown's own line moved up to
+#        flat_overshoot.
+#      A v103 peer would read the check drive as a pin strength and predict a
+#      different outcome for the same hit, so mixed builds must be refused.
+#      Replay FORMAT_VERSION 21 -> 22: the frames hold the block.

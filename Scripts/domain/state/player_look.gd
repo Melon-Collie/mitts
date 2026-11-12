@@ -13,6 +13,8 @@ var attributes: PlayerAttributes = PlayerAttributes.neutral()
 var skin_tone: int = SkinToneRegistry.DEFAULT_INDEX
 var tape_code: int = StickTapeConfig.DEFAULT_CODE
 var gear_style_code: int = GearStyleConfig.DEFAULT_CODE
+# Titles id worn, "" for none. A bot's look never carries one.
+var title_id: String = ""
 
 
 # A bot's look from its identity card (BotIdentityRegistry.normalize_entry's
@@ -39,7 +41,7 @@ static func for_bot(identity: Dictionary, bot_id: int, team_slot: int) -> Player
 # The build and cosmetics, as a lobby roster entry carries them after the
 # name, hand and number it already had.
 func cosmetics_to_wire() -> Array:
-	return [attributes.to_dict(), skin_tone, tape_code, gear_style_code]
+	return [attributes.to_dict(), skin_tone, tape_code, gear_style_code, title_id]
 
 
 # Reads cosmetics_to_wire's fields starting at `at`; anything missing or
@@ -52,3 +54,5 @@ func cosmetics_from_wire(entry: Array, at: int) -> void:
 	skin_tone = SkinToneRegistry.clamp_index(int(entry[at + 1]))
 	tape_code = StickTapeConfig.from_code(int(entry[at + 2])).to_code()
 	gear_style_code = GearStyleConfig.from_code(int(entry[at + 3])).to_code()
+	if entry.size() > at + 4 and entry[at + 4] is String:
+		title_id = Titles.coerce(String(entry[at + 4]))

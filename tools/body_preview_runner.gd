@@ -41,6 +41,8 @@ const SHOULDER_ANGLES: Array[Vector3] = [
 ]
 # --skate: framed on the near (left) skate, where the upper meets the leg.
 const SKATE_FOV: float = 8.0
+# --hands: framed on the top hand, from the TOP_HAND bone so a reach keeps it in.
+const HANDS_FOV: float = 6.0
 const PANTS_AIM_Y: float = -0.4
 
 enum Step { BUILD, POSE, GRAB }
@@ -54,12 +56,14 @@ var _head: bool = false
 var _waist: bool = false
 var _skate: bool = false
 var _shoulders: bool = false
+var _hands: bool = false
 
 
 func begin_preview(only: String, pants: bool = false,
 		audit: bool = false, head: bool = false, waist: bool = false,
-		skate: bool = false, shoulders: bool = false) -> void:
+		skate: bool = false, shoulders: bool = false, hands: bool = false) -> void:
 	_pants = pants
+	_hands = hands
 	_shoulders = shoulders
 	_skate = skate
 	_waist = waist
@@ -156,6 +160,11 @@ func _place_camera() -> void:
 		_camera.fov = SKATE_FOV
 		aim = legs.global_transform * legs.get_bone_global_pose(SkaterBodySkeleton.LEG_BONE_OFFSET
 				+ SkaterMeshBuilder.LegBone.FOOT_L).origin
+	if _hands:
+		var arms: Skeleton3D = _skater._arms._skeleton
+		_camera.fov = HANDS_FOV
+		aim = arms.global_transform * arms.get_bone_global_pose(
+				SkaterMeshBuilder.UpperBone.TOP_HAND).origin
 	var offset: Vector3 = ANGLES[_angle]
 	if _shoulders:
 		var spine: Skeleton3D = _skater._arms._skeleton
@@ -197,6 +206,8 @@ func _sheet_prefix() -> String:
 		return "waist_"
 	if _shoulders:
 		return "shoulders_"
+	if _hands:
+		return "hands_"
 	return "skate_" if _skate else ""
 
 

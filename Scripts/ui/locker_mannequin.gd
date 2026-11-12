@@ -453,8 +453,8 @@ func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig, heel: Vector3,
 	tape_p.face_open_deg = p.face_open_deg
 	tape_p.toe_round_m = p.toe_round_m
 	tape_p.curve_sign = p.curve_sign
-	_tape_mesh.mesh = StickBladeMeshBuilder.build_tape(tape_p, tape.span_range()) \
-			if tape.has_blade_tape() else null
+	_tape_mesh.mesh = StickBladeMeshBuilder.build_tape_job(tape_p, tape)
+	_kit.toe_mesh.mesh = StickBladeMeshBuilder.build_toe_cap(tape_p, tape)
 
 	var lean: float = deg_to_rad(lean_deg)
 	var axis := Vector3(0.0, sin(lean), cos(lean))

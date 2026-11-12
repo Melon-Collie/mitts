@@ -21,6 +21,7 @@ const _REBINDABLE_ACTIONS: Array = [
 	{"action": "stick_lift",     "label": "CONTROLS_DEFLECT"},
 	{"action": "stick_check",    "label": "CONTROLS_STICK_LIFT"},
 	{"action": "smart_ping",     "label": "Smart Ping"},
+	{"action": "drop_gloves",    "label": "CONTROLS_FIGHT"},
 ]
 
 # Gamepad button rebinds (discrete buttons only — sticks/triggers are fixed).
@@ -36,6 +37,7 @@ const _PAD_REBINDABLE: Array = [
 	{"action": "elevation_up",   "label": "Loft Up"},
 	{"action": "elevation_down", "label": "Loft Down"},
 	{"action": "smart_ping",     "label": "Smart Ping"},
+	{"action": "drop_gloves",    "label": "CONTROLS_FIGHT"},
 ]
 # Buttons reserved for menu / scoreboard — not bindable to a gameplay action.
 # Pressing one while listening CANCELS the rebind instead, so a pad-only player

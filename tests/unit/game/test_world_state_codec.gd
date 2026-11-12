@@ -527,11 +527,13 @@ func test_the_body_state_bits_do_not_disturb_each_other() -> void:
 		s.diving = bits & 1 != 0
 		s.slapshot_pinned = bits & 2 != 0
 		s.stumbling = bits & 4 != 0
+		s.fight_role = FightRules.Role.NONE if bits & 1 != 0 else FightRules.Role.FIGHTING
 		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 				WorldStateCodec._encode_skater_quantized(s))
 		assert_eq(dec.diving, s.diving)
 		assert_eq(dec.slapshot_pinned, s.slapshot_pinned)
 		assert_eq(dec.stumbling, s.stumbling)
+		assert_eq(dec.fight_role, s.fight_role)
 
 
 func test_skater_check_drive_round_trips() -> void:
@@ -546,6 +548,52 @@ func test_skater_check_drive_round_trips() -> void:
 		assert_eq(dec.check_drive_phase, phase)
 		assert_almost_eq(dec.check_drive_elapsed, 0.2, 0.5 * Constants.TICK_DURATION + 1e-6)
 		assert_true(dec.stumbling, "the byte before it is untouched")
+
+
+func test_skater_fight_role_rides_the_body_lock_byte() -> void:
+	for role: int in [FightRules.Role.NONE, FightRules.Role.CHALLENGING,
+			FightRules.Role.FIGHTING]:
+		var s := SkaterNetworkState.new()
+		s.stumbling = true
+		s.diving = true
+		s.slapshot_pinned = true
+		s.fight_role = role
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_eq(dec.fight_role, role)
+		assert_true(dec.stumbling, "the fight bits leave the stumble alone")
+		assert_true(dec.diving and dec.slapshot_pinned, "and the dive and the slapshot pin")
+
+
+func test_skater_fight_hands_ride_their_own_byte() -> void:
+	for grip: int in [FightHoldRules.Grip.NONE, FightHoldRules.Grip.JERSEY,
+			FightHoldRules.Grip.ARM_TOP, FightHoldRules.Grip.ARM_BOTTOM]:
+		for side: int in [FightHoldRules.Side.TOP, FightHoldRules.Side.BOTTOM]:
+			var s := SkaterNetworkState.new()
+			s.fight_role = FightRules.Role.FIGHTING
+			s.check_drive_phase = CheckDriveRules.Phase.DRIVE
+			s.fight_grip = grip
+			s.fight_punch_side = side
+			var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+					WorldStateCodec._encode_skater_quantized(s))
+			assert_eq(dec.fight_grip, grip)
+			assert_eq(dec.fight_punch_side, side)
+			assert_eq(dec.fight_role, FightRules.Role.FIGHTING)
+			assert_eq(dec.check_drive_phase, CheckDriveRules.Phase.DRIVE,
+					"the byte before it is untouched")
+
+
+func test_skater_rattle_rides_the_fight_byte_beside_the_hands() -> void:
+	for rattle: float in [0.0, 0.4, 1.7, FightPunchRules.RATTLE_MAX_S]:
+		var s := SkaterNetworkState.new()
+		s.fight_grip = FightHoldRules.Grip.ARM_BOTTOM
+		s.fight_punch_side = FightHoldRules.Side.BOTTOM
+		s.fight_rattle = rattle
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_almost_eq(dec.fight_rattle, rattle, 0.051)
+		assert_eq(dec.fight_grip, FightHoldRules.Grip.ARM_BOTTOM)
+		assert_eq(dec.fight_punch_side, FightHoldRules.Side.BOTTOM)
 
 
 func test_skater_stagger_round_trips() -> void:

@@ -37,6 +37,10 @@ func _btn(field: String) -> OptionButton:
 	return _popup.get(field) as OptionButton
 
 
+func _paint() -> StickPaintRows:
+	return _popup.get("_stick_paint") as StickPaintRows
+
+
 func _buttons(field: String) -> Array:
 	return _popup.get(field) as Array
 
@@ -70,7 +74,7 @@ func _picked(buttons: Array) -> int:
 func test_every_row_lists_its_catalogue_with_the_saved_picks() -> void:
 	assert_eq(_btn("_skate_btn").item_count, GearModelRegistry.skate_count())
 	assert_eq(_btn("_glove_btn").item_count, GearModelRegistry.glove_count())
-	assert_eq(_btn("_stick_model_btn").item_count, StickModelRegistry.count())
+	assert_eq(_paint().pattern_button().item_count, StickModelRegistry.listed().size())
 	assert_eq(_btn("_tuck_btn").item_count, GearModelRegistry.tuck_count())
 	assert_eq(_btn("_facial_btn").item_count, HairStyleRegistry.facial_count())
 	assert_eq(_buttons("_face_btns").size(), GearModelRegistry.face_count())
@@ -81,8 +85,20 @@ func test_every_row_lists_its_catalogue_with_the_saved_picks() -> void:
 	assert_eq(_buttons("_skin_buttons").size(), SkinToneRegistry.TONES.size())
 	assert_eq(_btn("_skate_btn").selected, GearModelRegistry.SKATE_RETRO)
 	assert_eq(_btn("_glove_btn").selected, GearModelRegistry.GLOVE_CONTRAST)
-	assert_eq(_btn("_stick_model_btn").selected, StickModelRegistry.count() - 1)
+	assert_eq(_paint().pattern_button().selected,
+			StickModelRegistry.listed().find(StickModelRegistry.count() - 1))
 	assert_eq(_picked(_buttons("_face_btns")), GearModelRegistry.FACE_VISOR)
+
+
+# A reward is listed once its Game Puck is earned and never before; headless
+# there is no Steam, so nothing is earned and the list is the free spans.
+func test_the_coverage_list_offers_only_what_the_player_may_wear() -> void:
+	var btn: OptionButton = (_popup.get("_coverage") as TapeCoverageList).button()
+	var earned: Array[String] = PlayerPrefs.earned_rewards()
+	var open: Array[int] = CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, earned)
+	assert_eq(btn.item_count, open.size())
+	for i: int in btn.item_count:
+		assert_has(open, btn.get_item_id(i))
 
 
 # The model items are rebuilt when the team changes — their TEAM zones resolve
@@ -104,6 +120,29 @@ func test_a_model_pick_lands_in_the_draft_and_on_the_figure() -> void:
 	_btn("_skate_btn").item_selected.emit(GearModelRegistry.SKATE_WHITEOUT)
 	assert_eq(_draft().gear().skate_model, GearModelRegistry.SKATE_WHITEOUT)
 	assert_ne(paint.zone(boot).albedo_color, before, "the figure re-dresses")
+
+
+# A pattern pick starts from that pattern's own colours and shows only the
+# zones it paints; a zone pick paints that zone and keeps the others.
+func test_a_stick_pattern_shows_its_zones_and_a_zone_pick_paints_it() -> void:
+	var btn: OptionButton = _paint().pattern_button()
+	btn.item_selected.emit(StickModelRegistry.listed().find(StickModelRegistry.PATTERN_SPLIT))
+	assert_eq(_draft().gear().stick_model, StickModelRegistry.PATTERN_SPLIT)
+	assert_false(_draft().tape().paint_custom, "a fresh pattern wears its defaults")
+	for zone: int in StickModelRegistry.ZONE_COUNT:
+		var row: Control = _paint().zone_dropdown(zone).get_parent().get_parent() as Control
+		assert_eq(row.visible, StickModelRegistry.has_zone(StickModelRegistry.PATTERN_SPLIT, zone),
+				"zone %d row" % zone)
+	_paint().zone_dropdown(StickModelRegistry.Zone.BAND1).selected.emit(
+			TapeColorRegistry.BLACK_INDEX)
+	var expected: Array[int] = StickModelRegistry.default_zones(StickModelRegistry.PATTERN_SPLIT)
+	expected[StickModelRegistry.Zone.BAND1] = TapeColorRegistry.BLACK_INDEX
+	assert_true(_draft().tape().paint_custom)
+	assert_eq(_draft().tape().paint, expected)
+	btn.item_selected.emit(StickModelRegistry.listed().find(StickModelRegistry.PATTERN_WOOD))
+	assert_false(_draft().tape().paint_custom, "a new pattern drops the old paint")
+	assert_false((_paint().zone_dropdown(StickModelRegistry.Zone.SHAFT).get_parent().get_parent()
+			as Control).visible, "wood's shaft is not paint")
 
 
 # The hair picker skips retired styles, so its rows are not style indices.
@@ -220,9 +259,11 @@ func test_a_row_aims_the_case_at_its_own_piece() -> void:
 		_buttons("_face_btns")[0]: F.HELMET,
 		(_gear_row(&"length").get("buttons") as Array)[0]: F.STICK,
 		(_gear_row(&"flex").get("buttons") as Array)[0]: F.STICK,
-		_btn("_stick_model_btn"): F.STICK,
+		_paint().pattern_button(): F.STICK,
+		_paint().zone_dropdown(StickModelRegistry.Zone.WORDMARK).focus_target(): F.STICK,
+		_paint().zone_dropdown(StickModelRegistry.Zone.BLADE).focus_target(): F.BLADE,
 		(_gear_row(&"curve").get("buttons") as Array)[0]: F.BLADE,
-		_btn("_span_btn"): F.BLADE,
+		(_popup.get("_coverage") as TapeCoverageList).button(): F.BLADE,
 		_btn("_style_btn"): F.GRIP,
 		(_popup.get("_height_slider") as Control): F.FULL,
 	}
@@ -242,6 +283,7 @@ func test_the_swatch_rows_reframe_the_case_too() -> void:
 		"_blade_color_dd": F.BLADE,
 		"_knob_color_dd": F.GRIP,
 		"_lace_dd": F.SKATES,
+		"_toe_color_dd": F.BLADE,
 	}
 	for field: String in rows:
 		var dd: SwatchDropdown = _popup.get(field) as SwatchDropdown
@@ -258,11 +300,12 @@ func test_the_swatch_rows_reframe_the_case_too() -> void:
 # A control the focus search skips is a pick a controller player cannot make.
 func test_every_row_control_is_pad_reachable() -> void:
 	var controls: Array[Control] = [_btn("_skate_btn"), _btn("_glove_btn"),
-		_btn("_stick_model_btn"), _btn("_span_btn"), _btn("_style_btn"), _btn("_tuck_btn"),
+		_paint().pattern_button(), (_popup.get("_coverage") as TapeCoverageList).button(),
+		_btn("_style_btn"), _btn("_tuck_btn"),
 		_btn("_hair_btn"), _btn("_facial_btn"), _popup.get("_height_slider") as Control,
 		_popup.get("_weight_slider") as Control, _popup.get("_name_field") as Control,
 		_popup.get("_number_field") as Control]
-	for field: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd"]:
+	for field: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd", "_toe_color_dd"]:
 		controls.append((_popup.get(field) as SwatchDropdown).focus_target())
 	for field: String in ["_face_btns", "_hair_color_buttons", "_skin_buttons",
 			"_shoots_btns", "_position_btns", "_tab_btns"]:

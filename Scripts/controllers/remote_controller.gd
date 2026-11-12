@@ -800,6 +800,11 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
 	skater.stick_tied = state.stick_tied
+	_adopt_fight(state)
+	# A remote fighter's hands are his own machine's (the local one keeps its
+	# own, predicted), so only a remote takes them off the wire.
+	skater.fight_grip = state.fight_grip
+	skater.fight_punch_side = state.fight_punch_side
 	_adopt_slapshot_pin(state)
 	skater.current_shot_state = state.shot_state
 	# The blade side, applied by state (the wire bit is garbage outside a wrister
