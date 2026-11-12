@@ -121,7 +121,7 @@ One registry row per puck. Kinds:
 | **count** | a lifetime counter reaches a tier | game-over, from `SteamStatRecorder.totals()` |
 | **game** | one game's stat reaches a bar (3 goals in a game) | game-over (`GamePuckRules.earned_game`) |
 | **feat** | a specific play happens (below) | the moment it happens, host-detected |
-| **event** | a moment (a big hit, finishing the tutorial course) | its hook (`TrophyService.on_*`) |
+| **event** | a moment (a big hit, finishing the tutorial course, winning a tournament) | its hook (`TrophyService.on_*`) |
 | **roster** | a match whose lobby includes a named person | game-over (`GamePuckRules.earned_roster`) |
 | **combo** | every puck, tier or combo it names is earned | whenever one of them is (`GamePuckRules.requirement_met`) |
 

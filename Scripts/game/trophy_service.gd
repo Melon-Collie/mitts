@@ -74,6 +74,11 @@ func on_feat(puck_id: String) -> void:
 		_earn_now(puck_id)
 
 
+# The player was on the ice when their club won a tournament's final.
+func on_cup_won() -> void:
+	_earn_now(GamePucks.event_puck("cup_won"))
+
+
 # The player applied a custom build in free play.
 func on_build_edited() -> void:
 	_earn_now(GamePucks.event_puck("build_edited"))

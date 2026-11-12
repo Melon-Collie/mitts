@@ -23,6 +23,9 @@ const APP_ID: int = 4892600
 # up and surfacing a failure (so the menu spinner can't hang forever if
 # run_callbacks never delivers the result).
 const LOBBY_OP_TIMEOUT: float = 12.0
+# Lobby metadata: the round (TournamentRules' index) a tournament lobby is
+# playing, empty for any other lobby.
+const LOBBY_KEY_TOURNAMENT_ROUND: String = "tournament_round"
 
 # ── Availability ────────────────────────────────────────────────────────────
 var is_available: bool = false   # true iff Steam initialised successfully
@@ -219,6 +222,14 @@ func get_app_build_id() -> int:
 	return Steam.getAppBuildId()
 
 
+# Host: one key of the current lobby's public metadata, which the game browser
+# reads back. A no-op with no lobby.
+func set_lobby_data(key: String, value: String) -> void:
+	if not is_available or current_lobby_id == 0:
+		return
+	Steam.setLobbyData(current_lobby_id, key, value)
+
+
 func _on_lobby_created(connect_result: int, lobby_id: int) -> void:
 	if _pending_op != 1:
 		return
@@ -294,6 +305,7 @@ func _on_lobby_match_list(lobbies: Array) -> void:
 			"name": Steam.getLobbyData(id, "name"),
 			"members": Steam.getNumLobbyMembers(id),
 			"max": Steam.getLobbyMemberLimit(id),
+			"tournament_round": Steam.getLobbyData(id, LOBBY_KEY_TOURNAMENT_ROUND),
 		})
 	lobby_list_received.emit(results)
 

@@ -34,6 +34,8 @@ var _kick_pending_peer: int = -1
 var _start_btn: Button = null
 var _ready_btn: Button = null
 var _settings_panel: LobbySettingsPanel = null
+# Non-null while the session is a tournament; see LobbyTournamentMode.
+var _tournament: LobbyTournamentMode = null
 var _spectator_list_label: Label = null
 var _spectator_join_btn: Button = null
 # Dynamic teams column: every widget is built once, then _refresh_teams_column
@@ -93,6 +95,9 @@ var _my_color_slot: int = TeamColorRegistry.DEFAULT_HOME_SLOT
 var _color_votes: Dictionary = {}  # peer_id → color_slot (int)
 
 func _ready() -> void:
+	_tournament = LobbyTournamentMode.for_session()
+	if _tournament != null:
+		add_child(_tournament)
 	_home_color_slot = NetworkManager.pending_home_color_slot
 	_away_color_slot = NetworkManager.pending_away_color_slot
 	_num_periods = NetworkManager.pending_num_periods
@@ -109,6 +114,8 @@ func _ready() -> void:
 	else:
 		_bot_difficulty = NetworkManager.pending_bot_difficulty
 		_goalie_difficulty = NetworkManager.pending_goalie_difficulty
+	if _tournament != null:
+		_adopt_tournament_settings()
 	_my_color_slot = _initial_color_preference()
 	_color_votes = NetworkManager.pending_color_votes.duplicate()
 	# Re-entering the lobby (return-to-lobby after a match) restores whatever
@@ -154,9 +161,12 @@ func _ready() -> void:
 		# the seat is always free).
 		var host_slot: int = PlayerRules.preferred_slot(
 				NetworkManager.get_peer_position(1), _team_size)
-		_assign_slot(1, 0, host_slot, NetworkManager.local_player_name,
+		var host_side: int = _tournament.club_side() if _tournament != null else 0
+		_assign_slot(1, host_side, host_slot, NetworkManager.local_player_name,
 				NetworkManager.local_is_left_handed, NetworkManager.local_jersey_number)
-		_broadcast_confirm(1, 0, host_slot)
+		_broadcast_confirm(1, host_side, host_slot)
+	if _tournament != null and NetworkManager.is_host:
+		_seat_for_tournament()
 	# Initial Start-button state. The button is constructed disabled; nothing
 	# else fires _update_start_btn until a peer joins/readies, so without this
 	# the host-alone case stays disabled forever.
@@ -173,6 +183,74 @@ func _ready() -> void:
 		ControllerNav.grab_focus(cta)
 	elif _slot_grid != null:
 		_slot_grid.focus_first_card()
+	# A tournament lobby opens on its bracket: the draw the first time, the
+	# round just played after that.
+	if _tournament != null:
+		_tournament.open_bracket.call_deferred(_panel)
+
+
+# The bracket decides the kits and the match settings; the lobby only shows them.
+func _adopt_tournament_settings() -> void:
+	var state: TournamentState = _tournament.state()
+	_home_color_slot = _tournament.home_club()
+	_away_color_slot = _tournament.away_club()
+	_num_periods = state.num_periods
+	_period_duration = state.period_duration
+	_ot_enabled = true
+	_rule_set = state.rule_set
+	_team_size = state.team_size
+	_fighting = state.fighting
+	_bot_difficulty = state.bot_difficulty
+	_goalie_difficulty = state.goalie_difficulty
+	if NetworkManager.is_host:
+		NetworkManager.send_team_colors(_home_color_slot, _away_color_slot)
+		NetworkManager.send_lobby_settings(_num_periods, _period_duration, _ot_enabled, _rule_set,
+				_team_size, _bot_difficulty, _goalie_difficulty, _fighting)
+
+
+# Host. The player's club changes sides between games, so every seated human is
+# moved to the side it has now (the same position where that is free), and both
+# rosters are filled out with bots.
+func _seat_for_tournament() -> void:
+	var side: int = _tournament.club_side()
+	_tournament.carry_bot_teammates()
+	for k: int in _lobby_slots.keys():
+		if LobbySlotKey.is_spectator(k) or LobbySlotKey.team_id(k) == side:
+			continue
+		var entry: Dictionary = _lobby_slots[k]
+		var seat: Array = [side, LobbySlotKey.slot(k)]
+		if _lobby_slots.has(LobbySlotKey.encode(side, LobbySlotKey.slot(k))):
+			seat = _find_balanced_slot(entry.peer_id)
+		if seat.is_empty():
+			var spec_slot: int = _find_open_spectator_slot()
+			if spec_slot == -1:
+				continue
+			seat = [GameRules.SPECTATOR_TEAM_ID, spec_slot]
+		_assign_slot(entry.peer_id, seat[0], seat[1],
+				entry.player_name, entry.is_left_handed, entry.get("jersey_number", 10))
+		_broadcast_confirm(entry.peer_id, seat[0], seat[1])
+	_fill_open_slots_with_bots()
+	# The whole picture, not the moves that made it: a client still loading
+	# this scene keeps what NetworkManager holds for it and misses the rest.
+	var roster: Array = _build_roster_array()
+	for peer_id: int in NetworkManager.connected_peer_ids():
+		NetworkManager.send_bot_slots_to(peer_id, NetworkManager.pending_bot_slots,
+				NetworkManager.pending_bot_identities)
+		NetworkManager.send_lobby_roster(peer_id, roster)
+	_tournament.advertise()
+
+
+# The tournament is over. Ends tournament mode and reopens this lobby as an
+# ordinary one, on every machine, for whoever is in it.
+func _finish_tournament() -> void:
+	_leaving = true
+	GameManager.tournament.end_session()
+	_tournament.stop_advertising()
+	NetworkManager.pending_bot_slots = {}
+	NetworkManager.pending_bot_identities = {}
+	for peer_id: int in NetworkManager.connected_peer_ids():
+		NetworkManager.send_bot_slots_to(peer_id, {}, {})
+	NetworkManager.send_return_to_lobby_to_all(_build_roster_array())
 
 
 # Controller / keyboard: back out of the lobby on ui_cancel (B / Escape). A
@@ -243,7 +321,7 @@ func _build_ui() -> void:
 	grid_box.add_theme_constant_override("separation", 4)
 	grid_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid_box.add_child(_slot_grid)
-	if NetworkManager.is_host:
+	if NetworkManager.is_host and _tournament == null:
 		grid_box.add_child(_build_fill_bots_row())
 	vbox.add_child(grid_box)
 
@@ -262,6 +340,8 @@ func _build_ui() -> void:
 
 	if NetworkManager.is_host:
 		_start_btn = _btn("Start Game")
+		if _tournament != null and _tournament.is_over():
+			_start_btn.text = tr(&"TOURNAMENT_FINISH")
 		MenuStyle.apply_primary_cta(_start_btn)
 		_start_btn.pressed.connect(_on_start_pressed)
 		_start_btn.disabled = true
@@ -333,6 +413,8 @@ func _build_header_row() -> HBoxContainer:
 
 	var title := Label.new()
 	title.text = "Lobby"
+	if _tournament != null:
+		title.text = _tournament.header_text()
 	MenuStyle.apply_heading(title, 30)
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	header.add_child(title)
@@ -415,6 +497,9 @@ func _column_header(text: String) -> Label:
 # you're on a team, and a host-picked dropdown for each team with no human
 # on it (see the var-block doc).
 func _build_teams_column() -> VBoxContainer:
+	if _tournament != null:
+		return _tournament.build_matchup_column(
+				_column_header(tr(&"TOURNAMENT_MATCHUP")), _panel)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -511,8 +596,10 @@ func _build_match_column() -> VBoxContainer:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_child(_column_header("MATCH"))
 
+	# A tournament latched its settings when it was created: shown, not edited.
 	_settings_panel = LobbySettingsPanel.new(_num_periods, _period_duration, _ot_enabled, _rule_set,
-			NetworkManager.is_host, _team_size, _bot_difficulty, _goalie_difficulty, _fighting)
+			NetworkManager.is_host and _tournament == null, _team_size, _bot_difficulty,
+			_goalie_difficulty, _fighting, _tournament != null)
 	_settings_panel.settings_changed.connect(_on_settings_panel_changed)
 	col.add_child(_settings_panel)
 
@@ -586,6 +673,8 @@ func _on_attach_online_ready() -> void:
 		NetworkManager.host_lobby_failed.disconnect(_on_attach_online_failed)
 	_visibility = _visibility_target
 	_visibility_btn.disabled = false
+	if _tournament != null:
+		_tournament.advertise()
 	_refresh_grid()
 
 
@@ -669,7 +758,10 @@ func _refresh_spectator_panel() -> void:
 		# Spectators get back into a player slot by clicking on an empty slot in
 		# the grid above — no separate "Play" button. Only show "Spectate" while
 		# the local peer is in a player slot.
-		_spectator_join_btn.visible = not local_is_spectator
+		# A tournament's host stays on the ice: with the host watching, the
+		# club's game could start with no human in it.
+		var may_spectate: bool = _tournament == null or not NetworkManager.is_host
+		_spectator_join_btn.visible = not local_is_spectator and may_spectate
 		_spectator_join_btn.disabled = _find_open_spectator_slot() < 0
 	# Spectators don't belong to a team, so their color vote can't affect any
 	# team's resolution (`_recompute_resolved_colors` skips spectator entries).
@@ -764,7 +856,10 @@ func _find_balanced_slot(peer_id: int) -> Array:
 	var preferred_team: int = 0 if team0 <= team1 else 1
 	var want: int = PlayerRules.preferred_slot(
 			NetworkManager.get_peer_position(peer_id), _team_size)
-	for attempt_team: int in [preferred_team, 1 - preferred_team]:
+	var teams: Array[int] = [preferred_team, 1 - preferred_team]
+	if _tournament != null:
+		teams = [_tournament.club_side()]
+	for attempt_team: int in teams:
 		if want < _team_size and not _lobby_slots.has(LobbySlotKey.encode(attempt_team, want)):
 			return [attempt_team, want]
 		for s: int in _team_size:
@@ -839,7 +934,7 @@ func _refresh_grid() -> void:
 		_backdrop.set_benches(_bench.benches(_lobby_slots, _team_size))
 	_slot_grid.refresh(_build_slot_grid_roster(), _get_team_colors(),
 			NetworkManager.pending_bot_slots, NetworkManager.is_host,
-			NetworkManager.pending_bot_identities, true, true)
+			NetworkManager.pending_bot_identities, _tournament == null, true)
 	_refresh_teams_column()
 	_update_visibility_row()
 	_update_fill_bots_btn()
@@ -855,6 +950,8 @@ func _refresh_grid() -> void:
 # as the fallback default — which is exactly how the host's direct pick for
 # a humanless team survives resolution.
 func _recompute_resolved_colors() -> void:
+	if _tournament != null:
+		return
 	var home_votes: Array[int] = []
 	var away_votes: Array[int] = []
 	for k: int in _lobby_slots:
@@ -972,6 +1069,8 @@ func _on_peer_disconnected(peer_id: int) -> void:
 			break
 	_ready_states.erase(peer_id)
 	_color_votes.erase(peer_id)
+	if _tournament != null and NetworkManager.is_host:
+		_fill_open_slots_with_bots()
 	_update_start_btn()
 	_refresh_grid()
 
@@ -994,6 +1093,8 @@ func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> v
 		return
 	if _lobby_slots.has(LobbySlotKey.encode(new_team_id, new_slot)):
 		return
+	if _tournament != null and not _tournament.may_seat(new_team_id):
+		return
 	if new_team_id == GameRules.SPECTATOR_TEAM_ID:
 		if new_slot < 0 or new_slot >= GameRules.MAX_SPECTATORS:
 			return
@@ -1010,6 +1111,9 @@ func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> v
 	_assign_slot(peer_id, new_team_id, new_slot,
 			identity.player_name, identity.is_left_handed, identity.jersey_number)
 	_broadcast_confirm(peer_id, new_team_id, new_slot)
+	# The seat just left goes to a bot: a tournament's rosters are always full.
+	if _tournament != null:
+		_fill_open_slots_with_bots()
 	# Swapping to/from spectator changes who counts toward the ready check, so
 	# re-evaluate the start button — otherwise a sole client moving to spectate
 	# leaves the host's button stuck disabled.
@@ -1199,6 +1303,9 @@ func _on_ready_pressed() -> void:
 	NetworkManager.send_player_ready(_local_is_ready)
 
 func _on_start_pressed() -> void:
+	if _tournament != null and _tournament.is_over():
+		_finish_tournament()
+		return
 	# _home_color_slot / _away_color_slot already reflect the live vote tally —
 	# every vote and slot change has been folded in by _refresh_grid →
 	# _recompute_resolved_colors. Just ship the current values.
@@ -1217,6 +1324,10 @@ func _on_start_pressed() -> void:
 		# career_stats rows so a game can be reconstructed across players.
 		"game_id": PlayerPrefs.generate_uuid(),
 	}
+	if _tournament != null:
+		_fill_open_slots_with_bots()
+		_tournament.apply_to_config(config)
+		GameManager.tournament.begin_match()
 	NetworkManager.send_game_start(config)
 
 # Back / B / Escape. Offline the lobby is the local player's own, so leaving is

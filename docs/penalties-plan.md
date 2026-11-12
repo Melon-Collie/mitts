@@ -435,13 +435,13 @@ Known gaps, each small enough to leave for the playtest to rank:
 
 ## Wire summary
 
-- **Phase 2 (v105):** three reliable RPCs — the call (peer, foul), the penalty
+- **Phase 2 (v106):** three reliable RPCs — the call (peer, foul), the penalty
   whistle, and the ledger (`PenaltyLedger.to_wire`). No snapshot or replay
   format change (`docs/protocol-history.md`).
-- **Phase 3 (still v105, unreleased):** the ledger's wire gains the fouled
+- **Phase 3 (v106):** the ledger's wire gains the fouled
   man and a `SHOT` state, and the penalty whistle says whether it is a shot
   ending without a goal. No phase was added.
-- **Phase 6 (still v105, unreleased):** the stats sync's player record grows
+- **Phase 6 (v106):** the stats sync's player record grows
   from 21 fields to 30, and its footer gains each team's power plays and
   power-play goals.
 

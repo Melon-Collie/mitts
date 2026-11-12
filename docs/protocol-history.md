@@ -540,7 +540,11 @@ here whenever you bump, in the same format.
 #      A v103 peer would read the check drive as a pin strength and predict a
 #      different outcome for the same hit, so mixed builds must be refused.
 #      Replay FORMAT_VERSION 21 -> 22: the frames hold the block.
-# v105: penalties (docs/penalties-plan.md Phases 2–3), one bump for the
+# v105: added the sync_tournament RPC (host -> client: the session's bracket, so
+#      a client's lobby and game-over screen can show it). A new @rpc method
+#      shifts the method table, so mixed builds must be refused. No match-time
+#      wire change.
+# v106: penalties (docs/penalties-plan.md), one bump for the
 #      branch. Three reliable RPCs join the method set, which shifts the
 #      rpc-config ordering both peers hash:
 #      - notify_penalty_called: the referee's delayed call against a peer.
@@ -559,7 +563,7 @@ here whenever you bump, in the same format.
 #      pp_assists, pp_opportunities, pp_on_ice_goals, pk_opportunities,
 #      pk_on_ice_goals_against), and each team's power plays and power-play
 #      goals follow the team shots in its footer.
-#      A v104 peer would cast a boxed centre onto the dot, never lock or hide
+#      A v105 peer would cast a boxed centre onto the dot, never lock or hide
 #      a boxed skater, skate freely through a penalty shot and refuse every
 #      stats payload as malformed, so mixed builds must be refused.
 #      Replay FORMAT_VERSION unchanged.

@@ -21,6 +21,10 @@ extends VBoxContainer
 # rows write straight to the host's PlayerPrefs + save on change; the synced
 # values exist purely so clients' dimmed dropdowns show the host's picks —
 # clients never write them to their own prefs.
+#
+# A tournament's panel (`for_tournament`) is the same rows without Overtime,
+# which an elimination game always has, and its difficulty rows are settings of
+# the tournament being set up: they leave the host's prefs alone.
 
 signal settings_changed(num_periods: int, period_duration: float, ot_enabled: bool, rule_set: int,
 		team_size: int, bot_difficulty: int, goalie_difficulty: int, fighting: bool)
@@ -40,6 +44,7 @@ var _bot_difficulty: int
 var _goalie_difficulty: int
 var _fighting: bool
 var _is_host: bool
+var _for_tournament: bool
 
 var _periods_value_label: Label = null
 var _dur_value_label: Label = null
@@ -59,7 +64,8 @@ func _init(num_periods: int, period_duration: float, ot_enabled: bool, rule_set:
 		team_size: int = GameRules.DEFAULT_TEAM_SIZE,
 		bot_difficulty: int = BotSkillProfile.Difficulty.NORMAL,
 		goalie_difficulty: int = GoalieSkillProfile.Difficulty.NORMAL,
-		fighting: bool = GameRules.FIGHTING_ENABLED) -> void:
+		fighting: bool = GameRules.FIGHTING_ENABLED,
+		for_tournament: bool = false) -> void:
 	_num_periods = num_periods
 	_period_duration = period_duration
 	_ot_enabled = ot_enabled
@@ -69,6 +75,7 @@ func _init(num_periods: int, period_duration: float, ot_enabled: bool, rule_set:
 	_goalie_difficulty = goalie_difficulty
 	_fighting = fighting
 	_is_host = is_host
+	_for_tournament = for_tournament
 	add_theme_constant_override("separation", 10)
 	_build()
 
@@ -168,6 +175,7 @@ func _build() -> void:
 	else:
 		_ot_check.modulate = Color(1, 1, 1, 0.5)
 	ot_row.add_child(_ot_check)
+	ot_row.visible = not _for_tournament
 	left.add_child(ot_row)
 
 	# Row 4 (right): Rules
@@ -363,8 +371,9 @@ func _on_mode_selected(idx: int) -> void:
 # settings_changed so clients' dimmed dropdowns mirror the pick (see class doc).
 func _on_bot_difficulty_selected(idx: int) -> void:
 	_bot_difficulty = idx
-	PlayerPrefs.bot_difficulty = idx
-	PlayerPrefs.save()
+	if not _for_tournament:
+		PlayerPrefs.bot_difficulty = idx
+		PlayerPrefs.save()
 	_emit_settings()
 
 
@@ -372,8 +381,9 @@ func _on_bot_difficulty_selected(idx: int) -> void:
 # PlayerPrefs.goalie_difficulty at match start) — synced like Bot Difficulty.
 func _on_goalie_difficulty_selected(idx: int) -> void:
 	_goalie_difficulty = idx
-	PlayerPrefs.goalie_difficulty = idx
-	PlayerPrefs.save()
+	if not _for_tournament:
+		PlayerPrefs.goalie_difficulty = idx
+		PlayerPrefs.save()
 	_emit_settings()
 
 

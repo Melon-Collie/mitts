@@ -82,8 +82,10 @@ func test_a_big_hit_earns_its_puck_once() -> void:
 func test_the_meta_hooks_earn_their_pucks() -> void:
 	_service.on_tutorials_complete()
 	_service.on_build_edited()
+	_service.on_cup_won()
 	assert_true(_ledger.has(GamePucks.STUDENT))
 	assert_true(_ledger.has(GamePucks.CUSTOM_BUILD))
+	assert_true(_ledger.has(GamePucks.CUP_WINNER))
 
 
 func test_a_feat_from_the_host_earns_its_puck_and_nothing_else_does() -> void:

@@ -27,6 +27,9 @@ var _content: VBoxContainer = null
 var _home_stripe_style: StyleBoxFlat = null
 var _away_stripe_style: StyleBoxFlat = null
 var _home_rows: VBoxContainer = null
+var _title_label: Label = null
+var _home_header: Label = null
+var _away_header: Label = null
 var _away_rows: VBoxContainer = null
 var _present_tween: Tween = null
 
@@ -59,9 +62,9 @@ func _build_ui() -> void:
 	_content.add_theme_constant_override("separation", 22)
 	centering.add_child(_content)
 
-	var tag := _lbl(tr(&"MATCHUP_TITLE"), 16, _DIM)
-	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_content.add_child(tag)
+	_title_label = _lbl(tr(&"MATCHUP_TITLE"), 16, _DIM)
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_content.add_child(_title_label)
 
 	var columns := HBoxContainer.new()
 	columns.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -71,6 +74,7 @@ func _build_ui() -> void:
 	_home_stripe_style = _stripe_style()
 	var home_col := _build_team_column(tr(&"TEAM_HOME"), _home_stripe_style)
 	_home_rows = home_col.get_meta(&"rows") as VBoxContainer
+	_home_header = home_col.get_meta(&"header") as Label
 	columns.add_child(home_col)
 
 	# Center spine: just the VS — the archetype tags carry the build story in
@@ -83,6 +87,7 @@ func _build_ui() -> void:
 	_away_stripe_style = _stripe_style()
 	var away_col := _build_team_column(tr(&"TEAM_AWAY"), _away_stripe_style)
 	_away_rows = away_col.get_meta(&"rows") as VBoxContainer
+	_away_header = away_col.get_meta(&"header") as Label
 	columns.add_child(away_col)
 
 
@@ -97,8 +102,10 @@ func _build_team_column(header: String, stripe_style: StyleBoxFlat) -> VBoxConta
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 10)
 	head.add_child(_stripe(stripe_style, 30))
-	head.add_child(_lbl(header, 28, _WHITE))
+	var header_label := _lbl(header, 28, _WHITE)
+	head.add_child(header_label)
 	col.add_child(head)
+	col.set_meta(&"header", header_label)
 
 	var rows := VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 6)
@@ -107,8 +114,14 @@ func _build_team_column(header: String, stripe_style: StyleBoxFlat) -> VBoxConta
 	return col
 
 
+# `title` and the two headers replace "TONIGHT'S MATCHUP", HOME and AWAY when
+# given: a tournament game names its round and its clubs.
 func present(home_records: Array[PlayerRecord], away_records: Array[PlayerRecord],
-		home_stripe: Color, away_stripe: Color) -> void:
+		home_stripe: Color, away_stripe: Color, title: String = "",
+		home_header: String = "", away_header: String = "") -> void:
+	_title_label.text = tr(&"MATCHUP_TITLE") if title.is_empty() else title
+	_home_header.text = tr(&"TEAM_HOME") if home_header.is_empty() else home_header
+	_away_header.text = tr(&"TEAM_AWAY") if away_header.is_empty() else away_header
 	_home_stripe_style.bg_color = home_stripe
 	_away_stripe_style.bg_color = away_stripe
 	_fill_rows(_home_rows, home_records)
