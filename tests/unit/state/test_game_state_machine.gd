@@ -284,6 +284,20 @@ func test_uncontested_icing_is_whistled_on_the_crossing() -> void:
 	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING,
 			"nobody racing for it — icing on the crossing")
 
+func test_a_short_handed_team_may_ice_the_puck() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.short_handed_team_id = 0
+	sm.notify_puck_carried(0, 5.0)
+	sm.check_icing_for_loose_puck(-30.0)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE)
+
+func test_the_team_on_the_power_play_is_still_called_for_icing() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.short_handed_team_id = 1
+	sm.notify_puck_carried(0, 5.0)
+	sm.check_icing_for_loose_puck(-30.0)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING)
+
 func test_race_keeps_the_puck_live_until_someone_reaches_the_dots() -> void:
 	_open_race()
 	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE,
@@ -968,6 +982,28 @@ func test_get_faceoff_positions_uses_active_dot() -> void:
 	var slot: Dictionary = sm.players[1]
 	assert_eq(positions[1],
 			PlayerRules.faceoff_position(slot.team_id, slot.team_slot, dot))
+
+# ── Penalties ────────────────────────────────────────────────────────────────
+
+func test_a_penalty_whistle_faces_off_in_the_offending_teams_end() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.request_penalty_faceoff(0, 3.0)
+	assert_eq(sm.pending_faceoff_dot, GameRules.icing_faceoff_dot(0, 3.0))
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.PENALTY)
+
+
+func test_a_penalty_whistle_does_not_override_one_already_pending() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.pending_faceoff_reason = GameStateMachine.FaceoffReason.OFFSIDE
+	sm.request_penalty_faceoff(0, 3.0)
+	assert_eq(sm.pending_faceoff_reason, GameStateMachine.FaceoffReason.OFFSIDE)
+
+
+func test_no_penalty_whistle_outside_live_play() -> void:
+	sm.current_phase = GamePhase.Phase.FACEOFF_PREP
+	sm.request_penalty_faceoff(0, 3.0)
+	assert_eq(sm.pending_faceoff_reason, GameStateMachine.FaceoffReason.NONE)
+
 
 # ── Period / clock ───────────────────────────────────────────────────────────
 

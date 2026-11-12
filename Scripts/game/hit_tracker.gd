@@ -45,6 +45,12 @@ extends RefCounted
 
 signal impact_landed(hitter_peer_id: int, victim_peer_id: int, force: float, hit_dir: Vector3)
 signal hit_credited(victim_peer_id: int, force: float, hit_dir: Vector3)
+# Every contact between opponents, before the hit rules decide whether it is a
+# hit: what the referee judges (PenaltyTracker). `seconds_since_victim_lost_puck`
+# is INF for a man who has not had it.
+signal opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
+		hit_dir: Vector3, attacker_has_puck: bool, victim_is_carrier: bool,
+		seconds_since_victim_lost_puck: float, attacker_committed: bool)
 
 const HIT_COOLDOWN_S: float = 1.5
 
@@ -79,6 +85,8 @@ func on_contact(hitter_peer_id: int, victim_peer_id: int, victim_team_id: int,
 	if record.team.team_id == victim_team_id:
 		return  # no credit for hitting a teammate
 	var since_loss: float = _possession_lost_ago.get(victim_peer_id, INF)
+	opposing_contact.emit(hitter_peer_id, victim_peer_id, force, hit_dir,
+			attacker_has_puck, victim_is_carrier, since_loss, attacker_committed)
 	var verdict: HitRules.Verdict = HitRules.classify_contact(
 			force, attacker_has_puck, victim_is_carrier, since_loss, attacker_committed)
 	if verdict == HitRules.Verdict.REJECT:

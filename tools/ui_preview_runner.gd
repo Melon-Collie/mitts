@@ -40,6 +40,8 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "side_options", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_options_pressed"},
 	{"name": "side_exit", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_exit_pressed"},
 	{"name": "hud_free_play", "stage": _STAGE_FREE_PLAY, "open": "_close_side_menu"},
+	{"name": "hud_penalty_delayed", "stage": _STAGE_FREE_PLAY, "open": "_show_penalty_hud", "arg": false},
+	{"name": "hud_penalty_box", "stage": _STAGE_FREE_PLAY, "open": "_show_penalty_hud", "arg": true},
 	{"name": "post_game_analytics", "stage": _STAGE_FREE_PLAY, "open": "_open_post_game_analytics"},
 	{"name": "hud_tutorial", "stage": _STAGE_TUTORIAL, "open": "_open_nothing"},
 	{"name": "lobby", "stage": _STAGE_LOBBY, "open": "_open_nothing"},
@@ -345,6 +347,22 @@ func _open_player_region(region: int) -> void:
 
 # A past game's analytics, as the career screen opens a local replay: a fixed
 # made-up game, so the picture changes only when the screen does.
+# Free play calls no fouls, so the match's ledger is written by hand and the
+# HUD told it changed: a delayed call against the local player's team, or
+# (`boxed`) him sitting out a minor beside a strip that reads five on four.
+func _show_penalty_hud(boxed: bool) -> void:
+	_close_side_menu()
+	var ledger: PenaltyLedger = GameManager.get_penalty_ledger()
+	if ledger == null:
+		_fail("free play has no penalty ledger")
+		return
+	ledger.clear()
+	ledger.call_foul(NetworkManager.local_peer_id(), 0, PenaltyRules.Foul.BOARDING)
+	if boxed:
+		ledger.assess(PenaltyRules.minor_seconds(GameRules.PERIOD_DURATION), 2)
+	GameManager.penalties_changed.emit()
+
+
 func _open_post_game_analytics() -> void:
 	_close_side_menu()
 	var screen: PostGameAnalytics = _find(get_tree().current_scene, PostGameAnalytics) \

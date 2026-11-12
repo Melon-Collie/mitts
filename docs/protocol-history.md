@@ -540,3 +540,15 @@ here whenever you bump, in the same format.
 #      A v103 peer would read the check drive as a pin strength and predict a
 #      different outcome for the same hit, so mixed builds must be refused.
 #      Replay FORMAT_VERSION 21 -> 22: the frames hold the block.
+# v105: penalties (docs/penalties-plan.md Phase 2). Three reliable RPCs join
+#      the method set, which shifts the rpc-config ordering both peers hash:
+#      - notify_penalty_called: the referee's delayed call against a peer.
+#      - notify_penalty_whistled: the whistle when his team has the puck.
+#      - notify_penalty_ledger: the whole PenaltyLedger (to_wire: peer, team,
+#        foul, state, ms left per entry), sent on every change and to a joiner.
+#        A client seats the box from it, and runs the same faceoff cast as the
+#        host only if it knows who is boxed.
+#      No snapshot field changed: a boxed skater rides the existing ghost bit.
+#      A v104 peer would cast a boxed centre onto the dot and never lock or
+#      hide a boxed skater, so mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged.

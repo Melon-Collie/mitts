@@ -1,7 +1,8 @@
 # Penalties — the NHL ruleset calls fouls
 
-Status: **Phase 1 built** (faceoff formations), playtest pending. Phases 2–6
-not started.
+Status: **Phases 1 and 2 built** (faceoff formations; the calls, the box and
+playing short in 5v5), playtest pending. Phases 3–6 not started. Where what is
+built differs from the proposal, *Phase 2 as built* says how.
 Amends `docs/fighting-plan.md` ("No penalty. Both stay on."), the "Deliberately
 out" line of `docs/defensive-play-plan.md`, and the rule-set paragraph of
 `docs/gameplay-design.md`. Each phase is its own PR and playtest.
@@ -94,12 +95,13 @@ read back and the number moved.
 
 ## 2. The call (host-authoritative)
 
-A new host-only collaborator (`Scripts/game/penalty_tracker.gd`, shaped like
-`FightTracker`) owns the pending call; a domain state type
-(`Scripts/domain/state/penalty_ledger.gd`) owns who is serving what.
+`PenaltyTracker` (`Scripts/game/penalty_tracker.gd`, shaped like
+`FightTracker`) judges the contacts and holds the call; `PenaltyLedger`
+(`Scripts/domain/state/penalty_ledger.gd`) owns who has been called and who is
+serving what.
 
 ```
-foul judged ──▶ DELAYED ──offending team has the puck, or its goalie covers──▶ whistle ──▶ assessed
+foul judged ──▶ DELAYED ──offending team has the puck──▶ whistle ──▶ assessed at the faceoff
                    │ the fouled team scores first
                    ▼
                 waived (the goal stands, nobody sits, no shot is taken)
@@ -110,7 +112,11 @@ foul judged ──▶ DELAYED ──offending team has the puck, or its goalie c
   a deflection off the offending team keeps play alive.
 - **A second foul in the delay** by the same team is assessed too. One by the
   fouled team makes the two coincidental (below).
-- **A period horn** during the delay assesses it at the horn.
+- **Any other stoppage** in the delay (a goal, an icing, a cover, the horn)
+  assesses the call as well: every pending call becomes a minor as the next
+  faceoff is placed, which for a horn is the next period's opening one.
+- **A goal against a team already short** ends its minor nearest its end, and
+  the call pending against it stands.
 - **The faceoff** is in the offending team's end, at the dot on the puck's side
   (`GameRules.icing_faceoff_dot`), the geometry icing and the cover already use.
 - **The toast** names the foul and the player. `PenaltyRules` returns a locale
@@ -118,8 +124,8 @@ foul judged ──▶ DELAYED ──offending team has the puck, or its goalie c
 
 ## 3. 5v5: the box
 
-- **Length.** `PENALTY_MINOR_PERIOD_SHARE` (0.1) of the match's period length,
-  floored at `PENALTY_MINOR_MIN_S`. The penalty clock runs only while the game
+- **Length.** `PenaltyRules.MINOR_PERIOD_SHARE` (0.1) of the match's period
+  length, floored at `MINOR_MIN_S`. The penalty clock runs only while the game
   clock does.
 - **Going in.** At the whistle the penalized skater skates to his team's
   penalty-box door, not to a faceoff spot, and is hidden on reaching it: the
@@ -129,9 +135,10 @@ foul judged ──▶ DELAYED ──offending team has the puck, or its goalie c
   bench's side of centre, straight across the ice from the bench.
 - **In the box** he has no presence on the ice: no collision, no puck play, no
   place in a faceoff, the AI's snapshot, the offside count, time on ice, the
-  camera's targets or the off-screen arrows. That is a new replicated
-  `Skater.in_box`, read through one predicate with `is_ghost`, which already
-  gates most of those paths.
+  camera's targets or the off-screen arrows. That is `Skater.in_box`, which
+  each peer sets from the ledger. His controller holds him as a dead-puck
+  phase does, the host ghosts him (`is_ghost` already gates contact and puck
+  play), the bots' snapshot leaves him out, and each peer hides him.
 - **Coming out.** When his time is up he steps out of the door into live play
   and is in it from his first stride. Nothing stops the play for him.
 - **A power-play goal** releases the short-handed team's earliest minor. A goal
@@ -150,8 +157,10 @@ yaw following the puck, mounted the way `_become_local_spectator` mounts the
 `CameraDirector`. It runs on the render clock and opts out of interpolation like
 every other player camera. The HUD shows the foul and the time left, large.
 
-**The scorebug** shows each team's strength and the penalty clock under the
-short-handed team.
+**A strip under the scorebug** shows the manpower ("5 ON 4") and the minor
+nearest its end, in the ink of the team with the extra man (`HudPenalties`).
+The same panel carries the two banners: the delayed call, telling each team
+what the raised arm means for it, and the boxed player's own foul and clock.
 
 ## 4. Faceoff formations by headcount (Phase 1, as built)
 
@@ -245,24 +254,50 @@ The bots learn each rule in the phase that adds it.
 | # | What | Playtest |
 |---|---|---|
 | 1 | Faceoff formations by headcount, and the draw-taker (**built**) | a faceoff with a seat empty: a lobby started short, or a reservation |
-| 2 | `PenaltyRules`, the ledger, the delayed call, the box, short-handed play, the box camera, the scorebug, bots that avoid fouls and serve them (5v5) | a penalty start to finish |
+| 2 | `PenaltyRules`, the ledger, the delayed call, the box, short-handed play, the box camera, the scorebug strip, bots that avoid fouls and serve them (5v5) (**built**) | a penalty start to finish |
 | 3 | The penalty shot (3v3), bots shooting | a foul in 3v3 |
 | 4 | Fights' coincidental minors (5v5) | a fight under `NHL` |
 | 5 | Bots a man up and a man down | 5-on-4 against bots |
 | 6 | Stats (`PlayerStats` penalties, power-play and short-handed goals), career columns, Game Pucks | — |
 
-Until Phase 3 ships, 3v3 under `NHL` calls nothing. Phase 2 is the large one
-and may land as two PRs, the box camera and scorebug second.
+Until Phase 3 ships, 3v3 under `NHL` calls nothing.
 
-## Wire summary (sized in the phase that adds it)
+## Phase 2 as built
 
-- `Skater.in_box` in `SkaterNetworkState`.
-- The game-state block gains each team's active penalties (who, and the time
-  left) and the pending delayed call's team.
-- Reliable RPCs: the call (foul, player), and the penalty shot's shooter.
-- `GamePhase.Phase.PENALTY_SHOT`.
-- `BuildInfo.PROTOCOL_VERSION` and `ReplayFileWriter.FORMAT_VERSION` bump, with a
-  row in `docs/protocol-history.md`; the replay records the call as an event.
+- **The ledger travels whole, on a reliable RPC**, whenever it changes and to a
+  joiner; nothing was added to the snapshot. A client seats the box from it,
+  runs its clocks down for display and waits to be told who came out. It has to
+  be the reliable channel: a client derives the faceoff cast from the
+  `on_faceoff_positions` payload, a boxed skater holds no seat in it, and the
+  ledger is sent ahead of that payload (`Scripts/networking/CLAUDE.md`).
+- **Bots** let up on a foul through a last pass on the Hit button
+  (`SkaterAgentDiscipline` → `AIFoulRead`), not inside each verb's own gate, so
+  the press, the board hold and the stand-up are judged by one read. The
+  possession they read is the snapshot's, already delayed by the tier's
+  reaction, so no new knob was needed. A boxed bot's team brain drops him
+  (`exclude_skater`) and plays the roles it has left.
+- **The thresholds are the proposal's**, untested in play: the 1.5 m boarding
+  zone, the rear 90°, the 0.3 s turn grace, the 2 m loose-puck reach.
+
+Known gaps, each small enough to leave for the playtest to rank:
+
+- **A recorded replay draws a boxed skater.** Hiding is per peer and live, so a
+  goal replay or a `.mreplay` shows him as a ghost standing at his door. Fixing
+  it puts `in_box` in the snapshot (the body-state byte has two spare bits).
+- **The box camera's seat is unseen.** Its position is derived from the rink's
+  numbers and has not been rendered or played.
+- **A foul after the whistle** is not judged, and neither is contact in the
+  goal celebration.
+- **No stat** is kept for a penalty yet (Phase 6), and the replay records no
+  event for a call.
+
+## Wire summary
+
+- **Phase 2 (v105):** three reliable RPCs — the call (peer, foul), the penalty
+  whistle, and the ledger (`PenaltyLedger.to_wire`). No snapshot or replay
+  format change (`docs/protocol-history.md`).
+- **Phase 3:** `GamePhase.Phase.PENALTY_SHOT` and a reliable RPC naming the
+  shooter.
 
 ## Not in this plan
 

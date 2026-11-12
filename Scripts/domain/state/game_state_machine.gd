@@ -65,6 +65,9 @@ var reserved_slots: Array[Dictionary] = []
 # ── Icing ────────────────────────────────────────────────────────────────────
 # Host-side; read-only outside this class (GameManager reads pending_team_id).
 var icing: IcingRace = IcingRace.new()
+# The team with fewer skaters on the ice for a penalty, -1 at even strength
+# (host, from the PenaltyLedger). A short-handed team may ice the puck.
+var short_handed_team_id: int = -1
 
 # ── Offsides ─────────────────────────────────────────────────────────────────
 # ARCADE path: peer IDs currently serving an offside ghost. Cleared per-peer
@@ -106,7 +109,7 @@ var _crease_dwell: Dictionary[int, float] = {}
 # When the domain decides a stoppage should fire (NHL icing confirmed, NHL
 # offside touch), it stashes the dot + reason here for GameManager to consume
 # in the same tick and route through the whistle + faceoff_prep pipeline.
-enum FaceoffReason { NONE, ICING, OFFSIDE }
+enum FaceoffReason { NONE, ICING, OFFSIDE, PENALTY }
 var pending_faceoff_dot: Vector2 = Vector2.ZERO
 var pending_faceoff_reason: int = FaceoffReason.NONE
 # Where the faceoff after a fight is taken: chosen as the whistle went.
@@ -230,6 +233,8 @@ func check_icing_for_loose_puck(puck_z: float, player_positions: Dictionary = {}
 		player_velocities: Dictionary = {}) -> void:
 	if rule_set != GameRules.RuleSet.NHL or current_phase != GamePhase.Phase.PLAYING:
 		return
+	if short_handed_team_id != -1 and _last_touch_team_id == short_handed_team_id:
+		return
 	_apply_icing_call(icing.update(puck_z, player_positions, player_velocities, players))
 
 
@@ -240,6 +245,15 @@ func _apply_icing_call(icing_call: InfractionRules.IcingCall) -> void:
 		pending_faceoff_dot = GameRules.icing_faceoff_dot(icing.pending_team_id, icing.pending_release_x)
 		pending_faceoff_reason = FaceoffReason.ICING
 	icing.end_race(icing_call)
+
+# Host-side: the team a penalty is pending against has the puck, so the play
+# is whistled dead and faces off in that team's end, on the puck's side.
+func request_penalty_faceoff(offending_team_id: int, puck_x: float) -> void:
+	if current_phase != GamePhase.Phase.PLAYING \
+			or pending_faceoff_reason != FaceoffReason.NONE:
+		return
+	pending_faceoff_dot = GameRules.icing_faceoff_dot(offending_team_id, puck_x)
+	pending_faceoff_reason = FaceoffReason.PENALTY
 
 # Host-side: compute ghost state for all players into `result` as
 # {peer_id: should_ghost}. Runs every host tick, so the caller owns the
@@ -599,6 +613,7 @@ func reset_all() -> void:
 	current_period = 1
 	time_remaining = period_duration
 	icing.reset()
+	short_handed_team_id = -1
 	_last_touch_team_id = -1
 	_offside_peer_ids.clear()
 	_delayed_offside_peer_ids.clear()

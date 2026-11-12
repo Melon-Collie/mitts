@@ -210,7 +210,7 @@ func _step_tick(delta: float) -> void:
 		var decay: float = pow(1.0 - _RECONCILE_VISUAL_ALPHA, delta * _RECONCILE_VISUAL_HZ)
 		var new_offset: Vector3 = skater.visual_offset * decay
 		skater.visual_offset = new_offset if new_offset.length_squared() > 0.000001 else Vector3.ZERO
-	if _game_state.is_movement_locked():
+	if _movement_locked():
 		# Faceoff / intro skate-in: while an approach is active the body glides to
 		# the dot (see SkaterController.begin_approach) instead of freezing. On
 		# arrival tick_faceoff_approach returns false and we fall through to the
@@ -218,7 +218,7 @@ func _step_tick(delta: float) -> void:
 		if tick_faceoff_approach(delta):
 			return
 		skater.velocity = Vector3.ZERO
-		if _game_state.allows_blade_aim_during_lock() and _gatherer != null:
+		if _blade_aim_allowed_in_lock() and _gatherer != null:
 			# FACEOFF_PREP: keep the stick alive so centers can pre-angle the draw
 			# during the countdown. We neutralize move_vector and the shot flags
 			# so the input that flows to the host (and the same frames in our
@@ -457,7 +457,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# broadcast rather than only on a reconcile.
 	skater.stick_tied = server_state.stick_tied
 	_adopt_fight(server_state)
-	if _game_state.is_movement_locked():
+	if _movement_locked():
 		# Dead-puck phase: don't reconcile. on_faceoff_positions is the reliable
 		# source of truth for teleport positions; world-state snapshots may lag behind
 		# and would fight it if applied here.

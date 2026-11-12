@@ -18,6 +18,7 @@ var _chyron: HudGoalChyron = null
 var _prompts: HudPrompts = null
 var _ghost_banner: HudGhostBanner = null
 var _icing_race: HudIcingRace = null
+var _penalties: HudPenalties = null
 var _stat_feed: HudStatFeed = HudStatFeed.new()
 var _votes: HudRematchVotes = HudRematchVotes.new()
 
@@ -74,6 +75,9 @@ func _ready() -> void:
 	_icing_race = HudIcingRace.new()
 	add_child(_icing_race)
 	_icing_race.build(_scale_root)
+	_penalties = HudPenalties.new()
+	add_child(_penalties)
+	_penalties.build(_scale_root)
 	_build_bug_icon()
 	_prompts = HudPrompts.new()
 	add_child(_prompts)
@@ -166,6 +170,9 @@ func _ready() -> void:
 	GameManager.fight_challenged.connect(_on_fight_challenged)
 	GameManager.fight_challenge_lapsed.connect(_on_fight_challenge_lapsed)
 	GameManager.fight_called.connect(_on_fight_called)
+	GameManager.penalty_called.connect(_on_penalty_called)
+	GameManager.penalty_whistled.connect(_on_penalty_whistled)
+	GameManager.penalties_changed.connect(_on_penalties_changed)
 	GameManager.local_player_hit.connect(_on_local_player_hit)
 	# Arrives just before faceoff_prep_announced on the opening faceoff; the
 	# countdown consumes it to lead with the matchup card.
@@ -701,6 +708,28 @@ func _on_fight_called(a_peer_id: int, b_peer_id: int) -> void:
 		var swap: String = ControllerGlyphs.prompt(PlayerPrefs.action_display(&"slapshot"),
 				ControllerGlyphs.trigger_label(false))
 		_toast_stack.push(tr(&"TOAST_FIGHT_CONTROLS") % [grab, swap], MenuStyle.BROADCAST_CREAM)
+
+
+func _on_penalty_called(peer_id: int, foul: int) -> void:
+	if _toast_stack != null:
+		_toast_stack.push(tr(&"TOAST_PENALTY_CALLED")
+				% [_peer_name(peer_id), tr(PenaltyRules.name_key(foul))],
+				MenuStyle.BROADCAST_CREAM)
+
+
+func _on_penalty_whistled() -> void:
+	if _toast_stack != null:
+		_toast_stack.push(tr(&"TOAST_PENALTY"), MenuStyle.BROADCAST_CREAM)
+
+
+func _on_penalties_changed() -> void:
+	var local: PlayerRecord = GameManager.get_players().get(
+			NetworkManager.local_peer_id(), null)
+	# Just under the scorebug, on its left edge.
+	var strip_at := Vector2(8.0, 8.0 + _scorebug.panel_size().y + 6.0)
+	_penalties.show_ledger(GameManager.get_penalty_ledger(), GameManager.get_team_size(),
+			NetworkManager.local_peer_id(),
+			local.team.team_id if local != null and local.team != null else -1, strip_at)
 
 
 func _peer_name(peer_id: int) -> String:

@@ -137,6 +137,12 @@ signal offside_called()
 signal fight_challenged(challenger_peer_id: int, target_peer_id: int)
 signal fight_challenge_lapsed(challenger_peer_id: int)
 signal fight_called(a_peer_id: int, b_peer_id: int)
+# The referee's arm is up: `peer_id` was called for `foul` (PenaltyRules.Foul)
+# and the whistle goes when his team has the puck.
+signal penalty_called(peer_id: int, foul: int)
+signal penalty_whistled()
+# Who is called or boxed changed; read get_penalty_ledger().
+signal penalties_changed()
 # A punch landed on `victim_peer_id` (FightPunchJudge), on every peer:
 # `intensity` 0..1 how hard (FightPunchRules.intensity).
 signal punch_landed(victim_peer_id: int, intensity: float)
@@ -311,6 +317,12 @@ var _xg_query := AIShotOdds.Query.new()
 var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
 var _fights: FightTracker = null
+var _penalties: PenaltyTracker = null
+# The local player's view from the penalty box; built the first time he sits.
+var _box_camera: PenaltyBoxCamera = null
+# The newest ledger the host sent this client. Kept because one can arrive
+# before the world it describes is up (a mid-match join); cleared on scene exit.
+var _latest_penalty_wire: Array = []
 # Host: every bot's grudge (FightGrudges), kept across stoppages, cleared for
 # each new match and rematch.
 var _grudges := FightGrudges.new()
@@ -585,6 +597,9 @@ func _wire_network_signals() -> void:
 	NetworkManager.fight_called_received.connect(_on_fight_called_received)
 	NetworkManager.punch_landed_received.connect(_play_punch)
 	NetworkManager.faceoff_positions_received.connect(_on_faceoff_positions_received)
+	NetworkManager.penalty_called_received.connect(_on_penalty_called_received)
+	NetworkManager.penalty_whistled_received.connect(_on_penalty_whistled_received)
+	NetworkManager.penalty_ledger_received.connect(_on_penalty_ledger_received)
 	NetworkManager.game_reset_received.connect(on_game_reset)
 	NetworkManager.stats_received.connect(_on_stats_received)
 	NetworkManager.final_stats_received.connect(_on_final_stats_received)
@@ -661,8 +676,14 @@ func _physics_process(delta: float) -> void:
 		_last_phys_tick_us = now_us
 	if _state_machine != null and _registry != null:
 		var local: PlayerRecord = _registry.get_local()
-		if local != null and _state_machine.current_phase == GamePhase.Phase.PLAYING:
+		var playing: bool = _state_machine.current_phase == GamePhase.Phase.PLAYING
+		if local != null and playing and not (local.skater != null and local.skater.in_box):
 			local.stats.toi_seconds += delta
+		if _penalties != null:
+			if playing and not NetworkManager.is_host:
+				_penalties.ledger.tick_mirror(delta)
+			_penalties.update_visibility(
+					_state_machine.current_phase == GamePhase.Phase.FACEOFF_PREP)
 	# His gear once a tick, for every skater's stick and body: on host AND
 	# clients, before the host gate below, since both clamp everywhere.
 	_refresh_goalie_boxes()
@@ -692,6 +713,7 @@ func _physics_process(delta: float) -> void:
 		# carrier reaches both the team brains and the agents.
 		current_snapshot = get_state_delayed(0.0, _ai_snapshot)
 		if current_snapshot != null:
+			_drop_boxed_from_ai_snapshot(current_snapshot)
 			_enrich_snapshot_for_ai(current_snapshot)
 			# Shared dead-reckoning: advance the global accel estimate once and
 			# hand it to every bot by reference (was recomputed per bot per tick).
@@ -751,6 +773,8 @@ func _physics_process(delta: float) -> void:
 	_hit_tracker.tick(delta)
 	_stick_ties.tick(not _state_machine.is_movement_locked())
 	_fights.tick(delta, _fights_allowed(), _state_machine.current_phase)
+	if _state_machine.current_phase == GamePhase.Phase.PLAYING:
+		_penalties.tick(delta, _state_machine.team_size)
 	_fighters_scratch.clear()
 	for s: Skater in _registry.skaters():
 		if s.fight_role == FightRules.Role.FIGHTING:
@@ -1149,6 +1173,137 @@ func _flush_pending_faceoff_win() -> void:
 		_sync_stats_to_clients()
 
 
+# ── Penalties (docs/penalties-plan.md) ───────────────────────────────────────
+
+# Host: whether this match calls fouls at all (PenaltyRules.calls_fouls).
+func _fouls_called() -> bool:
+	var practice: bool = NetworkManager.is_free_play_mode or NetworkManager.is_drill_mode()
+	return PenaltyRules.calls_fouls(_state_machine.rule_set, _state_machine.team_size, practice)
+
+
+func get_penalty_ledger() -> PenaltyLedger:
+	return _penalties.ledger if _penalties != null else null
+
+
+# What the last foul was judged on, for the F3 overlay.
+func last_penalty_facts() -> String:
+	return _penalties.last_call_facts if _penalties != null else ""
+
+
+func _on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
+		hit_dir: Vector3, attacker_has_puck: bool, victim_is_carrier: bool,
+		seconds_since_victim_lost_puck: float, attacker_committed: bool) -> void:
+	if not NetworkManager.is_host or _state_machine == null \
+			or _state_machine.current_phase != GamePhase.Phase.PLAYING \
+			or not _fouls_called():
+		return
+	_penalties.on_opposing_contact(hitter_peer_id, victim_peer_id, force, hit_dir,
+			attacker_has_puck, victim_is_carrier, seconds_since_victim_lost_puck,
+			attacker_committed)
+
+
+func _on_penalty_foul_called(peer_id: int, foul: int) -> void:
+	print("[penalty] %s" % _penalties.last_call_facts)
+	penalty_called.emit(peer_id, foul)
+	NetworkManager.notify_penalty_called_to_all(peer_id, foul)
+
+
+# Host: the team a call is pending against has the puck. The whistle itself is
+# the pending-faceoff path's (_consume_pending_faceoff), which the possession
+# hook runs next.
+func _on_penalty_possession_whistle(offending_team_id: int) -> void:
+	if puck != null:
+		_state_machine.request_penalty_faceoff(offending_team_id, puck.global_position.x)
+
+
+# Host: pending calls become minors as the next faceoff is placed, so the men
+# they box are skated to their doors by that placement.
+func _on_faceoff_placement_starting() -> void:
+	if NetworkManager.is_host and _penalties != null:
+		_penalties.assess_pending(_state_machine.period_duration, _state_machine.team_size)
+
+
+func _on_goal_for_penalties(scoring_team: Team, _scorer: String, _a1: String,
+		_a2: String) -> void:
+	if NetworkManager.is_host and _penalties != null and scoring_team != null:
+		_penalties.on_goal(scoring_team.team_id, _state_machine.team_size)
+
+
+func _on_penalty_ledger_changed() -> void:
+	_state_machine.short_handed_team_id = \
+			_penalties.short_handed_team(_state_machine.team_size)
+	NetworkManager.send_penalty_ledger_to_all(_penalties.ledger.to_wire())
+	penalties_changed.emit()
+
+
+func _on_skater_boxed(peer_id: int) -> void:
+	_on_box_state_changed(peer_id, true)
+
+
+func _on_skater_released(peer_id: int) -> void:
+	_on_box_state_changed(peer_id, false)
+
+
+# Every peer. A boxed skater is no part of his team to its brain until he is out.
+func _on_box_state_changed(peer_id: int, in_box: bool) -> void:
+	var record: PlayerRecord = _registry.get_record(peer_id) if _registry != null else null
+	if record == null:
+		return
+	if NetworkManager.is_host and _ai_coordinator != null and record.team != null:
+		if in_box:
+			_ai_coordinator.queue_exclude_skater(record.team.team_id, peer_id)
+		else:
+			_ai_coordinator.queue_include_skater(record.team.team_id, peer_id)
+		_ai_coordinator.queue_force_retick()
+	if record.is_local and record.team != null:
+		_set_local_box_camera(in_box, record.team.team_id)
+
+
+func _set_local_box_camera(in_box: bool, team_id: int) -> void:
+	if not in_box:
+		if is_instance_valid(_box_camera):
+			_box_camera.deactivate()
+		return
+	if not is_instance_valid(_box_camera):
+		_box_camera = PenaltyBoxCamera.new()
+		get_tree().current_scene.add_child(_box_camera)
+	_box_camera.setup(team_id,
+			func() -> Vector3: return puck.global_position if puck != null else Vector3.ZERO)
+	_box_camera.activate()
+
+
+# The bots play as if a boxed skater were not there: he is off the ice.
+func _drop_boxed_from_ai_snapshot(snap: WorldSnapshot) -> void:
+	if _penalties == null or _penalties.ledger.is_empty():
+		return
+	for entry: PenaltyLedger.Entry in _penalties.ledger.entries:
+		if entry.state != PenaltyLedger.State.PENDING:
+			snap.skater_states.erase(entry.peer_id)
+
+
+func _on_penalty_called_received(peer_id: int, foul: int) -> void:
+	penalty_called.emit(peer_id, foul)
+
+
+func _on_penalty_whistled_received() -> void:
+	penalty_whistled.emit()
+	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
+
+
+func _on_penalty_ledger_received(wire: Array) -> void:
+	_latest_penalty_wire = wire
+	if _penalties == null:
+		return
+	_penalties.apply_remote(wire)
+	penalties_changed.emit()
+
+
+# Host: a peer that just got the roster gets the ledger behind it.
+func _send_penalty_ledger_to(peer_id: int) -> void:
+	if _penalties != null and not _penalties.ledger.is_empty():
+		NetworkManager.send_penalty_ledger(peer_id, _penalties.ledger.to_wire())
+
+
 # Host-only: a body check can end an active NHL delayed offside — see
 # GameStateMachine.notify_offside_contact for which contacts count.
 func _on_skater_contact_for_offside(attacker_peer_id: int, victim: Skater) -> void:
@@ -1182,6 +1337,9 @@ func _consume_pending_faceoff() -> void:
 		GameStateMachine.FaceoffReason.OFFSIDE:
 			offside_called.emit()
 			NetworkManager.notify_offside_called_to_all()
+		GameStateMachine.FaceoffReason.PENALTY:
+			penalty_whistled.emit()
+			NetworkManager.notify_penalty_whistled_to_all()
 	_whistle_and_faceoff(dot)
 
 
@@ -1281,7 +1439,7 @@ func _apply_ghost_state(delta: float) -> void:
 	for peer_id in ghosts:
 		var r: PlayerRecord = _registry.get_record(peer_id)
 		if r != null:
-			var new_ghost: bool = ghosts[peer_id]
+			var new_ghost: bool = ghosts[peer_id] or r.skater.in_box
 			r.skater.set_ghost(new_ghost)
 			# A skater who ghosts (icing, etc.) while carrying must lose the puck —
 			# set_ghost only severs collision/interaction layers, so without this a
@@ -1431,6 +1589,7 @@ func on_player_connected(peer_id: int) -> void:
 				pending_slot.get("team_slot", 0), GameRules.SPECTATOR_TEAM_ID,
 				Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0))
 		NetworkManager.send_sync_existing_players(peer_id, _collect_existing_player_data())
+		_send_penalty_ledger_to(peer_id)
 		return
 	# Roster gate: when both teams are at the latched team size, a mid-game
 	# joiner comes in as a spectator instead of overflowing the roster — the
@@ -1447,10 +1606,12 @@ func on_player_connected(peer_id: int) -> void:
 		NetworkManager.send_slot_assignment(peer_id, 0, GameRules.SPECTATOR_TEAM_ID,
 				Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0))
 		NetworkManager.send_sync_existing_players(peer_id, _collect_existing_player_data())
+		_send_penalty_ledger_to(peer_id)
 		return
 	var assignment: Dictionary = _state_machine.on_player_connected(peer_id)
 	NetworkManager.send_join_in_progress(peer_id, config)
 	NetworkManager.send_sync_existing_players(peer_id, _collect_existing_player_data())
+	_send_penalty_ledger_to(peer_id)
 	_spawn_player_and_broadcast(peer_id, assignment.team_id, assignment.team_slot,
 			NetworkManager.get_peer_handedness(peer_id),
 			NetworkManager.get_peer_name(peer_id),
@@ -1495,6 +1656,7 @@ func _maybe_reserve_slot(peer_id: int, record: PlayerRecord) -> void:
 	_reservation_token += 1
 	var token: int = _reservation_token
 	_reserved_slots[steam_id] = {
+		"peer_id": peer_id,
 		"team_id": team_id,
 		"team_slot": team_slot,
 		"stats": record.stats,
@@ -1535,6 +1697,7 @@ func _restore_reserved_player(peer_id: int, steam_id: int, config: Dictionary) -
 	NetworkManager.set_peer_attributes(peer_id, res.attributes)
 	NetworkManager.send_join_in_progress(peer_id, config)
 	NetworkManager.send_sync_existing_players(peer_id, _collect_existing_player_data())
+	_send_penalty_ledger_to(peer_id)
 	_spawn_player_and_broadcast(peer_id, team_id, team_slot,
 			NetworkManager.get_peer_handedness(peer_id),
 			NetworkManager.get_peer_name(peer_id),
@@ -1545,6 +1708,11 @@ func _restore_reserved_player(peer_id: int, steam_id: int, config: Dictionary) -
 	var rec: PlayerRecord = _registry.get_record(peer_id)
 	if rec != null:
 		rec.stats = res.stats
+	# A player who dropped mid-penalty comes back into the box.
+	if _penalties != null and _penalties.ledger.is_boxed(res.peer_id):
+		_penalties.ledger.rebind(res.peer_id, peer_id)
+		_penalties.apply_box_state()
+		_on_penalty_ledger_changed()
 
 
 # Tears down host/client-side actor state for a peer whose skater is going
@@ -1619,6 +1787,9 @@ func sync_existing_players(player_data: Array) -> void:
 	# world-state broadcasts get recorded. Idempotent — short-circuits if a
 	# previous sync already opened it.
 	_open_replay_file_writer()
+	# The ledger can land before the skaters it boxes are spawned.
+	if _penalties != null:
+		_penalties.apply_box_state()
 
 
 func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
@@ -1920,6 +2091,16 @@ func _wire_subsystems() -> void:
 	_punches.punch_landed.connect(_on_punch_landed)
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
+	_penalties = PenaltyTracker.new()
+	_penalties.setup(_registry, _state_buffer_manager, get_puck)
+	_penalties.foul_called.connect(_on_penalty_foul_called)
+	_penalties.possession_whistle.connect(_on_penalty_possession_whistle)
+	_penalties.ledger_changed.connect(_on_penalty_ledger_changed)
+	_penalties.skater_boxed.connect(_on_skater_boxed)
+	_penalties.skater_released.connect(_on_skater_released)
+	_hit_tracker.opposing_contact.connect(_on_opposing_contact)
+	if not _latest_penalty_wire.is_empty():
+		_penalties.apply_remote(_latest_penalty_wire)
 
 	# Host-only takeaway / giveaway / interception / faceoff-win attribution off
 	# possession changes. Fed by the pickup and strip hooks below and by each
@@ -2015,6 +2196,8 @@ func _wire_subsystems() -> void:
 	_phase_coord.goal_scored.connect(_stash_goal_clip_meta)
 	_phase_coord.goal_scored.connect(_trigger_scorer_celebration)
 	_phase_coord.goal_scored.connect(_on_goal_resolve_faceoff)
+	_phase_coord.goal_scored.connect(_on_goal_for_penalties)
+	_phase_coord.faceoff_placement_starting.connect(_on_faceoff_placement_starting)
 	_phase_coord.score_changed.connect(score_changed.emit)
 	_phase_coord.phase_changed.connect(phase_changed.emit)
 	# Record period-end markers into the .mreplay event stream (like goals) so the
@@ -2625,7 +2808,7 @@ func _show_all_skaters() -> void:
 		return
 	for peer_id: int in _registry.all():
 		var record: PlayerRecord = _registry.get_record(peer_id)
-		if record != null and record.skater != null:
+		if record != null and record.skater != null and not record.skater.in_box:
 			record.skater.visible = true
 
 
@@ -3279,6 +3462,7 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 	snap.tag_up_peers.clear()
 	snap.loose_puck_released_by = _loose_puck_released_by \
 			if puck != null and puck.get_carrier() == null else -1
+	snap.fouls_called = _state_machine != null and _fouls_called()
 	for pid: int in _tag_up_peers:
 		snap.tag_up_peers[pid] = true
 	if _registry == null:
@@ -3651,6 +3835,8 @@ func _on_possession_established(peer_id: int, team_id: int) -> void:
 	# offending team's ghosts in their own zone.
 	if _state_machine != null and puck != null:
 		_state_machine.notify_possession_established(team_id, puck.global_position.z)
+		if _penalties != null:
+			_penalties.on_possession_established(team_id)
 		_consume_pending_faceoff()
 
 
@@ -4987,6 +5173,10 @@ func on_scene_exit() -> void:
 	if _fights != null:
 		_fights.clear()
 	_fights = null
+	# Dropped, not cleared: clearing walks the skaters back out of the box, and
+	# they are on their way out with the scene.
+	_penalties = null
+	_latest_penalty_wire = []
 	if _punches != null:
 		_punches.clear()
 	_punches = null
@@ -5079,6 +5269,10 @@ func _apply_reset() -> void:
 	# 0-0 game. Host-only dict; a no-op on clients. Pending expiry timers are token-
 	# guarded, so they harmlessly no-op after the clear.
 	_reserved_slots.clear()
+	if _penalties != null:
+		_penalties.clear()
+		if NetworkManager.is_host:
+			_on_penalty_ledger_changed()
 	_seen_first_prep = false  # next prep is a rematch's opening faceoff
 	_last_emitted_clock_secs = -1
 	_last_ghost_state.clear()
@@ -5451,6 +5645,7 @@ func _push_lobby_assignments_to_clients() -> void:
 		if peer_id == 1:
 			continue
 		NetworkManager.send_sync_existing_players(peer_id, _roster_excluding(full, peer_id))
+		_send_penalty_ledger_to(peer_id)
 	NetworkManager.pending_lobby_slots = {}
 
 

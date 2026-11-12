@@ -773,6 +773,10 @@ func _render_host_ai_cost() -> void:
 # neutral throughout: an uneven tick/frame pattern is a local display and pacing
 # fact, not a network problem.
 func _render_sim_phase() -> void:
+	var foul_facts: String = GameManager.last_penalty_facts()
+	if not foul_facts.is_empty():
+		_section("Referee (host)")
+		_info("Last call", foul_facts, "what the foul was judged on")
 	_section("Sim / render phase")
 	if _phase_pub_frames <= 0:
 		_info("Sampling", "…", "the first reading lands one second after this panel opens")

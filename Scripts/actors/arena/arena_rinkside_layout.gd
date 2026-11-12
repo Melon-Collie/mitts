@@ -25,8 +25,8 @@ const BENCH_SEAT_HEIGHT: float = 0.46
 # is also the only stretch of this bowl that was an unbroken run of crowd. Two
 # boxes flank centre ice with the timekeeper's table in the gap, so the whole
 # assembly spans |z| < PENALTY_BOX_CENTER_Z + PENALTY_BOX_HALF_LEN.
-const PENALTY_BOX_CENTER_Z: float = 2.9
-const PENALTY_BOX_HALF_LEN: float = 1.7
+const PENALTY_BOX_CENTER_Z: float = GameRules.PENALTY_BOX_CENTER_Z
+const PENALTY_BOX_HALF_LEN: float = GameRules.PENALTY_BOX_HALF_LEN
 const OFFICIALS_HALF_LEN: float = 1.0
 const OFFICIALS_HEIGHT: float = 0.78
 # Bench behind the officials' table, the crew's equivalent of the seat block a

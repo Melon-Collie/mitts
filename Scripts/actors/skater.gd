@@ -583,6 +583,10 @@ var latched_shot_state: int = 0
 # has to clear it. Derived identically on host and client rather than
 # replicated — every peer knows every player's seat and who was placed.
 var is_faceoff_center: bool = false
+# True while this skater sits in the penalty box (PenaltyTracker, from the
+# ledger on every peer): his controller holds him as it does in a dead-puck
+# phase, and the host ghosts him so nothing on the ice touches him.
+var in_box: bool = false
 # Predicted world-space shot velocity (direction * speed) if the carrier
 # released the shot they're currently charging RIGHT NOW. Published each tick by
 # SkaterController during a live charge (WRISTER via _update_wrister_charge, SLAPPER

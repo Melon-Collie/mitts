@@ -185,7 +185,7 @@ func begin_tick(delta: float) -> bool:
 		_process_input(_script_input, delta)
 		skater.current_shot_state = _sm.get_state() as int
 		return false
-	if _game_state.is_movement_locked():
+	if _movement_locked():
 		_stale_pending = true  # mark pending decision stale (see scripted note)
 		# Faceoff / intro skate-in: the bot glides from its bench / current spot
 		# to the dot while an approach is active, then hands back to the draw-aim
@@ -201,7 +201,7 @@ func begin_tick(delta: float) -> bool:
 		# clash over the dot, wings/D reach toward it. We don't run the agent
 		# here; its full state machine isn't designed for the locked phase and
 		# could drag in stale carrier / chase intent.
-		if _game_state.allows_blade_aim_during_lock():
+		if _blade_aim_allowed_in_lock():
 			_faceoff_input.delta = delta
 			_faceoff_input.host_timestamp = NetworkManager.estimated_host_time()
 			# Only the two centers are draw-tracking (armed by PhaseCoordinator);

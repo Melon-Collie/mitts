@@ -53,6 +53,7 @@ func tick(snapshot: WorldSnapshot, delta: float, host_timestamp: float) -> Input
 	_sm.apply_board_play(_scratch_input, snapshot)
 	_sm.apply_shot_block(_scratch_input, snapshot)
 	_sm.apply_press(_scratch_input, snapshot)
+	_sm.apply_discipline(_scratch_input, snapshot)
 	_sm.apply_offside_guard(_scratch_input, snapshot)
 	return _scratch_input
 

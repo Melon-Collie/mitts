@@ -46,6 +46,9 @@ var real_puck_carrier_peer_id: int = -1
 # watching sees; who it was meant for is never here. AI-only, host-filled
 # (GameManager._enrich_snapshot_for_ai).
 var loose_puck_released_by: int = -1
+# Whether this match calls fouls on body checks (PenaltyRules.calls_fouls).
+# AI-only, host-filled like the field above.
+var fouls_called: bool = false
 
 func get_skater_state(peer_id: int) -> SkaterNetworkState:
 	return skater_states.get(peer_id)

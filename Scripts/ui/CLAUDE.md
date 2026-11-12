@@ -92,7 +92,7 @@ if something needs to watch it.
 `hud.gd` builds only the chrome nobody else wants (version tag, bug icon,
 spectator banner) and owns the overlays and dialogs. Everything else is a panel
 under `Scripts/ui/hud/` that owns its widgets **and** its state — `HudScorebug`,
-`HudGoalChyron`, `HudPrompts`, `HudGhostBanner`, `HudIcingRace`, plus `HudStatFeed` and
+`HudGoalChyron`, `HudPrompts`, `HudGhostBanner`, `HudIcingRace`, `HudPenalties`, plus `HudStatFeed` and
 `HudRematchVotes`, which own no widgets at all. `HudChrome` holds the widget
 factories, team colors and period/clock text they share.
 

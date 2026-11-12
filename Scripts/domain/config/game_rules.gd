@@ -676,6 +676,17 @@ const FACEOFF_MAX_ABS_Z: float = GOAL_LINE_Z - 1.0
 const BENCH_CENTER_Z: float  = 4.4
 const BENCH_HALF_LEN: float  = 3.0
 
+# ── Penalty boxes ─────────────────────────────────────────────────────────────
+# The two boxes on the -X boards, across the ice from the benches: each team's
+# is the one on its own bench's side of centre. ArenaRinksideLayout derives the
+# furniture from the first two numbers, as it does the benches.
+const PENALTY_BOX_CENTER_Z: float = 2.9
+const PENALTY_BOX_HALF_LEN: float = 1.7
+# Where a penalized skater stands on the ice at his box's door: the gate the
+# boards leave at the outer end of the box (HockeyRink), which
+# test_rink_geometry_mirrors.gd holds this against.
+const PENALTY_BOX_DOOR_Z: float = 4.0
+
 # ── Bench start points (pre-game intro skate-in) ──────────────────────────────
 # Where each skater begins the opening/rematch intro before skating out to its
 # faceoff slot. They start ON the ice alongside their bench rather than queued

@@ -26,6 +26,7 @@ passed per call, and only its own fields written.
 | `SkaterAgentBoardPlay` | holding a man on the wall with the body, pushing back out of a hold, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
 | `SkaterAgentPress` | the press on a screen we are leaned on, a screener setting his edges (Ctrl and the brake) against an engaged defender on him, and a carrier putting his body into a man who stands him up |
+| `SkaterAgentDiscipline` | letting Ctrl up on a check that would be a foul (`AIFoulRead`): a man who neither has the puck, just lost it, nor is playing a loose one, or a carrier with his back turned at the boards |
 | `SkaterAgentReception` | reading an incoming feed: is it ours, the blade gate, the squared or wall-kill stance, and whether it is a shot reception |
 | `SkaterAgentOneTimer` | the ready finisher's settle anchor on the feed line, the slapper zone, the feed's remaining flight, the press square-up |
 | `SkaterAgentCarryCursor` | the carrier's blade target before a commit: the carry aim (facing, stickhandle, shield, cradles), or the hold of the release he is close to |
@@ -53,10 +54,11 @@ Adding a behaviour is four steps:
 | any press state | CARRY | the release fires, or the press bails |
 | CARRY, any press state | `_post_puck_lost_state` | the puck is gone: CHASE_PUCK for the nearest teammate to a loose puck, else OFF_PUCK |
 
-After dispatch, `SkaterAgent.tick` runs five per-tick passes that may overwrite
+After dispatch, `SkaterAgent.tick` runs six per-tick passes that may overwrite
 the dispatched input: the stick lift, the stand-up (`apply_stand_up`), board play
 (`apply_board_play`), the shot
-block (`SkaterAgentShotBlock`) and the press (`SkaterAgentPress`). The offside brake (`apply_offside_guard`)
+block (`SkaterAgentShotBlock`), the press (`SkaterAgentPress`) and, after every
+pass that presses the Hit button, the foul let-up (`apply_discipline`). The offside brake (`apply_offside_guard`)
 runs after all of them as the last write to the move, so no writer — the rolled
 carry inside dispatch, the slide out of a hold after it — can carry a bot over the line
 (`test_agent_offside_guard.gd`). The one bot it stands down for is a hunter
