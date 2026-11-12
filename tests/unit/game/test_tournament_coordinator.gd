@@ -167,9 +167,64 @@ func test_a_save_that_is_not_a_possible_bracket_reads_as_none() -> void:
 func test_the_roster_side_is_forgotten_with_the_session() -> void:
 	var coordinator: TournamentCoordinator = _started()
 	coordinator.roster_side = 1
+	coordinator.roster_game = 2
 	coordinator.end_session()
 	assert_true(coordinator.resume())
 	assert_eq(coordinator.roster_side, -1)
+	assert_eq(coordinator.roster_game, TournamentRules.NO_GAME)
+
+
+# ── A client's mirror ────────────────────────────────────────────────────────
+
+func test_a_client_mirrors_the_hosts_bracket_without_storing_it() -> void:
+	var host: TournamentCoordinator = _started()
+	assert_true(_play(host, true))
+	var stores_before: int = _store_count
+	var client: TournamentCoordinator = _coordinator()
+	watch_signals(client)
+	client.adopt_remote(host.active.to_dict())
+	assert_true(client.is_active())
+	assert_eq(client.active.to_dict(), host.active.to_dict())
+	assert_signal_emitted(client, "changed")
+	assert_eq(_store_count, stores_before, "the save is the host's alone")
+
+
+func test_an_empty_or_broken_copy_ends_the_clients_tournament() -> void:
+	var host: TournamentCoordinator = _started()
+	var client: TournamentCoordinator = _coordinator()
+	client.adopt_remote(host.active.to_dict())
+	client.adopt_remote({})
+	assert_false(client.is_active(), "the host finished or left the tournament")
+	var broken: Dictionary = host.active.to_dict()
+	broken["player_club"] = 99
+	client.adopt_remote(broken)
+	assert_false(client.is_active())
+
+
+func test_a_client_records_nothing() -> void:
+	var host: TournamentCoordinator = _started()
+	var client: TournamentCoordinator = _coordinator()
+	client.adopt_remote(host.active.to_dict())
+	assert_false(client.record_result(3, 1, false))
+	assert_false(client.active.is_played(TournamentRules.player_game(client.active)))
+
+
+# ── Seats ────────────────────────────────────────────────────────────────────
+
+func test_every_seat_is_open_outside_a_tournament() -> void:
+	var coordinator: TournamentCoordinator = _coordinator()
+	assert_true(coordinator.may_seat(0))
+	assert_true(coordinator.may_seat(1))
+
+
+func test_humans_sit_only_on_the_side_the_lobby_seated_them() -> void:
+	var coordinator: TournamentCoordinator = _started()
+	assert_true(coordinator.may_seat(0), "no lobby has seated anyone yet")
+	assert_true(coordinator.may_seat(1))
+	coordinator.roster_side = 1
+	assert_true(coordinator.may_seat(1))
+	assert_true(coordinator.may_seat(GameRules.SPECTATOR_TEAM_ID))
+	assert_false(coordinator.may_seat(0), "the opponent's side")
 
 
 func test_changed_fires_when_a_result_lands() -> void:

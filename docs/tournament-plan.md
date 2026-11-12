@@ -1,9 +1,9 @@
 # Tournament — design plan
 
-Status: **approved; Phases 1 and 2 built.** A whole cup can be played alone
-with bot teammates; Phase 2 awaits a local playtest. Phases 3 and 4 are not
-started. Where what is built differs from the text below, *Phase 2 as built*
-says how.
+Status: **approved; Phases 1 to 3 built.** A whole cup can be played alone or
+with friends on the player's side; Phases 2 and 3 await a local playtest, and
+Phase 3 has not run over Steam. Phase 4 is not started. Where what is built
+differs from the text below, the *as built* sections say how.
 
 A tournament is an eight-club single-elimination bracket. The player picks a
 club, is drawn a seed, and wins three games to take the cup: quarterfinal,
@@ -224,14 +224,56 @@ lobby, the bracket mid-run and the bracket finished.
   emptied and redrawn for each new club.
 - **The host cannot spectate** a tournament game: with no other human it would
   be a game nobody played.
-- **Finish reloads the lobby scene** as an ordinary lobby. That is enough alone;
-  with clients (Phase 3) it has to take them along.
+- **Finish reopens the lobby** as an ordinary one.
 - **The pause menu's Rematch** still restarts a tournament game in progress. It
   is the same as abandoning it: nothing was recorded, and the fresh game's
   result is.
-- **Only the lobby's seating path is restricted** so far (the first of the
-  three in section 4). The other two cannot occur while the visibility selector
-  is held at Offline.
+
+## Phase 3 as built
+
+- **The bracket reaches a joiner before the roster does.** `GameManager` sends
+  it on `peer_joined` ahead of the lobby's own handler, and a client loads its
+  lobby scene on the roster, so the lobby always opens knowing whether it is a
+  tournament's. The same send covers a mid-match joiner. Every later change
+  (a result, the session ending) goes to everyone off the coordinator's
+  `changed` signal.
+- **A client's bracket is a mirror** (`TournamentCoordinator.adopt_remote`): it
+  is never stored, and `record_result` does nothing with it. An empty or
+  impossible copy clears it.
+- **The host sends whole pictures after re-seating**, not the moves. When the
+  club changes sides the host re-seats the humans and carries the bots, then
+  sends each client the full roster and the full bot table. A client still
+  loading its lobby keeps what `NetworkManager` holds for it and would miss
+  individual seat changes.
+- **The mid-match seating paths are closed twice.** A tournament match starts
+  with both rosters full, bots included, and bots hold seats in the state
+  machine, so a joiner already spectates and no seat on the opponent's side is
+  ever open. On top of that `TournamentCoordinator.may_seat` refuses the
+  opponent's side in the mid-match swap and in a joiner's auto-balance, so the
+  rule does not rest on the rosters staying full.
+- **A reconnect needed no change and got no test.** It restores the seat the
+  player held, which was on the player's side. Nothing in it reads the
+  tournament, so there was nothing tournament-specific to assert.
+- **The game-over outcome line waits for the result.** A client's copy of the
+  result arrives after the horn, so the line is read off the game itself
+  (`TournamentRules.game_between` names it by the match's two kits) and stays
+  empty until that game is played in the client's mirror. Rematch is hidden
+  either way.
+- **Finish takes everyone along.** It ends the tournament, clears the bots, and
+  uses the return-to-lobby path from inside the lobby, which reloads the lobby
+  scene on every machine with the roster intact.
+- **A lobby reopened on the same game keeps its bots** (an abandoned game, or
+  the last game of a finished tournament); they are redrawn only for a new
+  opponent.
+- **The Steam lobby carries the round** (`tournament_round` metadata), and the
+  game browser shows it under the lobby's name. Untested here: there is no
+  Steam in the build container.
+- **Clients may spectate; the host may not.**
+
+What was run: a host and a client as two headless processes over a local ENet
+peer standing in for Steam, through two rounds, a side change and Finish, with
+the two lobbies compared seat for seat each round. No game was played out: the
+host forced each final score.
 
 ## 6. Phases
 

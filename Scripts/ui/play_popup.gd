@@ -218,9 +218,20 @@ func _lobby_row(lobby: Dictionary) -> Control:
 	if lobby_name.is_empty():
 		lobby_name = "Game"
 	name_label.text = "%s  (%d/%d)" % [lobby_name, int(lobby.get("members", 0)), int(lobby.get("max", 0))]
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.add_theme_font_size_override("font_size", 16)
-	row.add_child(name_label)
+	var titles := VBoxContainer.new()
+	titles.add_theme_constant_override("separation", 0)
+	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	titles.add_child(name_label)
+	var round_tag: String = lobby.get("tournament_round", "")
+	if round_tag.is_valid_int():
+		var tournament_label := Label.new()
+		tournament_label.text = tr(&"TOURNAMENT_LOBBY_TITLE") \
+				% TournamentCopy.round_name(round_tag.to_int())
+		tournament_label.add_theme_font_size_override("font_size", 12)
+		tournament_label.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
+		titles.add_child(tournament_label)
+	row.add_child(titles)
 	var join_btn := Button.new()
 	join_btn.text = "Join"
 	join_btn.add_theme_font_size_override("font_size", 16)

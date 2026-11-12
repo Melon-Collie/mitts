@@ -64,6 +64,20 @@ func header_text() -> String:
 	return tr(&"TOURNAMENT_LOBBY_TITLE") % TournamentCopy.round_name(TournamentRules.round_of(_game))
 
 
+# Host: tells the public game browser which round this lobby is playing. A
+# no-op until the lobby is online.
+func advertise() -> void:
+	if not NetworkManager.is_host:
+		return
+	var round_tag: String = "" if is_over() else str(TournamentRules.round_of(_game))
+	SteamManager.set_lobby_data(SteamManager.LOBBY_KEY_TOURNAMENT_ROUND, round_tag)
+
+
+func stop_advertising() -> void:
+	if NetworkManager.is_host:
+		SteamManager.set_lobby_data(SteamManager.LOBBY_KEY_TOURNAMENT_ROUND, "")
+
+
 func open_bracket(background: Control) -> void:
 	_overlay.open(_state, background)
 
@@ -83,9 +97,13 @@ func apply_to_config(config: Dictionary) -> void:
 
 # Host. The bots seated on the player's side keep their seats, moved to the side
 # the club has now, so its line stays together through the cup; every other bot
-# seat is emptied for the new opponent. The caller refills the open seats.
+# seat is emptied for the new opponent. The caller refills the open seats. A
+# lobby reopened on the game it last seated changes nothing.
 func carry_bot_teammates() -> void:
 	var coordinator: TournamentCoordinator = GameManager.tournament
+	if coordinator.roster_game == _game:
+		return
+	coordinator.roster_game = _game
 	var side: int = club_side()
 	var slots: Dictionary[int, bool] = {}
 	var identities: Dictionary[int, Dictionary] = {}

@@ -109,6 +109,21 @@ func test_the_better_seed_is_at_home_whichever_line_it_came_through() -> void:
 	assert_eq(TournamentRules.away_club(state, 4), _FIELD[7])
 
 
+func test_two_clubs_name_the_game_they_play() -> void:
+	var state: TournamentState = _state()
+	assert_eq(TournamentRules.game_between(state, _FIELD[3], _FIELD[4]), 1)
+	assert_eq(TournamentRules.game_between(state, _FIELD[4], _FIELD[3]),
+			TournamentRules.NO_GAME, "the better seed is the home side")
+	assert_eq(TournamentRules.game_between(state, _FIELD[0], _FIELD[3]),
+			TournamentRules.NO_GAME, "not drawn together yet")
+	assert_eq(TournamentRules.game_between(state, TournamentRules.NO_CLUB,
+			TournamentRules.NO_CLUB), TournamentRules.NO_GAME,
+			"an undecided game is not a match for no clubs")
+	assert_true(_win(state, 0, _FIELD[0]))
+	assert_true(_win(state, 1, _FIELD[3]))
+	assert_eq(TournamentRules.game_between(state, _FIELD[0], _FIELD[3]), 4)
+
+
 func test_round_of_each_game() -> void:
 	var rounds: Array[int] = [0, 0, 0, 0, 1, 1, 2]
 	for game: int in range(TournamentState.GAME_COUNT):

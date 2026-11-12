@@ -33,12 +33,13 @@ static func status_line(state: TournamentState) -> String:
 			club_name(opponent)]
 
 
-# What the game just recorded did to the player's tournament.
-static func outcome_line(state: TournamentState) -> String:
-	match TournamentRules.status(state):
-		TournamentRules.Status.CHAMPION:
-			return t(&"TOURNAMENT_CHAMPIONS")
-		TournamentRules.Status.ELIMINATED:
-			return t(&"TOURNAMENT_ELIMINATED")
-	var next_round: int = TournamentRules.round_of(TournamentRules.player_game(state))
-	return t(&"TOURNAMENT_ADVANCE") % round_name(next_round)
+# What `game`'s result did to the player's tournament. Empty until that result
+# is in the bracket, which on a client is when the host's copy arrives.
+static func outcome_line(state: TournamentState, game: int) -> String:
+	if not state.is_played(game):
+		return ""
+	if TournamentRules.winner(state, game) != state.player_club:
+		return t(&"TOURNAMENT_ELIMINATED")
+	if game == TournamentRules.FINAL:
+		return t(&"TOURNAMENT_CHAMPIONS")
+	return t(&"TOURNAMENT_ADVANCE") % round_name(TournamentRules.round_of(game) + 1)

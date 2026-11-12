@@ -6,6 +6,9 @@ extends RefCounted
 ## session ends (GameManager ends it on every NetworkManager reset), so any
 ## match played while it is set is the player's next tournament game. The save
 ## outlives the session and is what `resume` picks up.
+##
+## The host owns both. A client's `active` is a mirror of the host's
+## (`adopt_remote`), never stored and never recorded into.
 
 signal changed
 
@@ -15,6 +18,9 @@ var active: TournamentState = null
 # -1 before the session's first lobby has seated anyone. The club changes sides
 # between games, and the lobby reads this to know which seats were its own.
 var roster_side: int = -1
+# The game that roster was seated for, so a lobby reopened on the same game
+# (one abandoned, or the last of a finished tournament) keeps its bots.
+var roster_game: int = TournamentRules.NO_GAME
 
 var _load_save: Callable   # () -> Variant, the dictionary last stored
 var _store_save: Callable  # (Dictionary) -> void
@@ -68,6 +74,23 @@ func end_session() -> void:
 	_set_active(null)
 
 
+# Client: takes the host's copy as the session's tournament. Anything that is
+# not a possible bracket, the empty dictionary included, means there is none.
+func adopt_remote(data: Variant) -> void:
+	var state: TournamentState = TournamentState.from_variant(data)
+	active = state if TournamentRules.is_valid(state) else null
+	changed.emit()
+
+
+# Whether a human may take a seat on `team_id`. In a tournament the humans all
+# sit on the player's side; anywhere else, and before a lobby has seated
+# anyone, every seat is open.
+func may_seat(team_id: int) -> bool:
+	if active == null or roster_side == -1:
+		return true
+	return team_id == roster_side or team_id == GameRules.SPECTATOR_TEAM_ID
+
+
 # The lobby is starting the player's next game. False when there is none to play.
 func begin_match() -> bool:
 	_awaiting_result = active != null \
@@ -96,6 +119,7 @@ func record_result(home_score: int, away_score: int, overtime: bool) -> bool:
 func _set_active(state: TournamentState) -> void:
 	active = state
 	roster_side = -1
+	roster_game = TournamentRules.NO_GAME
 	_awaiting_result = false
 	changed.emit()
 

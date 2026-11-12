@@ -44,6 +44,14 @@ into the game-start config, and the host hands the final score back at
 - **Home is side 0.** The better seed takes it, so the player's club changes
   sides between games; the lobby re-seats the humans and carries the club's bot
   teammates across (`roster_side` is the side they currently hold).
+- **The host owns it; a client mirrors it.** `sync_tournament` carries the
+  whole bracket to a joiner (ahead of the lobby roster, so the client's lobby
+  opens knowing) and to everyone on each change. A client's copy is never
+  stored and never recorded into.
+- **Humans sit only on the player's side**, in the lobby and mid-match
+  (`TournamentCoordinator.may_seat`). After re-seating, the host sends clients
+  the whole roster and bot table rather than the individual moves: a client
+  still loading the lobby scene only keeps what `NetworkManager` holds.
 
 ## Recording a match to disk
 

@@ -370,11 +370,11 @@ func set_spectator(is_spec: bool) -> void:
 
 
 # `outcome` is what the result did to the player's tournament ("Advance to the
-# Semifinal"); empty for a game that is not a tournament's.
-func set_tournament_outcome(outcome: String) -> void:
-	_in_tournament = not outcome.is_empty()
+# Semifinal"), empty while that is not known yet.
+func set_tournament(in_tournament: bool, outcome: String) -> void:
+	_in_tournament = in_tournament
 	_tournament_label.text = outcome
-	_tournament_label.visible = _in_tournament
+	_tournament_label.visible = in_tournament and not outcome.is_empty()
 	_lobby_btn.text = _lobby_button_text(RematchVoteRules.Choice.NONE)
 	_refresh_actions()
 

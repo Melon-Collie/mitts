@@ -96,6 +96,9 @@ signal slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int)
 signal slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int, new_team_id: int, new_slot: int, jersey: Color, helmet: Color, pants: Color)
 signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
+# Client: the host's tournament as TournamentState.to_dict() wrote it, or an
+# empty dictionary when the session is not (or is no longer) one.
+signal tournament_synced(data: Dictionary)
 signal color_vote_changed(peer_id: int, color_slot: int)
 signal color_votes_synced(votes: Dictionary)
 signal team_colors_changed(home_slot: int, away_slot: int)
@@ -2782,6 +2785,17 @@ func send_lobby_settings_to(peer_id: int, num_periods: int, period_duration: flo
 		fighting: bool) -> void:
 	notify_lobby_settings.rpc_id(peer_id, num_periods, period_duration, ot_enabled, rule_set,
 			team_size, bot_difficulty, goalie_difficulty, fighting)
+
+@rpc("authority", "reliable")
+func sync_tournament(data: Dictionary) -> void:
+	tournament_synced.emit(data)
+
+func send_tournament_to(peer_id: int, data: Dictionary) -> void:
+	sync_tournament.rpc_id(peer_id, data)
+
+func send_tournament_to_all(data: Dictionary) -> void:
+	for peer_id: int in connected_peer_ids():
+		sync_tournament.rpc_id(peer_id, data)
 
 @rpc("authority", "reliable")
 func notify_return_to_lobby(roster: Array) -> void:

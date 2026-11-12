@@ -544,6 +544,7 @@ func _ready() -> void:
 	_trophies = TrophyService.new(_stat_recorder.totals)
 	_trophies.puck_earned.connect(game_puck_earned.emit)
 	NetworkManager.session_reset.connect(tournament.end_session)
+	tournament.changed.connect(_broadcast_tournament)
 	# End-of-tick capture + broadcast (physics priority 2, after all actor
 	# integration). The callback body carries all the session gates, so the hook
 	# is safe to run from boot.
@@ -570,6 +571,10 @@ func _wire_network_signals() -> void:
 	NetworkManager.feat_received.connect(_on_feat_received)
 	NetworkManager.client_connected.connect(on_connected_to_server)
 	NetworkManager.disconnected_from_server.connect(on_scene_exit)
+	# Ahead of on_player_connected and the lobby's own handler, so a joiner
+	# holds the bracket before the roster that makes it load a scene.
+	NetworkManager.peer_joined.connect(_send_tournament_to)
+	NetworkManager.tournament_synced.connect(_on_tournament_synced)
 	NetworkManager.peer_joined.connect(on_player_connected)
 	NetworkManager.peer_disconnected.connect(on_player_disconnected)
 	NetworkManager.world_state_received.connect(_on_world_state_received)
@@ -1450,8 +1455,15 @@ func on_player_connected(peer_id: int) -> void:
 	# state machine would otherwise hand out team_slot == team_size, and the
 	# next faceoff indexes FACEOFF_OFFSETS out of bounds in 5v5 (host-side
 	# script error). If the spectator gallery is also full, kick with a reason.
-	if _state_machine.count_players_on_team(0) >= _state_machine.team_size \
-			and _state_machine.count_players_on_team(1) >= _state_machine.team_size:
+	var home_count: int = _state_machine.count_players_on_team(0)
+	var away_count: int = _state_machine.count_players_on_team(1)
+	var roster_full: bool = home_count >= _state_machine.team_size \
+			and away_count >= _state_machine.team_size
+	# A tournament's opponent is all bots: a joiner that balance would seat with
+	# it watches instead.
+	var seat_refused: bool = not tournament.may_seat(
+			PlayerRules.assign_team(home_count, away_count))
+	if roster_full or seat_refused:
 		if _spectator_peers.size() >= GameRules.MAX_SPECTATORS:
 			NetworkManager.kick_peer(peer_id, "Match is full.")
 			return
@@ -4438,6 +4450,8 @@ func _sync_stats_to_clients() -> void:
 func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> void:
 	if not NetworkManager.is_host or _swap_coord == null:
 		return
+	if not tournament.may_seat(new_team_id):
+		return
 	# Player → spectator: any peer requesting a spectator slot.
 	if new_team_id == GameRules.SPECTATOR_TEAM_ID:
 		_demote_player_to_spectator(peer_id)
@@ -5357,6 +5371,27 @@ func refresh_freeplay_goalie_difficulty() -> void:
 	AIGoalieModel.set_goalie_profile(goalie_skill_profile)
 	for gc: GoalieController in goalie_controllers:
 		gc.apply_skill_profile(goalie_skill_profile)
+
+
+# Host: the bracket, or the empty dictionary outside a tournament, to every
+# client. Runs on every change, a session ending included.
+func _broadcast_tournament() -> void:
+	if NetworkManager.is_host:
+		NetworkManager.send_tournament_to_all(_tournament_wire())
+
+
+func _send_tournament_to(peer_id: int) -> void:
+	if NetworkManager.is_host:
+		NetworkManager.send_tournament_to(peer_id, _tournament_wire())
+
+
+func _tournament_wire() -> Dictionary:
+	return tournament.active.to_dict() if tournament.is_active() else {}
+
+
+func _on_tournament_synced(data: Dictionary) -> void:
+	if not NetworkManager.is_host:
+		tournament.adopt_remote(data)
 
 
 func return_to_free_play() -> void:

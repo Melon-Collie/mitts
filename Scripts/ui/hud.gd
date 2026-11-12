@@ -149,6 +149,7 @@ func _ready() -> void:
 	GameManager.period_synced.connect(_scorebug.set_period)
 	GameManager.clock_updated.connect(_scorebug.update_clock)
 	GameManager.game_over.connect(_on_game_over)
+	GameManager.tournament.changed.connect(_refresh_tournament_outcome)
 	GameManager.game_reset.connect(_on_game_reset)
 	NetworkManager.rematch_vote_changed.connect(_votes.on_vote_changed)
 	NetworkManager.rematch_voters_changed.connect(_votes.on_voters_changed)
@@ -767,7 +768,7 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 			star_lines.append(_star_stat_line(star.stats))
 		star_stripes.append(HudChrome.team_stripe(star.team.team_id))
 	# Before present: it decides which actions exist, and present focuses one.
-	_game_over_popup.set_tournament_outcome(_tournament_outcome_text())
+	_refresh_tournament_outcome()
 	_game_over_popup.present(_scorebug.home_score(), _scorebug.away_score(),
 			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
 			result_text, result_color,
@@ -775,11 +776,18 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 	_refresh_goal_saving()
 
 
-# What the final score did to the tournament being played, or "" outside one.
-# The host has recorded the result by the time the screen presents.
-func _tournament_outcome_text() -> String:
+# Tells the game-over screen whether this was a tournament game and what its
+# result did. The match's two kits are the bracket's clubs, which is what names
+# the game. Re-run when the bracket changes: a client's copy of the result
+# arrives after the horn.
+func _refresh_tournament_outcome() -> void:
 	var state: TournamentState = GameManager.tournament.active
-	return "" if state == null else TournamentCopy.outcome_line(state)
+	if state == null:
+		_game_over_popup.set_tournament(false, "")
+		return
+	var game: int = TournamentRules.game_between(state,
+			NetworkManager.pending_home_color_slot, NetworkManager.pending_away_color_slot)
+	_game_over_popup.set_tournament(true, TournamentCopy.outcome_line(state, game))
 
 # Compact stat line for a star row. Scorers show goals/assists (plus the GWG
 # tag — the clutch credit the selection weighted); a star who earned it on

@@ -13,18 +13,22 @@ const _PLAYER_CLUB: int = 5  # sixth seed: away to the third in the quarterfinal
 var _saved_bot_slots: Dictionary[int, bool] = {}
 var _saved_bot_identities: Dictionary[int, Dictionary] = {}
 var _saved_roster_side: int = -1
+var _saved_roster_game: int = TournamentRules.NO_GAME
 
 
 func before_each() -> void:
 	_saved_bot_slots = NetworkManager.pending_bot_slots
 	_saved_bot_identities = NetworkManager.pending_bot_identities
 	_saved_roster_side = GameManager.tournament.roster_side
+	_saved_roster_game = GameManager.tournament.roster_game
+	GameManager.tournament.roster_game = TournamentRules.NO_GAME
 
 
 func after_each() -> void:
 	NetworkManager.pending_bot_slots = _saved_bot_slots
 	NetworkManager.pending_bot_identities = _saved_bot_identities
 	GameManager.tournament.roster_side = _saved_roster_side
+	GameManager.tournament.roster_game = _saved_roster_game
 
 
 func _state() -> TournamentState:
@@ -119,7 +123,32 @@ func test_the_status_line_follows_the_players_tournament() -> void:
 	assert_string_contains(TournamentCopy.status_line(state),
 			TournamentCopy.club_name(_PLAYER_CLUB))
 	assert_ne(TournamentCopy.status_line(state), next_game)
-	assert_eq(TournamentCopy.outcome_line(state), TournamentCopy.t(&"TOURNAMENT_ELIMINATED"))
+
+
+func test_the_outcome_line_waits_for_the_result() -> void:
+	var state: TournamentState = _state()
+	var quarterfinal: int = TournamentRules.player_game(state)
+	assert_eq(TournamentCopy.outcome_line(state, quarterfinal), "", "not played yet")
+	assert_eq(TournamentCopy.outcome_line(state, TournamentRules.NO_GAME), "")
+	_win(state, quarterfinal, _PLAYER_CLUB)
+	assert_eq(TournamentCopy.outcome_line(state, quarterfinal),
+			TournamentCopy.t(&"TOURNAMENT_ADVANCE") % TournamentCopy.round_name(1))
+
+
+func test_the_outcome_line_of_a_loss_and_of_the_final() -> void:
+	var lost: TournamentState = _state()
+	var quarterfinal: int = TournamentRules.player_game(lost)
+	_win(lost, quarterfinal, _FIELD[2])
+	assert_eq(TournamentCopy.outcome_line(lost, quarterfinal),
+			TournamentCopy.t(&"TOURNAMENT_ELIMINATED"))
+
+	var won: TournamentState = _state()
+	for game: int in range(TournamentState.GAME_COUNT):
+		var player_in_it: bool = TournamentRules.player_game(won) == game
+		_win(won, game, _PLAYER_CLUB if player_in_it else TournamentRules.home_club(won, game))
+	assert_eq(TournamentRules.status(won), TournamentRules.Status.CHAMPION)
+	assert_eq(TournamentCopy.outcome_line(won, TournamentRules.FINAL),
+			TournamentCopy.t(&"TOURNAMENT_CHAMPIONS"))
 
 
 # ── LobbyTournamentMode ──────────────────────────────────────────────────────
@@ -191,6 +220,22 @@ func test_the_clubs_bots_follow_it_to_its_new_side() -> void:
 	assert_eq(GameManager.tournament.roster_side, 1)
 
 
+func test_a_lobby_reopened_on_the_same_game_keeps_every_bot() -> void:
+	var teammate: int = LobbySlotKey.encode(1, 1)
+	var opponent: int = LobbySlotKey.encode(0, 0)
+	NetworkManager.pending_bot_slots = {teammate: true, opponent: true}
+	NetworkManager.pending_bot_identities = {teammate: {"name": "Dahl"}, opponent: {"name": "Vogel"}}
+	var state: TournamentState = _state()
+	GameManager.tournament.roster_side = 1
+	GameManager.tournament.roster_game = TournamentRules.player_game(state)
+	var mode: LobbyTournamentMode = LobbyTournamentMode.for_state(state)
+	add_child_autofree(mode)
+	mode.carry_bot_teammates()
+	assert_eq(NetworkManager.pending_bot_slots.size(), 2)
+	assert_eq(NetworkManager.pending_bot_identities[opponent]["name"], "Vogel",
+			"the same opponent keeps its players")
+
+
 func test_a_sessions_first_lobby_carries_no_bots() -> void:
 	NetworkManager.pending_bot_slots = {LobbySlotKey.encode(0, 1): true}
 	NetworkManager.pending_bot_identities = {LobbySlotKey.encode(0, 1): {"name": "Dahl"}}
@@ -213,7 +258,11 @@ func test_a_tournament_game_has_no_rematch() -> void:
 	assert_true(rematch.visible)
 	assert_false(outcome.visible)
 
-	popup.set_tournament_outcome("Advance to the Semifinal")
+	popup.set_tournament(true, "")
+	assert_false(rematch.visible, "no rematch even before the result is in")
+	assert_false(outcome.visible)
+
+	popup.set_tournament(true, "Advance to the Semifinal")
 	assert_false(rematch.visible)
 	assert_true(outcome.visible)
 	assert_eq(outcome.text, "Advance to the Semifinal")
@@ -222,7 +271,7 @@ func test_a_tournament_game_has_no_rematch() -> void:
 	popup.update_votes(votes, 1, RematchVoteRules.Choice.NONE)
 	assert_eq(lobby.text, tr(&"GAME_OVER_CONTINUE"), "a tally refresh keeps the wording")
 
-	popup.set_tournament_outcome("")
+	popup.set_tournament(false, "")
 	assert_true(rematch.visible, "the next ordinary game gets its rematch back")
 	assert_false(outcome.visible)
 	assert_eq(lobby.text, tr(&"GAME_OVER_RETURN_LOBBY"))
@@ -231,7 +280,7 @@ func test_a_tournament_game_has_no_rematch() -> void:
 func test_a_spectator_of_a_tournament_game_still_has_no_vote() -> void:
 	var popup := GameOverPopup.new()
 	add_child_autofree(popup)
-	popup.set_tournament_outcome("Eliminated")
+	popup.set_tournament(true, "Eliminated")
 	popup.set_spectator(true)
 	assert_false((popup.get("_rematch_btn") as Button).visible)
 	assert_false((popup.get("_lobby_btn") as Button).visible)

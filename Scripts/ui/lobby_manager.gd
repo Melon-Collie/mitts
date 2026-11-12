@@ -230,16 +230,27 @@ func _seat_for_tournament() -> void:
 				entry.player_name, entry.is_left_handed, entry.get("jersey_number", 10))
 		_broadcast_confirm(entry.peer_id, seat[0], seat[1])
 	_fill_open_slots_with_bots()
+	# The whole picture, not the moves that made it: a client still loading
+	# this scene keeps what NetworkManager holds for it and misses the rest.
+	var roster: Array = _build_roster_array()
+	for peer_id: int in NetworkManager.connected_peer_ids():
+		NetworkManager.send_bot_slots_to(peer_id, NetworkManager.pending_bot_slots,
+				NetworkManager.pending_bot_identities)
+		NetworkManager.send_lobby_roster(peer_id, roster)
+	_tournament.advertise()
 
 
 # The tournament is over. Ends tournament mode and reopens this lobby as an
-# ordinary one for whoever is in it.
+# ordinary one, on every machine, for whoever is in it.
 func _finish_tournament() -> void:
 	_leaving = true
 	GameManager.tournament.end_session()
-	NetworkManager.pending_bot_slots.clear()
-	NetworkManager.pending_bot_identities.clear()
-	get_tree().change_scene_to_file(Constants.SCENE_LOBBY)
+	_tournament.stop_advertising()
+	NetworkManager.pending_bot_slots = {}
+	NetworkManager.pending_bot_identities = {}
+	for peer_id: int in NetworkManager.connected_peer_ids():
+		NetworkManager.send_bot_slots_to(peer_id, {}, {})
+	NetworkManager.send_return_to_lobby_to_all(_build_roster_array())
 
 
 # Controller / keyboard: back out of the lobby on ui_cancel (B / Escape). A
@@ -662,6 +673,8 @@ func _on_attach_online_ready() -> void:
 		NetworkManager.host_lobby_failed.disconnect(_on_attach_online_failed)
 	_visibility = _visibility_target
 	_visibility_btn.disabled = false
+	if _tournament != null:
+		_tournament.advertise()
 	_refresh_grid()
 
 
@@ -680,10 +693,6 @@ func _on_attach_online_failed(reason: String) -> void:
 # Cheap — called from _refresh_grid so joins/leaves re-evaluate it.
 func _update_visibility_row() -> void:
 	if _visibility_btn == null:
-		return
-	if _tournament != null:
-		_visibility_btn.disabled = true
-		_set_visibility_hint(tr(&"TOURNAMENT_SOLO_HINT"))
 		return
 	var steam_ok: bool = SteamManager.is_available
 	var humans_connected: bool = not NetworkManager.connected_peer_ids().is_empty()
@@ -749,7 +758,10 @@ func _refresh_spectator_panel() -> void:
 		# Spectators get back into a player slot by clicking on an empty slot in
 		# the grid above — no separate "Play" button. Only show "Spectate" while
 		# the local peer is in a player slot.
-		_spectator_join_btn.visible = not local_is_spectator and _tournament == null
+		# A tournament's host stays on the ice: with the host watching, the
+		# club's game could start with no human in it.
+		var may_spectate: bool = _tournament == null or not NetworkManager.is_host
+		_spectator_join_btn.visible = not local_is_spectator and may_spectate
 		_spectator_join_btn.disabled = _find_open_spectator_slot() < 0
 	# Spectators don't belong to a team, so their color vote can't affect any
 	# team's resolution (`_recompute_resolved_colors` skips spectator entries).

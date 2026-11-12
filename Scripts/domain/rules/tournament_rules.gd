@@ -98,6 +98,17 @@ static func away_club(state: TournamentState, game: int) -> int:
 	return entrant(state, game, 1) if home == upper else upper
 
 
+# The game `home` hosts `away` in, or -1 when the bracket has no such game yet.
+# Two clubs meet at most once, so the pair names it.
+static func game_between(state: TournamentState, home: int, away: int) -> int:
+	if home == NO_CLUB or away == NO_CLUB:
+		return NO_GAME
+	for game: int in range(TournamentState.GAME_COUNT):
+		if home_club(state, game) == home and away_club(state, game) == away:
+			return game
+	return NO_GAME
+
+
 static func winner(state: TournamentState, game: int) -> int:
 	if not state.is_played(game):
 		return NO_CLUB
