@@ -128,12 +128,15 @@ func setup(registry: PlayerRegistry, state_machine: GameStateMachine) -> void:
 
 # ── Events ────────────────────────────────────────────────────────────────────
 
-func on_pickup(peer_id: int) -> void:
-	# Resolve the pending shot BEFORE clearing: a directed shot the picker didn't
-	# receive as a teammate is a missed-shot attempt (Corsi); a teammate receiving
-	# it (backdoor feed / saucer) is a pass, not a shot. _resolve_pending_miss
-	# reads the picker's team, so it must see it before the clear.
+# Returns true if a stat was credited (the pickup blocked the pending shot).
+func on_pickup(peer_id: int) -> bool:
+	# Resolve the pending shot BEFORE clearing: a defender taking it clean on the
+	# blade has blocked it as surely as one it glanced off; otherwise a directed
+	# shot the picker didn't receive as a teammate is a missed-shot attempt
+	# (Corsi), and a teammate receiving it (backdoor feed / saucer) is a pass, not
+	# a shot. Both read the picker's team, so they must see it before the clear.
 	_fed_from_x = _pass_origin_x(peer_id)
+	var blocked: bool = on_block(peer_id)
 	_resolve_pending_miss(peer_id)
 	clear_pending()
 	_holder_peer_id = peer_id
@@ -141,6 +144,7 @@ func on_pickup(peer_id: int) -> void:
 	# A pickup alone is only a touch — a momentary attach in a scramble must
 	# not break the opposing assist chain. on_possession_established upgrades.
 	_record_toucher(peer_id, false)
+	return blocked
 
 
 # The current carrier ESTABLISHED possession (PossessionTracker). Upgrade
@@ -359,6 +363,9 @@ func on_block(blocker_peer_id: int) -> bool:
 	if blocker_peer_id == -1:
 		return false
 	if _shooter_peer_id == -1:
+		return false
+	# The goalie already stopped it: what a defender touches now is the rebound.
+	if _shot_on_goal_counted:
 		return false
 	# Only a touch within the short post-release window is a block — a later loose
 	# puck touch is just a takeaway/rebound, not a blocked shot.

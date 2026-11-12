@@ -3405,7 +3405,8 @@ func _on_server_puck_picked_up_by(peer_id: int, settle_s: float, feed: Vector2) 
 	# tracker knows this pickup won the draw.
 	var was_faceoff: bool = _state_machine != null \
 			and _state_machine.current_phase == GamePhase.Phase.FACEOFF
-	_shot_tracker.on_pickup(peer_id)
+	if _shot_tracker.on_pickup(peer_id):
+		_stats_sync_gate.mark_dirty()
 	# Carrying again — a hit landing now must wait for a FRESH possession loss,
 	# not credit off the stale just-released grace from their last touch.
 	if _hit_tracker != null:

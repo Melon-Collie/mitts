@@ -896,6 +896,7 @@ func test_release_intent_defaults_to_shot() -> void:
 	_add_player(20, 1)
 	watch_signals(tracker)
 	tracker.on_shot_started(10)
+	tracker.note_trajectory(false)
 	tracker.note_directed_at_net(true)
 	tracker.on_pickup(20)
 	assert_signal_emitted(tracker, "shot_resolved")
@@ -913,6 +914,7 @@ func test_pass_intent_does_not_leak_into_the_next_shot() -> void:
 	tracker.on_pickup(20)                   # the pass dies here, no event
 	watch_signals(tracker)
 	tracker.on_shot_started(10)             # a real shot, intent never noted
+	tracker.note_trajectory(false)
 	tracker.note_directed_at_net(true)
 	tracker.on_pickup(20)
 	assert_signal_emitted(tracker, "shot_resolved")
@@ -989,6 +991,38 @@ func test_block_only_counts_inside_the_block_window() -> void:
 	assert_eq(shooter.stats.shots_blocked, 0)
 	assert_true(tracker.has_pending_shot(),
 			"the shot itself is still pending for SOG — only the block window closed")
+
+
+func test_shot_taken_clean_on_a_defenders_blade_is_a_block() -> void:
+	# The puck attaches instead of glancing off: a pickup, not a loose touch.
+	_add_player(10, 0)
+	var blocker := _add_player(20, 1)
+	watch_signals(tracker)
+	tracker.on_shot_started(10)
+	assert_true(tracker.on_pickup(20), "a stat was credited")
+	assert_eq(blocker.stats.shots_blocked, 1)
+	assert_signal_emit_count(tracker, "shot_resolved", 1)
+	assert_eq(_last_event().outcome, ShotEvent.Outcome.BLOCKED)
+
+
+func test_teammate_receiving_the_puck_blocks_nothing() -> void:
+	_add_player(10, 0)
+	var receiver := _add_player(11, 0)
+	tracker.on_shot_started(10)
+	assert_false(tracker.on_pickup(11))
+	assert_eq(receiver.stats.shots_blocked, 0)
+
+
+func test_rebound_off_the_goalie_is_not_blocked() -> void:
+	# Saved inside the block window: whoever meets the rebound, by a touch or by
+	# picking it up, has blocked nothing.
+	_add_player(10, 0)
+	var defender := _add_player(20, 1)
+	tracker.on_shot_started(10)
+	tracker.on_goalie_touch(1)
+	assert_false(tracker.on_block(20))
+	assert_false(tracker.on_pickup(20))
+	assert_eq(defender.stats.shots_blocked, 0)
 
 
 # ── Reset ────────────────────────────────────────────────────────────────────
