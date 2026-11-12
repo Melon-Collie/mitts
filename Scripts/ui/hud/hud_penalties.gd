@@ -2,8 +2,9 @@ class_name HudPenalties
 extends Node
 
 # Penalties as every peer sees them: a strip under the scorebug with the
-# manpower and the minor nearest its end, and a banner for the two moments a
-# player has to read — the referee's arm going up, and his own time in the box.
+# manpower and the minor nearest its end, and a banner for the moments a
+# player has to read — the referee's arm going up, his own time in the box,
+# and a penalty shot being taken.
 
 var _strip_wrap: Control = null
 var _strip_label: Label = null
@@ -15,6 +16,7 @@ var _ledger: PenaltyLedger = null
 var _team_size: int = GameRules.DEFAULT_TEAM_SIZE
 var _local_peer_id: int = -1
 var _local_team_id: int = -1
+var _shooter_name: String = ""
 # The clock second on screen, so the text is rebuilt once a second, not a frame.
 var _shown_second: int = -1
 
@@ -78,13 +80,15 @@ func build(scale_root: Control) -> void:
 
 
 # GameManager.penalties_changed. `strip_top_left` is where the strip sits, just
-# under the scorebug. `local_team_id` is -1 for a spectator.
+# under the scorebug. `local_team_id` is -1 for a spectator; `shooter_name` is
+# who is taking the penalty shot on, if one is.
 func show_ledger(ledger: PenaltyLedger, team_size: int, local_peer_id: int,
-		local_team_id: int, strip_top_left: Vector2) -> void:
+		local_team_id: int, strip_top_left: Vector2, shooter_name: String = "") -> void:
 	_ledger = ledger
 	_team_size = team_size
 	_local_peer_id = local_peer_id
 	_local_team_id = local_team_id
+	_shooter_name = shooter_name
 	_strip_wrap.position = strip_top_left
 	_shown_second = -1
 	_refresh()
@@ -145,7 +149,11 @@ func _refresh_strip() -> void:
 
 
 func _refresh_banner() -> void:
-	if _ledger != null and _ledger.is_boxed(_local_peer_id):
+	if _ledger != null and _ledger.shooter_peer_id() != -1:
+		_title_label.text = tr(&"PENALTY_SHOT_TITLE")
+		_detail_label.text = _shooter_name
+		_banner_root.visible = true
+	elif _ledger != null and _ledger.is_boxed(_local_peer_id):
 		_title_label.text = tr(&"PENALTY_BOX_TITLE")
 		var remaining: float = _ledger.remaining_for(_local_peer_id)
 		var foul: String = tr(PenaltyRules.name_key(_ledger.foul_of(_local_peer_id)))

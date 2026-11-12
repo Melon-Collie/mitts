@@ -140,7 +140,9 @@ signal fight_called(a_peer_id: int, b_peer_id: int)
 # The referee's arm is up: `peer_id` was called for `foul` (PenaltyRules.Foul)
 # and the whistle goes when his team has the puck.
 signal penalty_called(peer_id: int, foul: int)
-signal penalty_whistled()
+# The whistle for a penalty: the delayed call coming due, or (`shot_missed`) a
+# penalty shot ending without a goal.
+signal penalty_whistled(shot_missed: bool)
 # Who is called or boxed changed; read get_penalty_ledger().
 signal penalties_changed()
 # A punch landed on `victim_peer_id` (FightPunchJudge), on every peer:
@@ -320,6 +322,9 @@ var _fights: FightTracker = null
 var _penalties: PenaltyTracker = null
 # The local player's view from the penalty box; built the first time he sits.
 var _box_camera: PenaltyBoxCamera = null
+# The local player's view of a penalty shot he is not taking.
+var _shot_camera: SpectatorCamera = null
+var _shot_watchers_scratch: Array[int] = []
 # The newest ledger the host sent this client. Kept because one can arrive
 # before the world it describes is up (a mid-match join); cleared on scene exit.
 var _latest_penalty_wire: Array = []
@@ -677,7 +682,9 @@ func _physics_process(delta: float) -> void:
 	if _state_machine != null and _registry != null:
 		var local: PlayerRecord = _registry.get_local()
 		var playing: bool = _state_machine.current_phase == GamePhase.Phase.PLAYING
-		if local != null and playing and not (local.skater != null and local.skater.in_box):
+		if local != null and playing and local.skater != null \
+				and not (local.skater.in_box or local.skater.sidelined
+						or local.skater.takes_penalty_shot):
 			local.stats.toi_seconds += delta
 		if _penalties != null:
 			if playing and not NetworkManager.is_host:
@@ -775,6 +782,8 @@ func _physics_process(delta: float) -> void:
 	_fights.tick(delta, _fights_allowed(), _state_machine.current_phase)
 	if _state_machine.current_phase == GamePhase.Phase.PLAYING:
 		_penalties.tick(delta, _state_machine.team_size)
+	if _penalties.is_shot_on() and PhaseRules.is_puck_live_phase(_state_machine.current_phase):
+		_penalties.tick_shot(delta)
 	_fighters_scratch.clear()
 	for s: Skater in _registry.skaters():
 		if s.fight_role == FightRules.Role.FIGHTING:
@@ -933,6 +942,9 @@ func _on_goalie_covered_puck(covering_team_id: int) -> void:
 	if not NetworkManager.is_host:
 		return
 	if _state_machine == null or not GameRules.whistles_a_cover(_state_machine.rule_set):
+		return
+	if _penalties != null and _penalties.is_shot_on():
+		_penalties.note_shot_saved()  # the shot's own whistle, on the next tick
 		return
 	if _cover_whistle != null:
 		return
@@ -1178,7 +1190,7 @@ func _flush_pending_faceoff_win() -> void:
 # Host: whether this match calls fouls at all (PenaltyRules.calls_fouls).
 func _fouls_called() -> bool:
 	var practice: bool = NetworkManager.is_free_play_mode or NetworkManager.is_drill_mode()
-	return PenaltyRules.calls_fouls(_state_machine.rule_set, _state_machine.team_size, practice)
+	return PenaltyRules.calls_fouls(_state_machine.rule_set, practice)
 
 
 func get_penalty_ledger() -> PenaltyLedger:
@@ -1219,13 +1231,18 @@ func _on_penalty_possession_whistle(offending_team_id: int) -> void:
 # Host: pending calls become minors as the next faceoff is placed, so the men
 # they box are skated to their doors by that placement.
 func _on_faceoff_placement_starting() -> void:
-	if NetworkManager.is_host and _penalties != null:
-		_penalties.assess_pending(_state_machine.period_duration, _state_machine.team_size)
+	if not NetworkManager.is_host or _penalties == null:
+		return
+	# A faceoff while a penalty shot is on (the puck out of play, stuck on the
+	# net) ends it: its flags would otherwise set a second one up here.
+	_penalties.end_shot()
+	_penalties.assess_pending(_state_machine.period_duration, _state_machine.team_size)
 
 
 func _on_goal_for_penalties(scoring_team: Team, _scorer: String, _a1: String,
 		_a2: String) -> void:
 	if NetworkManager.is_host and _penalties != null and scoring_team != null:
+		_penalties.end_shot()
 		_penalties.on_goal(scoring_team.team_id, _state_machine.team_size)
 
 
@@ -1272,21 +1289,63 @@ func _set_local_box_camera(in_box: bool, team_id: int) -> void:
 	_box_camera.activate()
 
 
-# The bots play as if a boxed skater were not there: he is off the ice.
+# The bots play as if a boxed skater were not there, and through a penalty
+# shot as if only the shooter were: everyone else is off the play.
 func _drop_boxed_from_ai_snapshot(snap: WorldSnapshot) -> void:
 	if _penalties == null or _penalties.ledger.is_empty():
 		return
-	for entry: PenaltyLedger.Entry in _penalties.ledger.entries:
-		if entry.state != PenaltyLedger.State.PENDING:
-			snap.skater_states.erase(entry.peer_id)
+	var shooter: int = _penalties.ledger.shooter_peer_id()
+	_shot_watchers_scratch.clear()
+	for pid: int in snap.skater_states:
+		if _penalties.ledger.is_boxed(pid) or (shooter != -1 and pid != shooter):
+			_shot_watchers_scratch.append(pid)
+	for pid: int in _shot_watchers_scratch:
+		snap.skater_states.erase(pid)
+
+
+# Every peer: a penalty shot is set up. The clock stops with the puck live,
+# and a local player who is not taking it watches from the broadcast camera.
+func _on_penalty_shot_staged(shooter_peer_id: int) -> void:
+	if NetworkManager.is_host:
+		_state_machine.clock_held = true
+		_state_machine.active_faceoff_dot = GameRules.CENTER_ICE_DOT
+	var local: PlayerRecord = _registry.get_local() if _registry != null else null
+	if local == null or local.peer_id == shooter_peer_id:
+		return
+	if not is_instance_valid(_shot_camera):
+		_shot_camera = SpectatorCamera.new()
+		get_tree().current_scene.add_child(_shot_camera)
+		_shot_camera.setup(
+				func() -> Vector3: return puck.global_position if puck != null else Vector3.ZERO)
+	_shot_camera.activate()
+
+
+func _on_penalty_shot_over() -> void:
+	if _state_machine != null:
+		_state_machine.clock_held = false
+	if is_instance_valid(_shot_camera):
+		_shot_camera.deactivate()
+
+
+# Host: the shot is over without a goal, so play is whistled dead and faces
+# off in the end it was taken at.
+func _on_penalty_shot_missed() -> void:
+	var defending_team_id: int = _penalties.ledger.shot_defending_team_id()
+	_penalties.end_shot()
+	if not PhaseRules.is_puck_live_phase(_state_machine.current_phase) or puck == null:
+		return
+	penalty_whistled.emit(true)
+	NetworkManager.notify_penalty_whistled_to_all(true)
+	_whistle_and_faceoff(
+			GameRules.icing_faceoff_dot(defending_team_id, puck.global_position.x))
 
 
 func _on_penalty_called_received(peer_id: int, foul: int) -> void:
 	penalty_called.emit(peer_id, foul)
 
 
-func _on_penalty_whistled_received() -> void:
-	penalty_whistled.emit()
+func _on_penalty_whistled_received(shot_missed: bool) -> void:
+	penalty_whistled.emit(shot_missed)
 	SoundManager.play_crowd(SoundManager.Sound.FACEOFF_WHISTLE)
 
 
@@ -1338,8 +1397,8 @@ func _consume_pending_faceoff() -> void:
 			offside_called.emit()
 			NetworkManager.notify_offside_called_to_all()
 		GameStateMachine.FaceoffReason.PENALTY:
-			penalty_whistled.emit()
-			NetworkManager.notify_penalty_whistled_to_all()
+			penalty_whistled.emit(false)
+			NetworkManager.notify_penalty_whistled_to_all(false)
 	_whistle_and_faceoff(dot)
 
 
@@ -2098,6 +2157,9 @@ func _wire_subsystems() -> void:
 	_penalties.ledger_changed.connect(_on_penalty_ledger_changed)
 	_penalties.skater_boxed.connect(_on_skater_boxed)
 	_penalties.skater_released.connect(_on_skater_released)
+	_penalties.shot_staged.connect(_on_penalty_shot_staged)
+	_penalties.shot_over.connect(_on_penalty_shot_over)
+	_penalties.shot_missed.connect(_on_penalty_shot_missed)
 	_hit_tracker.opposing_contact.connect(_on_opposing_contact)
 	if not _latest_penalty_wire.is_empty():
 		_penalties.apply_remote(_latest_penalty_wire)

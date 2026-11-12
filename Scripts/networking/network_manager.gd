@@ -79,7 +79,7 @@ signal fight_challenge_received(challenger_peer_id: int, target_peer_id: int)
 signal fight_challenge_lapsed_received(challenger_peer_id: int)
 signal fight_called_received(a_peer_id: int, b_peer_id: int)
 signal penalty_called_received(peer_id: int, foul: int)
-signal penalty_whistled_received
+signal penalty_whistled_received(shot_missed: bool)
 signal penalty_ledger_received(wire: Array)
 signal punch_landed_received(victim_peer_id: int, intensity: float, dir_x: float, dir_z: float)
 signal puck_frozen_called_received
@@ -2353,13 +2353,16 @@ func notify_penalty_called(peer_id: int, foul: int) -> void:
 		func(p: int, f: int) -> void: penalty_called_received.emit(p, f),
 		[peer_id, foul], true)
 
-func notify_penalty_whistled_to_all() -> void:
+# The whistle for a penalty: the delayed call coming due, or (`shot_missed`) a
+# penalty shot ending without a goal.
+func notify_penalty_whistled_to_all(shot_missed: bool) -> void:
 	for to_peer: int in connected_peer_ids():
-		notify_penalty_whistled.rpc_id(to_peer)
+		notify_penalty_whistled.rpc_id(to_peer, shot_missed)
 
 @rpc("authority", "reliable")
-func notify_penalty_whistled() -> void:
-	NetworkSimManager.send(func() -> void: penalty_whistled_received.emit(), [], true)
+func notify_penalty_whistled(shot_missed: bool) -> void:
+	NetworkSimManager.send(
+		func(m: bool) -> void: penalty_whistled_received.emit(m), [shot_missed], true)
 
 # The whole PenaltyLedger (to_wire), sent whenever it changes and to a joiner.
 func send_penalty_ledger_to_all(wire: Array) -> void:

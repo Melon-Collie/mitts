@@ -1213,14 +1213,17 @@ func is_faceoff_ready() -> bool:
 			and Vector2(skater.velocity.x, skater.velocity.z).length() < FACEOFF_SET_MAX_SPEED
 
 
-# Whether this skater is held still: a dead-puck phase, or his own penalty.
+# Whether this skater is held still: a dead-puck phase, his own penalty, or a
+# penalty shot he is not the one taking.
 func _movement_locked() -> bool:
-	return skater.in_box or _game_state.is_movement_locked()
+	return skater.in_box or skater.sidelined or _game_state.is_movement_locked()
 
 
-# The stick stays live through a faceoff's countdown, but not in the box.
+# The stick stays live through a faceoff's countdown, but not in the box or on
+# the sideline.
 func _blade_aim_allowed_in_lock() -> bool:
-	return not skater.in_box and _game_state.allows_blade_aim_during_lock()
+	return not skater.in_box and not skater.sidelined \
+			and _game_state.allows_blade_aim_during_lock()
 
 
 # `lead` seconds pass before the window opens; nothing is posed through them.

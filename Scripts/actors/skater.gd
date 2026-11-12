@@ -587,6 +587,11 @@ var is_faceoff_center: bool = false
 # ledger on every peer): his controller holds him as it does in a dead-puck
 # phase, and the host ghosts him so nothing on the ice touches him.
 var in_box: bool = false
+# A penalty shot is on (PenaltyTracker, from the ledger on every peer). The
+# shooter is the one skater in it; everyone else is sidelined, held at his
+# bench as a boxed skater is held in the box, but in plain sight.
+var takes_penalty_shot: bool = false
+var sidelined: bool = false
 # Predicted world-space shot velocity (direction * speed) if the carrier
 # released the shot they're currently charging RIGHT NOW. Published each tick by
 # SkaterController during a live charge (WRISTER via _update_wrister_charge, SLAPPER

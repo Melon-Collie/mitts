@@ -46,9 +46,13 @@ signal period_break_started(duration: float)
 
 # A placed skater in the faceoff-positions payload: peer id, then x, y, z.
 const _POSITION_STRIDE: int = 4
+# How long a sidelined skater's blade is kept off the puck: longer than a
+# penalty shot can last, and the next faceoff's puck reset clears it anyway.
+const _SIDELINE_PUCK_COOLDOWN_S: float = 60.0
 
 var _state_machine: GameStateMachine = null
 var _registry: PlayerRegistry = null
+var _placement: FaceoffPlacement = null
 var _teams: Array[Team] = []
 var _puck_getter: Callable = Callable()
 var _goalie_controllers_getter: Callable = Callable()
@@ -155,6 +159,7 @@ func setup(
 		is_pregame_intro_getter: Callable = Callable()) -> void:
 	_state_machine = state_machine
 	_registry = registry
+	_placement = FaceoffPlacement.new(registry)
 	_teams = teams
 	_puck_getter = puck_getter
 	_goalie_controllers_getter = goalie_controllers_getter
@@ -250,12 +255,15 @@ func _enter_faceoff_prep(puck: Puck) -> void:
 	var last_arrival: float = 0.0
 	var positions: Array = []
 	faceoff_placement_starting.emit()
+	if _placement.penalty_shot_is_staged():
+		_place_penalty_shot(puck)
+		return
 	var placed: Array[int] = []
 	placed.assign(_registry.all().keys())
-	var casts: Array[PackedInt32Array] = _faceoff_casts(placed)
+	var casts: Array[PackedInt32Array] = _placement.casts(placed)
 	for peer_id: int in placed:
 		var record: PlayerRecord = _registry.get_record(peer_id)
-		if _is_boxed(record):
+		if _placement.is_boxed(record):
 			var door: Vector3 = PlayerRules.penalty_box_position(record.team.team_id)
 			var door_glide: float = _skate_in_duration(record.skater.global_position, door)
 			last_arrival = maxf(last_arrival, door_glide)
@@ -264,7 +272,7 @@ func _enter_faceoff_prep(puck: Puck) -> void:
 					PlayerRules.penalty_box_facing(), door_glide, record.skater.velocity)
 			positions.append_array([peer_id, door.x, door.y, door.z])
 			continue
-		var spot: int = _faceoff_spot(casts, record)
+		var spot: int = _placement.spot(casts, record)
 		var takes_draw: bool = spot == FaceoffFormation.CENTER_SPOT
 		# The draw-taker stands at his own reach-derived distance from the dot —
 		# Size scales stick + arms, so a fixed offset puts the puck out of a
@@ -356,7 +364,7 @@ func on_period_break_entered() -> void:
 			continue
 		if not _is_host and not record.is_local:
 			continue
-		if _is_boxed(record):
+		if _placement.is_boxed(record):
 			continue  # he sits the break out where he is
 		var start: Vector3 = record.skater.global_position
 		var target: Vector3 = PlayerRules.bench_start_position(
@@ -573,7 +581,7 @@ func on_faceoff_positions(positions: Array, preroll: float) -> void:
 	var placed_peers: Array[int] = []
 	for at: int in range(0, positions.size(), _POSITION_STRIDE):
 		placed_peers.append(int(positions[at]))
-	var casts: Array[PackedInt32Array] = _faceoff_casts(placed_peers)
+	var casts: Array[PackedInt32Array] = _placement.casts(placed_peers)
 	var i: int = 0
 	while i < positions.size():
 		var peer_id: int = positions[i]
@@ -585,8 +593,9 @@ func on_faceoff_positions(positions: Array, preroll: float) -> void:
 		# placed, the client knows each one's seat, and the cast follows from both.
 		var placed: PlayerRecord = _registry.get_record(peer_id) if _registry.has(peer_id) else null
 		if placed != null and placed.skater != null:
-			placed.skater.is_faceoff_center = not _is_boxed(placed) \
-					and _faceoff_spot(casts, placed) == FaceoffFormation.CENTER_SPOT
+			placed.skater.is_faceoff_center = not _placement.is_boxed(placed) \
+					and not _placement.in_penalty_shot(placed) \
+					and _placement.spot(casts, placed) == FaceoffFormation.CENTER_SPOT
 		if peer_id == local_peer_id and _registry.has(peer_id):
 			# Wire format stays position-only; clients derive facing locally
 			# from the record's current team_id. Slot-swap RPCs land before
@@ -600,9 +609,10 @@ func on_faceoff_positions(positions: Array, preroll: float) -> void:
 					record, pos, GameRules.CENTER_ICE_DOT, from_bench, staged)
 			var duration: float = _faceoff_approach_duration(
 					peer_id, start, pos, from_bench, skate_in, staged)
-			if _is_boxed(record):
-				# To the box door from wherever he stands, as the host skates him.
-				facing = PlayerRules.penalty_box_facing()
+			if _placement.is_boxed(record) or _placement.in_penalty_shot(record):
+				# To the box door, the bench or the shooter's mark from wherever
+				# he stands, as the host skates him.
+				facing = _placement.held_out_facing(record)
 				start = record.skater.global_position
 				duration = _skate_in_duration(start, pos)
 			if preroll > 0.0:
@@ -622,25 +632,37 @@ func on_faceoff_positions(positions: Array, preroll: float) -> void:
 
 # ── Internal ──────────────────────────────────────────────────────────────────
 
-# Sitting out a penalty: skated to his box's door, and no part of the faceoff.
-func _is_boxed(record: PlayerRecord) -> bool:
-	return record != null and record.skater != null and record.skater.in_box
-
-
-# Each team's FaceoffFormation.cast over the seats `peer_ids` hold, indexed by
-# team id. A boxed skater holds no seat.
-func _faceoff_casts(peer_ids: Array[int]) -> Array[PackedInt32Array]:
-	var on_ice: Array[int] = [0, 0]
-	for peer_id: int in peer_ids:
-		var record: PlayerRecord = _registry.get_record(peer_id) \
-				if _registry.has(peer_id) else null
-		if record != null and record.team != null and not _is_boxed(record):
-			on_ice[record.team.team_id] |= FaceoffFormation.seat_bit(record.team_slot)
-	return [FaceoffFormation.cast(on_ice[0]), FaceoffFormation.cast(on_ice[1])]
-
-
-func _faceoff_spot(casts: Array[PackedInt32Array], record: PlayerRecord) -> int:
-	return casts[record.team.team_id][record.team_slot]
+# Host: sets a penalty shot up where the faceoff would have been. The shooter
+# glides to centre with the puck laid a stride ahead of him, everyone else to
+# his own bench, and the prep's countdown is the shot's: at its end the puck
+# unlocks and the FACEOFF phase waits for him to collect it.
+func _place_penalty_shot(puck: Puck) -> void:
+	var last_arrival: float = 0.0
+	var positions: Array = []
+	for peer_id: int in _registry.all():
+		var record: PlayerRecord = _registry.get_record(peer_id)
+		if record == null or record.skater == null or record.controller == null:
+			continue
+		record.skater.is_faceoff_center = false
+		var pos: Vector3 = _placement.penalty_shot_spot(record)
+		var glide: float = _skate_in_duration(record.skater.global_position, pos)
+		last_arrival = maxf(last_arrival, glide)
+		record.controller.begin_approach(record.skater.global_position, pos,
+				_placement.held_out_facing(record), glide, record.skater.velocity)
+		positions.append_array([peer_id, pos.x, pos.y, pos.z])
+		if record.skater.takes_penalty_shot and puck != null:
+			puck.reset(PlayerRules.penalty_shot_puck_spot(record.team.team_id))
+			puck.pickup_locked = true
+	if puck != null:
+		# After the reset, which clears every cooldown.
+		for peer_id: int in _registry.all():
+			var record: PlayerRecord = _registry.get_record(peer_id)
+			if record != null and record.skater != null and record.skater.sidelined:
+				puck.set_skater_cooldown(record.skater, _SIDELINE_PUCK_COOLDOWN_S)
+	last_prep_preroll = last_arrival + GameRules.FACEOFF_SET_BEAT
+	_state_machine.set_faceoff_prep_extra(last_prep_preroll)
+	faceoff_positions_ready.emit(positions, last_prep_preroll)
+	faceoff_prep_announced.emit()
 
 
 # True when the faceoff being placed is the opening/rematch intro — the only

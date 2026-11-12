@@ -25,10 +25,15 @@ const MINOR_MIN_S: float = 15.0
 const MIN_SKATERS: int = 3
 
 
-# Fouls are called under NHL rules in 5v5; a foul in 3v3 is a penalty shot,
-# which is not built.
-static func calls_fouls(rule_set: int, team_size: int, practice: bool) -> bool:
-	return rule_set == GameRules.RuleSet.NHL and team_size >= 5 and not practice
+# Fouls are called under NHL rules.
+static func calls_fouls(rule_set: int, practice: bool) -> bool:
+	return rule_set == GameRules.RuleSet.NHL and not practice
+
+
+# What a foul costs: a minor in 5v5, and a penalty shot for the man fouled in
+# 3v3, where a team a man short is close to an automatic goal.
+static func awards_penalty_shot(team_size: int) -> bool:
+	return team_size < 5
 
 
 static func minor_seconds(period_duration: float) -> float:

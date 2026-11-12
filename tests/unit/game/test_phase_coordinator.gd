@@ -400,6 +400,46 @@ func test_a_boxed_skater_does_not_skate_off_for_the_period_break() -> void:
 	assert_eq((free.controller as StubController).targets.size(), 1)
 
 
+# ── A penalty shot set up in the faceoff's place ─────────────────────────────
+
+func _with_skater(record: PlayerRecord) -> PlayerRecord:
+	record.skater = SKATER_SCENE.instantiate() as Skater
+	add_child_autofree(record.skater)
+	record.skater.set_physics_process(false)
+	record.skater.set_process(false)
+	return record
+
+
+func test_a_penalty_shot_puts_the_shooter_at_centre_and_the_rest_at_their_benches() -> void:
+	var shooter: PlayerRecord = _with_skater(_add_seated_player(10, 0, 1))
+	shooter.skater.takes_penalty_shot = true
+	var mate: PlayerRecord = _with_skater(_add_seated_player(11, 0, 0))
+	mate.skater.sidelined = true
+	var opponent: PlayerRecord = _with_skater(_add_seated_player(20, 1, 0))
+	opponent.skater.sidelined = true
+	sm.begin_faceoff_prep(Vector2(6.7, 21.0))
+	coord.handle_phase_entered()
+	assert_eq(_placed_position(10), PlayerRules.penalty_shot_start())
+	assert_eq(_placed_position(11), PlayerRules.bench_start_position(0, 0))
+	assert_eq(_placed_position(20), PlayerRules.bench_start_position(1, 0))
+	for record: PlayerRecord in [shooter, mate, opponent]:
+		assert_false(record.skater.is_faceoff_center, "nobody takes a draw")
+		assert_eq((record.controller as StubController).targets.size(), 1)
+	assert_gt(sm.faceoff_prep_time_until_drop(), GameRules.FACEOFF_PREP_DURATION,
+			"the countdown waits for everyone to be set")
+
+
+func test_a_client_takes_no_draw_through_a_penalty_shot() -> void:
+	var shooter: PlayerRecord = _with_skater(_add_seated_player(10, 0, 0))
+	shooter.skater.takes_penalty_shot = true
+	var opponent: PlayerRecord = _with_skater(_add_seated_player(20, 1, 0))
+	opponent.skater.sidelined = true
+	sm.current_phase = GamePhase.Phase.PLAYING
+	coord.on_faceoff_positions([10, 0.0, 1.0, 0.0, 20, 11.5, 1.0, -4.4], 1.0)
+	assert_false(shooter.skater.is_faceoff_center)
+	assert_false(opponent.skater.is_faceoff_center)
+
+
 # ── Period break → period-start bench intro ──────────────────────────────────
 
 func test_end_of_period_emits_period_break_and_stashes_next_period() -> void:

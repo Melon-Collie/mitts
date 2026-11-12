@@ -27,6 +27,11 @@ static func is_puck_pickup_locked_phase(phase: GamePhase.Phase) -> bool:
 	return is_dead_puck_phase(phase) or phase == GamePhase.Phase.GOAL_CELEBRATION \
 			or phase == GamePhase.Phase.FIGHT
 
+# The puck can be played: live play, and a faceoff's dropped puck before
+# anyone has it.
+static func is_puck_live_phase(phase: GamePhase.Phase) -> bool:
+	return phase == GamePhase.Phase.PLAYING or phase == GamePhase.Phase.FACEOFF
+
 # Phases in which skaters pass through each other: every locked one (a skate-in
 # crossing the centre is not a check), and the fight's stoppage, where nobody
 # can hit a fighter or be hit.

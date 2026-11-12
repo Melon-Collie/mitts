@@ -183,6 +183,62 @@ func test_a_power_play_goal_releases_him() -> void:
 	assert_eq(_released, [HITTER] as Array[int])
 
 
+# ── The penalty shot (3v3) ───────────────────────────────────────────────────
+
+func _stage_a_shot_for_the_victim() -> Array:
+	var events: Array = []
+	_tracker.shot_staged.connect(func(p: int) -> void: events.append(["staged", p]))
+	_tracker.shot_over.connect(func() -> void: events.append(["over"]))
+	_tracker.shot_missed.connect(func() -> void: events.append(["missed"]))
+	_tracker.ledger.call_foul(HITTER, 0, PenaltyRules.Foul.INTERFERENCE, VICTIM)
+	_tracker.assess_pending(PERIOD_S, 3)
+	return events
+
+
+func test_in_3v3_a_foul_is_a_shot_for_the_man_fouled() -> void:
+	var events: Array = _stage_a_shot_for_the_victim()
+	assert_true(_tracker.is_shot_on())
+	assert_true(_skater(VICTIM).takes_penalty_shot)
+	assert_false(_skater(VICTIM).sidelined)
+	assert_true(_skater(HITTER).sidelined, "everyone else watches")
+	assert_false(_skater(HITTER).in_box, "nobody sits for it")
+	assert_eq(events, [["staged", VICTIM]])
+
+
+func test_a_shot_for_a_man_who_has_left_is_not_taken() -> void:
+	_tracker.ledger.call_foul(HITTER, 0, PenaltyRules.Foul.INTERFERENCE, 99)
+	_tracker.assess_pending(PERIOD_S, 3)
+	assert_false(_tracker.is_shot_on())
+	assert_true(_tracker.ledger.is_empty())
+
+
+func test_a_shot_that_ends_puts_everyone_back_in_the_game() -> void:
+	var events: Array = _stage_a_shot_for_the_victim()
+	_tracker.end_shot()
+	assert_false(_tracker.is_shot_on())
+	assert_false(_skater(VICTIM).takes_penalty_shot)
+	assert_false(_skater(HITTER).sidelined)
+	assert_eq(events, [["staged", VICTIM], ["over"]])
+
+
+func test_a_save_ends_the_shot_on_the_next_tick() -> void:
+	var events: Array = _stage_a_shot_for_the_victim()
+	_tracker.note_shot_saved()
+	_tracker.tick_shot(1.0 / 90.0)
+	assert_eq(events.back(), ["missed"])
+
+
+func test_a_client_sidelines_everyone_but_the_shooter() -> void:
+	var host := PenaltyLedger.new()
+	host.call_foul(HITTER, 0, PenaltyRules.Foul.INTERFERENCE, VICTIM)
+	host.stage_shot()
+	_tracker.apply_remote(host.to_wire())
+	assert_true(_skater(VICTIM).takes_penalty_shot)
+	assert_true(_skater(HITTER).sidelined)
+	_tracker.apply_remote([])
+	assert_false(_skater(HITTER).sidelined)
+
+
 func test_a_client_seats_the_box_from_the_hosts_ledger() -> void:
 	var host := PenaltyLedger.new()
 	host.call_foul(VICTIM, 1, PenaltyRules.Foul.INTERFERENCE)

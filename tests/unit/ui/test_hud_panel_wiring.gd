@@ -79,7 +79,8 @@ func test_icing_race_reaches_its_banner() -> void:
 
 func test_penalty_signals_reach_the_hud() -> void:
 	GameManager.penalty_called.emit(7, PenaltyRules.Foul.BOARDING)
-	GameManager.penalty_whistled.emit()
+	GameManager.penalty_whistled.emit(false)
+	GameManager.penalty_whistled.emit(true)
 	GameManager.penalties_changed.emit()
 	assert_eq((_panel(&"_penalties") as HudPenalties).banner_title(), "",
 			"no ledger outside a match, so nothing is up")
@@ -98,6 +99,19 @@ func test_the_penalty_panel_shows_the_call_then_the_manpower() -> void:
 	assert_eq(panel.strip_text(), "%s   0:24" % (tr(&"PENALTY_STRENGTH") % [5, 4]))
 	panel.show_ledger(ledger, 5, 7, 1, Vector2(8.0, 80.0))
 	assert_eq(panel.banner_title(), tr(&"PENALTY_BOX_TITLE"), "the boxed player sees his own clock")
+
+
+func test_the_penalty_panel_names_the_shooter_through_a_penalty_shot() -> void:
+	var panel: HudPenalties = _panel(&"_penalties") as HudPenalties
+	var ledger := PenaltyLedger.new()
+	ledger.call_foul(7, 1, PenaltyRules.Foul.BOARDING, 3)
+	ledger.stage_shot()
+	panel.show_ledger(ledger, 3, 3, 0, Vector2(8.0, 80.0), "JONES")
+	assert_eq(panel.banner_title(), tr(&"PENALTY_SHOT_TITLE"))
+	assert_eq(panel.strip_text(), "", "nobody is short for a penalty shot")
+	ledger.end_shot()
+	panel.show_ledger(ledger, 3, 3, 0, Vector2(8.0, 80.0))
+	assert_eq(panel.banner_title(), "")
 
 
 func test_roster_announcements_reach_the_toast_stack() -> void:

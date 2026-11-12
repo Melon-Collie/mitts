@@ -100,6 +100,28 @@ static func is_goal(
 			GameRules.PUCK_COLLISION_HALF_HEIGHT)
 
 
+# A shot off the blade is given this long before its velocity is read: the tick
+# it leaves, it has none yet.
+const SHOT_FLIGHT_GRACE_S: float = 0.15
+# A puck slower than this toward the goal line is not going in.
+const SHOT_DEAD_SPEED: float = 0.5
+# However it is moving, a shot is over this long after it left the blade.
+const SHOT_MAX_FLIGHT_S: float = 4.0
+
+
+# Whether a shot that has left the blade is over without having crossed the
+# line: it is no longer going at the net (saved, off a post, lost wide), or it
+# has had its time. There are no rebounds, so nothing after this counts.
+# `puck_vel_z` is the puck's velocity along Z.
+static func shot_is_dead(puck_vel_z: float, attack_dir_z: float,
+		seconds_since_release: float) -> bool:
+	if seconds_since_release < SHOT_FLIGHT_GRACE_S:
+		return false
+	if seconds_since_release >= SHOT_MAX_FLIGHT_S:
+		return true
+	return puck_vel_z * signf(attack_dir_z) <= SHOT_DEAD_SPEED
+
+
 # Classify one sampled frame of an attempt.
 #
 # `forward_speed` is the shooter's rate of forward progress (m/s) — the caller

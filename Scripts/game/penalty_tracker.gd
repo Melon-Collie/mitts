@@ -1,10 +1,11 @@
 class_name PenaltyTracker
 extends RefCounted
 
-# The referee and the penalty box (docs/penalties-plan.md). On the host it
-# judges each contact between opponents (PenaltyRules), holds the call until
-# the offending team has the puck, and runs the minors; on every peer it seats
-# the boxed skaters from the ledger, which a client receives whole whenever it
+# The referee, the penalty box and the penalty shot (docs/penalties-plan.md).
+# On the host it judges each contact between opponents (PenaltyRules), holds
+# the call until the offending team has the puck, runs the minors and judges a
+# penalty shot; on every peer it seats the boxed skaters and sidelines the ones
+# watching a shot from the ledger, which a client receives whole whenever it
 # changes.
 
 # Host: a foul was judged and the delayed call is up.
@@ -16,9 +17,16 @@ signal ledger_changed
 # Every peer: a skater went into the box, or came out of it.
 signal skater_boxed(peer_id: int)
 signal skater_released(peer_id: int)
+# Every peer: a penalty shot was set up for `shooter_peer_id`, or is over.
+signal shot_staged(shooter_peer_id: int)
+signal shot_over
+# Host: the shot on is over without a goal.
+signal shot_missed
 
 # A boxed skater is hidden once he is this close to his door.
 const _BOX_HIDE_DIST_SQ: float = 0.75 * 0.75
+# How long a shooter has to collect the puck laid for him.
+const _SHOT_COLLECT_S: float = GameRules.FACEOFF_TIMEOUT
 
 var ledger := PenaltyLedger.new()
 # What the last call was judged on, for the F3 overlay.
@@ -28,6 +36,12 @@ var _registry: PlayerRegistry = null
 var _state_buffer: StateBufferManager = null
 var _puck_getter: Callable = Callable()
 var _rewind_scratch := WorldSnapshot.new()
+# The penalty shot on, as the host judges it, and who this peer last knew to
+# be taking one (-1 for none).
+var _shot := PenaltyShotAttempt.new()
+var _staged_shooter: int = -1
+# The goalie has the puck: the shot on is over at the next tick_shot.
+var _shot_saved: bool = false
 
 
 func setup(registry: PlayerRegistry, state_buffer: StateBufferManager,
@@ -77,7 +91,7 @@ func on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
 			attacker_has_puck, eligible, into_boards, from_behind)
 	if foul == PenaltyRules.Foul.NONE:
 		return
-	if not ledger.call_foul(hitter_peer_id, hitter.team.team_id, foul):
+	if not ledger.call_foul(hitter_peer_id, hitter.team.team_id, foul, victim_peer_id):
 		return
 	last_call_facts = "%s  force %.1f  into boards %s  from behind %s (facing·drive %.2f)" \
 			% [PenaltyRules.Foul.keys()[foul], force, into_boards, from_behind,
@@ -104,13 +118,63 @@ func on_goal(scoring_team_id: int, team_size: int) -> void:
 	ledger_changed.emit()
 
 
-# Every pending call becomes a minor. Called as a faceoff is placed, so the
-# men it boxes skate to their doors rather than to a spot.
+# Every pending call is paid for: a minor each, or one penalty shot where a
+# foul is a shot (PenaltyRules.awards_penalty_shot). Called as a faceoff is
+# placed, so that placement skates the boxed to their doors, or sets the shot
+# up in the faceoff's place.
 func assess_pending(period_duration: float, team_size: int) -> void:
 	if not ledger.has_pending():
 		return
-	ledger.assess(PenaltyRules.minor_seconds(period_duration),
-			PenaltyRules.max_serving(team_size))
+	if PenaltyRules.awards_penalty_shot(team_size):
+		_stage_shot()
+	else:
+		ledger.assess(PenaltyRules.minor_seconds(period_duration),
+				PenaltyRules.max_serving(team_size))
+	apply_box_state()
+	ledger_changed.emit()
+
+
+func _stage_shot() -> void:
+	var shooter: PlayerRecord = _registry.get_record(ledger.stage_shot())
+	if shooter == null or shooter.skater == null or shooter.team == null:
+		ledger.end_shot()  # the man fouled has left: nobody takes it
+		return
+	var attack_dir_z: float = -PlayerRules.own_goal_dir(shooter.team.team_id)
+	_shot.max_wait_s = _SHOT_COLLECT_S
+	_shot.ends_when_shot_dies = true
+	_shot.begin(attack_dir_z, attack_dir_z * GameRules.GOAL_LINE_Z, GameRules.NET_HALF_WIDTH)
+	_shot_saved = false
+
+
+func is_shot_on() -> bool:
+	return ledger.shooter_peer_id() != -1
+
+
+# Host: steps the shot on; call each tick the puck is live. Emits shot_missed
+# when it is over without a goal. A goal is the goal line's to call.
+func tick_shot(delta: float) -> void:
+	var shooter: PlayerRecord = _registry.get_record(ledger.shooter_peer_id())
+	var puck: Puck = _puck_getter.call() as Puck
+	if shooter == null or shooter.skater == null or puck == null or _shot_saved:
+		shot_missed.emit()
+		return
+	if _shot.step(delta, shooter.skater.global_position.z, puck.carrier == shooter.skater,
+			puck.get_puck_position(), puck.get_puck_velocity().z) \
+			== PenaltyShotRules.Outcome.MISS:
+		shot_missed.emit()
+
+
+# Host: the goalie smothered or caught the puck. Noted, not acted on: the
+# cover is reported from inside the puck's own tick.
+func note_shot_saved() -> void:
+	_shot_saved = true
+
+
+# Host: the shot is over, whichever way it went.
+func end_shot() -> void:
+	if not is_shot_on():
+		return
+	ledger.end_shot()
 	apply_box_state()
 	ledger_changed.emit()
 
@@ -141,16 +205,20 @@ func apply_remote(wire: Array) -> void:
 	apply_box_state()
 
 
-# Seats and releases skaters to match the ledger. A released skater stands at
-# his door facing the ice; on a client only the host's snapshots move a remote
-# one, and the local one is put there by its next reconcile.
+# Seats, sidelines and releases skaters to match the ledger. A released
+# skater stands at his door facing the ice; on a client only the host's
+# snapshots move a remote one, and the local one is put there by its next
+# reconcile.
 func apply_box_state() -> void:
 	if _registry == null:
 		return
+	var shooter: int = ledger.shooter_peer_id()
 	for peer_id: int in _registry.all():
 		var record: PlayerRecord = _registry.get_record(peer_id)
 		if record == null or record.skater == null:
 			continue
+		record.skater.takes_penalty_shot = peer_id == shooter
+		record.skater.sidelined = shooter != -1 and peer_id != shooter
 		var boxed: bool = ledger.is_boxed(peer_id)
 		if record.skater.in_box == boxed:
 			continue
@@ -164,6 +232,13 @@ func apply_box_state() -> void:
 					PlayerRules.penalty_box_position(record.team.team_id),
 					PlayerRules.penalty_box_facing())
 		skater_released.emit(peer_id)
+	if shooter == _staged_shooter:
+		return
+	_staged_shooter = shooter
+	if shooter == -1:
+		shot_over.emit()
+	else:
+		shot_staged.emit(shooter)
 
 
 # Hides a boxed skater once he has reached his door, or once play is back on.

@@ -1,8 +1,9 @@
 # Penalties — the NHL ruleset calls fouls
 
-Status: **Phases 1 and 2 built** (faceoff formations; the calls, the box and
-playing short in 5v5), playtest pending. Phases 3–6 not started. Where what is
-built differs from the proposal, *Phase 2 as built* says how.
+Status: **Phases 1–3 built** (faceoff formations; the calls, the box and
+playing short in 5v5; the penalty shot in 3v3), playtest pending. Phases 4–6
+not started. Where what is built differs from the proposal, *Phase 2 as built*
+and the penalty shot's own section say how.
 Amends `docs/fighting-plan.md` ("No penalty. Both stay on."), the "Deliberately
 out" line of `docs/defensive-play-plan.md`, and the rule-set paragraph of
 `docs/gameplay-design.md`. Each phase is its own PR and playtest.
@@ -205,23 +206,59 @@ Tests: `test_faceoff_formation.gd` holds the cast over every combination of
 seats (one man per spot, the lowest seat on the dot, the wings filled first);
 `test_phase_coordinator.gd` holds the placement and the client's read.
 
-## 5. 3v3: the penalty shot
+## 5. 3v3: the penalty shot (Phase 3, as built)
 
-- **A new phase, `GamePhase.Phase.PENALTY_SHOT`**, appended as ordinal 8 so
-  `.mreplay` files stay valid. The clock is stopped.
-- **The shooter is the fouled player**, a bot included.
-- **Staging** is the drill's: the shooter at centre, the puck a stride ahead.
-  Everyone else skates to the boards on the bench side and is held there with
-  body contact off.
-- **The attempt is judged by `PenaltyShotRules.classify`**, on the host, from
-  authoritative state. The per-attempt accumulators `PenaltyDrillManager` holds
-  today (furthest progress, the stall timer) move into a `RefCounted` the drill
-  and the match both drive.
-- **Afterwards.** A goal counts for the shooter with no assists and play resumes
-  at centre. Anything else faces off at an end-zone dot in the defending team's
-  end.
-- **Nothing new on the wire** beyond the phase and one reliable RPC naming the
-  shooter: the shooter predicts himself and the puck as in live play.
+In 3v3 a foul is called and delayed exactly as in 5v5. What it costs is one
+penalty shot, taken by the man who was fouled, a bot included.
+
+**There is no new phase.** The proposal appended a `PENALTY_SHOT` phase; the
+shot is built on the faceoff's own two phases instead, because they already
+are a set-up followed by a puck waiting to be collected:
+
+| Phase | In a faceoff | In a penalty shot |
+|---|---|---|
+| `FACEOFF_PREP` | everyone skates to his spot; the countdown | the shooter skates to centre, everyone else to his own bench; the countdown ("PENALTY SHOT IN 2") |
+| `FACEOFF` | the puck drops and is live until someone has it | the puck, laid a stride ahead of the shooter, unlocks ("GO!") and waits for him |
+| `PLAYING` | play | the shot, with the game clock held (`GameStateMachine.clock_held`) |
+
+So the reliable faceoff-positions payload, the skate-in, the countdown hold and
+the pickup that starts play are the faceoff's, unchanged, and nothing a client
+does on a phase change had to learn a new phase.
+
+- **Who is in it.** The ledger entry goes from `PENDING` to `SHOT`, carrying
+  the fouled man (`victim_peer_id`), and every peer sets two skater flags from
+  it: `takes_penalty_shot` on the shooter, `sidelined` on everyone else. A
+  sidelined skater's controller holds him as a boxed one is held, in plain
+  sight at his bench; his blade is kept off the puck by a pickup cooldown, the
+  bots' snapshot leaves him out so a bot shooter sees an empty rink, and a
+  local player who is sidelined watches from the broadcast camera.
+- **When it starts.** As the next faceoff is placed, as a minor is assessed in
+  5v5: the placement finds the shot staged and sets it up in the faceoff's
+  place (`PhaseCoordinator._place_penalty_shot`, `FaceoffPlacement`).
+- **More than one call.** A call against each team washes the other out, and a
+  team called twice in one delay gives up one shot, to the man fouled first.
+  If the man fouled has left the match, no shot is taken.
+- **The attempt** is `PenaltyShotAttempt`, the running numbers
+  `PenaltyShotRules.classify` reads, which the drill now steps too. In a match
+  it also ends the shot when the shooter never collects the puck
+  (`FACEOFF_TIMEOUT`), when the goalie covers it, and when the puck has left
+  the blade and is no longer going at the net (`PenaltyShotRules.shot_is_dead`:
+  a save, a post, a puck lost wide). There are no rebounds. The drill keeps
+  its old behaviour and lets a saved puck play on.
+- **A goal** is the goal line's to call, through the ordinary goal pipeline:
+  the shooter is credited, there are no assists (the stoppage cleared the
+  chain), and the celebration, the replay and the centre-ice faceoff follow.
+- **No goal** whistles the play and faces off in the defending team's end, on
+  the puck's side.
+- **A penalty shot that misses the net is not an icing**, and the clock does
+  not run.
+- **A bot taking the shot** was measured in the duel harness at every tier: it
+  collects the puck at once, drives the net without tripping the keep-driving
+  rules, and shoots from in close (*slow* `test_bot_penalty_shot.gd`). The harness's
+  goalie is the static one, so its scoring rate says nothing.
+
+Known gaps: a player who joins while a shot is on is not sidelined until the
+next ledger change; and the shot's banner stays up over the play.
 
 ## 6. Fights
 
@@ -258,12 +295,10 @@ The bots learn each rule in the phase that adds it.
 |---|---|---|
 | 1 | Faceoff formations by headcount, and the draw-taker (**built**) | a faceoff with a seat empty: a lobby started short, or a reservation |
 | 2 | `PenaltyRules`, the ledger, the delayed call, the box, short-handed play, the box camera, the scorebug strip, bots that avoid fouls and serve them (5v5) (**built**) | a penalty start to finish |
-| 3 | The penalty shot (3v3), bots shooting | a foul in 3v3 |
+| 3 | The penalty shot (3v3), bots shooting (**built**) | a foul in 3v3 |
 | 4 | Fights' coincidental minors (5v5) | a fight under `NHL` |
 | 5 | Bots a man up and a man down | 5-on-4 against bots |
 | 6 | Stats (`PlayerStats` penalties, power-play and short-handed goals), career columns, Game Pucks | — |
-
-Until Phase 3 ships, 3v3 under `NHL` calls nothing.
 
 ## Phase 2 as built
 
@@ -311,8 +346,9 @@ Known gaps, each small enough to leave for the playtest to rank:
 - **Phase 2 (v105):** three reliable RPCs — the call (peer, foul), the penalty
   whistle, and the ledger (`PenaltyLedger.to_wire`). No snapshot or replay
   format change (`docs/protocol-history.md`).
-- **Phase 3:** `GamePhase.Phase.PENALTY_SHOT` and a reliable RPC naming the
-  shooter.
+- **Phase 3 (still v105, unreleased):** the ledger's wire gains the fouled
+  man and a `SHOT` state, and the penalty whistle says whether it is a shot
+  ending without a goal. No phase was added.
 
 ## Not in this plan
 
@@ -331,9 +367,10 @@ Known gaps, each small enough to leave for the playtest to rank:
 
 ## Open questions
 
-1. **What a penalty shot is worth.** If the drill's scoring rate against the
-   match goalie is far above a 5v5 power play's, a foul costs much more in 3v3
-   than in 5v5. Measure before Phase 3.
+1. **What a penalty shot is worth.** Still unmeasured: it needs the live
+   goalie, and the harness that skates a bot through a shot has a static one.
+   If shooters score far more often than a 5v5 power play does, a foul costs
+   much more in 3v3 than in 5v5. The drill's results card is the quickest read.
 2. **Which winger takes the draw.** Built as the left wing before the right
    (the lowest seat). The other reading is the winger on a particular side of
    the dot.

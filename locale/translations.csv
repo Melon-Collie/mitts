@@ -359,6 +359,10 @@ PENALTY_BOX_LINE,%s · %s,%s · %s
 PENALTY_DELAYED_TITLE,DELAYED PENALTY,PENALIZACIÓN RETARDADA
 PENALTY_DELAYED_OFFENDING,Play stops when your team has the puck,El juego se detiene cuando tu equipo tenga el disco
 PENALTY_DELAYED_FOULED,Play on: the whistle waits until they have the puck,Sigue jugando: el silbato espera a que ellos tengan el disco
+PENALTY_SHOT_TITLE,PENALTY SHOT,TIRO PENAL
+PENALTY_SHOT_IN_N,PENALTY SHOT IN %d,TIRO PENAL EN %d
+PHASE_GO,GO!,¡YA!
+TOAST_PENALTY_SHOT_NO_GOAL,NO GOAL,NO ES GOL
 OPTIONS_PLAYER_SHADOWS,Player Shadows,Sombras de jugadores
 OPTIONS_ARENA_ADS,Arena Ads,Publicidad en la pista
 OPTIONS_ANIMATION_DETAIL,Animation Detail,Detalle de animación

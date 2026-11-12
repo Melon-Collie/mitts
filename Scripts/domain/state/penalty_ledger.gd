@@ -1,16 +1,18 @@
 class_name PenaltyLedger
 extends RefCounted
 
-# Who has been called for what, and who is sitting for it. A foul is PENDING
-# from the call until the next stoppage assesses it; then it is SERVING, its
-# clock running with the game clock, or QUEUED behind a team's other minors
-# when one more would put it below PenaltyRules.MIN_SKATERS. A QUEUED man sits
-# in the box all the same.
+# Who has been called for what, and what it cost. A foul is PENDING from the
+# call until the next stoppage assesses it. Where a foul is a minor it is then
+# SERVING, its clock running with the game clock, or QUEUED behind a team's
+# other minors when one more would put it below PenaltyRules.MIN_SKATERS; a
+# QUEUED man sits in the box all the same. Where a foul is a penalty shot it is
+# SHOT while the man who was fouled takes it, and gone when he has.
 
-enum State { PENDING, SERVING, QUEUED }
+enum State { PENDING, SERVING, QUEUED, SHOT }
 
-# One entry on the wire: peer id, team id, foul, state, time left in ms.
-const WIRE_STRIDE: int = 5
+# One entry on the wire: peer id, team id, foul, state, time left in ms, and
+# the peer who was fouled.
+const WIRE_STRIDE: int = 6
 
 
 class Entry:
@@ -19,6 +21,8 @@ class Entry:
 	var foul: int = PenaltyRules.Foul.NONE
 	var state: int = State.PENDING
 	var remaining: float = 0.0
+	# The man the foul was on, who takes the shot where a foul is one.
+	var victim_peer_id: int = -1
 
 
 # Oldest first: the order minors start, and the order the queue is promoted in.
@@ -36,13 +40,14 @@ func is_empty() -> bool:
 
 # Records a call against `peer_id`. A man already called or already sitting
 # is not called again.
-func call_foul(peer_id: int, team_id: int, foul: int) -> bool:
+func call_foul(peer_id: int, team_id: int, foul: int, victim_peer_id: int = -1) -> bool:
 	if _find(peer_id) != null:
 		return false
 	var entry := Entry.new()
 	entry.peer_id = peer_id
 	entry.team_id = team_id
 	entry.foul = foul
+	entry.victim_peer_id = victim_peer_id
 	entries.append(entry)
 	return true
 
@@ -84,6 +89,48 @@ func assess(minor_s: float, max_serving: int) -> Array[int]:
 				else State.QUEUED
 		assessed.append(entry.peer_id)
 	return assessed
+
+
+# Turns the pending calls into one penalty shot, for the man fouled first.
+# A call against each team washes the other out, and a team called twice in
+# one delay still gives up one shot. Returns the shooter, -1 for no shot.
+func stage_shot() -> int:
+	while has_pending_against(0) and has_pending_against(1):
+		waive_one_against(0)
+		waive_one_against(1)
+	var shot: Entry = null
+	for i: int in range(entries.size() - 1, -1, -1):
+		if entries[i].state != State.PENDING:
+			continue
+		if shot != null:
+			entries.erase(shot)
+		shot = entries[i]
+	if shot == null:
+		return -1
+	shot.state = State.SHOT
+	return shot.victim_peer_id
+
+
+# The man taking a penalty shot now, -1 with none on.
+func shooter_peer_id() -> int:
+	for entry: Entry in entries:
+		if entry.state == State.SHOT:
+			return entry.victim_peer_id
+	return -1
+
+
+# The team defending a penalty shot now (the one that fouled), -1 with none on.
+func shot_defending_team_id() -> int:
+	for entry: Entry in entries:
+		if entry.state == State.SHOT:
+			return entry.team_id
+	return -1
+
+
+func end_shot() -> void:
+	for i: int in range(entries.size() - 1, -1, -1):
+		if entries[i].state == State.SHOT:
+			entries.remove_at(i)
 
 
 # Runs the serving minors' clocks. Returns the men whose time is up, in a
@@ -143,7 +190,8 @@ func strength(team_id: int, team_size: int) -> int:
 # In the box: serving, or waiting to.
 func is_boxed(peer_id: int) -> bool:
 	var entry: Entry = _find(peer_id)
-	return entry != null and entry.state != State.PENDING
+	return entry != null \
+			and (entry.state == State.SERVING or entry.state == State.QUEUED)
 
 
 # Time left on the minor of `team_id`'s that ends first; -1 with none running.
@@ -177,7 +225,7 @@ func to_wire() -> Array:
 	var wire: Array = []
 	for entry: Entry in entries:
 		wire.append_array([entry.peer_id, entry.team_id, entry.foul, entry.state,
-				roundi(entry.remaining * 1000.0)])
+				roundi(entry.remaining * 1000.0), entry.victim_peer_id])
 	return wire
 
 
@@ -190,6 +238,7 @@ func from_wire(wire: Array) -> void:
 		entry.foul = int(wire[at + 2])
 		entry.state = int(wire[at + 3])
 		entry.remaining = int(wire[at + 4]) / 1000.0
+		entry.victim_peer_id = int(wire[at + 5])
 		entries.append(entry)
 
 

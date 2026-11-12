@@ -68,6 +68,8 @@ var icing: IcingRace = IcingRace.new()
 # The team with fewer skaters on the ice for a penalty, -1 at even strength
 # (host, from the PenaltyLedger). A short-handed team may ice the puck.
 var short_handed_team_id: int = -1
+# Host: the game clock is stopped though the puck is live, for a penalty shot.
+var clock_held: bool = false
 
 # ── Offsides ─────────────────────────────────────────────────────────────────
 # ARCADE path: peer IDs currently serving an offside ghost. Cleared per-peer
@@ -235,6 +237,8 @@ func check_icing_for_loose_puck(puck_z: float, player_positions: Dictionary = {}
 		return
 	if short_handed_team_id != -1 and _last_touch_team_id == short_handed_team_id:
 		return
+	if clock_held:
+		return  # a penalty shot that misses the net is not an icing
 	_apply_icing_call(icing.update(puck_z, player_positions, player_velocities, players))
 
 
@@ -614,6 +618,7 @@ func reset_all() -> void:
 	time_remaining = period_duration
 	icing.reset()
 	short_handed_team_id = -1
+	clock_held = false
 	_last_touch_team_id = -1
 	_offside_peer_ids.clear()
 	_delayed_offside_peer_ids.clear()
@@ -775,6 +780,8 @@ func _set_phase(phase: int) -> void:
 
 func _tick_phase(delta: float) -> bool:
 	if current_phase == GamePhase.Phase.PLAYING:
+		if clock_held:
+			return false
 		if infinite_time:
 			time_remaining += delta
 			return false

@@ -1005,6 +1005,25 @@ func test_no_penalty_whistle_outside_live_play() -> void:
 	assert_eq(sm.pending_faceoff_reason, GameStateMachine.FaceoffReason.NONE)
 
 
+func test_the_clock_is_held_through_a_penalty_shot() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	var before: float = sm.time_remaining
+	sm.clock_held = true
+	sm.tick(5.0)
+	assert_eq(sm.time_remaining, before)
+	sm.clock_held = false
+	sm.tick(5.0)
+	assert_almost_eq(sm.time_remaining, before - 5.0, 0.0001)
+
+
+func test_a_penalty_shot_that_misses_the_net_is_not_an_icing() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.clock_held = true
+	sm.notify_puck_carried(0, 5.0)
+	sm.check_icing_for_loose_puck(-30.0)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE)
+
+
 # ── Period / clock ───────────────────────────────────────────────────────────
 
 func test_period_clock_expires_to_end_of_period() -> void:

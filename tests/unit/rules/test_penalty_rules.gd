@@ -15,13 +15,16 @@ func _judge(impulse: float, eligible: bool, into_boards: bool, from_behind: bool
 
 # ── Where fouls are called ───────────────────────────────────────────────────
 
-func test_fouls_are_called_only_under_nhl_rules_in_5v5() -> void:
-	assert_true(PenaltyRules.calls_fouls(GameRules.RuleSet.NHL, 5, false))
-	assert_false(PenaltyRules.calls_fouls(GameRules.RuleSet.ARCADE, 5, false))
-	assert_false(PenaltyRules.calls_fouls(GameRules.RuleSet.OFF, 5, false))
-	assert_false(PenaltyRules.calls_fouls(GameRules.RuleSet.NHL, 3, false),
-			"3v3 waits for the penalty shot")
-	assert_false(PenaltyRules.calls_fouls(GameRules.RuleSet.NHL, 5, true), "practice")
+func test_fouls_are_called_only_under_nhl_rules() -> void:
+	assert_true(PenaltyRules.calls_fouls(GameRules.RuleSet.NHL, false))
+	assert_false(PenaltyRules.calls_fouls(GameRules.RuleSet.ARCADE, false))
+	assert_false(PenaltyRules.calls_fouls(GameRules.RuleSet.OFF, false))
+	assert_false(PenaltyRules.calls_fouls(GameRules.RuleSet.NHL, true), "practice")
+
+
+func test_a_foul_is_a_minor_in_5v5_and_a_penalty_shot_in_3v3() -> void:
+	assert_false(PenaltyRules.awards_penalty_shot(5))
+	assert_true(PenaltyRules.awards_penalty_shot(3))
 
 
 # ── The clean hit ────────────────────────────────────────────────────────────

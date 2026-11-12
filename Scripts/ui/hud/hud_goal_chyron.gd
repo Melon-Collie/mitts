@@ -38,6 +38,8 @@ var _countdown_tween: Tween = null
 var _sweep_track: Control = null
 var _sweep_fill: ColorRect = null
 var _sweep_tween: Tween = null
+# The locale key the prep countdown counts in with.
+var _countdown_key: StringName = &"FACEOFF_IN_N"
 var _pending_intro_secs: float = 0.0
 var _pending_skate_secs: float = 0.0
 var _pending_period_intro_secs: float = 0.0
@@ -323,7 +325,9 @@ func queue_period_intro(period: int, seconds: float) -> void:
 
 # Fires on the same reliable beat that teleports the local skater to the dot, so
 # the countdown banner can't appear on a client before the skater is in position.
-func begin_faceoff_prep() -> void:
+# `penalty_shot`: the countdown is to a penalty shot, not to a puck drop.
+func begin_faceoff_prep(penalty_shot: bool = false) -> void:
+	_countdown_key = &"PENALTY_SHOT_IN_N" if penalty_shot else &"FACEOFF_IN_N"
 	clear_goal_template()
 	_reset_hero_styling()
 	show_at_rest()
@@ -408,4 +412,4 @@ func stop_faceoff_countdown() -> void:
 # phrase does not order the same way in every language, and a key set numbered
 # in English is what traps the next language added.
 func _faceoff_in(seconds: int) -> String:
-	return tr(&"FACEOFF_IN_N") % seconds
+	return tr(_countdown_key) % seconds

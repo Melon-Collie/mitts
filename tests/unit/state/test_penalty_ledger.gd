@@ -143,3 +143,50 @@ func test_a_rejoining_player_takes_his_penalty_with_him() -> void:
 	ledger.rebind(10, 77)
 	assert_false(ledger.is_boxed(10))
 	assert_true(ledger.is_boxed(77))
+
+
+# ── A penalty shot ───────────────────────────────────────────────────────────
+
+func test_a_pending_call_becomes_a_shot_for_the_man_fouled() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	assert_eq(ledger.stage_shot(), 20)
+	assert_eq(ledger.shooter_peer_id(), 20)
+	assert_eq(ledger.shot_defending_team_id(), 0, "the team that fouled defends it")
+	assert_false(ledger.has_pending())
+	assert_false(ledger.is_boxed(10), "nobody sits for a penalty shot")
+
+
+func test_a_team_called_twice_gives_up_one_shot_to_the_man_fouled_first() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	ledger.call_foul(11, 0, BOARDING, 21)
+	assert_eq(ledger.stage_shot(), 20)
+	assert_eq(ledger.entries.size(), 1)
+
+
+func test_a_call_against_each_team_washes_out() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	ledger.call_foul(21, 1, BOARDING, 11)
+	assert_eq(ledger.stage_shot(), -1)
+	assert_true(ledger.is_empty())
+
+
+func test_no_call_means_no_shot() -> void:
+	assert_eq(ledger.stage_shot(), -1)
+	assert_eq(ledger.shooter_peer_id(), -1)
+	assert_eq(ledger.shot_defending_team_id(), -1)
+
+
+func test_a_shot_that_is_over_leaves_the_ledger() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	ledger.stage_shot()
+	ledger.end_shot()
+	assert_true(ledger.is_empty())
+
+
+func test_the_wire_carries_who_takes_the_shot() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	ledger.stage_shot()
+	var mirror := PenaltyLedger.new()
+	mirror.from_wire(ledger.to_wire())
+	assert_eq(mirror.shooter_peer_id(), 20)
+	assert_eq(mirror.shot_defending_team_id(), 0)

@@ -197,6 +197,25 @@ static func penalty_box_facing() -> Vector2:
 	return Vector2(1.0, 0.0)
 
 
+# A penalty shot starts from centre ice. The puck lies PENALTY_SHOT_PUCK_AHEAD_M
+# toward the net the shooter attacks, for him to skate onto.
+const PENALTY_SHOT_PUCK_AHEAD_M: float = 1.2
+
+
+static func penalty_shot_start() -> Vector3:
+	return Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+
+
+# Where the puck is laid for `team_id`'s shooter (XZ).
+static func penalty_shot_puck_spot(team_id: int) -> Vector2:
+	return Vector2(0.0, -own_goal_dir(team_id) * PENALTY_SHOT_PUCK_AHEAD_M)
+
+
+# The benches are on the +X boards, so a skater stood at his faces -X to watch.
+static func bench_facing() -> Vector2:
+	return Vector2(-1.0, 0.0)
+
+
 # Post-goal skate-in start: the final faceoff slot pushed radially OUTWARD from
 # the dot by FACEOFF_STAGING_SETBACK, so the skate-in runs back along the ray
 # toward the dot — every player converging on the circle instead of skating in
