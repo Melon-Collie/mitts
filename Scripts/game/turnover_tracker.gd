@@ -66,12 +66,11 @@ var _strip_victim_team: int = -1
 # is credited to THEM, not whoever recovers the loose puck. -1 for a goalie
 # strip (no player takeaway).
 var _strip_stripper_peer: int = -1
-var _shot_time: float = -INF
-var _shot_team: int = -1
-var _dump_time: float = -INF
-var _dump_team: int = -1
-var _pass_time: float = -INF
-var _pass_team: int = -1
+# The window the last release opened: what it was read as, when, and whose. One
+# release, one window, so a pass thrown after a rebound is judged as a pass.
+var _release_kind: TurnoverRules.Release = TurnoverRules.Release.NONE
+var _release_time: float = -INF
+var _release_team: int = -1
 # The opponent whose pickup first ended the last pass's flight, credited an
 # interception if the giveaway it caused lands. -1 when none is pending.
 var _interceptor_peer: int = -1
@@ -116,8 +115,7 @@ func on_carrier_gained(peer_id: int, was_faceoff: bool) -> void:
 		_faceoff_pending = true
 		_clear_candidate()
 		_strip_open = false
-		_shot_time = -INF
-		_pass_time = -INF
+		_release_kind = TurnoverRules.Release.NONE
 		_interceptor_peer = -1
 		return
 	if _faceoff_pending:
@@ -132,19 +130,16 @@ func on_carrier_gained(peer_id: int, was_faceoff: bool) -> void:
 		_loose_touched_by_opponent = true
 	elif _loose_touched_by_opponent:
 		_loser_recontacted = true
-	var now: float = _now()
+	var recent_shot: bool = _release_is_live(TurnoverRules.Release.SHOT, SHOT_WINDOW_S)
+	var recent_dump: bool = _release_is_live(TurnoverRules.Release.DUMP, DUMP_WINDOW_S)
 	# The pass's flight ends at its first pickup: a teammate's is a completion,
 	# an opponent's is the interception.
-	if _pass_time + PASS_WINDOW_S > now and _pass_team == _last_established_team:
-		if new_team != _pass_team:
+	if _release_is_live(TurnoverRules.Release.PASS, PASS_WINDOW_S):
+		if new_team != _release_team:
 			_interceptor_peer = peer_id
-		_pass_time = -INF
+		_release_kind = TurnoverRules.Release.NONE
 	var recent_strip: bool = _strip_open \
 			and _strip_victim_team == _last_established_team
-	var recent_shot: bool = _shot_time + SHOT_WINDOW_S > now \
-			and _shot_team == _last_established_team
-	var recent_dump: bool = _dump_time + DUMP_WINDOW_S > now \
-			and _dump_team == _last_established_team
 	_candidate_type = TurnoverRules.classify(
 			_last_established_team, new_team, recent_strip, recent_shot, recent_dump)
 	_candidate_carrier_peer = peer_id
@@ -240,8 +235,7 @@ func note_strip(victim_peer_id: int, stripper_peer_id: int) -> void:
 # a shot, and refreshed at a confirmed shot-on-goal so a save's rebound stays
 # covered past the shot flight.
 func note_shot(shooter_peer_id: int) -> void:
-	_shot_time = _now()
-	_shot_team = _team_of(shooter_peer_id)
+	_open_release(TurnoverRules.Release.SHOT, shooter_peer_id)
 
 
 # `dumper_peer_id` deliberately surrendered the puck to open ice (a dump-and-chase,
@@ -249,16 +243,14 @@ func note_shot(shooter_peer_id: int) -> void:
 # loose puck reads as a concession, not a giveaway. Fed from a release
 # TurnoverRules.release_kind reads as a dump.
 func note_dump(dumper_peer_id: int) -> void:
-	_dump_time = _now()
-	_dump_team = _team_of(dumper_peer_id)
+	_open_release(TurnoverRules.Release.DUMP, dumper_peer_id)
 
 
 # `passer_peer_id` released the puck at a teammate (a release
 # TurnoverRules.release_kind reads as a pass). Opens the window in which an
 # opponent's first pickup is an interception.
 func note_pass(passer_peer_id: int) -> void:
-	_pass_time = _now()
-	_pass_team = _team_of(passer_peer_id)
+	_open_release(TurnoverRules.Release.PASS, passer_peer_id)
 
 
 # Clear all context (new game / rematch reset).
@@ -268,17 +260,27 @@ func reset() -> void:
 	_strip_open = false
 	_strip_victim_team = -1
 	_strip_stripper_peer = -1
-	_shot_time = -INF
-	_shot_team = -1
-	_dump_time = -INF
-	_dump_team = -1
-	_pass_time = -INF
-	_pass_team = -1
+	_release_kind = TurnoverRules.Release.NONE
+	_release_time = -INF
+	_release_team = -1
 	_interceptor_peer = -1
 	_loose_touched_by_opponent = false
 	_loser_recontacted = false
 	_clear_candidate()
 	_faceoff_pending = false
+
+
+func _open_release(kind: TurnoverRules.Release, peer_id: int) -> void:
+	_release_kind = kind
+	_release_time = _now()
+	_release_team = _team_of(peer_id)
+
+
+# The last release was a `kind` by the team that last established, `window_s` ago
+# at most.
+func _release_is_live(kind: TurnoverRules.Release, window_s: float) -> bool:
+	return _release_kind == kind and _release_team == _last_established_team \
+			and _release_time + window_s > _now()
 
 
 func _clear_candidate() -> void:
