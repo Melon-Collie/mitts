@@ -68,6 +68,9 @@ var self_pass_aim_error_rad: float = 0.0
 # A shot's commit→release lookahead, seconds: AIBotMechanics.shot_lookahead_s at
 # this tier's shot_timing_error_s.
 var self_shot_lookahead_s: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+# The tier's shot_timing_error_s: the spread of that hold
+# (AIBotMechanics.shot_hold_sample_s).
+var self_shot_timing_error_s: float = 0.0
 # Charged wrister release speed, m/s — also the cap on its pass launch speed.
 var self_wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 # Body-check delivery and current stagger, for AIDefensiveVerbs.evaluate_body_check.

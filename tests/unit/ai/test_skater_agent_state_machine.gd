@@ -1826,6 +1826,28 @@ func test_a_shot_is_priced_where_it_leaves_on_average() -> void:
 				% profile.shot_timing_error_s)
 
 
+func test_a_shot_is_priced_over_the_hold_it_can_be_let_go_in() -> void:
+	# The samples a shot is priced at span the hold the press draws from and
+	# average to the priced lookahead; hands with no hold price one.
+	assert_eq(AIBotMechanics.shot_hold_samples(0.0), 1, "no hold, one sample")
+	assert_almost_eq(AIBotMechanics.shot_hold_sample_s(0.0, 0, 1),
+			AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, 1e-9, "at the wrister's lookahead")
+	for profile: BotSkillProfile in [BotSkillProfile.hard(), BotSkillProfile.normal(),
+			BotSkillProfile.easy()]:
+		var err: float = profile.shot_timing_error_s
+		var n: int = AIBotMechanics.shot_hold_samples(err)
+		var sum: float = 0.0
+		var max_ticks: int = int(round(err / Agent.MOUSE_TICK_DELTA))
+		for j: int in n:
+			var s: float = AIBotMechanics.shot_hold_sample_s(err, j, n)
+			assert_between(s, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
+					AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + max_ticks * Agent.MOUSE_TICK_DELTA,
+					"a sample lies inside the hold (error %.2f s)" % err)
+			sum += s
+		assert_almost_eq(sum / n, AIBotMechanics.shot_lookahead_s(err), 1e-6,
+				"the samples average to the priced lookahead (error %.2f s)" % err)
+
+
 # ── Cognition gates (difficulty-tiered hockey IQ) ────────────────────────────
 
 func test_apply_profile_sets_cognition_gates() -> void:

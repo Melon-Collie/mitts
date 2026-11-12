@@ -605,6 +605,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 				ctx.self_shot_lookahead_s, _field.opponents,
 				_field.opponent_vels, _field.opponent_caps)
 	_phase_shoot_score = -1.0
+	var hold_samples: int = AIBotMechanics.shot_hold_samples(ctx.self_shot_timing_error_s)
 	for k: int in _field.holds.count:
 		if shot_unavailable:
 			break
@@ -612,21 +613,28 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var share: float = _field.holds.share[k]
 		var pull_s: float = _field.holds.pull_s[k]
 		var sample_speed: float = ctx.self_wrister_shot_speed * share
-		var released_at: Vector3 = self_pos + hold + horizontal_velocity \
-				* (ctx.self_shot_lookahead_s + pull_s)
-		if not _shootable_from(released_at, attacking_goal, goalie_now):
-			continue
-		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(released_at,
-				attacking_goal, goalie_now)
 		# Priced through the seam like the carry and pass legs, against the
 		# keeper as he reads now: the field prices what he does over the wind-up
-		# and flight. With no keeper replicated he is taken
-		# square and set.
-		var s: float = AIActionScoring.score_shoot_value(
-				release, attacking_goal, keeper_now, _field.opponents_release,
-				keeper_vel_x, keeper_stance, sample_speed,
-				_field.opponent_caps, -1.0, keeper_yaw, true, _shot_history()) \
-				* _field.holds.keep[k]
+		# and flight. With no keeper replicated he is taken square and set. Over
+		# where the hands can let it go (AIBotMechanics.shot_hold_sample_s): a
+		# release on the line is no shot, and a hold with none left is none.
+		var sum: float = 0.0
+		var shootable: bool = false
+		for j: int in hold_samples:
+			var released_at: Vector3 = self_pos + hold + horizontal_velocity \
+					* (AIBotMechanics.shot_hold_sample_s(ctx.self_shot_timing_error_s, j,
+							hold_samples) + pull_s)
+			if not _shootable_from(released_at, attacking_goal, goalie_now):
+				continue
+			shootable = true
+			sum += AIActionScoring.score_shoot_value(
+					AIGoalieModel.release_ahead_of_goalie(released_at, attacking_goal, goalie_now),
+					attacking_goal, keeper_now, _field.opponents_release,
+					keeper_vel_x, keeper_stance, sample_speed,
+					_field.opponent_caps, -1.0, keeper_yaw, true, _shot_history())
+		if not shootable:
+			continue
+		var s: float = sum / hold_samples * _field.holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_share = share

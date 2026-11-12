@@ -99,9 +99,13 @@ spot through the value seam, which is a property of the chance rather than the
 shooter, so a wobblier tier takes the same shots and misses more of them (#699).
 The release timing (`shot_timing_error_s`) is the other way round: the hands'
 hold moves WHERE the shot leaves, not its odds from there, so the compete prices
-every shot at the hold's mean (`AIBotMechanics.shot_lookahead_s`). Left out, a
-lower tier at breakaway pace decided to shoot from the spot it would have liked
-and released a metre further in, on the keeper (#943).
+every shot over the hold it can be let go in (`AIBotMechanics.shot_hold_sample_s`,
+whose samples average to `shot_lookahead_s`), a release that cannot leave in front
+of the goal line counting as no shot. Left out, a lower tier at breakaway pace
+decided to shoot from the spot it would have liked and released a metre or more
+further in, on the keeper (#943). Never price it at the mean's spot alone: in
+tight the odds fall off within a metre, and a hold carries a breakaway further
+than that.
 
 Tuning order, when a tier is wrong: if it plays like a pushover, raise the
 precision knobs back toward Hard and let the pace knobs keep it beatable; if it
@@ -1335,6 +1339,13 @@ reaches back into what remains.
   cost. The chosen input is the carrier's stick until the next re-eval: what is
   priced is what is skated. Never price a near move by a straight line and a
   closed-form clock — that is what let a carrier plan spots it could not reach.
+  The shot on its arrival is the shot now's, from there: released from the hold
+  the carrier would shoot from, through the same line gate
+  (`AICarrierField.leaves_ahead_of_line`, a release behind it priced as no shot),
+  against the keeper at the depth he takes for the pace the carry closes on him
+  at arrival. Priced from the body, or against the depth the drive's average
+  pace pushed him to, a carry promised shots the shot now refused once it got
+  there, and the carrier braked into the slot or coasted into the keeper.
   A destination across a cage is skated at the arrival clock's waypoint round it
   (`AIArrival.cage_waypoint`). A move whose path reaches a crease, or the goal
   line from in front, ends at its last sample short of it and is priced there

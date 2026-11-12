@@ -1250,6 +1250,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.self_lateral_grip = _self_lateral_grip
 	ctx.self_pass_aim_error_rad = _pass_aim_error_rad
 	ctx.self_shot_lookahead_s = AIBotMechanics.shot_lookahead_s(_shot_timing_error_s)
+	ctx.self_shot_timing_error_s = _shot_timing_error_s
 	ctx.self_weight = _self_weight
 	ctx.self_body_check_transfer = _self_body_check_transfer
 	ctx.self_handle_reach = _self_handle_reach

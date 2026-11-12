@@ -697,40 +697,54 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 		cand_wait = _field.arrival_hold_wait(ctx, candidate, arrive_vel, local_time)
 		cand_keep = _field.holds.arrival_keep
 		cand_hold = Vector3(_field.holds.arrival_offset.x, 0.0, _field.holds.arrival_offset.y)
-	var cand_windup: float = ctx.self_shot_lookahead_s + cand_wait
-	# The keeper backs in as the carry closes on him (the planning depth model).
-	# Closing is the rate this carry shortens the puck's distance to the goal.
-	var carry_closing: float = (self_pos.distance_to(ctx.attacking_goal_pos)
-			- candidate.distance_to(ctx.attacking_goal_pos)) / maxf(local_time, 0.001)
+	# The keeper backs in as the carry closes on him (the planning depth model),
+	# at the pace it closes on arrival, which is what he reads then: a carry that
+	# brakes into its spot meets a keeper who has stepped back out, never the one
+	# its drive pushed back.
+	var to_goal: Vector3 = ctx.attacking_goal_pos - candidate
+	to_goal.y = 0.0
+	var carry_closing: float = maxf(arrive_vel.dot(to_goal.normalized()), 0.0) \
+			if to_goal.length_squared() > 0.0001 else 0.0
 	var tracked_goalie: Vector3 = AIGoalieModel.predict_goalie_pos(
 			AICarrierField.goalie_now(ctx), ctx.attacking_goal_pos, local_time, candidate,
 			carry_closing)
-	# Released from the hold, as the shot now is (a body-centred release prices a
-	# shot nearly a metre behind the puck, from a spot whose real release is
-	# already on the goal line). One that cannot leave in front of the line is
-	# left there, where value_at prices it as no shot: the jam clamp would carry
-	# it out in front of the keeper.
-	var released_at: Vector3 = candidate + cand_hold + arrive_vel * cand_windup
-	var cand_release: Vector3 = released_at
-	if AICarrierField.leaves_ahead_of_line(released_at, ctx.attacking_goal_pos):
-		cand_release = AIGoalieModel.release_ahead_of_goalie(released_at,
-				ctx.attacking_goal_pos, tracked_goalie)
-	# The shot is decided on ARRIVAL, against the keeper as he is then: a carry
-	# that outran him leaves him still pushing toward his square, at the share of
-	# the push he has left (goalie_unsettled). The field prices what he does over
-	# the wind-up and flight itself. A goalie-motion-blind tier reads him still.
-	var lag: float = AIGoalieModel.goalie_arc_match_x(
-			tracked_goalie, ctx.attacking_goal_pos, cand_release) - tracked_goalie.x
-	var keeper_vel_x: float = signf(lag) * AIGoalieModel.GOALIE_MAX_LATERAL_SPEED_MPS \
-			* AICarrierField.goalie_unsettled_at(ctx, local_time, candidate, carry_closing)
-	# Having tracked the carry he faces the shot, as the shoot-now read will see
-	# him there. Left unread, the field blends in keepers turned to a decoy or a
-	# feed, which in tight promise odds the shot on arrival never has.
-	var dest_score: float = _field.value_at(ctx, cand_release, self_pos,
-			_scratch_opponents_path, tracked_goalie, keeper_vel_x, cand_keep,
-			_field.keeper_stance_at(local_time + cand_windup),
-			atan2(tracked_goalie.x - cand_release.x, tracked_goalie.z - cand_release.z),
-			local_time, arrive_vel, AIShotOdds.History.CARRIED)
+	var unsettled: float = AICarrierField.goalie_unsettled_at(ctx, local_time, candidate,
+			carry_closing)
+	# Over where the hands can let it go (AIBotMechanics.shot_hold_sample_s), as
+	# the shot now is priced.
+	var samples: int = AIBotMechanics.shot_hold_samples(ctx.self_shot_timing_error_s)
+	var dest_score: float = 0.0
+	for j: int in samples:
+		var cand_windup: float = AIBotMechanics.shot_hold_sample_s(
+				ctx.self_shot_timing_error_s, j, samples) + cand_wait
+		# Released from the hold, as the shot now is (a body-centred release prices
+		# a shot nearly a metre behind the puck, from a spot whose real release is
+		# already on the goal line). One that cannot leave in front of the line is
+		# left there, where value_at prices it as no shot: the jam clamp would carry
+		# it out in front of the keeper.
+		var released_at: Vector3 = candidate + cand_hold + arrive_vel * cand_windup
+		var cand_release: Vector3 = released_at
+		if AICarrierField.leaves_ahead_of_line(released_at, ctx.attacking_goal_pos):
+			cand_release = AIGoalieModel.release_ahead_of_goalie(released_at,
+					ctx.attacking_goal_pos, tracked_goalie)
+		# The shot is decided on ARRIVAL, against the keeper as he is then: a carry
+		# that outran him leaves him still pushing toward his square, at the share
+		# of the push he has left (goalie_unsettled). The field prices what he does
+		# over the wind-up and flight itself. A goalie-motion-blind tier reads him
+		# still.
+		var lag: float = AIGoalieModel.goalie_arc_match_x(
+				tracked_goalie, ctx.attacking_goal_pos, cand_release) - tracked_goalie.x
+		var keeper_vel_x: float = signf(lag) * AIGoalieModel.GOALIE_MAX_LATERAL_SPEED_MPS \
+				* unsettled
+		# Having tracked the carry he faces the shot, as the shoot-now read will see
+		# him there. Left unread, the field blends in keepers turned to a decoy or a
+		# feed, which in tight promise odds the shot on arrival never has.
+		dest_score += _field.value_at(ctx, cand_release, self_pos,
+				_scratch_opponents_path, tracked_goalie, keeper_vel_x, cand_keep,
+				_field.keeper_stance_at(local_time + cand_windup),
+				atan2(tracked_goalie.x - cand_release.x, tracked_goalie.z - cand_release.z),
+				local_time, arrive_vel, AIShotOdds.History.CARRIED)
+	dest_score /= samples
 	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
 	# a carrier there does next — the drive-in from it, priced in the in-zone
 	# regime and starting when we arrive — which its own shot xG badly
