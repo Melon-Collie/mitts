@@ -448,6 +448,10 @@ const DEFAULT_RULE_SET: int = RuleSet.ARCADE
 const RULE_SET_NAMES: Array[String] = ["Off", "Arcade", "NHL"]
 
 
+static func is_rule_set(value: int) -> bool:
+	return value >= 0 and value < RULE_SET_NAMES.size()
+
+
 # A goalie's cover is a puck nobody can play: whistled wherever there are faceoffs, once the
 # referee has seen it frozen (the catch or cover seen made); in OFF he plays it out himself.
 const COVER_WHISTLE_DELAY_S: float = 1.0

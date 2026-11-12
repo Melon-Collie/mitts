@@ -222,6 +222,9 @@ var preferred_position: int = 0
 # picked while HOSTING (a joined lobby's mode is the host's choice, so the
 # client-side settings sync never writes it) and seeds the next hosted lobby.
 var preferred_team_size: int = GameRules.DEFAULT_TEAM_SIZE
+# Preferred lobby rule set (GameRules.RuleSet), remembered and seeded exactly
+# as preferred_team_size is.
+var preferred_rule_set: int = GameRules.DEFAULT_RULE_SET
 # Index into SkinToneRegistry.TONES — identity next to name/number, picked in
 # the edit-player popup and carried through the join handshake like the rest.
 var skin_tone: int = SkinToneRegistry.DEFAULT_INDEX
@@ -543,6 +546,7 @@ func save() -> void:
 	cfg.set_value("player", "left_handed", is_left_handed)
 	cfg.set_value("player", "preferred_position", preferred_position)
 	cfg.set_value("player", "preferred_team_size", preferred_team_size)
+	cfg.set_value("player", "preferred_rule_set", preferred_rule_set)
 	cfg.set_value("player", "preferred_color_slot", preferred_color_slot)
 	cfg.set_value("player", "stick_tape", stick_tape_code)
 	cfg.set_value("player", "gear_style", gear_style_code)
@@ -1142,6 +1146,10 @@ func _load() -> void:
 		var stored_size: int = int(cfg.get_value(
 				"player", "preferred_team_size", GameRules.DEFAULT_TEAM_SIZE))
 		preferred_team_size = 5 if stored_size == 5 else GameRules.DEFAULT_TEAM_SIZE
+		var stored_rules: int = int(cfg.get_value(
+				"player", "preferred_rule_set", GameRules.DEFAULT_RULE_SET))
+		preferred_rule_set = stored_rules if GameRules.is_rule_set(stored_rules) \
+				else GameRules.DEFAULT_RULE_SET
 		preferred_color_slot = int(cfg.get_value("player", "preferred_color_slot", -1))
 		# Round-trip through the config type so a hand-edited or future-version
 		# code coerces to a legal tape job instead of riding raw into the wire. A
