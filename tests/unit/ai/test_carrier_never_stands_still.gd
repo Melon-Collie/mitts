@@ -5,7 +5,7 @@ extends GutTest
 # zone) and no read goes stale by being skated to, so standing still never wins
 # the carry (docs/possession-floor-plan.md §2.4, step 5).
 
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 
 
 func _ctx(self_pos: Vector3, vel: Vector3) -> RoleContext:

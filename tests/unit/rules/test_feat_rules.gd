@@ -88,7 +88,7 @@ func _one_timer_from(x: float, z: float) -> GoalFeatContext:
 func test_a_one_timer_from_either_offensive_circle_is_from_the_dot() -> void:
 	var dot_x: float = GameRules.END_ZONE_FACEOFF_DOT_X
 	var dot_z: float = GameRules.ICING_FACEOFF_DOT_Z
-	var rim: float = GameRules.FACEOFF_CIRCLE_RADIUS_M - 0.05
+	var rim: float = RinkMarkings.FACEOFF_CIRCLE_RADIUS_M - 0.05
 	for x: float in [-dot_x, dot_x, dot_x + rim, -dot_x - rim]:
 		assert_has(_feats(_one_timer_from(x, dot_z)),
 				{"peer": SCORER, "feat": FeatRules.ONE_TIMER_DOT}, "x = %.2f" % x)
@@ -99,7 +99,7 @@ func test_a_one_timer_from_either_offensive_circle_is_from_the_dot() -> void:
 func test_from_the_dot_needs_a_one_timer_inside_a_circle() -> void:
 	var dot_x: float = GameRules.END_ZONE_FACEOFF_DOT_X
 	var dot_z: float = GameRules.ICING_FACEOFF_DOT_Z
-	var outside: float = GameRules.FACEOFF_CIRCLE_RADIUS_M + 0.05
+	var outside: float = RinkMarkings.FACEOFF_CIRCLE_RADIUS_M + 0.05
 	for at: Vector2 in [Vector2(0.0, dot_z), Vector2(dot_x, dot_z - outside),
 			Vector2(dot_x, -dot_z)]:
 		assert_does_not_have(_feats(_one_timer_from(at.x, at.y)),

@@ -23,7 +23,7 @@ const LIFT_EPS_M: float = 0.03
 const GLIDE_ALPHA_FRAC: float = 0.35
 
 @export var rink_width: float = 26.0
-@export var rink_length: float = 60.0
+@export var rink_length: float = 60.96
 # Texture pixels per meter of rink. 60 → 1560×3600 (~5.6 MP, ~22 MB at RGBA8).
 # Bigger = crisper scratches at close range; smaller = cheaper memory & fill.
 @export var px_per_meter: float = 60.0

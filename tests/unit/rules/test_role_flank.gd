@@ -4,7 +4,7 @@ extends GutTest
 # per L/R) and slightly back toward our net, bounded by the numbers read.
 
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 
 
 # `home_mate` parks a teammate on our own goal line. It is ON by default because

@@ -95,9 +95,9 @@ func test_gap_tightens_as_the_carrier_approaches_our_blue_line() -> void:
 	# The doctrine ladder: ~3 sticks at their blue line, 2 at the red line, 1 at
 	# ours. The old model was a function of PACE, so a carrier at full flight
 	# held a ~3-stick gap all the way to our net — that is the sag.
-	var far_carrier := Vector3(0.0, 0.0, -7.29)   # their blue line
+	var far_carrier := Vector3(0.0, 0.0, -GameRules.BLUE_LINE_Z)   # their blue line
 	var mid_carrier := Vector3(0.0, 0.0, 0.0)     # red line
-	var near_carrier := Vector3(0.0, 0.0, 7.29)   # our blue line
+	var near_carrier := Vector3(0.0, 0.0, GameRules.BLUE_LINE_Z)   # our blue line
 	var vel := Vector3(0.0, 0.0, 7.0)
 	var gaps: Array[float] = []
 	for c: Vector3 in [far_carrier, mid_carrier, near_carrier]:
@@ -533,7 +533,7 @@ func test_the_back_man_waits_for_him_on_our_line() -> void:
 	# A carrier coming up the middle at the red line: the ladder would put the
 	# stand out in the neutral zone. The back line does not go out to him.
 	var carrier := Vector3(2.0, 0.0, 0.0)
-	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 7.0),
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, GameRules.BLUE_LINE_Z - 0.29),
 			[[10, 1, carrier, Vector3(0.0, 0.0, 3.0)]], 10)
 	var d: RoleDecision = AIRoleRushD.decide(ctx, AIRoleSlots.Slot.BACK_STRONG)
 	assert_almost_eq(OUR_NET_Z - d.target_position.z, AIRoleNeutralZone.line_depth_m(),
@@ -545,7 +545,7 @@ func test_the_line_stand_stays_inside_the_dots() -> void:
 	# A carrier up the wall at the red line: protect the middle, give him the
 	# outside — the stand on the line does not follow him out to the boards.
 	var carrier := Vector3(GameRules.INNER_HALF_WIDTH - 1.0, 0.0, 0.0)
-	var ctx: RoleContext = _ctx(Vector3(5.0, 0.0, 7.0),
+	var ctx: RoleContext = _ctx(Vector3(5.0, 0.0, GameRules.BLUE_LINE_Z - 0.29),
 			[[10, 1, carrier, Vector3(0.0, 0.0, 5.0)]], 10)
 	var d: RoleDecision = AIRoleRushD.decide(ctx, AIRoleSlots.Slot.BACK_STRONG)
 	assert_lte(absf(d.target_position.x), GameRules.END_ZONE_FACEOFF_DOT_X + 0.01,

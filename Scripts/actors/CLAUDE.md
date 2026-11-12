@@ -268,7 +268,10 @@ only `trunk_lean_share` of it (legs carry the edge, shoulders stay near the
 stick), and keeps it `trunk_lean_lag_s` late (`Skater.trunk_tilt`, a
 first-order delay off the lean and its replicated rate): the hips go over
 first and the chest follows, and on a reversal the chest crosses upright about
-0.1 s after the hips. Both the gameplay frame's shift and the spine read that
+0.1 s after the hips. The boards hold it: a lean toward them stops where the
+shoulders meet the glass (`BalanceRules.wall_held_tilt`), and a body that goes
+down at them is held off by the figure lying on the ice, not its standing disc
+(`Skater.board_clearance_radius`); `test_bodies_stay_inside_the_boards.gd`. Both the gameplay frame's shift and the spine read that
 one tilt, so the visible shoulders stay on the frame the hands hang from. The
 neck takes back `head_level_share` of the trunk's lean. The spring is what
 tells a steering correction from a turn, and gives the lean its weight: a held

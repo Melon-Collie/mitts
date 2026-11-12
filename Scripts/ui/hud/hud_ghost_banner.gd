@@ -15,6 +15,7 @@ var _pulse_t: float = 0.0
 # Lets the banner distinguish an offside from a pure crease violation deep in
 # the attacking zone, where no offside ever occurred.
 var _was_offside: bool = false
+var _puck_zone: PuckZoneTracker = PuckZoneTracker.new()
 
 func build(scale_root: Control) -> void:
 	var root := Control.new()
@@ -66,6 +67,9 @@ func build(scale_root: Control) -> void:
 func update() -> void:
 	if _root == null:
 		return
+	var puck: Puck = GameManager.get_puck()
+	if puck != null:
+		_puck_zone.update(puck.global_position.z)
 	var record: PlayerRecord = GameManager.get_local_player()
 	var skater: Skater = record.skater if record != null else null
 	if skater == null or record.team == null:
@@ -95,15 +99,14 @@ func update() -> void:
 	var tagged_up: bool = InfractionRules.has_tagged_up(pos.z, team_id)
 	if tagged_up:
 		_was_offside = false
-	elif GameManager.get_rule_set() == GameRules.RuleSet.ARCADE:
-		var puck: Puck = GameManager.get_puck()
-		if puck != null:
-			# GameManager's resolver, not puck.carrier — the latter is host-only, so
-			# a carrying client reads as puckless and latches OFFSIDE while
-			# actually carrying the puck into the zone (carrying is never offside).
-			var is_carrier: bool = GameManager.get_puck_carrier() == skater
-			if InfractionRules.is_offside(pos.z, team_id, puck.global_position.z, is_carrier):
-				_was_offside = true
+	elif GameManager.get_rule_set() == GameRules.RuleSet.ARCADE and puck != null:
+		# GameManager's resolver, not puck.carrier — the latter is host-only, so
+		# a carrying client reads as puckless and latches OFFSIDE while
+		# actually carrying the puck into the zone (carrying is never offside).
+		var is_carrier: bool = GameManager.get_puck_carrier() == skater
+		if InfractionRules.is_offside(pos.z, team_id,
+				_puck_zone.in_attacking_zone(team_id), is_carrier):
+			_was_offside = true
 	# Reason is derived from the local skater's position. Offside takes priority:
 	# a skater serving an offside in the opponent crease must skate back to the
 	# blue line, which clears the crease violation incidentally on the way. But a

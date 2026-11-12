@@ -6,7 +6,7 @@ extends GutTest
 # via CHASE_PUCK once the bot is closest.
 
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 
 
 func _make_ctx(self_pos: Vector3, puck_pos: Vector3) -> RoleContext:

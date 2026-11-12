@@ -71,8 +71,14 @@ static func find(skel: KeeperSkeleton, step: float = STEP_M) -> Array[Rect2]:
 	return out
 
 
+# Columns sit on whole steps from the mouth's centre, so where he is sampled
+# does not move with the mouth's width.
 static func columns(step: float) -> int:
-	return ceili(2.0 * _inner_half_width() / step)
+	return 2 * _half_columns(step) + 1
+
+
+static func _half_columns(step: float) -> int:
+	return floori(_inner_half_width() / step - 0.5 + 1e-6)
 
 
 static func rows(step: float) -> int:
@@ -81,7 +87,7 @@ static func rows(step: float) -> int:
 
 # A cell's centre in the mouth plane.
 static func cell_center(cell: Vector2i, step: float) -> Vector2:
-	return Vector2(-_inner_half_width() + (float(cell.x) + 0.5) * step, (float(cell.y) + 0.5) * step)
+	return Vector2(float(cell.x - _half_columns(step)) * step, (float(cell.y) + 0.5) * step)
 
 
 static func _inner_half_width() -> float:
@@ -139,7 +145,7 @@ static func _rasterize(cells: PackedByteArray, nx: int, ny: int, step: float,
 	for p: Vector2 in hull:
 		lo = lo.min(p)
 		hi = hi.max(p)
-	var x0: float = -_inner_half_width()
+	var x0: float = -(float(_half_columns(step)) + 0.5) * step
 	var i0: int = maxi(floori((lo.x - x0) / step), 0)
 	var i1: int = mini(ceili((hi.x - x0) / step), nx - 1)
 	var j0: int = maxi(floori(lo.y / step), 0)

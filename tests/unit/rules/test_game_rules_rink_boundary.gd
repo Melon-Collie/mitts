@@ -1,15 +1,14 @@
 extends GutTest
 
-# GameRules.clamp_to_rink_inner — analytic rink boundary projection.
-#
-# Constants under test:
-#   INNER_HALF_WIDTH    = 12.85  (13.0 - 0.15)
-#   INNER_HALF_LENGTH   = 29.85  (30.0 - 0.15)
-#   INNER_CORNER_RADIUS =  8.35  ( 8.5 - 0.15)
-#   CORNER_CENTER_X     =  4.5   (12.85 - 8.35)
-#   CORNER_CENTER_Z     = 21.5   (29.85 - 8.35)
+# GameRules.clamp_to_rink_inner — analytic rink boundary projection: the
+# straight boards at INNER_HALF_WIDTH / INNER_HALF_LENGTH, and the corner arcs
+# of INNER_CORNER_RADIUS about (±CORNER_CENTER_X, ±CORNER_CENTER_Z).
 
 const TOLERANCE: float = 0.001
+# A point in the +x +z corner quadrant, offset from its arc's centre: outside
+# the arc, and inside it.
+const OUTSIDE_CORNER := Vector2(GameRules.CORNER_CENTER_X + 6.5, GameRules.CORNER_CENTER_Z + 5.5)
+const INSIDE_CORNER := Vector2(GameRules.CORNER_CENTER_X + 5.5, GameRules.CORNER_CENTER_Z + 3.5)
 
 # ── Points already inside ─────────────────────────────────────────────────────
 
@@ -24,11 +23,10 @@ func test_point_well_inside_straight_region_unchanged() -> void:
 	assert_almost_eq(result.y, 10.0, TOLERANCE, "z unchanged")
 
 func test_point_inside_corner_arc_unchanged() -> void:
-	# (10, 25) is in the corner quadrant (|x|>4.5, |z|>21.5).
-	# dist from corner center (4.5, 21.5) = sqrt(5.5^2 + 3.5^2) ≈ 6.52 < 8.35
-	var result: Vector2 = GameRules.clamp_to_rink_inner(Vector2(10.0, 25.0))
-	assert_almost_eq(result.x, 10.0, TOLERANCE, "x unchanged")
-	assert_almost_eq(result.y, 25.0, TOLERANCE, "z unchanged")
+	# In the corner quadrant, sqrt(5.5^2 + 3.5^2) ≈ 6.52 from the arc's centre.
+	var result: Vector2 = GameRules.clamp_to_rink_inner(INSIDE_CORNER)
+	assert_almost_eq(result.x, INSIDE_CORNER.x, TOLERANCE, "x unchanged")
+	assert_almost_eq(result.y, INSIDE_CORNER.y, TOLERANCE, "z unchanged")
 
 # ── Side wall (X axis) ────────────────────────────────────────────────────────
 
@@ -62,9 +60,8 @@ func test_outside_negative_end_wall_clamped() -> void:
 # ── Corner arc ────────────────────────────────────────────────────────────────
 
 func test_outside_corner_arc_projected_onto_arc() -> void:
-	# (11, 27): dx=6.5, dz=5.5 from corner center (4.5, 21.5),
-	# dist ≈ 8.51 > INNER_CORNER_RADIUS (8.35) → outside
-	var result: Vector2 = GameRules.clamp_to_rink_inner(Vector2(11.0, 27.0))
+	# sqrt(6.5^2 + 5.5^2) ≈ 8.51 from the arc's centre, past INNER_CORNER_RADIUS.
+	var result: Vector2 = GameRules.clamp_to_rink_inner(OUTSIDE_CORNER)
 	var dist_from_center: float = result.distance_to(
 		Vector2(GameRules.CORNER_CENTER_X, GameRules.CORNER_CENTER_Z))
 	assert_almost_eq(dist_from_center, GameRules.INNER_CORNER_RADIUS, TOLERANCE,
@@ -73,14 +70,14 @@ func test_outside_corner_arc_projected_onto_arc() -> void:
 	assert_gt(result.y, 0.0, "result in positive Z quadrant")
 
 func test_outside_corner_arc_negative_quadrant_projected() -> void:
-	var result: Vector2 = GameRules.clamp_to_rink_inner(Vector2(-11.0, -27.0))
+	var result: Vector2 = GameRules.clamp_to_rink_inner(-OUTSIDE_CORNER)
 	var dist_from_center: float = result.distance_to(
 		Vector2(-GameRules.CORNER_CENTER_X, -GameRules.CORNER_CENTER_Z))
 	assert_almost_eq(dist_from_center, GameRules.INNER_CORNER_RADIUS, TOLERANCE,
 		"result lies on the arc in negative quadrant")
 
 func test_outside_corner_arc_mixed_quadrant_projected() -> void:
-	var result: Vector2 = GameRules.clamp_to_rink_inner(Vector2(-11.0, 27.0))
+	var result: Vector2 = GameRules.clamp_to_rink_inner(Vector2(-OUTSIDE_CORNER.x, OUTSIDE_CORNER.y))
 	var dist_from_center: float = result.distance_to(
 		Vector2(-GameRules.CORNER_CENTER_X, GameRules.CORNER_CENTER_Z))
 	assert_almost_eq(dist_from_center, GameRules.INNER_CORNER_RADIUS, TOLERANCE,
@@ -97,7 +94,7 @@ func test_point_on_corner_arc_boundary_unchanged() -> void:
 
 func test_corner_projection_preserves_direction() -> void:
 	# The projected point should be along the same radial from the corner center.
-	var p := Vector2(11.0, 27.0)
+	var p := OUTSIDE_CORNER
 	var result: Vector2 = GameRules.clamp_to_rink_inner(p)
 	var center := Vector2(GameRules.CORNER_CENTER_X, GameRules.CORNER_CENTER_Z)
 	var dir_in: Vector2 = (p - center).normalized()
@@ -130,7 +127,7 @@ func test_margin_insets_end_wall() -> void:
 		"center held a margin inside the end wall")
 
 func test_margin_insets_corner_arc() -> void:
-	var result: Vector2 = GameRules.clamp_to_rink_inner(Vector2(11.0, 27.0), MARGIN)
+	var result: Vector2 = GameRules.clamp_to_rink_inner(OUTSIDE_CORNER, MARGIN)
 	var dist_from_center: float = result.distance_to(
 		Vector2(GameRules.CORNER_CENTER_X, GameRules.CORNER_CENTER_Z))
 	assert_almost_eq(dist_from_center, GameRules.INNER_CORNER_RADIUS - MARGIN, TOLERANCE,

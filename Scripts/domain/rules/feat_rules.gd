@@ -49,6 +49,6 @@ static func goal_feats(ctx: GoalFeatContext) -> Array[Dictionary]:
 static func in_offensive_circle(release_xz: Vector2) -> bool:
 	for x: float in [-GameRules.END_ZONE_FACEOFF_DOT_X, GameRules.END_ZONE_FACEOFF_DOT_X]:
 		if release_xz.distance_to(Vector2(x, GameRules.ICING_FACEOFF_DOT_Z)) \
-				<= GameRules.FACEOFF_CIRCLE_RADIUS_M:
+				<= RinkMarkings.FACEOFF_CIRCLE_RADIUS_M:
 			return true
 	return false

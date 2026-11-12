@@ -36,16 +36,16 @@ class Rush:
 func _rush(five: bool, lane_x: float) -> Rush:
 	var duel := Duel.new()
 	duel.team_size = 5 if five else 3
-	var hold := Vector3(lane_x * 0.3, 0.0, 21.0)
+	var hold := Vector3(lane_x * 0.3, 0.0, GameRules.GOAL_LINE_Z - 5.65)
 	duel.add_scripted_attacker(ME, 0, [hold, hold] as Array[Vector3], 0.0)
 	var me: Object = duel._skater(ME)
 	me.script_skates = true
-	var mates: Array = [[2, Vector3(-8, 0, 12)], [3, Vector3(8, 0, 12)]]
+	var mates: Array = [[2, Vector3(-8, 0, GameRules.BLUE_LINE_Z + 4.71)], [3, Vector3(8, 0, GameRules.BLUE_LINE_Z + 4.71)]]
 	var them: Array = [[11, Vector3(0, 0, -4)], [12, Vector3(-7, 0, -6)],
 			[13, Vector3(7, 0, -6)]]
 	if five:
-		mates += [[4, Vector3(-5, 0, 22)], [5, Vector3(5, 0, 22)]]
-		them += [[14, Vector3(-5, 0, -16)], [15, Vector3(5, 0, -16)]]
+		mates += [[4, Vector3(-5, 0, GameRules.GOAL_LINE_Z - 4.65)], [5, Vector3(5, 0, GameRules.GOAL_LINE_Z - 4.65)]]
+		them += [[14, Vector3(-5, 0, -GameRules.BLUE_LINE_Z - 8.71)], [15, Vector3(5, 0, -GameRules.BLUE_LINE_Z - 8.71)]]
 		duel.positions = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 11: 0, 12: 2, 13: 1, 14: 4, 15: 3}
 	for m: Array in mates:
 		duel.add_skater(m[0], 0, m[1], BotSkillProfile.hard())
@@ -59,8 +59,9 @@ func _rush(five: bool, lane_x: float) -> Rush:
 	var go_tick: int = int(HOLD_S / DT)
 	for t: int in int((HOLD_S + RUSH_S) / DT):
 		if t == go_tick:
-			me.script_path = [hold, Vector3(lane_x, 0.0, 6.0), Vector3(lane_x, 0.0, -6.0),
-					Vector3(lane_x * 0.4, 0.0, -18.0),
+			me.script_path = [hold, Vector3(lane_x, 0.0, GameRules.BLUE_LINE_Z - 1.29),
+					Vector3(lane_x, 0.0, -GameRules.BLUE_LINE_Z + 1.29),
+					Vector3(lane_x * 0.4, 0.0, -(GameRules.GOAL_LINE_Z - 8.65)),
 					Vector3(0.0, 0.0, -(GameRules.GOAL_LINE_Z - 2.5))] as Array[Vector3]
 			me.script_idx = 1
 			me.script_speed = duel.move_cfg.max_speed * duel.move_cfg.puck_carry_speed_multiplier

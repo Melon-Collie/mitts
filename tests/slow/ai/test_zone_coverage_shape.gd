@@ -298,14 +298,14 @@ func test_a_low_cycle_is_covered() -> void:
 	# box, the slot seam and the low battle at once.
 	gut.p("  ── 5v5 D-zone coverage ──")
 	var r: Result = _run(
-		[Vector3(9.0, 0.0, -22.0),    # carrier, strong wall low
-		 Vector3(-1.5, 0.0, -24.0),   # net front
-		 Vector3(0.5, 0.0, -20.0),    # slot
-		 Vector3(6.0, 0.0, -14.0),    # strong point
-		 Vector3(-6.0, 0.0, -14.0)],  # weak point
-		[Vector3(4.0, 0.0, -22.0), Vector3(-2.0, 0.0, -24.5),
-		 Vector3(0.0, 0.0, -19.0), Vector3(7.0, 0.0, -13.0),
-		 Vector3(-7.0, 0.0, -13.0)],
+		[Vector3(9.0, 0.0, NET_Z + 4.65),    # carrier, strong wall low
+		 Vector3(-1.5, 0.0, NET_Z + 2.65),   # net front
+		 Vector3(0.5, 0.0, NET_Z + 6.65),    # slot
+		 Vector3(6.0, 0.0, NET_Z + 12.65),    # strong point
+		 Vector3(-6.0, 0.0, NET_Z + 12.65)],  # weak point
+		[Vector3(4.0, 0.0, NET_Z + 4.65), Vector3(-2.0, 0.0, NET_Z + 2.15),
+		 Vector3(0.0, 0.0, NET_Z + 7.65), Vector3(7.0, 0.0, NET_Z + 13.65),
+		 Vector3(-7.0, 0.0, NET_Z + 13.65)],
 		1)
 	_report("low cycle", r)
 	_assert_shape("low cycle", r)
@@ -321,14 +321,14 @@ func test_a_point_shot_setup_is_covered() -> void:
 	# and the traffic working below — so the fixture measures the coverage
 	# rather than whichever release the point man decides on.
 	var r: Result = _run(
-		[[[Vector3(5.0, 0.0, -15.0), Vector3(1.5, 0.0, -15.5)], 2.0],      # carrier walks the line
-		 [[Vector3(-0.5, 0.0, -24.5), Vector3(0.5, 0.0, -24.0)], 1.0],     # net-front screen
-		 [[Vector3(2.5, 0.0, -21.0), Vector3(0.5, 0.0, -20.5)], 1.5],      # low slot
-		 [[Vector3(-8.0, 0.0, -18.0), Vector3(-7.0, 0.0, -20.5)], 1.5],    # weak wall
-		 [[Vector3(-5.0, 0.0, -15.0), Vector3(-3.0, 0.0, -15.5)], 1.5]],   # weak point
-		[Vector3(1.0, 0.0, -23.0), Vector3(-1.5, 0.0, -24.5),
-		 Vector3(0.5, 0.0, -19.5), Vector3(6.0, 0.0, -14.0),
-		 Vector3(-6.0, 0.0, -14.5)],
+		[[[Vector3(5.0, 0.0, NET_Z + 11.65), Vector3(1.5, 0.0, NET_Z + 11.15)], 2.0],      # carrier walks the line
+		 [[Vector3(-0.5, 0.0, NET_Z + 2.15), Vector3(0.5, 0.0, NET_Z + 2.65)], 1.0],     # net-front screen
+		 [[Vector3(2.5, 0.0, NET_Z + 5.65), Vector3(0.5, 0.0, NET_Z + 6.15)], 1.5],      # low slot
+		 [[Vector3(-8.0, 0.0, NET_Z + 8.65), Vector3(-7.0, 0.0, NET_Z + 6.15)], 1.5],    # weak wall
+		 [[Vector3(-5.0, 0.0, NET_Z + 11.65), Vector3(-3.0, 0.0, NET_Z + 11.15)], 1.5]],   # weak point
+		[Vector3(1.0, 0.0, NET_Z + 3.65), Vector3(-1.5, 0.0, NET_Z + 2.15),
+		 Vector3(0.5, 0.0, NET_Z + 7.15), Vector3(6.0, 0.0, NET_Z + 12.65),
+		 Vector3(-6.0, 0.0, NET_Z + 12.15)],
 		1)
 	_report("point shot", r)
 	_assert_shape("point shot", r, UNCOVERED_CEILING_POINT_SHOT)
@@ -343,15 +343,15 @@ func test_a_man_who_changes_areas_is_handed_off_not_dropped() -> void:
 	# cutter goes weak side → through the slot → strong side and back while the
 	# carrier works the strong wall low.
 	var r: Result = _run(
-		[[[Vector3(9.0, 0.0, -21.0), Vector3(8.5, 0.0, -23.5)], 1.5],    # carrier, strong wall low
-		 [[Vector3(-7.0, 0.0, -19.0), Vector3(-1.0, 0.0, -20.5),
-		   Vector3(4.0, 0.0, -19.5), Vector3(-1.0, 0.0, -20.5)], 3.0],     # the cutter
-		 [[Vector3(-1.0, 0.0, -24.0), Vector3(0.0, 0.0, -24.5)], 1.0],     # net front
-		 [[Vector3(6.0, 0.0, -14.0), Vector3(4.0, 0.0, -14.5)], 1.5],      # strong point
-		 [[Vector3(-6.0, 0.0, -14.0), Vector3(-4.0, 0.0, -14.5)], 1.5]],   # weak point
-		[Vector3(4.0, 0.0, -22.0), Vector3(-1.5, 0.0, -24.5),
-		 Vector3(0.0, 0.0, -19.0), Vector3(7.0, 0.0, -13.5),
-		 Vector3(-7.0, 0.0, -13.5)],
+		[[[Vector3(9.0, 0.0, NET_Z + 5.65), Vector3(8.5, 0.0, NET_Z + 3.15)], 1.5],    # carrier, strong wall low
+		 [[Vector3(-7.0, 0.0, NET_Z + 7.65), Vector3(-1.0, 0.0, NET_Z + 6.15),
+		   Vector3(4.0, 0.0, NET_Z + 7.15), Vector3(-1.0, 0.0, NET_Z + 6.15)], 3.0],     # the cutter
+		 [[Vector3(-1.0, 0.0, NET_Z + 2.65), Vector3(0.0, 0.0, NET_Z + 2.15)], 1.0],     # net front
+		 [[Vector3(6.0, 0.0, NET_Z + 12.65), Vector3(4.0, 0.0, NET_Z + 12.15)], 1.5],      # strong point
+		 [[Vector3(-6.0, 0.0, NET_Z + 12.65), Vector3(-4.0, 0.0, NET_Z + 12.15)], 1.5]],   # weak point
+		[Vector3(4.0, 0.0, NET_Z + 4.65), Vector3(-1.5, 0.0, NET_Z + 2.15),
+		 Vector3(0.0, 0.0, NET_Z + 7.65), Vector3(7.0, 0.0, NET_Z + 13.15),
+		 Vector3(-7.0, 0.0, NET_Z + 13.15)],
 		1)
 	_report("crossing cutter", r)
 	_assert_shape("crossing cutter", r, UNCOVERED_CEILING_CROSSING_CUTTER)

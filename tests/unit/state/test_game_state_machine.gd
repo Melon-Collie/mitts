@@ -520,12 +520,13 @@ func test_delayed_offside_needs_every_attacker_out_at_once() -> void:
 	# instant. An onside teammate who followed the puck in holds it up.
 	sm.register_remote_assigned_player(2, 1, 0)
 	_nhl_offside_setup({2: Vector3(0, 1, 0)})
+	var in_zone: float = -(InfractionRules.OFFSIDE_DEPTH_M + 0.2)
 	sm.update_delayed_offside(
-			{1: Vector3(0, 1, 0), 2: Vector3(0, 1, -8)}, Vector3(0, 0, -10), -1)
+			{1: Vector3(0, 1, 0), 2: Vector3(0, 1, in_zone)}, Vector3(0, 0, -10), -1)
 	assert_eq(sm.delayed_offside_team_id, 0,
 			"the offside attacker alone at the line does not clear it")
 	assert_true(sm.must_tag_up(1, 0.0), "flag held until the team clears together")
-	assert_true(sm.must_tag_up(2, -8.0), "the in-zone teammate must clear too")
+	assert_true(sm.must_tag_up(2, in_zone), "the in-zone teammate must clear too")
 	sm.update_delayed_offside(
 			{1: Vector3(0, 1, 0), 2: Vector3(0, 1, 0)}, Vector3(0, 0, -10), -1)
 	assert_eq(sm.delayed_offside_team_id, -1, "everyone back at the line clears it")

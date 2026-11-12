@@ -2192,7 +2192,7 @@ func test_house_blade_clears_the_puck_to_mouth_corridor() -> void:
 	# a deflection surface in tight (the own-goal tip). The safe dir slides
 	# the blade to the corridor's edge at full stance length; the body stays
 	# where the role put it.
-	var self_pos := Vector3(0, 0, 24.5)            # in the house; own net +26.65
+	var self_pos := Vector3(0, 0, 24.5)            # in the house; own net GOAL_LINE_Z
 	var s := _loose_puck_snap(Vector3(0, 0, 17))   # slot shot line through us
 	var dir := Vector3(0, 0, -1)                   # aiming straight at the puck
 	var safe: Vector3 = sm._deflect_safe_aim_dir(self_pos, dir, s)

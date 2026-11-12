@@ -4,7 +4,7 @@ extends GutTest
 # same snapshot harness as test_role_slots.gd. Peers 1–5 are team 0
 # (defending +Z): lobby positions C=slot 0, LW=1, RW=2, LD=3, RD=4.
 
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 const TEAM_ID: int = 0
 
 
@@ -366,7 +366,7 @@ func test_home_side_bias_settles_symmetric_d_pair() -> void:
 		[1, 0, Vector3(0, 0, -8)],
 		[2, 0, Vector3(-9, 0, -6)],
 		[3, 0, Vector3(9, 0, -6)],
-		[4, 0, Vector3(0, 0, 7.29)],   # LD dead-center on our blue line
+		[4, 0, Vector3(0, 0, GameRules.BLUE_LINE_Z)],   # LD dead-center on our blue line
 		[5, 0, Vector3(0, 0, 8.0)],    # RD dead-center, a hair deeper
 	]
 	var a: Dictionary = _assign(skaters, AIPossessionState.State.NEUTRAL, -1, -3.0)
@@ -381,7 +381,7 @@ func test_home_side_bias_mirrors_for_the_team_defending_minus_z() -> void:
 		[1, 1, Vector3(0, 0, 8)],
 		[2, 1, Vector3(9, 0, 6)],
 		[3, 1, Vector3(-9, 0, 6)],
-		[4, 1, Vector3(0, 0, -7.29)],  # LD dead-center on our blue line
+		[4, 1, Vector3(0, 0, -GameRules.BLUE_LINE_Z)],  # LD dead-center on our blue line
 		[5, 1, Vector3(0, 0, -8.0)],   # RD dead-center, a hair deeper
 	]
 	var snap: WorldSnapshot = _make_snapshot(skaters, -1, 3.0)

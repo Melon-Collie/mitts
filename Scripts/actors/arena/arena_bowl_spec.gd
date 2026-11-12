@@ -12,7 +12,7 @@ extends RefCounted
 # every field — but they keep a bare `ArenaBowlSpec.new()` buildable in a test.
 
 # ── Rink footprint ───────────────────────────────────────────────────────────
-var rink_length: float = 60.0
+var rink_length: float = 60.96
 var rink_width: float = 26.0
 var corner_radius: float = 8.53
 var corner_segments: int = 14

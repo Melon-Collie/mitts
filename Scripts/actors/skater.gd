@@ -360,9 +360,16 @@ var stick_whip_damping: float = 14.0     # release-whip decay rate
 # ── Body Footprint ────────────────────────────────────────────────────────────
 # Radius (m) of the disc every analytic contact path treats as this skater's
 # body: skater-vs-skater in _resolve_player_collisions and the rink / net /
-# goalie containment clamps. Scaled per-build by SkaterController.apply_attributes
+# goalie containment clamps (the rink's widens while he is down,
+# board_clearance_radius). Scaled per-build by SkaterController.apply_attributes
 # (girth_mult), so read it through collision_radius() rather than caching it.
 var body_collision_radius: float = 0.35
+# How far (m) from his centre the figure reaches lying on the ice: the legs
+# sprawled and the skates gone out from under him. The boards hold that off
+# them as he goes down (board_clearance_radius). League body, not his build's,
+# as knockdown_fall_body_reach_m is.
+var knockdown_lying_reach_m: float = 0.9
+var _down_share: float = 0.0
 
 # ── Body Check Tuning ─────────────────────────────────────────────────────────
 var weight: float = 1.0
@@ -1385,10 +1392,10 @@ func _backstopped(victim: Skater, from: Skater, delta_v: Vector3, n: Vector3,
 # integration step and re-used by LocalController's reconcile replay so both paths
 # agree.
 func clamp_body_to_rink() -> void:
-	# Inset the boundary by the (girth-scaled) body radius so the body's EDGE stops
-	# at the boards — otherwise the center reaches the surface and the body clips in
-	# by its radius (worse for bigger players).
-	var radius: float = collision_radius()
+	# Inset the boundary by the body's reach so its EDGE stops at the boards —
+	# otherwise the center reaches the surface and the body clips in by its radius
+	# (worse for bigger players).
+	var radius: float = board_clearance_radius()
 	var xz := Vector2(global_position.x, global_position.z)
 	var clamped: Vector2 = GameRules.clamp_to_rink_inner(xz, radius)
 	if xz.distance_squared_to(clamped) <= 1e-6:
@@ -1405,6 +1412,21 @@ func clamp_body_to_rink() -> void:
 	global_position.x = clamped.x
 	global_position.z = clamped.y
 	_touched_boundary = true
+
+
+# How far (m) from his centre the boards hold his body off: his disc upright,
+# easing out to the figure on the ice as a knockdown takes him down — so a body
+# that goes down at the boards ends up beside them, not through them.
+func board_clearance_radius() -> float:
+	var radius: float = collision_radius()
+	return lerpf(radius, maxf(radius, knockdown_lying_reach_m), _down_share)
+
+
+# How far into the knockdown's down pose he is, 0 upright to 1 down
+# (SkaterController.knockdown_pose_weight). Laid by every tick, a reconcile's
+# replay included, so the replay clamps him where the live tick did.
+func set_down_share(share: float) -> void:
+	_down_share = share
 
 
 # Holds the body out of the goal-net pocket. Mirrors clamp_body_to_rink: project

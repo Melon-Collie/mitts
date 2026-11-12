@@ -1993,6 +1993,7 @@ func _process_input(input: InputState, delta: float) -> void:
 	# The frame this tick's IK and twist solve in tilts with the fall: every tick
 	# lays its own, replay included (Scripts/networking/CLAUDE.md).
 	_apply_fall_tilt(knockdown_getup_left())
+	skater.set_down_share(knockdown_pose_weight())
 	_advance_balance(tick_start_velocity, delta)
 	_pose.apply_velocity_lean(delta)
 	_pose.apply_facing(input, delta)
@@ -2472,8 +2473,29 @@ func _advance_balance(tick_start_velocity: Vector3, delta: float) -> void:
 				deg_to_rad(skater.balance_lean_cap_deg))
 	var s: Vector4 = BalanceRules.spring_step(skater.balance_tilt(), balance_tilt_vel,
 			target, skater.balance_omega, delta)
+	var tilt := Vector2(s.x, s.y)
 	balance_tilt_vel = Vector2(s.z, s.w)
-	skater.set_balance_tilt(Vector2(s.x, s.y), balance_tilt_vel)
+	var held: Vector2 = _held_by_the_boards(tilt)
+	if held != tilt:
+		var wall: Vector2 = (tilt - held).normalized()
+		balance_tilt_vel -= wall * maxf(balance_tilt_vel.dot(wall), 0.0)
+		tilt = held
+	skater.set_balance_tilt(tilt, balance_tilt_vel)
+
+
+# The lean the boards leave him (BalanceRules.wall_held_tilt): leaning on them,
+# his shoulders stop at the glass. Read off where this tick starts him, which a
+# reconcile's replay restores before it steps the tick again.
+func _held_by_the_boards(tilt: Vector2) -> Vector2:
+	var radius: float = skater.collision_radius()
+	var height: float = skater.upper_body.to_global(skater.shoulder.position).y
+	var reach: float = height * sin(deg_to_rad(skater.balance_lean_cap_deg))
+	var wall: Vector2 = BoardWallRules.wall_normal(skater.global_position, radius, reach)
+	if wall == Vector2.ZERO:
+		return tilt
+	var room: float = GameRules.distance_to_rink_inner(
+			Vector2(skater.global_position.x, skater.global_position.z)) - radius
+	return BalanceRules.wall_held_tilt(tilt, wall, room, height)
 
 
 func get_shot_state() -> int:

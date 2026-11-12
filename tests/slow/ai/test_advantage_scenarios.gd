@@ -189,7 +189,10 @@ func test_a_two_on_one_ends_in_a_shot() -> void:
 
 func test_two_defenders_back_concede_no_slot_shot_to_one_rusher() -> void:
 	for x: float in [-4.0, 0.0, 4.0]:
-		for z: float in [-2.0, -8.0]:
+		# The rusher this far out from their goal line: in the neutral zone, and
+		# just inside their blue line.
+		for out: float in [24.65, 18.65]:
+			var z: float = GOAL_Z + out
 			var p: Play = _play([[1, 0, Vector3(x, 0, z), Vector3(0, 0, -7)],
 					[201, 1, Vector3(-2.5, 0, z - 10), Vector3(0, 0, -3)],
 					[202, 1, Vector3(2.5, 0, z - 10), Vector3(0, 0, -3)]], 1, 5.0)

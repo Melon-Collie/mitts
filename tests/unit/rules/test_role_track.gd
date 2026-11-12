@@ -5,7 +5,7 @@ extends GutTest
 # Team 0 defends +Z; peer 1 is the bot under test, peer 10 the opposing carrier.
 
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 
 
 func _ctx(self_pos: Vector3, skaters: Array, carrier_pid: int,

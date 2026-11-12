@@ -5,9 +5,9 @@ extends GutTest
 # puck crosses our blue line, which used to re-slot three still-backchecking
 # forwards onto zone posts. These pin the pure predicate and the brain wiring.
 #
-# Team 0 defends +Z (net at +26.65).
+# Team 0 defends +Z (net at GOAL_LINE_Z).
 
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 
 
 # ── The pure predicate ───────────────────────────────────────────────────────
