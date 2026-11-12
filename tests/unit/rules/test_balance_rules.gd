@@ -98,3 +98,26 @@ func _wiggle_amplitude(hz: float) -> float:
 		if t > 2.0:
 			peak = maxf(peak, absf(x.x))
 	return peak
+
+
+func test_the_boards_stop_a_lean_at_the_glass() -> void:
+	# Shoulders 1.4 m over the ice with 0.2 m to the boards on +X: a lean that
+	# would carry them further is held where they meet the glass.
+	var wall := Vector2(1.0, 0.0)
+	var held: Vector2 = BalanceRules.wall_held_tilt(Vector2(0.3, 0.1), wall, 0.2, 1.4)
+	assert_almost_eq(1.4 * sin(held.x), 0.2, 1e-4, "the shoulders stop at the glass")
+	assert_almost_eq(held.y, 0.1, 1e-6, "the lean along the boards is his own")
+
+
+func test_the_boards_never_tip_a_body() -> void:
+	var wall := Vector2(1.0, 0.0)
+	for tilt: Vector2 in [Vector2(-0.3, 0.0), Vector2(0.05, 0.2), Vector2.ZERO]:
+		assert_eq(BalanceRules.wall_held_tilt(tilt, wall, 0.2, 1.4), tilt,
+				"a lean away from the boards, or one with room, is untouched")
+	assert_eq(BalanceRules.wall_held_tilt(Vector2(0.3, 0.0), Vector2.ZERO, 0.0, 1.4),
+			Vector2(0.3, 0.0), "no boards in reach, no hold")
+
+
+func test_a_body_on_the_boards_stands_up_against_them() -> void:
+	var held: Vector2 = BalanceRules.wall_held_tilt(Vector2(0.0, 0.3), Vector2(0.0, 1.0), 0.0, 1.4)
+	assert_almost_eq(held.y, 0.0, 1e-6, "no room, no lean into the boards")

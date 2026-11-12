@@ -183,6 +183,9 @@ func _head_across_travel(skater: Skater) -> float:
 # hard steering genuinely does lean a skater half way.
 func test_a_held_turn_leans_and_steering_taps_do_not() -> void:
 	var c: SkaterController = _live_controller()
+	# From the far end, so the turn is skated in open ice: the boards hold a lean
+	# into them (BalanceRules.wall_held_tilt).
+	c.skater.global_position.z = GameRules.INNER_HALF_LENGTH - 3.0
 	var input := InputState.new()
 	input.delta = DT
 	_skate_up_the_ice(c, input)
