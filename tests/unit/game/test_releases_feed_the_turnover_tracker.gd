@@ -151,6 +151,15 @@ func test_the_release_signal_classifies_nothing() -> void:
 	assert_false(body.contains("_note_release_for_turnovers"))
 
 
+func test_a_puck_knocked_off_the_stick_opens_no_window() -> void:
+	# The post and the boards fire the puck through the same path a pass takes.
+	var body: String = _functions()["_note_release_for_turnovers"]
+	var forced: int = body.find("last_release_was_forced")
+	assert_gt(forced, -1)
+	assert_lt(forced, body.find("TurnoverRules.release_kind("),
+			"refused before the release is read as a pass")
+
+
 func test_only_a_counted_shot_on_goal_opens_the_shot_window_by_signal() -> void:
 	var src: String = FileAccess.get_file_as_string(_GM)
 	assert_eq(src.count("connect(_turnover_tracker.note_shot)"), 1)

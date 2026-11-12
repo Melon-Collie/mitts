@@ -3550,9 +3550,10 @@ func _on_server_puck_released_by_carrier(peer_id: int) -> void:
 # pass an opponent can pick off. Runs after _note_shot_trajectory, which notes
 # the directed-at-net read the shot tracker answers from, and only from the
 # paths that fire a puck: a strip, a nudge and a whistle drop also raise the
-# puck's release signal, and none of them is a pass. A one-timer redirects a
-# puck its shooter never carried, so `redirected` reads it as a shot wherever it
-# goes.
+# puck's release signal, and none of them is a pass. Nor is a puck the post or
+# the boards knocked off the stick, which opens no window: lost to an opponent
+# it is a fumble. A one-timer redirects a puck its shooter never carried, so
+# `redirected` reads it as a shot wherever it goes.
 # get_release_velocity (not linear_velocity): release() queues the launch for the
 # next drive step, so linear_velocity reads ~zero in this same-frame window.
 func _note_release_for_turnovers(peer_id: int, redirected: bool = false) -> void:
@@ -3562,6 +3563,9 @@ func _note_release_for_turnovers(peer_id: int, redirected: bool = false) -> void
 		return
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	if record == null or record.team == null:
+		return
+	if not redirected and record.controller != null \
+			and record.controller.last_release_was_forced:
 		return
 	var vel: Vector3 = puck.get_release_velocity()
 	var launch_pos: Vector3 = puck.get_puck_position()

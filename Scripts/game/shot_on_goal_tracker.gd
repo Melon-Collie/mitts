@@ -64,12 +64,12 @@ var _pending_directed_at_net: bool = false
 # collected it, and a feed at a man in the crease genuinely projects through the
 # mouth — and logged as a missed shot attempt.
 #
-# What it actually catches is the quick-pass button and the net-clamp
-# knock-loose. It deliberately does NOT catch the charged-wrister pass, which a
-# bot could report and a human could not: exempting one and not the other would
-# break the only thing a Corsi column is for. Own-half releases are refused by
-# geometry instead (ShotOnNetRules.is_release_in_own_half), which applies to
-# everyone equally.
+# What it actually catches is the quick-pass button and a puck the post or the
+# boards knock off the stick. It deliberately does NOT catch the charged-wrister
+# pass, which a bot could report and a human could not: exempting one and not
+# the other would break the only thing a Corsi column is for. Own-half releases
+# are refused by geometry instead (ShotOnNetRules.is_release_in_own_half), which
+# applies to everyone equally.
 #
 # Gates the two resolutions that can invent an attempt out of a pass — the MISS
 # and the BLOCK. A pass that goes in is still a goal (on_goal_confirmed credits
