@@ -567,10 +567,20 @@ func test_a_carrier_cutting_across_is_switched_to_the_d_on_that_side() -> void:
 
 func test_zone_coverage_takes_no_man_still_up_the_ice() -> void:
 	# His trailers are in the neutral zone: escorting them walks the coverage
-	# away from the puck.
-	var brain: TeamBrain = _entry_brain()
+	# away from the puck. A third man already in front of our net gives the
+	# matching someone to cover, so the trailers lose to him on the merits.
+	var brain := TeamBrain.new(TEAM_ID, {100: 0, 110: 0, 120: 0, 130: 0, 140: 0,
+			200: 1, 210: 1, 220: 1, 230: 1}, {}, 5,
+			{100: 0, 110: 1, 120: 2, 130: 3, 140: 4})
+	var snap: WorldSnapshot = _entry_snapshot(Vector3(0.0, 0.0, 9.0))
+	var slot_man := SkaterNetworkState.new()
+	slot_man.position = Vector3(3.0, 0.0, OUR_NET_Z - 6.0)
+	snap.skater_states[230] = slot_man
 	brain.force_retick()
-	brain.tick(0.001, _entry_snapshot(Vector3(0.0, 0.0, 9.0)))
+	brain.tick(0.001, snap)
+	assert_eq(brain.state, AIPossessionState.State.DZONE, "fixture sanity: DZONE")
+	assert_true(230 in brain.threat_assignments.values(),
+			"the man in front of our net is covered; got %s" % str(brain.threat_assignments))
 	for def_pid: int in brain.threat_assignments:
 		assert_false(brain.threat_assignments[def_pid] in [210, 220],
 				"peer %d covers a man up the ice" % def_pid)
