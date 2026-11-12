@@ -16,8 +16,10 @@ class_name BodyBalanceRules
 
 class Config:
 	# Δv (m/s) a square, upright skater of the reference height rides on his
-	# feet: one-sided checks at equal builds below top speed never reach it.
-	var balance_ref_dv: float = 2.4
+	# feet: one-sided checks at equal builds below top speed never reach it, and
+	# a timed check from the side (CheckDriveRules) floors him from ~6 m/s
+	# closing.
+	var balance_ref_dv: float = 3.4
 	# Share of the Δv along his blades that tips him: the skates roll with the
 	# body, so most of it is carried off as travel. Across them the edges bite.
 	var along_share: float = 0.5
@@ -26,7 +28,7 @@ class Config:
 	var sight_behind: float = 0.6
 	# Budget × this while his body is committed to something else: a slapper's
 	# wind-up, a wrister's load, a follow-through, a one-timer's hold.
-	var vulnerable_mult: float = 0.6
+	var vulnerable_mult: float = 0.73
 	# The loaded stance's base over the skating base, half-width over
 	# half-width: each skate set SkaterController.stance_width_m out from under a
 	# hip GaitPose.HIP_HALF_WIDTH off centre. The controller derives it from those
@@ -36,6 +38,12 @@ class Config:
 	# him back the way he faces counts at this share for his every outcome, so
 	# landing a check slows him without rocking him.
 	var checker_front_share: float = 0.4
+	# How fast (m/s) he can arrive and still lean into it at that share, and the
+	# pace from which he takes all of it: a check thrown at full speed rocks its
+	# thrower too, and a man set against a carrier skating into him leans in
+	# whatever the carrier's pace.
+	var checker_control_speed: float = 4.0
+	var checker_wild_speed: float = 8.0
 
 
 enum Posture { UPRIGHT, STANCE, VULNERABLE }
@@ -85,10 +93,24 @@ static func overshoot(dv: Vector2, facing: Vector2, posture: Posture,
 	return tip_dv(dv, facing, cfg) / maxf(b, 1e-6)
 
 
-# `dv` as a committed checker facing `facing` takes it: the part driving him
-# back the way he faces at checker_front_share, the rest whole.
-static func leaned_into(dv: Vector2, facing: Vector2, cfg: Config) -> Vector2:
+# `dv` as a committed checker facing `facing` takes it, having skated into the
+# contact at `approach` m/s (approach_speed): the part driving him back the way
+# he faces at checker_front_share up to checker_control_speed, rising to all of
+# it at checker_wild_speed; the rest whole.
+static func leaned_into(dv: Vector2, facing: Vector2, approach: float, cfg: Config) -> Vector2:
 	var along: float = dv.dot(facing)
 	if along >= 0.0:
 		return dv
-	return dv - facing * along * (1.0 - cfg.checker_front_share)
+	var wild: float = clampf((approach - cfg.checker_control_speed)
+			/ maxf(cfg.checker_wild_speed - cfg.checker_control_speed, 0.001), 0.0, 1.0)
+	var share: float = lerpf(cfg.checker_front_share, 1.0, wild)
+	return dv - facing * along * (1.0 - share)
+
+
+# How fast (m/s) a body was skating into the contact that kicked it `dv`, from
+# its velocity after the kick: its own speed against the way it was driven.
+static func approach_speed(velocity_after: Vector2, dv: Vector2) -> float:
+	var kick: float = dv.length()
+	if kick < 1e-6:
+		return 0.0
+	return maxf((velocity_after - dv).dot(-dv / kick), 0.0)

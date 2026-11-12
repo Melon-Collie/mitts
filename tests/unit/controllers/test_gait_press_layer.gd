@@ -66,15 +66,22 @@ func test_skating_away_is_no_press() -> void:
 
 
 func test_dug_in_he_sits_deeper_and_leans_back_into_the_push() -> void:
-	_controller.stance_active = true
+	_skater.hit_committed = true
 	_skater.brake_intent = true
 	_place_other(Vector3(0.0, 0.0, 1.0), false)
 	_settle()
-	var stance_drop: float = _coord.crouch_drop
-	var stance_pitch: float = _coord.trunk_pitch_add
+	var commit_drop: float = _coord.crouch_drop
+	var commit_pitch: float = _coord.trunk_pitch_add
 	_place_other(Vector3(0.0, 0.0, 1.0))
 	_settle()
 	assert_eq(_coord._press._role, GaitPressLayer.Role.ANCHOR)
-	assert_gt(_coord.crouch_drop, stance_drop, "sat deeper than the stance")
-	assert_gt(_coord.trunk_pitch_add, stance_pitch + deg_to_rad(_controller.press_anchor_lean_deg) * 0.9,
+	assert_gt(_coord.crouch_drop, commit_drop, "sat deeper than the commit alone")
+	assert_gt(_coord.trunk_pitch_add, commit_pitch + deg_to_rad(_controller.press_anchor_lean_deg) * 0.9,
 			"leaning back toward the man pushing him")
+
+
+func test_braking_without_the_button_is_no_dig_in() -> void:
+	_skater.brake_intent = true
+	_place_other(Vector3(0.0, 0.0, 1.0))
+	_settle()
+	assert_true(_coord._press.is_quiet())

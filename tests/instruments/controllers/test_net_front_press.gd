@@ -15,9 +15,7 @@ func _spec(man_lbs: int, attacker_lbs: int, side: String, man: String,
 	s.man_lbs = man_lbs
 	s.attacker_lbs = attacker_lbs
 	s.side = side
-	s.man_stance = man.contains("stance")
-	s.man_back = man.contains("back")
-	s.man_brake = man.contains("brake")
+	s.man_does(man)
 	s.attacker = attacker
 	return s
 
@@ -29,22 +27,22 @@ func test_print_the_press_table() -> void:
 	]
 	# label, man lb, attacker lb, side, man, attacker
 	var cases: Array = [
-		["skate in", 201, 201, "behind", "nothing", "skate"],
-		["skate in, committed", 201, 201, "behind", "nothing", "skate commit"],
-		["skate in, stance", 201, 201, "behind", "nothing", "skate stance"],
-		["man in stance", 201, 201, "behind", "stance", "skate commit"],
-		["man backs in", 201, 201, "behind", "back", "skate commit"],
-		["man backs in, uncommitted attacker", 201, 201, "behind", "back", "skate"],
-		["man brakes", 201, 201, "behind", "brake", "skate commit"],
-		["man brakes, stance", 201, 201, "behind", "brake stance", "skate commit"],
-		["man brakes, from the side", 201, 201, "beside", "brake", "skate commit"],
-		["man brakes, heavy uncommitted attacker", 170, 235, "behind", "brake", "skate"],
-		["heavy on light, anchored", 170, 235, "behind", "brake stance", "skate commit"],
-		["light on heavy, anchored", 235, 170, "behind", "brake stance", "skate commit"],
-		["heavy on light", 170, 235, "behind", "nothing", "skate commit"],
-		["light on heavy", 235, 170, "behind", "nothing", "skate commit"],
-		["from the side", 201, 201, "beside", "nothing", "skate commit"],
-		["from the side, stance", 201, 201, "beside", "stance", "skate commit"],
+		["not engaged, skated into", 201, 201, "behind", "nothing", "skate"],
+		["not engaged, pushed", 201, 201, "behind", "nothing", "skate commit"],
+		["not engaged, pushed side-on", 201, 201, "behind", "nothing", "skate commit side-on"],
+		["not engaged, in the stance", 201, 201, "behind", "stance", "skate commit"],
+		["not engaged, skating back in", 201, 201, "behind", "back", "skate commit"],
+		["not engaged, braking", 201, 201, "behind", "brake", "skate commit"],
+		["engaged, doing nothing", 201, 201, "behind", "commit", "skate commit"],
+		["engaged, pushing back, his back to him", 201, 201, "behind", "commit back", "skate commit"],
+		["engaged, pushing back, chest to chest", 201, 201, "behind", "commit back facing", "skate commit"],
+		["engaged and set", 201, 201, "behind", "commit brake", "skate commit"],
+		["engaged and set, shoved first", 201, 201, "behind", "commit brake", "skate commit shove"],
+		["engaged and set, from the side", 201, 201, "beside", "commit brake", "skate commit"],
+		["heavy on a set light man", 170, 235, "behind", "commit brake", "skate commit"],
+		["light on a set heavy man", 235, 170, "behind", "commit brake", "skate commit"],
+		["heavy out-pushing light, chest to chest", 170, 235, "behind", "commit back facing", "skate commit"],
+		["heavy on light, not engaged", 170, 235, "behind", "nothing", "skate commit"],
 	]
 	for c: Array in cases:
 		var r: PressHarness.Result = PressHarness.new(self).run(

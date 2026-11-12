@@ -29,17 +29,22 @@ func _cfg() -> SkaterMovementRules.MovementConfig:
 
 
 func _drive(posture: int, intent: Vector2, n: Vector2, braking: bool = false,
-		stagger: float = 1.0) -> float:
-	return PressRules.drive(_cfg(), 10.5, posture, braking, false, stagger, AHEAD, intent, n, 0.0)
+		stagger: float = 1.0, facing: Vector2 = AHEAD, u: float = 0.0) -> float:
+	return PressRules.drive(_cfg(), 10.5, posture, braking, false, stagger, facing, intent, n, u)
 
 
-func _hold(posture: int, braking: bool, n: Vector2, stagger: float = 1.0) -> float:
-	return PressRules.hold(_cfg(), posture, braking, false, stagger, AHEAD, n, 0.0)
+func _hold(posture: int, braking: bool, n: Vector2, stagger: float = 1.0, u: float = 0.0) -> float:
+	return PressRules.hold(_cfg(), posture, braking, false, stagger, AHEAD, n, u)
 
 
-func test_the_commit_drives_harder_than_skating_in() -> void:
+func test_an_engaged_body_drives_harder_than_one_skating_in() -> void:
 	assert_gt(_drive(Posture.COMMIT, AHEAD, AHEAD), _drive(Posture.UPRIGHT, AHEAD, AHEAD))
-	assert_gt(_drive(Posture.UPRIGHT, AHEAD, AHEAD), _drive(Posture.STANCE, AHEAD, AHEAD))
+
+
+func test_the_stance_is_an_unengaged_body() -> void:
+	assert_eq(_drive(Posture.STANCE, AHEAD, AHEAD), _drive(Posture.UPRIGHT, AHEAD, AHEAD))
+	for braking: bool in [false, true]:
+		assert_eq(_hold(Posture.STANCE, braking, AHEAD), _hold(Posture.UPRIGHT, braking, AHEAD))
 
 
 func test_braking_and_standing_still_drive_nothing() -> void:
@@ -53,24 +58,62 @@ func test_a_push_away_drives_negative() -> void:
 
 func test_the_stagger_takes_from_the_drive_and_the_hold() -> void:
 	assert_lt(_drive(Posture.COMMIT, AHEAD, AHEAD, false, 0.5), _drive(Posture.COMMIT, AHEAD, AHEAD))
-	assert_lt(_hold(Posture.STANCE, true, AHEAD, 0.6), _hold(Posture.STANCE, true, AHEAD))
+	assert_lt(_hold(Posture.COMMIT, true, AHEAD, 0.6), _hold(Posture.COMMIT, true, AHEAD))
 
 
-func test_across_the_blades_holds_more_than_along_them() -> void:
-	assert_gt(_hold(Posture.UPRIGHT, false, SIDE), _hold(Posture.UPRIGHT, false, AHEAD))
-	assert_almost_eq(_hold(Posture.UPRIGHT, false, AHEAD), _cfg().friction, 1e-6,
-			"along them the blades glide")
+# The legs drive the way he faces: the more squarely he faces the man, the
+# harder he pushes him.
+func test_he_pushes_hardest_chest_on() -> void:
+	var prev: float = INF
+	for deg: float in [0.0, 30.0, 60.0, 90.0]:
+		var facing: Vector2 = AHEAD.rotated(deg_to_rad(deg))
+		var d: float = _drive(Posture.COMMIT, AHEAD, AHEAD, false, 1.0, facing)
+		assert_lt(d, prev + 1e-6, "%d degrees off him" % deg)
+		prev = d
+	assert_almost_eq(prev, _drive(Posture.COMMIT, AHEAD, AHEAD) * PressRules.SIDE_ON_SHARE, 1e-6)
+	assert_almost_eq(_drive(Posture.COMMIT, AHEAD, AHEAD, false, 1.0, -AHEAD), prev, 1e-6,
+			"with his back to him, no better than side-on")
 
 
-func test_braking_holds_from_any_side() -> void:
+func test_only_an_engaged_body_sets_his_edges() -> void:
+	var set_hold: float = _hold(Posture.COMMIT, true, AHEAD)
+	assert_gt(set_hold, _drive(Posture.COMMIT, AHEAD, AHEAD), "and they hold an equal drive")
+	assert_lt(_hold(Posture.UPRIGHT, true, AHEAD), 0.5 * set_hold, "a stop is not a stand")
+	assert_lt(_hold(Posture.COMMIT, false, AHEAD), 0.1 * set_hold, "engaged and not braking, he glides")
+	assert_almost_eq(_hold(Posture.UPRIGHT, false, AHEAD), _cfg().friction, 1e-6)
+
+
+func test_set_edges_hold_from_any_side() -> void:
 	for deg: float in [0.0, 30.0, 90.0, 150.0]:
 		var n: Vector2 = AHEAD.rotated(deg_to_rad(deg))
-		assert_almost_eq(_hold(Posture.UPRIGHT, true, n), _hold(Posture.UPRIGHT, true, AHEAD), 1e-6)
+		assert_almost_eq(_hold(Posture.COMMIT, true, n), _hold(Posture.COMMIT, true, AHEAD), 1e-6)
 
 
-func test_the_stance_anchors_more_than_upright() -> void:
-	assert_gt(_hold(Posture.STANCE, true, AHEAD), _hold(Posture.UPRIGHT, true, AHEAD))
-	assert_gt(_hold(Posture.STANCE, false, SIDE), _hold(Posture.UPRIGHT, false, SIDE))
+# Set, they hold more than once they have broken loose; and a staggered man's
+# are loose however still he stands.
+func test_edges_broken_loose_hold_less() -> void:
+	var set_hold: float = _hold(Posture.COMMIT, true, AHEAD)
+	var prev: float = set_hold
+	for i: int in 13:
+		var h: float = _hold(Posture.COMMIT, true, AHEAD, 1.0, 0.05 * i)
+		assert_lte(h, prev + 1e-6, "never firmer the faster he slides")
+		prev = h
+	assert_almost_eq(prev, set_hold * PressRules.LOOSE_SHARE, 1e-6)
+	assert_lt(prev, _drive(Posture.COMMIT, AHEAD, AHEAD), "loose, an equal drive moves him")
+	assert_almost_eq(_hold(Posture.COMMIT, true, AHEAD, 0.999), set_hold * 0.999 * PressRules.LOOSE_SHARE,
+			1e-6, "staggered")
+
+
+func test_a_press_fades_out_at_a_walk() -> void:
+	var from_rest: float = _drive(Posture.COMMIT, AHEAD, AHEAD)
+	var prev: float = from_rest
+	for i: int in 16:
+		var d: float = _drive(Posture.COMMIT, AHEAD, AHEAD, false, 1.0, AHEAD, 0.1 * i)
+		assert_lte(d, prev + 1e-6)
+		prev = d
+	assert_eq(_drive(Posture.COMMIT, AHEAD, AHEAD, false, 1.0, AHEAD, PressRules.MAX_SPEED_M_S), 0.0)
+	assert_almost_eq(_drive(Posture.COMMIT, AHEAD, AHEAD, false, 1.0, AHEAD, -3.0), from_rest, 1e-6,
+			"pushing against the motion is whole")
 
 
 func test_contact_only_pushes() -> void:
@@ -111,29 +154,10 @@ func test_it_is_monotone_in_mass_drive_and_hold() -> void:
 	assert_gt(base, PressRules.pair_accel(1.0, 10.5, 0.0, 1.0, 2.0, 9.0, 0.0, DT), "he pushes back")
 
 
-# An anchored man (braking, in the stance) holds an equal man's full drive.
-func test_an_anchored_man_holds_an_equal_drive() -> void:
-	var drive: float = _drive(Posture.COMMIT, AHEAD, AHEAD)
-	var anchored: float = _hold(Posture.STANCE, true, AHEAD)
-	assert_eq(PressRules.pair_accel(1.0, drive, 0.0, 1.0, 0.0, anchored, 0.0, DT), 0.0)
-	assert_gt(PressRules.pair_accel(1.0, drive, 0.0, 1.0, 0.0, _hold(Posture.UPRIGHT, true, AHEAD),
-			0.0, DT), 0.0, "upright, the stop alone gives")
-
-
 func test_the_passive_share_is_the_uncommitted_bumps() -> void:
 	var skater := Skater.new()
 	assert_almost_eq(PressRules.PASSIVE_DRIVE_SHARE, skater.hit_passive_transfer_mult, 1e-6)
 	skater.free()
-
-
-func test_the_stride_is_power_limited_past_its_knee() -> void:
-	var slow: float = PressRules.drive(_cfg(), 10.5, Posture.COMMIT, false, false, 1.0, AHEAD,
-			AHEAD, AHEAD, 2.0)
-	var fast: float = PressRules.drive(_cfg(), 10.5, Posture.COMMIT, false, false, 1.0, AHEAD,
-			AHEAD, AHEAD, 5.2)
-	assert_almost_eq(fast, slow * 0.5, 1e-6, "twice the knee, half the drive")
-	assert_almost_eq(PressRules.drive(_cfg(), 10.5, Posture.COMMIT, false, false, 1.0, AHEAD,
-			AHEAD, AHEAD, -5.2), slow, 1e-6, "pushing against the motion is not power-limited")
 
 
 func test_touching_is_the_slack_widened_by_a_reader_timing() -> void:

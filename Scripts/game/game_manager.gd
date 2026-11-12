@@ -310,7 +310,6 @@ var _shot_tracker: ShotOnGoalTracker = null
 var _xg_query := AIShotOdds.Query.new()
 var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
-var _board_pins: BoardPinTracker = null
 var _fights: FightTracker = null
 # Host: every bot's grudge (FightGrudges), kept across stoppages, cleared for
 # each new match and rematch.
@@ -750,7 +749,6 @@ func _physics_process(delta: float) -> void:
 	_apply_ghost_state(delta)
 	_shot_tracker.tick(delta)
 	_hit_tracker.tick(delta)
-	_board_pins.tick(not _state_machine.is_movement_locked())
 	_stick_ties.tick(not _state_machine.is_movement_locked())
 	_fights.tick(delta, _fights_allowed(), _state_machine.current_phase)
 	_fighters_scratch.clear()
@@ -929,26 +927,20 @@ func _whistle_goalie_freeze(covering_team_id: int) -> void:
 	_whistle_and_faceoff(GameRules.icing_faceoff_dot(covering_team_id, puck.global_position.x))
 
 
-# Host-only: a puck trapped on the boards under a pinned skater (FrozenPuckRules).
-# NHL whistles it and faces off at the nearest dot; elsewhere the puck squirts
-# free along the wall and the pins on it let go.
+# Host-only: a puck trapped on the boards under a skater held there
+# (FrozenPuckRules), loose at his feet or still on his stick. NHL whistles it and
+# faces off at the nearest dot; elsewhere the puck squirts free along the wall.
 func _check_frozen_puck(delta: float) -> void:
 	if _state_machine.current_phase != GamePhase.Phase.PLAYING:
 		_frozen_puck.clear()
 		return
 	var puck_pos: Vector3 = puck.global_position
-	var pinned: Skater = null
-	for s: Skater in _registry.skaters():
-		if s.pin_role == BoardPinRules.Role.NONE:
-			continue
-		var reach: float = FrozenPuckRules.REACH_M + s.collision_radius()
-		if Vector2(s.global_position.x - puck_pos.x, s.global_position.z - puck_pos.z).length() \
-				<= reach:
-			pinned = s
-	# A pinned carrier loses the puck as the pin starts, so a trapped puck is loose.
-	var trapped: bool = pinned != null and puck.carrier == null \
-			and puck.linear_velocity.length() < FrozenPuckRules.SPEED_MAX_M_S \
+	var held: Skater = _held_on_the_puck(puck_pos)
+	var trapped: bool = held != null and (puck.carrier == null or puck.carrier == held) \
 			and FrozenPuckRules.near_boards(puck_pos)
+	if trapped:
+		var moving: Vector3 = held.velocity if puck.carrier == held else puck.linear_velocity
+		trapped = moving.length() < FrozenPuckRules.SPEED_MAX_M_S
 	if not FrozenPuckRules.step(_frozen_puck, puck_pos, trapped, delta):
 		return
 	if _state_machine.rule_set == GameRules.RuleSet.NHL:
@@ -956,14 +948,30 @@ func _check_frozen_puck(delta: float) -> void:
 		NetworkManager.notify_puck_frozen_called_to_all()
 		_whistle_and_faceoff(GameRules.nearest_faceoff_dot(Vector2(puck_pos.x, puck_pos.z)))
 		return
-	puck.linear_velocity = FrozenPuckRules.squirt_velocity(puck_pos, pinned.global_position)
-	_board_pins.release(pinned)
+	if puck.carrier != null:
+		puck.drop()
+	puck.linear_velocity = FrozenPuckRules.squirt_velocity(puck_pos, held.global_position)
 
 
-# Host: the pin just locked a carrier against the boards — his puck goes loose.
-func _strip_pinned_carrier(victim: Skater, pinner: Skater) -> void:
-	if puck != null and puck.carrier == victim:
-		puck.apply_pin_strip(pinner)
+# The skater within reach of the puck whom an opponent holds on the boards, or
+# null.
+func _held_on_the_puck(puck_pos: Vector3) -> Skater:
+	var skaters: Array[Skater] = _registry.skaters()
+	for s: Skater in skaters:
+		if s.is_ghost or s.is_knocked_down:
+			continue
+		var reach: float = FrozenPuckRules.REACH_M + s.collision_radius()
+		if Vector2(s.global_position.x - puck_pos.x, s.global_position.z - puck_pos.z).length() \
+				> reach:
+			continue
+		var team: int = _registry.team_id_by_skater.get(s, -1)
+		for o: Skater in skaters:
+			if o == s or o.is_ghost or _registry.team_id_by_skater.get(o, -1) == team:
+				continue
+			if FrozenPuckRules.held_on_boards(s.global_position, s.collision_radius(),
+					o.global_position, o.collision_radius(), o.hit_committed):
+				return s
+	return null
 
 
 # Host: whether this match fights at all (FightRules.allowed).
@@ -1892,10 +1900,6 @@ func _wire_subsystems() -> void:
 		_stick_ties.clear()
 	_stick_ties = StickTieTracker.new()
 	_stick_ties.setup(_registry, func() -> Skater: return puck.carrier if puck != null else null)
-	if _board_pins != null:
-		_board_pins.clear()
-	_board_pins = BoardPinTracker.new()
-	_board_pins.setup(_registry, NetworkManager.local_time, _strip_pinned_carrier)
 	if _fights != null:
 		_fights.clear()
 	_grudges.clear()
@@ -4977,9 +4981,6 @@ func on_scene_exit() -> void:
 	if _stick_ties != null:
 		_stick_ties.clear()
 	_stick_ties = null
-	if _board_pins != null:
-		_board_pins.clear()
-	_board_pins = null
 	if _fights != null:
 		_fights.clear()
 	_fights = null
@@ -5584,6 +5585,7 @@ func _sample_historical_others(exclude_skater: Skater, host_ts: float) -> Array:
 		entry["position"] = state.position
 		entry["velocity"] = state.velocity
 		entry["hit"] = state.hit_committed
+		entry["drive"] = CheckDriveRules.is_driving(state.check_drive_phase)
 		entry["puck"] = SkaterStateMachine.state_has_puck(state.shot_state)
 		entry["ghost"] = state.is_ghost
 		entry["shot_state"] = state.shot_state

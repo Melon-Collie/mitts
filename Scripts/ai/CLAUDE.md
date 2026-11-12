@@ -22,10 +22,10 @@ passed per call, and only its own fields written.
 |---|---|
 | `SkaterAgentSteering` | body steering to an anchor: the field, brake-pivot, arrival brake, stance carve |
 | `SkaterAgentStickPlay` | the pressurer's stick on the puck's path and the lift, the tie and its pull, the stick-check button |
-| `SkaterAgentStandUp` | meeting a carrier about to skate into us with Ctrl held, so the contact is our check |
-| `SkaterAgentBoardPlay` | reaching for and holding a pin, the pinned slide, a carrier's answer to a square checker |
+| `SkaterAgentStandUp` | the timing of Ctrl: a check the dispatch is hunting held through the hunt and re-pressed as the contact comes once the drive has re-armed, and a carrier about to skate into us met with a press then, so the contact lands inside our drive (`CheckDriveRules`) |
+| `SkaterAgentBoardPlay` | holding a man on the wall with the body, pushing back out of a hold, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
-| `SkaterAgentPress` | the press on a screen we are leaned on, a screener digging in against a defender on him, and a carrier putting his body into a man who stands him up |
+| `SkaterAgentPress` | the press on a screen we are leaned on, a screener setting his edges (Ctrl and the brake) against an engaged defender on him, and a carrier putting his body into a man who stands him up |
 | `SkaterAgentReception` | reading an incoming feed: is it ours, the blade gate, the squared or wall-kill stance, and whether it is a shot reception |
 | `SkaterAgentOneTimer` | the ready finisher's settle anchor on the feed line, the slapper zone, the feed's remaining flight, the press square-up |
 | `SkaterAgentCarryCursor` | the carrier's blade target before a commit: the carry aim (facing, stickhandle, shield, cradles), or the hold of the release he is close to |
@@ -54,12 +54,11 @@ Adding a behaviour is four steps:
 | CARRY, any press state | `_post_puck_lost_state` | the puck is gone: CHASE_PUCK for the nearest teammate to a loose puck, else OFF_PUCK |
 
 After dispatch, `SkaterAgent.tick` runs five per-tick passes that may overwrite
-the dispatched input: the stick lift, the stand-up (`apply_stand_up`, ahead of
-the board play so a check it starts at the wall can become a pin), board play
+the dispatched input: the stick lift, the stand-up (`apply_stand_up`), board play
 (`apply_board_play`), the shot
 block (`SkaterAgentShotBlock`) and the press (`SkaterAgentPress`). The offside brake (`apply_offside_guard`)
 runs after all of them as the last write to the move, so no writer — the rolled
-carry inside dispatch, the pinned slide after it — can carry a bot over the line
+carry inside dispatch, the slide out of a hold after it — can carry a bot over the line
 (`test_agent_offside_guard.gd`). The one bot it stands down for is a hunter
 without the puck, who follows the man he is after wherever he goes.
 

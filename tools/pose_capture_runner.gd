@@ -250,7 +250,8 @@ const POSES: Array = [
 		[70, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(3.0, 0.0, -0.5)}],
 	]},
 	# The same reads from the game camera, where a pose has to work: from above,
-	# the stance has to read by WIDTH, the commit by being tall and narrow.
+	# the stance has to read by WIDTH and the chest folded over the stick, the
+	# commit by a narrow base under a chest kept up.
 	{"name": "rest_game", "puck": false, "game_cam": true, "steps": [[40, {}]]},
 	{"name": "stance_rest_game", "puck": false, "game_cam": true,
 			"steps": [[40, {"stance": true}]]},
@@ -298,16 +299,17 @@ const POSES: Array = [
 	{"name": "hit_commit_deep", "puck": false, "steps": [
 		[60, {"hit": true, "move": Vector2(0.84, -0.55), "aim": Vector3(1.6, 0.0, 2.4)}],
 	]},
-	# ── Board pin ───────────────────────────────────────────────────────────
-	# Both locked roles against the +x boards, facing them (the boards are not
-	# drawn here; the tiles are for the lean and the sit): the pinned skater
-	# pressed flat to the glass, the pinner a body off it, driving in.
-	# Shot side-on from the ice (the default camera would sit outside the boards).
-	{"name": "pin_pinned", "puck": false, "pin_role": BoardPinRules.Role.PINNED,
-		"cam": Vector3(-0.8, 0.6, 3.2), "steps": [[60, {"aim": Vector3(3.0, 0.0, 0.0)}]]},
-	{"name": "pin_pinner", "puck": false, "pin_role": BoardPinRules.Role.PINNER,
-		"cam": Vector3(-0.8, 0.6, 3.2),
-		"steps": [[60, {"stick": true, "aim": Vector3(3.0, 0.0, 0.0)}]]},
+	# Side on and skating: the knee bend under the load.
+	{"name": "hit_commit_side", "puck": false, "cam": Vector3(-3.4, 0.9, 0.3), "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
+	# The throw at the middle of its window (CheckDriveRules.DRIVE_S / 2): the dip
+	# and the trunk driven forward off the press.
+	{"name": "hit_throw_side", "puck": false, "cam": Vector3(-3.4, 0.9, 0.3), "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[14, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
 	# ── The press ───────────────────────────────────────────────────────────
 	# Two bodies pressed together (PressRules), framed from the side: the posed
 	# skater drives into the man ahead of him with Ctrl, and the man (the away
@@ -366,15 +368,27 @@ const POSES: Array = [
 	# the side and backward. These are the tiles that show where the fall
 	# pivots: a body lying a hip-height above the ice, or one sunk through it,
 	# is a proportion no display-less test catches.
-	{"name": "knockdown_mid_fall", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
-		"cam": Vector3(0.6, -0.2, 3.4), "cam_aim": Vector3(0.6, -0.5, 0.0),
+	{"name": "knockdown_mid_fall", "puck": false, "knockdown": Vector3(5.3, 0.0, 0.0),
+		"cam": Vector3(0.1, -0.2, 3.4), "cam_aim": Vector3(0.1, -0.5, 0.0),
 		"steps": [[30, {}]]},
-	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
-		"cam": Vector3(0.9, -0.45, 2.6), "cam_aim": Vector3(0.9, -0.95, 0.0),
-		"steps": [[100, {}]]},
-	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 6.0),
-		"cam": Vector3(2.6, -0.45, 0.9), "cam_aim": Vector3(0.0, -0.95, 0.9),
-		"steps": [[100, {}]]},
+	{"name": "knockdown_early_fall", "puck": false, "knockdown": Vector3(5.3, 0.0, 0.0),
+		"cam": Vector3(0.1, -0.2, 3.4), "cam_aim": Vector3(0.1, -0.5, 0.0),
+		"steps": [[18, {}]]},
+	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(5.3, 0.0, 0.0),
+		"cam": Vector3(0.15, -0.45, 2.6), "cam_aim": Vector3(0.15, -0.95, 0.0),
+		"steps": [[50, {}]]},
+	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 6.5),
+		"cam": Vector3(2.6, -0.45, 0.15), "cam_aim": Vector3(0.0, -0.95, 0.15),
+		"steps": [[50, {}]]},
+	# Past his balance and short of flat he stumbles: down onto the knee he was
+	# driven over, the other skate planted, the stick out on the ice. Hit from
+	# the side, seen from in front and from the side it came from.
+	{"name": "stumble_down", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+		"cam": Vector3(0.6, 0.0, -3.4), "cam_aim": Vector3(0.3, -0.5, 0.0),
+		"steps": [[30, {}]]},
+	{"name": "stumble_down_side", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+		"cam": Vector3(-3.4, 0.0, 0.4), "cam_aim": Vector3(0.0, -0.5, 0.0),
+		"steps": [[30, {}]]},
 	# A full check short of the knockdown line rocks him: the reel, the splayed
 	# catch, the stick jarred up. Hit from the side, seen from behind and from
 	# the side the hit came from.
@@ -746,8 +760,6 @@ func _run_pose() -> void:
 	_state.faceoff_prep = false
 	if pose.has("knockdown"):
 		_controller._on_body_check_received(pose["knockdown"] as Vector3)
-	if pose.has("pin_role"):
-		_place_for_pin(int(pose["pin_role"]))
 	if pose.has("celebrate"):
 		_controller.start_celebration(float(pose["celebrate"]))
 	_set_fight_role(FightRules.Role.FIGHTING if bool(pose.get("fight", false)) \
@@ -973,19 +985,6 @@ func _run_faceoff(spec: Dictionary) -> void:
 			_skater.blade_mark_position(false).y])
 	print("      dot %.3v blade %.3v" % [
 			dot, _skater.upper_body_to_global(_skater.get_blade_position())])
-
-
-# Against the +x boards as the role stands there: the pinned skater's edge at the
-# boards, the pinner one body and the lock's give further off.
-func _place_for_pin(role: int) -> void:
-	var r: float = _skater.collision_radius()
-	var gap: float = 0.05
-	if role == BoardPinRules.Role.PINNER:
-		gap += 2.0 * r + BoardPinRules.PIN_CONTACT_SLACK_M
-	_skater.global_position = Vector3(GameRules.INNER_HALF_WIDTH - r - gap,
-			GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
-	_skater.pin_role = role
-	_skater.pin_strength = 0.5
 
 
 # The partner's held input: `aim` and `move` as _fill_input reads them, relative

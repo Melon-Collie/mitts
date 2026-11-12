@@ -2718,7 +2718,7 @@ func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 
 # Meeting a carrier about to skate into us with the shoulder
 # (SkaterAgentStandUp), every physics tick after dispatch and before the board
-# play, which may turn that check at the wall into a pin.
+# play, which holds a man it has leaned on at the wall.
 func apply_stand_up(input: InputState, snapshot: WorldSnapshot) -> void:
 	_stand_up.apply(input, snapshot, _check_aggression)
 

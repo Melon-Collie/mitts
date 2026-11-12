@@ -76,7 +76,7 @@ func _report(label: String) -> void:
 
 func test_a_hit_gets_up_onto_his_knees_then_one_knee() -> void:
 	# Shoved toward +X: he lands on his right side, so the left leg is free.
-	_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+	_controller._on_body_check_received(Vector3(6.0, 0.0, 0.0))
 	_run_down_to(_tail_at(KnockdownFallRules.GETUP_KNEES_END))
 	_report("on his knees")
 	assert_almost_eq(_controller.knockdown_fall_tilt(), 0.0, 1e-4, "upright off the ice")
@@ -95,14 +95,14 @@ func test_a_hit_gets_up_onto_his_knees_then_one_knee() -> void:
 
 
 func test_the_leg_he_fell_onto_is_the_one_that_stays_down() -> void:
-	_controller._on_body_check_received(Vector3(-3.0, 0.0, 0.0))
+	_controller._on_body_check_received(Vector3(-6.0, 0.0, 0.0))
 	_run_down_to(_tail_at(KnockdownFallRules.GETUP_STEP_END))
 	assert_gt(_height(_leg(LegBone.KNEE_R)), 0.3, "fell to his left, the right leg steps up")
 	assert_lt(_height(_leg(LegBone.KNEE_L)), 0.15)
 
 
 func test_a_hit_gets_up_staggered_leaning_forward() -> void:
-	_controller._on_body_check_received(Vector3(0.0, 0.0, 3.0))
+	_controller._on_body_check_received(Vector3(0.0, 0.0, 6.5))
 	_run_down_to(DT * 1.5)
 	assert_eq(_controller.stagger_timer, 0.0, "the hit's own stagger ran out while he was down")
 	_run_down_to(0.0)
@@ -151,7 +151,7 @@ func test_spamming_the_dive_buys_one_per_window() -> void:
 
 # Where the blade is on one knee, the cursor held at `cursor` (offset from him).
 func _blade_on_one_knee(cursor: Vector3) -> Vector3:
-	_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+	_controller._on_body_check_received(Vector3(6.0, 0.0, 0.0))
 	var input := InputState.new()
 	input.mouse_world_pos = _skater.global_position + cursor
 	_run_down_to(_tail_at(KnockdownFallRules.GETUP_STEP_END), input)

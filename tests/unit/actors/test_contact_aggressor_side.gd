@@ -13,7 +13,8 @@ extends GutTest
 # into his own share of it (BodyBalanceRules.leaned_into).
 #
 # Real Skater scenes at equal mass, resolved by hand. The carrier skates +x,
-# the defender meets him from +x facing back down the ice at him.
+# the defender meets him from +x facing back down the ice at him, inside his
+# drive (CheckDriveRules) unless a test says otherwise.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -44,6 +45,8 @@ func before_each() -> void:
 	_carrier.current_shot_state = SkaterStateMachine.State.SKATING_WITH_PUCK
 	_defender.current_shot_state = SkaterStateMachine.State.SKATING_WITHOUT_PUCK
 	_defender.hit_committed = true
+	_defender.check_drive_phase = CheckDriveRules.Phase.DRIVE
+	_defender.press_thrust = GameRules.DEFAULT_SKATER_THRUST_M_S2
 	_defender.set_facing(Vector2(-1.0, 0.0))
 	_carrier.set_facing(Vector2(1.0, 0.0))
 	_checks.clear()
@@ -98,11 +101,33 @@ func _carrier_keeps_the_puck() -> bool:
 	return puck.carrier == _carrier
 
 
-# What the defender's own share reads as, leaning into it.
+# What the defender's own share reads as, leaning into it at the pace he met
+# the carrier with.
 func _defender_feels() -> float:
-	var dv: Vector3 = _largest(_defender)
-	return BodyBalanceRules.leaned_into(Vector2(dv.x, dv.z), _defender.get_facing(),
+	var kicked: Vector3 = _largest(_defender)
+	var dv := Vector2(kicked.x, kicked.z)
+	return BodyBalanceRules.leaned_into(dv, _defender.get_facing(),
+			BodyBalanceRules.approach_speed(
+					Vector2(_defender.velocity.x, _defender.velocity.z), dv),
 			BodyBalanceRules.Config.new()).length()
+
+
+# The timed check is the closing share whole and the legs' kick; a shoulder held
+# in past its drive is the held share of the first and none of the second.
+func test_a_shoulder_held_in_early_lands_less_than_the_timed_check() -> void:
+	var closing_share: float = SkaterCollisionRules.victim_kick(CLOSING_M_S,
+			_defender.weight, _carrier.weight, _defender.body_check_transfer)
+	var kick: float = CheckDriveRules.kick_dv(_defender.press_thrust, _defender.weight,
+			_carrier.weight)
+	_contact(1.0)
+	assert_almost_eq(_largest(_carrier).length(), closing_share + kick, 1e-4, "timed")
+	assert_almost_eq(_largest(_defender).length(), closing_share, 1e-4,
+			"none of the kick comes back on him")
+	before_each()
+	_defender.check_drive_phase = CheckDriveRules.Phase.SPENT
+	_contact(1.0)
+	assert_almost_eq(_largest(_carrier).length(), closing_share * CheckDriveRules.HELD_SHARE,
+			1e-4, "held")
 
 
 func test_stepping_into_a_slower_carrier_strips_him() -> void:

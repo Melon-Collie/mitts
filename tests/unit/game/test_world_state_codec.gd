@@ -521,53 +521,47 @@ func test_skater_stick_tied_round_trips_beside_every_flag() -> void:
 		assert_eq(dec.elevation_level, 3)
 
 
-func test_skater_pin_round_trips() -> void:
-	var s := SkaterNetworkState.new()
-	s.pin_role = BoardPinRules.Role.PINNED
-	s.pin_strength = 0.62
-	var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
-			WorldStateCodec._encode_skater_quantized(s))
-	assert_eq(dec.pin_role, BoardPinRules.Role.PINNED)
-	assert_almost_eq(dec.pin_strength, 0.62, 1.0 / 255.0)
-
-
-func test_skater_dive_rides_the_body_lock_byte_beside_the_pin() -> void:
-	for role: int in [BoardPinRules.Role.NONE, BoardPinRules.Role.PINNER, BoardPinRules.Role.PINNED]:
-		for diving: bool in [false, true]:
-			var s := SkaterNetworkState.new()
-			s.pin_role = role
-			s.diving = diving
-			var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
-					WorldStateCodec._encode_skater_quantized(s))
-			assert_eq(dec.pin_role, role)
-			assert_eq(dec.diving, diving)
-
-
-func test_skater_slapshot_pin_rides_the_body_lock_byte() -> void:
-	for pinned: bool in [false, true]:
+func test_the_body_state_bits_do_not_disturb_each_other() -> void:
+	for bits: int in 8:
 		var s := SkaterNetworkState.new()
-		s.pin_role = BoardPinRules.Role.PINNED
-		s.diving = true
-		s.slapshot_pinned = pinned
+		s.diving = bits & 1 != 0
+		s.slapshot_pinned = bits & 2 != 0
+		s.stumbling = bits & 4 != 0
+		s.fight_role = FightRules.Role.NONE if bits & 1 != 0 else FightRules.Role.FIGHTING
 		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 				WorldStateCodec._encode_skater_quantized(s))
-		assert_eq(dec.slapshot_pinned, pinned)
-		assert_eq(dec.pin_role, BoardPinRules.Role.PINNED, "the pin bit leaves the role alone")
-		assert_true(dec.diving, "the pin bit leaves the dive alone")
+		assert_eq(dec.diving, s.diving)
+		assert_eq(dec.slapshot_pinned, s.slapshot_pinned)
+		assert_eq(dec.stumbling, s.stumbling)
+		assert_eq(dec.fight_role, s.fight_role)
+
+
+func test_skater_check_drive_round_trips() -> void:
+	for phase: int in [CheckDriveRules.Phase.IDLE, CheckDriveRules.Phase.DRIVE,
+			CheckDriveRules.Phase.SPENT]:
+		var s := SkaterNetworkState.new()
+		s.check_drive_phase = phase
+		s.check_drive_elapsed = 0.2
+		s.stumbling = true
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_eq(dec.check_drive_phase, phase)
+		assert_almost_eq(dec.check_drive_elapsed, 0.2, 0.5 * Constants.TICK_DURATION + 1e-6)
+		assert_true(dec.stumbling, "the byte before it is untouched")
 
 
 func test_skater_fight_role_rides_the_body_lock_byte() -> void:
 	for role: int in [FightRules.Role.NONE, FightRules.Role.CHALLENGING,
 			FightRules.Role.FIGHTING]:
 		var s := SkaterNetworkState.new()
-		s.pin_role = BoardPinRules.Role.PINNER
+		s.stumbling = true
 		s.diving = true
 		s.slapshot_pinned = true
 		s.fight_role = role
 		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 				WorldStateCodec._encode_skater_quantized(s))
 		assert_eq(dec.fight_role, role)
-		assert_eq(dec.pin_role, BoardPinRules.Role.PINNER, "the fight bits leave the pin alone")
+		assert_true(dec.stumbling, "the fight bits leave the stumble alone")
 		assert_true(dec.diving and dec.slapshot_pinned, "and the dive and the slapshot pin")
 
 
@@ -577,7 +571,7 @@ func test_skater_fight_hands_ride_their_own_byte() -> void:
 		for side: int in [FightHoldRules.Side.TOP, FightHoldRules.Side.BOTTOM]:
 			var s := SkaterNetworkState.new()
 			s.fight_role = FightRules.Role.FIGHTING
-			s.pin_strength = 0.5
+			s.check_drive_phase = CheckDriveRules.Phase.DRIVE
 			s.fight_grip = grip
 			s.fight_punch_side = side
 			var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
@@ -585,7 +579,8 @@ func test_skater_fight_hands_ride_their_own_byte() -> void:
 			assert_eq(dec.fight_grip, grip)
 			assert_eq(dec.fight_punch_side, side)
 			assert_eq(dec.fight_role, FightRules.Role.FIGHTING)
-			assert_almost_eq(dec.pin_strength, 0.5, 1.0 / 255.0)
+			assert_eq(dec.check_drive_phase, CheckDriveRules.Phase.DRIVE,
+					"the byte before it is untouched")
 
 
 func test_skater_rattle_rides_the_fight_byte_beside_the_hands() -> void:

@@ -3,12 +3,12 @@ class_name AIBodyCheck
 # Pure decision: should an on-puck defensive bot COMMIT to a body check on the
 # carrier right now, and where's the body-intercept to drive at?
 #
-# There is no "throw a hit" action: a bot delivers one by driving its body into
-# the intercept while holding the Hit button (input.hit_held), and
-# Skater._resolve_player_collisions turns the closing velocity into the impulse
-# exactly as for a human. Holding Hit is what delivers the FULL transfer
-# predicted_impulse assumes; an uncommitted drive lands only the passive
-# fraction.
+# A bot drives its body at the intercept with Hit held, its stick off the ice
+# for the whole hunt, and re-presses as the contact comes once its drive has
+# re-armed (SkaterAgentStandUp, inside AIStandUpRead.THROW_S). predicted_impulse
+# is the shoulder's delivery at the full transfer and does not model the drive
+# (CheckDriveRules): a contact inside one lands the legs' kick on top, and one
+# between the first press's drive and its re-arm lands the held share.
 #
 # Committing abandons containment, so only roles with support behind them ask:
 # PRESSURE (in-zone pressurer and forecheck F1) and NZ_F1 once goal-side of
@@ -29,7 +29,7 @@ const MAX_LEAD_S: float = 0.6
 # rocks and strips him (BodyCheckRules' rocked band and the puck-strip threshold,
 # both at stagger_ref_impulse 1.35) with a little margin, and short of what
 # floors a square, upright man (BodyBalanceRules.balance_ref_dv): the knockdown
-# is the angle's and the moment's. At equal mass a committed drive kicks the
+# is the angle's and the moment's. At equal mass a committed shoulder kicks the
 # victim ~0.325 × closing, so a baseline bot commits from ~5 m/s closing.
 const COMMIT_IMPULSE_M_S: float = 1.6
 

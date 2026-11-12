@@ -379,7 +379,7 @@ const PUCK_OOB_GRACE_DURATION: float = 1.0
 # runs. The puck COLLIDES at that boundary, so a loose puck's own radius keeps
 # its center ≥6 cm inside — a center sustained even 1 cm past the lip means the
 # puck escaped into or through the wall (tunnelled at speed, squeezed through
-# by a board pin, or over the glass). Keep it this tight and unconditional: a
+# by a body on the boards, or over the glass). Keep it this tight and unconditional: a
 # puck trapped INSIDE the 0.3 m wall band at ice level is invisible behind the
 # boards and soft-locks play, so any tolerance that clears the band hides it.
 const PUCK_OOB_XZ_TOLERANCE: float = 0.01

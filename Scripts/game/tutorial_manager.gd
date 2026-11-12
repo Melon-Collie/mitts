@@ -615,13 +615,13 @@ func _step_def_for(step_id: int) -> TutorialStep:
 		STEP_BODY_CHECK:
 			return _step(
 				"Body Check",
-				"Build up speed, hold {hit} to commit, and drive straight through the opponent to knock them off the puck.",
-				"Committing with {hit} throws your weight into the hit — you land it far harder AND shrug off the collision. An uncommitted bump barely moves them.")
+				"Skate at the opponent and press {hit} just as you reach them: your legs drive through the hit and knock them off the puck.",
+				"Timing is the hit. Pressed as you arrive it lands hard even at a controlled pace; held early it lands soft, and a bump without {hit} barely moves them. Come in too fast and the hit rocks you as well.")
 		STEP_STICK_LIFT:
 			return _step(
 				"Stick Lift",
 				"Get beside the opponent with your blade under their stick and tap {stick_check} to lift it — the puck comes loose off their blade.",
-				"Let go of {stick_check} and your blade drops straight back onto the puck. Hold it too long and your stick stays up while the puck gets away. Held into a man on the boards, {stick_check} pins him there.")
+				"Let go of {stick_check} and your blade drops straight back onto the puck. Hold it too long and your stick stays up while the puck gets away.")
 		STEP_SHOT_BLOCK:
 			return _step(
 				"Shot Block",

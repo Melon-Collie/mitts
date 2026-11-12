@@ -299,7 +299,7 @@ func _steer(input: InputState) -> void:
 			input.brake = _tick >= 20
 		"hitup":
 			if _tick == TURN_AT:
-				_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+				_controller._on_body_check_received(Vector3(5.3, 0.0, 0.0))
 		"dive", "diveup":
 			input.stance_held = turning and _tick <= TURN_AT + DIVE_HOLD
 			input.block_held = input.stance_held

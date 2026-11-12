@@ -2,7 +2,10 @@
 
 Status: **all three phases built**; Phases B and C **retired** at v88 — the
 press (`docs/net-front-battles-plan.md`) is how a man is moved off his spot, and
-the cross-check's code is gone. Phase A (the pin on the stick button) stands.
+the cross-check's code is gone. Phase A (the pin on the stick button) was
+**retired** at v101: a man is held on the boards by the press
+(`docs/net-front-battles-plan.md` Phase 5), and the pin's code is gone. This
+document is the record of what was built.
 Amends
 `docs/defensive-play-plan.md` (the pin revision, v74) and adds a new verb. Three
 phases, each its own PR and playtest.

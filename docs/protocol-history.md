@@ -520,3 +520,23 @@ here whenever you bump, in the same format.
 #      An older peer reads none of this, so mixed builds must be refused.
 #      Replay FORMAT_VERSION unchanged: an older replay's codes decode as
 #      before and its header simply lacks the title.
+# v104: hitting and the boards, one bump for the branch's wire changes, none of
+#      which shipped on its own. The skater block stays 59 bytes with a new
+#      layout:
+#      - The board pin is gone: its pin_strength byte and the body-state byte's
+#        bits 0-1 (pin_role) leave the block. A man is held on the boards by the
+#        press's squeeze instead (BoardWallRules), which every machine lays from
+#        state already replicated.
+#      - A check-drive byte takes the pin strength's place: the timed check's
+#        phase and ticks into it (CheckDriveRules.pack), which a contact reads
+#        on both bodies (full transfer and the legs' kick inside the drive, the
+#        held share past it) and the local reconcile adopts. The hit button's
+#        meaning changed with it: a contact outside the drive lands at
+#        CheckDriveRules.HELD_SHARE of the transfer.
+#      - The body-state byte's bit 6 is `stumbling`: a down window that is a
+#        stumble, on a knee (BodyCheckRules.flat_overshoot), where it was always
+#        a knockdown flat on the ice, and the knockdown's own line moved up to
+#        flat_overshoot.
+#      A v103 peer would read the check drive as a pin strength and predict a
+#      different outcome for the same hit, so mixed builds must be refused.
+#      Replay FORMAT_VERSION 21 -> 22: the frames hold the block.

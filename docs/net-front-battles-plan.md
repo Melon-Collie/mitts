@@ -1,7 +1,9 @@
 # Net-front battles — the press, and retiring the cross-check
 
-Status: **all three phases built** (the press, the bots' press and dig-in, the
-press's poses and scrape, the cross-check retired), playtest pending. Amends the physicality
+Status: **all five phases built** (the press, the bots' press and dig-in, the
+press's poses and scrape, the cross-check retired, Phase 4's rework of who
+pushes and who holds, which supersedes Phase 1's controls and table, and
+Phase 5's hold on the boards, which retires the pin), playtest pending. Amends the physicality
 paragraph of `docs/gameplay-design.md` and Phase B of
 `docs/physicality-plan.md` (the cross-check). The stick half of the battle is
 `docs/defensive-play-plan.md`'s tie; the crease itself (jams, stuffs, wraps)
@@ -310,6 +312,176 @@ and its replay alike, counting him touching within the travel its timing
 allows (`PressRules.touching`, `LocalController.PRESS_READ_TIMING_S`). A
 carried man reaches 6 m/s, where a client a tick off with the bare slack lost
 him on most ticks (`test_press_reads_one_instant.gd`).
+
+## Phase 4 — in the battle or out of it (built)
+
+Supersedes Phase 1's controls, its table and its open-question decisions 1–4.
+
+Why: measured on the live rig the press was all or nothing. A man who did
+nothing was carried 7.5 m in two seconds at close to skating pace; a man
+holding Space + Shift could not be moved at all; a man who leaned back into
+the push, the natural answer, was carried 5.7 m; and Shift alone did nothing
+from behind. Nothing rewarded getting to the spot first.
+
+### Decided with the user
+
+- **Ctrl is the battle.** Both players hold it. Only an engaged body pushes
+  with his whole stride or holds his ground; a body not holding it is moved.
+- **Ctrl + skating into him pushes; Ctrl + Space holds.** Space without Ctrl is
+  the ordinary brake and holds little.
+- **Shift is nothing here.** Getting low is not an answer to being pushed.
+- **Position matters more.**
+- **A fresh Ctrl press on a man you are touching is a shove**, with a stagger.
+- **Engaging costs the stick**, as the commit always has: a screener holding
+  his spot cannot tip or receive until he lets go of Ctrl.
+
+### Rules (`PressRules`)
+
+- **The drive:** an engaged body's whole stride, an unengaged one's passive
+  share (0.3), nothing braking. It is scaled by how squarely he faces the man
+  (`SIDE_ON_SHARE`, 0.4 side-on or with his back to him, up to 1 chest-on), so
+  the man who is square behind the other has the push; and it fades to nothing
+  as the pair reaches a walking pace (`MAX_SPEED_M_S`, 1.5 m/s).
+- **The hold:** an engaged body braking has set his edges (`SET_ANCHOR`), from
+  any side. Set, they hold an equal man's drive; once the pair is sliding, or
+  while he is staggered, they have broken loose and hold `LOOSE_SHARE` (0.6) of
+  that, which an equal drive overcomes. So the man set first holds, a man
+  caught sliding is moved until he pushes back to stall it, and nothing has to
+  be remembered between ticks: it is static against sliding friction, read off
+  the pair's own speed. An unengaged brake holds `PASSIVE_BRAKE_SHARE`.
+- **The shove** is the timed check thrown into a man already leaned on
+  (`CheckDriveRules.kick_dv`, `docs/hit-outcomes-plan.md` Phase 5): it kicks
+  him back and staggers him, which breaks his set, on the drive's cooldown.
+- The posture the stance names is read as unengaged; across-the-blades grip is
+  gone from the press.
+
+### What it does (live rig, 201 lb each unless noted, `test_net_front_press.gd`)
+
+| the man | pushed chest-on from behind, 1 s | 2 s |
+|---|---|---|
+| not engaged, does nothing | 1.00 m | 2.36 m, at 1.4 m/s |
+| not engaged, braking | 0.77 | 1.81 |
+| not engaged, in the stance | 1.00 | 2.36 |
+| not engaged, pushed side-on | 0.57 | 1.61 |
+| engaged, pushing back with his back to him | 0.57 | 1.35 |
+| engaged, pushing back chest to chest | 0.00 | 0.00 |
+| engaged and set | 0.00 | 0.00 |
+| engaged and set, shoved first | 0.51 | 0.96, staggered 0.55 s |
+| 170 lb engaged and set, 235 lb pushing | 0.04 | 0.09 |
+| 235 lb engaged and set, 170 lb pushing | 0.00 | 0.00 |
+
+### Bots
+
+- **A screener digs in with Ctrl and the brake**, when an engaged opponent is
+  on him, and not while his stick is up for a tip, which Ctrl would take off
+  the ice (`SkaterAgentPress._dig_in`).
+- **A coverer prices the walking pace and the shove**
+  (`AIPressRead.displacement_m`, `PressRules.displacement`): with his drive in
+  hand the press opens with a shove, so the man is read staggered and his set
+  broken; with it spent, a set man is not worth pressing.
+
+### Pose
+
+`GaitPressLayer` draws the dig-in only on an engaged body braking, sat deeper
+than the commit's own crouch (`press_anchor_stance`).
+
+### Networking
+
+Nothing new on the wire: engagement is `hit_committed`, the brake and the
+intent are the intent byte, and the pair's speed is both bodies' own. The
+shove is the timed check's kick, already replicated. No protocol change beyond
+v100.
+
+### Tests
+
+- `test_press_rules.gd`: only an engaged body sets his edges, from any side;
+  loose edges hold less; the stance is an unengaged body; chest-on pushes
+  hardest; the drive fades out at a walk.
+- `test_press.gd` (live rig): the properties above, the stall chest to chest,
+  weight at the margin, a shove breaking a set man loose.
+- `tests/slow/controllers/test_press_table.gd`: the table, re-pinned.
+- `test_bot_press.gd`: the dig-in's controls and when it keeps the stick; a
+  set man pressed only with a shove to open it.
+
+## Phase 5 — the boards (built)
+
+Retires the pin on the stick button (`docs/physicality-plan.md` Phase A,
+`docs/defensive-play-plan.md`'s pin): its tracker, its locked pair, its slide
+caps, its pose and its two wire fields are gone (protocol v101).
+
+### Decided with the user
+
+- **The boards work the way the press does.** No button of their own: a man is
+  pinned by an engaged body with leverage on his open-ice side.
+- **He gets out by moving against the push.**
+- **A held carrier keeps the puck** until a stick or a shove takes it.
+
+### Rules (`BoardWallRules`)
+
+- **The squeeze.** A press acts along the line between the bodies, so on its
+  own a man pressed into the wall would skate off along it. Pressed into the
+  boards (his edge within `SQUEEZE_MARGIN_M` of them, the push within 45° of
+  the wall's normal), his speed along the wall is cut each tick by
+  `SQUEEZE_GRIP` × the acceleration the pair's drives press him in with, on
+  his own mass: the holder's drive less his own back into the holder. It is
+  friction: it takes speed toward rest and never reverses it.
+- **Why it is over 1** (1.1): he is gripped on two faces, the glass and the
+  man. At 1 an equal man square on him exactly cancels his stride, and any
+  slip off square lets him go; over about 1.2 an equal man pushing back on the
+  diagonal, the only one a keyboard has, could never unload it.
+- **What follows from the press's own rules.** Only an engaged holder drives
+  with his whole stride, so only Ctrl holds a man. The drive is scaled by how
+  squarely each faces the other, so the held man pushes back hardest turned
+  to face the holder. A shove staggers the holder, whose drive falls with the
+  stagger's thrust penalty, and the squeeze with it. A carrier's Ctrl is the
+  brace and throws no drive, so a held carrier cannot shove.
+- **The frozen puck** (`FrozenPuckRules.held_on_boards`,
+  `GameManager._check_frozen_puck`): a slow puck at the boards, loose or on
+  his stick, with a held skater on it for `FROZEN_S`.
+
+### What it does (live rig, 1 s, the holder engaged and square, `test_press.gd`)
+
+| the man on the boards | slid along the wall |
+|---|---|
+| equal, skating along it, not engaged | 0.02 m (4.1 m in open ice) |
+| equal, the holder not engaged | over 3 m |
+| equal, engaged, facing him, pushing back and along | 0.04 |
+| the same, opened with a shove | 0.56, and 0.31 off the wall |
+| 235 lb held by 170 lb, pushing back and along | 0.73 |
+| 170 lb held by 235 lb, pushing back and along | 0.00 |
+| 170 lb held by 235 lb, opened with a shove | 0.29 |
+
+### Bots (`SkaterAgentBoardPlay`)
+
+- **Hold:** leaned on a man at the wall who carries the puck or stands over
+  it, from his open-ice side, where it is worth it (support that beats theirs
+  to the puck, or our own end, never as the last man back): Ctrl and the
+  stick toward him, which follows him along the wall.
+- **Held:** Ctrl, back into the man and out along the wall in equal parts,
+  letting the button up for a tick whenever the drive has re-armed so the next
+  press is a shove.
+- **Carrying at the wall with an engaged checker coming square:** out of his
+  line along the boards if that beats him there, else the brace
+  (`AIPinThreatRead`).
+
+### Networking
+
+Nothing on the wire. The squeeze reads what the press reads (both bodies'
+mass, posture, intent, facing, stagger) and the rink's own geometry, in
+`SkaterController._apply_press`, so both bodies, every machine and the
+reconcile lay the same hold. The pin's `pin_role` and `pin_strength` leave the
+skater block (v101).
+
+### Tests
+
+- `test_board_wall_rules.gd`: the backstop, the squeeze (only into the wall,
+  only a net push, growing with it), the grip as friction, `held_on_boards`,
+  the frozen count.
+- `test_press.gd` (live rig): an engaged man holds an equal on the boards and
+  not in open ice; an unengaged one holds nobody; a shove gets him off the
+  wall; weight decides who is held.
+- `test_bot_board_play.gd`: the hold and when it is worth it, the push back,
+  the repeat shove, the carrier's answer.
 
 ## Docs that change when each phase lands
 

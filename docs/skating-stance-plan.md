@@ -14,8 +14,8 @@ plan as written:
   leg solve reaches on the ice — see skating-stroke-plan §19) and the chest folded
   over the knees on the trunk texture (`stance_chest_deg`), so the blade never
   moves. Width is what reads from the top-down game camera. The check commit
-  stands tall instead (`hit_commit_crouch_m` 0.03), so the two postures read
-  apart.
+  sits on bent knees too (`hit_commit_stance`) but keeps its base under its
+  hips and its chest up, which is what reads the two apart.
 - **The league top speed is 10.0 m/s and `top_speed_mult` is 1.0 at neutral**
   (`GameRules.DEFAULT_SKATER_MAX_SPEED_M_S`, `PlayerAttributes.top_speed_mult`),
   rather than `9.0 × speed_mult × sprint_ceiling_mult`. It keeps the attributes'

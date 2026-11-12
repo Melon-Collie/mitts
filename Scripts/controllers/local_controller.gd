@@ -320,7 +320,7 @@ func _step_tick(delta: float) -> void:
 			# host confirm re-pinned it to the ice zone — the host catches the feed and
 			# it arrives through the puck sync.
 			if in_range and not skater.deflect_intent and _sm.get_state() != State.SLAPPER_CHARGE_WITHOUT_PUCK \
-					and not skater.stick_tied and skater.pin_role == BoardPinRules.Role.NONE \
+					and not skater.stick_tied \
 					and not skater.is_knocked_down \
 					and not StickCheckRules.is_stick_busy(skater.stick_check_phase) \
 					and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
@@ -376,7 +376,6 @@ func _step_tick(delta: float) -> void:
 							blade_pos_for_claim, c_hand, c_blade,
 							PuckController.STICK_LIFT_RADIUS, PuckController.STICK_LIFT_UNDER_MARGIN)
 				elif not skater.blade_up and not skater.stick_tied \
-						and skater.pin_role == BoardPinRules.Role.NONE \
 						and not StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					in_poke_range = puck.global_position.distance_to(blade_pos_for_claim) <= PuckController.POKE_RADIUS \
 							and not PuckInteractionRules.net_between(blade_pos_for_claim, puck.global_position)
@@ -456,7 +455,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# A tie is the host's call alone (StickTieTracker), so it lands every
 	# broadcast rather than only on a reconcile.
 	skater.stick_tied = server_state.stick_tied
-	_adopt_pin(server_state)
+	_adopt_fight(server_state)
 	if _game_state.is_movement_locked():
 		# Dead-puck phase: don't reconcile. on_faceoff_positions is the reliable
 		# source of truth for teleport positions; world-state snapshots may lag behind
@@ -624,6 +623,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# The lift phase rides the same rail: the host's at the ack, stepped on by
 	# the replayed inputs.
 	_adopt_stick_check(server_state)
+	_adopt_check_drive(server_state)
 	# The balance and torso leans ride the same rail: the host's values at the
 	# ack, then the replay steps them forward through the unacked inputs.
 	balance_tilt_vel = server_state.balance_tilt_vel
@@ -637,7 +637,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# its impulse-seeded metadata (timer extension only grows the window total).
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = server_state.knockdown_timer
-	_set_down_flags(server_state.diving)
+	_set_down_flags(server_state.diving, server_state.stumbling)
 	_sync_knockdown_meta(prev_kd)
 	# Snap facing for replay accuracy — facing drives the direction of travel,
 	# so the replay must start from the server's facing to reproduce the trajectory.
@@ -874,7 +874,6 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> v
 		return
 	var others: Array = _historical_others_provider.call(skater, host_ts)
 	var my_radius: float = skater.collision_radius()
-	var pinned: bool = skater.pin_role != BoardPinRules.Role.NONE
 	for rec: Dictionary in others:
 		var other: Skater = rec["skater"]
 		if other == null or rec["ghost"]:
@@ -884,27 +883,27 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> v
 		var my_pos: Vector3 = skater.global_position
 		var d: Vector3 = opos - my_pos
 		d.y = 0.0
-		# The live resolver's flat contact for a locked pin pair (Skater).
-		var axis: Vector3 = Vector3.ZERO
-		if pinned and other.pin_role != BoardPinRules.Role.NONE:
-			axis = BoardPinRules.locked_contact_axis(my_pos, skater.pin_role, my_radius,
-					opos, other.pin_role, other_radius)
-		var dist: float = d.length() if axis == Vector3.ZERO else d.dot(axis)
+		var dist: float = d.length()
 		# Exactly the resolver's own no-overlap test, so a skip changes nothing.
 		if dist >= my_radius + other_radius:
 			continue
 		var ovel: Vector3 = rec["velocity"]
 		# The live resolver's transfer, from this tick's commit and possession and
 		# the other's replicated ones.
+		var local_has_puck: bool = SkaterStateMachine.state_has_puck(skater.current_shot_state)
+		var local_driving: bool = skater.is_check_driving()
 		var transfer: float = SkaterCollisionRules.contact_transfer(
-				skater.body_check_transfer, local_hit_committed,
-				SkaterStateMachine.state_has_puck(skater.current_shot_state),
-				skater.body_check_brace_resistance,
-				other.body_check_transfer, rec["hit"], rec["puck"],
+				skater.body_check_transfer, local_hit_committed, local_driving,
+				local_has_puck, skater.body_check_brace_resistance,
+				other.body_check_transfer, rec["hit"], rec["drive"], rec["puck"],
 				other.body_check_brace_resistance, skater.hit_passive_transfer_mult)
-		var n: Vector3 = axis
-		if axis == Vector3.ZERO:
-			n = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
+		var kick_on_other: float = SkaterCollisionRules.drive_kick(local_driving,
+				local_hit_committed, local_has_puck, skater.press_thrust, skater.weight,
+				other.weight, rec["hit"] and rec["puck"], other.body_check_brace_resistance)
+		var kick_on_local: float = SkaterCollisionRules.drive_kick(rec["drive"], rec["hit"],
+				rec["puck"], other.press_thrust, other.weight, skater.weight,
+				local_hit_committed and local_has_puck, skater.body_check_brace_resistance)
+		var n: Vector3 = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
 		# Aggressor gate from the local player's perspective — identical rule to the
 		# live resolver (sum of velocities along the axis, tie-broken by the stable id).
 		var agg: float = (skater.velocity + ovel).dot(n)
@@ -918,14 +917,15 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> v
 		if local_is_aggressor:
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					my_pos, skater.velocity, skater.weight, my_radius,
-					opos, ovel, other.weight, other_radius, transfer, axis)
+					opos, ovel, other.weight, other_radius, transfer,
+					kick_on_other, kick_on_local)
 			skater.velocity += _replay_collision_result.dvel_a
 			skater.global_position += _replay_collision_result.sep_a
 		else:
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					opos, ovel, other.weight, other_radius,
 					my_pos, skater.velocity, skater.weight, my_radius,
-					transfer, -axis)
+					transfer, kick_on_local, kick_on_other)
 			skater.velocity += _replay_collision_result.dvel_b
 			skater.global_position += _replay_collision_result.sep_b
 
@@ -957,7 +957,7 @@ func _find_press_partner(host_ts: float, out: PressPartner) -> bool:
 		var rec: Dictionary = others[i]
 		var other: Skater = rec["skater"]
 		if other == null or rec["ghost"] or other.is_knocked_down \
-				or other.pin_role != BoardPinRules.Role.NONE or other.press_cfg == null:
+				or other.press_cfg == null:
 			continue
 		var d: Vector3 = (rec["position"] as Vector3) - my_pos
 		d.y = 0.0

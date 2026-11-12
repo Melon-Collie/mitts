@@ -19,7 +19,7 @@ func test_past_the_escape_offset_his_hit_is_no_longer_square() -> void:
 	var along: float = AIPinThreatRead.escape_along_m()
 	var into_wall: float = sqrt(AIPinThreatRead.TOUCHING_M * AIPinThreatRead.TOUCHING_M
 			- along * along) / AIPinThreatRead.TOUCHING_M
-	assert_almost_eq(into_wall, BoardPinRules.BACKSTOP_MIN_INTO_WALL, 1e-5)
+	assert_almost_eq(into_wall, BoardWallRules.BACKSTOP_MIN_INTO_WALL, 1e-5)
 
 
 func test_escape_from_rest_is_the_offset_under_full_acceleration() -> void:

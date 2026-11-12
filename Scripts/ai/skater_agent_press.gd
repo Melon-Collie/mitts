@@ -6,8 +6,9 @@ extends RefCounted
 # - covering a man at our net who hides the release from our goalie, leaned on
 #   him: drive into him (Ctrl, the stick toward him) when the press moves him
 #   off the sightline;
-# - screening their goalie with an opponent on us: dig in (the brake in the
-#   stance), the stop's edges anchored by the stance's base;
+# - screening their goalie with an engaged opponent on us: dig in (Ctrl and the
+#   brake, the edges set), unless the stick is up for a tip, which Ctrl would
+#   take off the ice;
 # - carrying into a man who stands us up: put the body into it (Ctrl, which a
 #   carrier holds as the brace, the stick staying on the puck).
 # A held tie keeps its stick through the press: the commit takes the stick off
@@ -41,7 +42,7 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 	if snapshot == null or snapshot.puck_state == null:
 		return false
 	var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	if me == null or me.knockdown_timer > 0.0 or me.pin_role != BoardPinRules.Role.NONE \
+	if me == null or me.knockdown_timer > 0.0 \
 			or me.is_ghost or input.block_held:
 		return false
 	if snapshot.puck_state.carrier_peer_id == _peer_id:
@@ -60,7 +61,7 @@ func _press_the_screen(input: InputState, snapshot: WorldSnapshot, me: SkaterNet
 		return false
 	var man: SkaterNetworkState = snapshot.skater_states.get(man_pid)
 	var goalie: GoalieNetworkState = snapshot.goalie_states.get(_team_id)
-	if man == null or goalie == null or man.is_ghost or man.pin_role != BoardPinRules.Role.NONE \
+	if man == null or goalie == null or man.is_ghost \
 			or own_goal_dir * man.position.z < GameRules.BLUE_LINE_Z \
 			or AIPressRead.gap_m(me.position, man.position) > AIPressRead.STEP_IN_M:
 		return false
@@ -78,10 +79,11 @@ func _press_the_screen(input: InputState, snapshot: WorldSnapshot, me: SkaterNet
 	return true
 
 
-# Screening their goalie, slow, with an opponent on us: brake in the stance.
+# Screening their goalie, slow, with an engaged opponent on us: set the edges.
 func _dig_in(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
 		own_goal_dir: float) -> bool:
 	if own_goal_dir * me.position.z > -GameRules.BLUE_LINE_Z or input.hit_held \
+			or input.stick_lift_held \
 			or Vector2(me.velocity.x, me.velocity.z).length() > SkaterMovementRules.SHUFFLE_MAX_SPEED:
 		return false
 	var their_goalie: GoalieNetworkState = snapshot.goalie_states.get(1 - _team_id)
@@ -93,9 +95,11 @@ func _dig_in(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
 		if _team_id_by_peer.get(pid, -1) == _team_id:
 			continue
 		var opp: SkaterNetworkState = snapshot.skater_states[pid]
-		if not opp.is_ghost and AIPressRead.gap_m(me.position, opp.position) <= AIPressRead.STEP_IN_M:
+		if not opp.is_ghost and opp.hit_committed \
+				and AIPressRead.gap_m(me.position, opp.position) <= AIPressRead.STEP_IN_M:
+			input.hit_held = true
 			input.brake = true
-			input.stance_held = true
+			input.stance_held = false
 			return true
 	return false
 
@@ -115,7 +119,7 @@ func _drive_through(input: InputState, snapshot: WorldSnapshot, me: SkaterNetwor
 		if _team_id_by_peer.get(pid, -1) == _team_id:
 			continue
 		var opp: SkaterNetworkState = snapshot.skater_states[pid]
-		if opp.is_ghost or opp.pin_role != BoardPinRules.Role.NONE or opp.knockdown_timer > 0.0:
+		if opp.is_ghost or opp.knockdown_timer > 0.0:
 			continue
 		var gap: float = AIPressRead.gap_m(me.position, opp.position)
 		if gap <= best_gap:

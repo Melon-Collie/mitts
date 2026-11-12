@@ -268,8 +268,8 @@ stroke's path rather than rolling the solved legs off it.
 ### Overlays are layers, and the order is the priority
 
 Everything the gait lays on the stroke — the faceoff stance, the loaded skating
-stance (Shift), the shot loads and kick, the check commit and drive, the board
-pin, the fight stance, the press (a driver's lunge into the man, a dug-in man sat back into it),
+stance (Shift), the shot loads and kick, the check commit and drive, the fight
+stance, the press (a driver's lunge into the man, a dug-in man sat back into it),
 the stick lift, the celebration bounce, the stagger, the block and the
 knockdown — is a `GaitLayer`
 (`Scripts/controllers/gait/`). The coordinator runs them lowest priority first
@@ -290,7 +290,9 @@ and the ankles, and unplants its kneeling leg; the knockdown, last, owns the
 legs, the drop, the plants (the blade contact seat, `Scripts/actors/CLAUDE.md`),
 the mohawk yaw, the edges, the trunk and the wobble — and through the get-up
 it owns the kneel too, solving each thigh so a foot pivot never goes under
-the ice. **A layer never suppresses another with a
+the ice. A stumble is that kneel's last stage entered from standing
+(`SkaterController.knockdown_getup_left` reads a stumble's timer onto it), so
+it is drawn by the same layer with no branch of its own. **A layer never suppresses another with a
 `(1 − other.weight)` factor** — if one must win, it is an override above the
 other. `test_gait_layers.gd` holds the order and the knockdown's mask.
 
