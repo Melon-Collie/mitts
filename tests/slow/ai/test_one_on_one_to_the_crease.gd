@@ -24,7 +24,7 @@ const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SECS: float = 7.0
-const START_Z: float = 8.0
+const START_Z: float = GameRules.BLUE_LINE_Z + 0.71
 const CARRIER := 1
 const DEFENDER := 2
 # Bot rushes that reach the crease untouched today, each with its issue.
