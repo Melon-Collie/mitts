@@ -10,8 +10,8 @@ class_name TurnoverRules
 ##     with no receiver) → nothing: conceding the puck to space is neither a
 ##     giveaway by the shooter/dumper nor a takeaway by whoever collects it.
 ##     Checked FIRST so a rebound or a retrieved dump is never scored as a
-##     turnover. The dump/pass split is `is_dump_release` below — an intercepted
-##     PASS (a teammate was the target) still charges a giveaway.
+##     turnover. Which of the three a release was is `release_kind` below — an
+##     intercepted PASS (a teammate was the target) still charges a giveaway.
 ##   - Opponent recovers a puck the previous owner was STRIPPED of (a recent
 ##     poke / stick-lift / body-check) → takeaway. The credit goes to the
 ##     STRIPPER — the defender who made the play — not whoever recovers the loose
@@ -34,6 +34,9 @@ const GIVEAWAY := "giveaway"
 # that stays a giveaway); a dump/clear/rim is fired to open ice.
 const RECEIVER_CORRIDOR_M: float = 3.5
 const RECEIVER_MAX_DIST_M: float = 30.0
+
+# What a release from carry was.
+enum Release { NONE, SHOT, PASS, DUMP }
 
 
 # prev_team: team_id of the last owner (-1 if none). new_team: team_id gaining
@@ -75,3 +78,20 @@ static func is_dump_release(launch: Vector2, launch_dir: Vector2,
 		if perp <= RECEIVER_CORRIDOR_M:
 			return false  # a teammate is in the flight corridor — this is a pass
 	return true
+
+
+# What a release from carry was. `is_shot_attempt` is the shot tracker's read
+# (ShotOnGoalTracker.pending_is_shot_attempt): directed at the opposing net and
+# not thrown with the pass button. A charged wrister is a shot or a pass by where
+# it goes, since a pass is a paced wrister; the pass button is a pass wherever it
+# goes, so a feed through the mouth that a defender picks off is an interception.
+# The rest are is_dump_release's. NONE is a puck let go with no launch at all.
+static func release_kind(is_shot_attempt: bool, launch: Vector2, launch_dir: Vector2,
+		teammate_positions: Array[Vector2]) -> Release:
+	if launch_dir.length() < 0.001:
+		return Release.NONE
+	if is_shot_attempt:
+		return Release.SHOT
+	if is_dump_release(launch, launch_dir, teammate_positions):
+		return Release.DUMP
+	return Release.PASS
