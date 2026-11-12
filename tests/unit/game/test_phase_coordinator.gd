@@ -277,6 +277,73 @@ func test_client_skate_in_never_outlasts_the_hosts_hold() -> void:
 	assert_lte(c.durations[0], 0.5 - GameRules.FACEOFF_SET_BEAT + 0.0001)
 
 
+# ── A team short at the faceoff (FaceoffFormation) ───────────────────────────
+
+func _add_seated_player(peer_id: int, team_id: int, team_slot: int) -> PlayerRecord:
+	var record: PlayerRecord = _add_player(peer_id, team_id)
+	record.team_slot = team_slot
+	var c := StubController.new()
+	autofree(c)
+	record.controller = c
+	return record
+
+
+func _placed_position(peer_id: int) -> Vector3:
+	var positions: Array = get_signal_parameters(coord, "faceoff_positions_ready")[0]
+	for at: int in range(0, positions.size(), 4):
+		if int(positions[at]) == peer_id:
+			return Vector3(positions[at + 1], positions[at + 2], positions[at + 3])
+	return Vector3.INF
+
+
+func test_with_no_centre_a_winger_is_placed_on_the_dot_and_his_defenseman_on_the_wing() -> void:
+	sm.team_size = 5
+	_add_seated_player(11, 0, 1)  # LW
+	_add_seated_player(12, 0, 2)  # RW
+	_add_seated_player(13, 0, 3)  # LD
+	_add_seated_player(14, 0, 4)  # RD
+	sm.begin_faceoff_prep()
+	coord.handle_phase_entered()
+	var dot: Vector2 = GameRules.CENTER_ICE_DOT
+	var reach: float = 1.0  # StubController.faceoff_center_distance
+	assert_eq(_placed_position(11), PlayerRules.faceoff_position(0, 0, dot, reach, 5),
+			"the left wing takes the draw, at his own reach from the dot")
+	assert_eq(_placed_position(13), PlayerRules.faceoff_position(0, 1, dot, -1.0, 5),
+			"the left defenseman steps up to the wing")
+	assert_eq(_placed_position(12), PlayerRules.faceoff_position(0, 2, dot, -1.0, 5))
+	assert_eq(_placed_position(14), PlayerRules.faceoff_position(0, 4, dot, -1.0, 5))
+
+
+func test_a_full_team_is_placed_seat_for_seat() -> void:
+	sm.team_size = 5
+	for seat: int in PlayerRules.MAX_PER_TEAM:
+		_add_seated_player(10 + seat, 1, seat)
+	sm.begin_faceoff_prep()
+	coord.handle_phase_entered()
+	for seat: int in PlayerRules.MAX_PER_TEAM:
+		var reach: float = 1.0 if seat == 0 else -1.0
+		assert_eq(_placed_position(10 + seat),
+				PlayerRules.faceoff_position(1, seat, GameRules.CENTER_ICE_DOT, reach, 5),
+				"seat %d" % seat)
+
+
+func test_a_client_reads_the_draw_taker_off_who_the_host_placed() -> void:
+	var wing: PlayerRecord = _add_seated_player(11, 0, 1)
+	var defender: PlayerRecord = _add_seated_player(13, 0, 3)
+	var centre: PlayerRecord = _add_seated_player(20, 1, 0)
+	for record: PlayerRecord in [wing, defender, centre]:
+		record.skater = Skater.new()
+		autofree(record.skater)
+	sm.current_phase = GamePhase.Phase.PLAYING
+	coord.on_faceoff_positions([
+			11, 0.0, 1.0, 1.0,
+			13, -4.7, 1.0, 0.9,
+			20, 0.0, 1.0, -1.0], 0.0)
+	assert_true(wing.skater.is_faceoff_center, "his team placed no centre")
+	assert_false(defender.skater.is_faceoff_center)
+	assert_true(centre.skater.is_faceoff_center)
+
+
 # ── Period break → period-start bench intro ──────────────────────────────────
 
 func test_end_of_period_emits_period_break_and_stashes_next_period() -> void:

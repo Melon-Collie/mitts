@@ -1,7 +1,7 @@
 # Penalties — the NHL ruleset calls fouls
 
-Status: **design agreed in chat except the open questions at the end; nothing
-built.**
+Status: **Phase 1 built** (faceoff formations), playtest pending. Phases 2–6
+not started.
 Amends `docs/fighting-plan.md` ("No penalty. Both stay on."), the "Deliberately
 out" line of `docs/defensive-play-plan.md`, and the rule-set paragraph of
 `docs/gameplay-design.md`. Each phase is its own PR and playtest.
@@ -14,18 +14,18 @@ out" line of `docs/defensive-play-plan.md`, and the rule-set paragraph of
 | The penalized player | **He sits in the box**, and a human watches from a box camera. |
 | 5v5 | **A minor puts the team a man short** for its length. |
 | 3v3 | **A penalty shot, not a power play.** A 3-on-2 is close to an automatic goal. Manpower never changes for a foul. |
-| Fights | **Coincidental minors.** Both sit for a minor's length and the teams play 4-on-4. There is one length of penalty; nothing is called a major. |
+| Fights | **Coincidental minors in 5v5.** Both sit for a minor's length and the teams play 4-on-4. There is one length of penalty; nothing is called a major. **A fight in 3v3 is not penalized**, so 3v3 never uses the box. |
 | First calls | **Boarding and interference.** |
 | Not called | **Delay of game** (the puck cannot leave the rink) and **charging**. |
 | Stick fouls | **Deferred.** Tripping, hooking, slashing and high-sticking need a stick that can foul a body, which no verb does today. |
 | The referee | **Deterministic.** A foul is a rule a player can learn and read before he commits; nothing is missed and nothing is rolled. |
 | Length | **A minor is a tenth of a period**, the share two minutes is of twenty: 24 s at the default 4-minute period, floored at 15 s (`PENALTY_MINOR_MIN_S`) so a 1-minute period still has a penalty worth killing. |
 | The whistle | **The call is delayed** until the offending team has the puck, with no extra attacker (goalies are AI-only and never leave the net). |
-| A fight in 3v3 | **Both sit and the teams play 2-on-2.** It is even, so it is not the automatic goal a 3-on-2 is. |
 | Drawing a call | **Boarding reads the victim's facing 0.3 s before the contact**, so turning your back as the hit arrives draws nothing. |
 | Stacked minors | **The floor is three skaters** in 5v5: a third minor is queued until the first ends. |
 | First build | **Real calls from the start.** No silent phase that only reports what it would have called. |
-| Faceoffs a man short | **A formation for each headcount**, and **a winger takes the draw** when the centre is off the ice. |
+| Faceoffs a man short | **A winger takes the draw** when the centre is off the ice, and **both wing spots are always filled**: an empty one costs the draw's scramble, so that side's defenseman steps up into it. He is still a defenseman to the team brain. |
+| Which box | **The one on the team's own bench's side of centre.** Benches are assigned by team for the walk-out (`PlayerRules.bench_start_position`); the box follows the same assignment. |
 
 ## Why
 
@@ -125,7 +125,8 @@ foul judged ──▶ DELAYED ──offending team has the puck, or its goalie c
   penalty-box door, not to a faceoff spot, and is hidden on reaching it: the
   period break's skate-off to the bench door, pointed at a different door
   (`PlayerRules.bench_start_position` gets a `penalty_box_position` sibling off
-  `ArenaRinksideLayout.PENALTY_BOX_CENTER_Z`).
+  `ArenaRinksideLayout.PENALTY_BOX_CENTER_Z`). His team's box is the one on its
+  bench's side of centre, straight across the ice from the bench.
 - **In the box** he has no presence on the ice: no collision, no puck play, no
   place in a faceoff, the AI's snapshot, the offside count, time on ice, the
   camera's targets or the off-screen arrows. That is a new replicated
@@ -152,49 +153,48 @@ every other player camera. The HUD shows the foul and the time left, large.
 **The scorebug** shows each team's strength and the penalty clock under the
 short-handed team.
 
-## 4. Faceoff formations by headcount
+## 4. Faceoff formations by headcount (Phase 1, as built)
 
-Today a faceoff spot is a function of the seat: `PlayerRules.faceoff_position`
-reads `team_slot`, and the centre's seat is what takes the draw
-(`team_slot == 0` in `PhaseCoordinator._enter_faceoff_prep` and `_enter_faceoff`,
-the client's `on_faceoff_positions`, and `SlotSwapCoordinator`). A team whose
-centre is off the ice therefore puts nobody on the dot. That is already true of
-a team holding a reconnect reservation for its centre.
+A faceoff spot was a function of the seat, and the centre's seat was what took
+the draw, so a team whose centre was off the ice put nobody on the dot. That
+was already true of a team holding a reconnect reservation for its centre.
 
-A formation becomes a list of **jobs** for a headcount, and the men on the ice
-are **cast** into them (pure, `Scripts/domain/rules/faceoff_formation.gd`).
+The men a team has on the ice are now **cast** into the faceoff's spots
+(`FaceoffFormation.cast`, pure). A spot is named by the seat whose place it is,
+so a man cast into a spot stands where `PlayerRules.faceoff_position` puts that
+seat, end-zone alignments included. Nobody stands anywhere new.
 
-| Mode | Men | Jobs |
-|---|---|---|
-| 5v5 | 5 | the draw, two wings, two D: today's alignment, unchanged |
-| 5v5 | 4 | the draw, one wing, two D |
-| 5v5 | 3 | the draw, two D |
-| 3v3 | 3 | the draw, two wings: today's alignment, unchanged |
-| 3v3 | 2 | the draw, one wing (after a fight) |
+| Men | Spots filled |
+|---|---|
+| 5 | the dot, two wings, two D: seat for seat, unchanged |
+| 4 | the dot, two wings, one D |
+| 3 | the dot, two wings (3v3 at full strength is this, unchanged) |
+| 2 | the dot, one wing |
 
-- **The spots are the ones the table already has.** Four men drop a wing's spot
-  and three drop both; nobody stands anywhere new. On a defending end-zone draw
-  the four are the draw, the boards-hash D, the inside-hash wing and the
-  net-front D, and the spot dropped is the second wing's beside the hash.
-- **Casting**, the same on every machine:
-  1. **The draw** goes to the lowest seat on the ice. Seats run C, LW, RW, LD,
-     RD, so that is the centre, then a winger, and a defenseman only when no
-     forward is left.
-  2. **A D job** goes to the defenseman of that side; one left empty is filled
-     from the forwards not taking the draw, the higher seat first.
-  3. **The wing**, if there is one, is the man left. He takes his own side's
-     spot, or the inside hash on a defending end-zone draw.
-- **"The centre" becomes "the draw-taker"** at every seam above: the
-  reach-derived distance from the dot (`faceoff_center_distance`), the swipe
-  capture (`begin_draw_tracking`) and the faceoff stance
-  (`Skater.is_faceoff_center`). A client can no longer tell who it is from the
-  seat, so the reliable `on_faceoff_positions` payload names each team's.
-- **Full strength is unchanged.** The test holds five-of-five and three-of-three
-  to today's positions exactly, and every short cast to one man per job with
-  exactly one draw-taker.
+Casting, the same on every machine:
 
-This phase stands alone and ships first: it needs no penalty to exercise it,
-because a reservation already plays a team short.
+1. **The dot** goes to the lowest seat on the ice. Seats run C, LW, RW, LD, RD,
+   so that is the centre, then the left wing, then the right, and a defenseman
+   only with no forward left.
+2. **Each wing** keeps its own winger if he is on the ice and not taking the
+   draw. An open wing is filled by its own side's defenseman; only when he is
+   gone too does the other defenseman cross the ice for it.
+3. **A defenseman not cast up** keeps his own spot.
+
+- **"The centre" is the draw-taker** wherever the faceoff used to read the seat:
+  the reach-derived distance from the dot (`faceoff_center_distance`), the swipe
+  capture (`begin_draw_tracking`), the drop's stamp (`mark_draw_drop`) and the
+  crouch over the dot (`Skater.is_faceoff_center`).
+- **Nothing changed on the wire.** The `on_faceoff_positions` payload already
+  names every skater the host placed, and a client knows each one's seat, so it
+  runs the same cast to find the draw-taker. Phase 2 keeps a boxed skater out of
+  that payload, which keeps him out of the cast.
+- **Not touched:** a mid-match seat swap still teleports the swapped player to
+  his new seat's own spot (`SlotSwapCoordinator`).
+
+Tests: `test_faceoff_formation.gd` holds the cast over every combination of
+seats (one man per spot, the lowest seat on the dot, the wings filled first);
+`test_phase_coordinator.gd` holds the placement and the client's read.
 
 ## 5. 3v3: the penalty shot
 
@@ -216,10 +216,10 @@ because a reservation already plays a team short.
 
 ## 6. Fights
 
-Under `NHL`, when a fight ends each fighter is assessed a minor, and the two are
-coincidental: both sit, the teams play 4-on-4 (2-on-2 in 3v3, the one case
-where 3v3 uses the box), and a goal releases neither. The faceoff after the
-fight is where it is today. `ARCADE` fights stay unpenalized.
+Under `NHL` in 5v5, when a fight ends each fighter is assessed a minor, and the
+two are coincidental: both sit, the teams play 4-on-4, and a goal releases
+neither. The faceoff after the fight is where it is today. A fight in 3v3 is
+not penalized. `ARCADE` fights stay unpenalized.
 A challenge that lapses costs nothing, so there is no instigator.
 
 ## 7. Bots
@@ -244,10 +244,10 @@ The bots learn each rule in the phase that adds it.
 
 | # | What | Playtest |
 |---|---|---|
-| 1 | Faceoff formations by headcount, and the draw-taker | a faceoff with the centre's seat empty (a reservation) |
+| 1 | Faceoff formations by headcount, and the draw-taker (**built**) | a faceoff with a seat empty: a lobby started short, or a reservation |
 | 2 | `PenaltyRules`, the ledger, the delayed call, the box, short-handed play, the box camera, the scorebug, bots that avoid fouls and serve them (5v5) | a penalty start to finish |
 | 3 | The penalty shot (3v3), bots shooting | a foul in 3v3 |
-| 4 | Fights' coincidental minors | a fight under `NHL`, in both modes |
+| 4 | Fights' coincidental minors (5v5) | a fight under `NHL` |
 | 5 | Bots a man up and a man down | 5-on-4 against bots |
 | 6 | Stats (`PlayerStats` penalties, power-play and short-handed goals), career columns, Game Pucks | — |
 
@@ -259,8 +259,7 @@ and may land as two PRs, the box camera and scorebug second.
 - `Skater.in_box` in `SkaterNetworkState`.
 - The game-state block gains each team's active penalties (who, and the time
   left) and the pending delayed call's team.
-- Reliable RPCs: the call (foul, player), the penalty shot's shooter, and each
-  team's draw-taker on `on_faceoff_positions`.
+- Reliable RPCs: the call (foul, player), and the penalty shot's shooter.
 - `GamePhase.Phase.PENALTY_SHOT`.
 - `BuildInfo.PROTOCOL_VERSION` and `ReplayFileWriter.FORMAT_VERSION` bump, with a
   row in `docs/protocol-history.md`; the replay records the call as an event.
@@ -282,10 +281,9 @@ and may land as two PRs, the box camera and scorebug second.
 
 ## Open questions
 
-1. **Which box is whose.** Fixed by team, or by the end the team defends.
-2. **What a penalty shot is worth.** If the drill's scoring rate against the
+1. **What a penalty shot is worth.** If the drill's scoring rate against the
    match goalie is far above a 5v5 power play's, a foul costs much more in 3v3
    than in 5v5. Measure before Phase 3.
-3. **The two-man formation in 3v3.** Proposed above as the draw and one wing on
-   his own side's spot. The other reading is the second man behind the draw, as
-   a lone defender.
+2. **Which winger takes the draw.** Built as the left wing before the right
+   (the lowest seat). The other reading is the winger on a particular side of
+   the dot.

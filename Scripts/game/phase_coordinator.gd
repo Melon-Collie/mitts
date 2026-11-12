@@ -41,6 +41,9 @@ signal replay_stopped
 # (camera wide hold) get the break length so their treatment spans the window.
 signal period_break_started(duration: float)
 
+# A placed skater in the faceoff-positions payload: peer id, then x, y, z.
+const _POSITION_STRIDE: int = 4
+
 var _state_machine: GameStateMachine = null
 var _registry: PlayerRegistry = null
 var _teams: Array[Team] = []
@@ -243,24 +246,29 @@ func _enter_faceoff_prep(puck: Puck) -> void:
 	last_prep_was_period_intro = period_intro
 	var last_arrival: float = 0.0
 	var positions: Array = []
-	for peer_id: int in _registry.all():
+	var on_ice: Array[int] = []
+	on_ice.assign(_registry.all().keys())
+	var casts: Array[PackedInt32Array] = _faceoff_casts(on_ice)
+	for peer_id: int in on_ice:
 		var record: PlayerRecord = _registry.get_record(peer_id)
-		# Centers spawn at their own reach-derived distance from the dot — Size
-		# scales stick + arms, so a fixed offset puts the puck out of a small
-		# build's reach. Wingers ignore the argument.
+		var spot: int = _faceoff_spot(casts, record)
+		var takes_draw: bool = spot == FaceoffFormation.CENTER_SPOT
+		# The draw-taker stands at his own reach-derived distance from the dot —
+		# Size scales stick + arms, so a fixed offset puts the puck out of a
+		# small build's reach. The other spots ignore the argument.
 		var reach: float = -1.0
 		if record.skater != null:
-			record.skater.is_faceoff_center = record.team_slot == 0
-		if record.team_slot == 0 and record.controller != null:
+			record.skater.is_faceoff_center = takes_draw
+		if takes_draw and record.controller != null:
 			reach = record.controller.faceoff_center_distance()
-			# Arm the center's swipe capture for the draw (host-only). A swing
-			# during the countdown pre-rolls in; the crest feeds the contest.
+			# Arm his swipe capture for the draw (host-only). A swing during
+			# the countdown pre-rolls in; the crest feeds the contest.
 			if record.skater != null:
 				record.skater.begin_draw_tracking(
 						record.controller.faceoff_draw_peak_decay,
 						record.controller.faceoff_draw_window)
 		var pos: Vector3 = PlayerRules.faceoff_position(
-				record.team.team_id, record.team_slot, dot, reach,
+				record.team.team_id, spot, dot, reach,
 				_state_machine.team_size)
 		var facing: Vector2 = PlayerRules.faceoff_facing(record.team.team_id)
 		var start: Vector3 = _approach_start_for(record, pos, dot, from_bench, staged)
@@ -304,15 +312,15 @@ func _enter_faceoff(puck: Puck) -> void:
 	# A frame hitch can carry the prep past the throw; the puck still drops.
 	_throw_held_puck(puck, 0.0)
 	puck.pickup_locked = false
-	# The drop: stamp it on the centers so the draw's timing bonus is measured from
-	# here (see FaceoffDrawRules.timing_weight). The stamp is the shared host clock
-	# (== local_time on the host) so a remote center's crest, timed by its own
-	# host_timestamp, is judged against the drop in the same base — ping-neutral.
+	# The drop: stamp it on the draw-takers so the draw's timing bonus is measured
+	# from here (see FaceoffDrawRules.timing_weight). The stamp is the shared host
+	# clock (== local_time on the host) so a remote draw-taker's crest, timed by its
+	# own host_timestamp, is judged against the drop in the same base — ping-neutral.
 	# The puck is now live and contests resolve within a few hundred ms.
 	var drop_host_time: float = NetworkManager.estimated_host_time()
 	for peer_id: int in _registry.all():
 		var record: PlayerRecord = _registry.get_record(peer_id)
-		if record.team_slot == 0 and record.skater != null:
+		if record.skater != null and record.skater.is_faceoff_center:
 			record.skater.mark_draw_drop(drop_host_time)
 
 
@@ -547,18 +555,23 @@ func on_faceoff_positions(positions: Array, preroll: float) -> void:
 	var skate_in: bool = not from_bench and not staged
 	last_prep_preroll = preroll
 	last_prep_was_period_intro = period_intro
+	var placed_peers: Array[int] = []
+	for at: int in range(0, positions.size(), _POSITION_STRIDE):
+		placed_peers.append(int(positions[at]))
+	var casts: Array[PackedInt32Array] = _faceoff_casts(placed_peers)
 	var i: int = 0
 	while i < positions.size():
 		var peer_id: int = positions[i]
 		var pos := Vector3(positions[i + 1], positions[i + 2], positions[i + 3])
-		i += 4
+		i += _POSITION_STRIDE
 		# Draw-taker flag for EVERY skater, not just the local one — it drives the
-		# centre's crouch, which has to look the same on every screen. Derived
-		# from the slot rather than replicated: the wire payload names every peer
-		# and the client already knows each one's slot (see Skater.is_faceoff_center).
+		# draw-taker's crouch, which has to look the same on every screen. Derived
+		# rather than replicated: the wire payload names every peer the host
+		# placed, the client knows each one's seat, and the cast follows from both.
 		var placed: PlayerRecord = _registry.get_record(peer_id) if _registry.has(peer_id) else null
 		if placed != null and placed.skater != null:
-			placed.skater.is_faceoff_center = placed.team_slot == 0
+			placed.skater.is_faceoff_center = \
+					_faceoff_spot(casts, placed) == FaceoffFormation.CENTER_SPOT
 		if peer_id == local_peer_id and _registry.has(peer_id):
 			# Wire format stays position-only; clients derive facing locally
 			# from the record's current team_id. Slot-swap RPCs land before
@@ -588,6 +601,22 @@ func on_faceoff_positions(positions: Array, preroll: float) -> void:
 
 
 # ── Internal ──────────────────────────────────────────────────────────────────
+
+# Each team's FaceoffFormation.cast over the seats `peer_ids` hold, indexed by
+# team id.
+func _faceoff_casts(peer_ids: Array[int]) -> Array[PackedInt32Array]:
+	var on_ice: Array[int] = [0, 0]
+	for peer_id: int in peer_ids:
+		var record: PlayerRecord = _registry.get_record(peer_id) \
+				if _registry.has(peer_id) else null
+		if record != null and record.team != null:
+			on_ice[record.team.team_id] |= FaceoffFormation.seat_bit(record.team_slot)
+	return [FaceoffFormation.cast(on_ice[0]), FaceoffFormation.cast(on_ice[1])]
+
+
+func _faceoff_spot(casts: Array[PackedInt32Array], record: PlayerRecord) -> int:
+	return casts[record.team.team_id][record.team_slot]
+
 
 # True when the faceoff being placed is the opening/rematch intro — the only
 # one skaters skate out from their benches for.
