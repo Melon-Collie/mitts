@@ -13,6 +13,7 @@ const _STAGE_BOOT: String = "boot"
 const _STAGE_FREE_PLAY: String = "free_play"
 const _STAGE_TUTORIAL: String = "tutorial"
 const _STAGE_LOBBY: String = "lobby"
+const _STAGE_TOURNAMENT: String = "tournament"
 const _STAGE_MATCH: String = "match"
 
 const _SHOTS: Array[Dictionary] = [
@@ -33,6 +34,7 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "side_player_head", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.HEAD},
 	{"name": "side_player_stick", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.STICK},
 	{"name": "side_player_skates", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.SKATES},
+	{"name": "side_tournament_setup", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_tournament_new_pressed"},
 	{"name": "side_career", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_career_pressed"},
 	{"name": "side_trophy_case", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_trophy_case_pressed"},
 	{"name": "side_tutorials", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_tutorial_pressed"},
@@ -43,6 +45,12 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "post_game_analytics", "stage": _STAGE_FREE_PLAY, "open": "_open_post_game_analytics"},
 	{"name": "hud_tutorial", "stage": _STAGE_TUTORIAL, "open": "_open_nothing"},
 	{"name": "lobby", "stage": _STAGE_LOBBY, "open": "_open_nothing"},
+	# A tournament lobby opens on its bracket; these run in bracket order, each
+	# playing the tournament on from where the last left it.
+	{"name": "tournament_draw", "stage": _STAGE_TOURNAMENT, "open": "_open_nothing"},
+	{"name": "tournament_lobby", "stage": _STAGE_TOURNAMENT, "open": "_close_tournament_bracket"},
+	{"name": "tournament_after_a_win", "stage": _STAGE_TOURNAMENT, "open": "_open_tournament_bracket_after", "arg": 1},
+	{"name": "tournament_won", "stage": _STAGE_TOURNAMENT, "open": "_open_tournament_bracket_after", "arg": 2},
 	{"name": "hud_match", "stage": _STAGE_MATCH, "open": "_open_nothing"},
 ]
 
@@ -65,6 +73,8 @@ const _MATCH_START_TIMEOUT_FRAMES: int = 600
 # Deepest overlay stack a shot opens (player settings over the side menu), plus
 # slack.
 const _MAX_DISMISS_PRESSES: int = 6
+# The tournament stage's draw, fixed so its shots repeat.
+const _TOURNAMENT_SEED: int = 7
 
 var _out_dir: String = ""
 var _stage: String = ""
@@ -144,6 +154,14 @@ func _enter_stage(stage: String) -> void:
 			NetworkManager.start_tutorial(TutorialRegistry.MOVEMENT_ID)
 		_STAGE_LOBBY, _STAGE_MATCH:
 			NetworkManager.start_offline()
+			path = Constants.SCENE_LOBBY
+		_STAGE_TOURNAMENT:
+			NetworkManager.start_offline()
+			var draft := TournamentState.new()
+			draft.player_club = TeamColorRegistry.DEFAULT_HOME_SLOT
+			if not GameManager.tournament.begin_new(draft, _TOURNAMENT_SEED,
+					TeamColorRegistry.get_all_slots()):
+				_fail("could not draw the preview tournament")
 			path = Constants.SCENE_LOBBY
 	_stage = stage
 	tree.change_scene_to_file(path)
@@ -232,6 +250,10 @@ func _overlay_open() -> bool:
 					PostGameAnalytics) as PostGameAnalytics
 			return (side != null and side.visible) \
 					or (analytics != null and analytics.visible)
+		_STAGE_TOURNAMENT:
+			var bracket: BracketOverlay = _find(get_tree().current_scene,
+					BracketOverlay) as BracketOverlay
+			return bracket != null and bracket.visible
 	return false
 
 
@@ -313,6 +335,35 @@ func _open_video_performance() -> void:
 	hover.position = rating.get_global_rect().get_center()
 	get_viewport().push_input(hover)
 	await _settle(2, ProjectSettings.get_setting("gui/timers/tooltip_delay_sec", 0.5) + 0.3)
+
+
+func _close_tournament_bracket() -> void:
+	var bracket: BracketOverlay = _find(get_tree().current_scene, BracketOverlay) as BracketOverlay
+	if bracket == null:
+		_fail("the tournament lobby has no BracketOverlay")
+		return
+	bracket.close()
+
+
+# The bracket after the player's club has won `wins` more games.
+func _open_tournament_bracket_after(wins: int) -> void:
+	var coordinator: TournamentCoordinator = GameManager.tournament
+	for i: int in wins:
+		var state: TournamentState = coordinator.active
+		var at_home: bool = TournamentRules.home_club(state,
+				TournamentRules.player_game(state)) == state.player_club
+		coordinator.begin_match()
+		var recorded: bool = coordinator.record_result(3, 2, i == 0) if at_home \
+				else coordinator.record_result(2, 3, i == 0)
+		if not recorded:
+			_fail("the preview tournament had no game to win")
+			return
+	var mode: LobbyTournamentMode = _find(get_tree().current_scene,
+			LobbyTournamentMode) as LobbyTournamentMode
+	if mode == null:
+		_fail("the lobby is not in tournament mode")
+		return
+	mode.open_bracket(null)
 
 
 func _open_side_menu(handler: String) -> void:

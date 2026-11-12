@@ -39,6 +39,8 @@ func is_real_peer(peer_id: int) -> bool:
 # _ready and executes the corresponding orchestration work. Keeps the upward
 # call discipline — infrastructure never calls into application directly.
 signal host_ready
+# Emitted at the end of reset(): the session that was running is gone.
+signal session_reset
 # Host: the Steam lobby is up and the SteamMultiplayerPeer is assigned — the
 # menu waits on this before changing to the Lobby scene (Steam lobby creation
 # is async, unlike ENet's instant create_server). Failure path mirrors it.
@@ -1003,6 +1005,7 @@ func reset() -> void:
 	_delta_receiver.reset()
 	_peer_snapshot_acks.clear()
 	NetworkSimManager.clear_pending()
+	session_reset.emit()
 
 # ── Process ───────────────────────────────────────────────────────────────────
 func _notification(what: int) -> void:

@@ -1,7 +1,9 @@
 # Tournament — design plan
 
-Status: **approved; Phase 1 built** (the bracket's state and rules, with their
-tests). Nothing is visible in the game yet. Phases 2 to 4 are not started.
+Status: **approved; Phases 1 and 2 built.** A whole cup can be played alone
+with bot teammates; Phase 2 awaits a local playtest. Phases 3 and 4 are not
+started. Where what is built differs from the text below, *Phase 2 as built*
+says how.
 
 A tournament is an eight-club single-elimination bracket. The player picks a
 club, is drawn a seed, and wins three games to take the cup: quarterfinal,
@@ -73,10 +75,10 @@ version and shape.
   the bracket once the player is out.
 - `is_valid(state)` says whether the bracket is a possible one. A save or a
   peer's copy that fails it is discarded.
-
-The round's display name is not in the domain yet: a `round_name_key(round)`
-returning `TOURNAMENT_ROUND_QF` / `_SF` / `_FINAL` arrives in Phase 2 with the
-catalogue rows and the first screen that shows one.
+- `round_name_key(round)` returns `TOURNAMENT_ROUND_QF` / `_SF` / `_FINAL`;
+  the UI runs it through `tr()`. `last_player_game(state)` is the latest game
+  the player's club played, which is how a finished tournament says which round
+  it went out in.
 
 A simulated score is sized from the match length by
 `TournamentRules.SIM_GOALS_PER_MINUTE`, which is a guess. It only shapes scores
@@ -98,8 +100,9 @@ reads its final score.
   today. In a tournament the two color slots are the home and away clubs of the
   player's game, the match settings come from `TournamentState`, and
   `ot_enabled` is forced on. `GameManager.on_host_started` reads the two
-  difficulties from the tournament in place of the host's lobby preferences. `GameStateMachine` already plays further overtime
-  periods until someone scores, so a game cannot end level.
+  difficulties from the tournament in place of the host's lobby preferences.
+  `GameStateMachine` already plays further overtime periods until someone
+  scores, so a game cannot end level.
 - **Result.** On the host, at `GAME_OVER`, the score is recorded, the rest of
   that round is simulated, and the state is saved and sent to clients. If the
   player's club lost, every later round is simulated too, so the bracket shows a
@@ -115,8 +118,15 @@ reads its final score.
 **`Scripts/game/tournament_coordinator.gd`** (`TournamentCoordinator`,
 RefCounted, owned by `GameManager`) holds the live `TournamentState`, or null
 outside a tournament. `GameManager` is past the god-class limits, so it gets
-three call sites and no logic: read the config at Start, hand over the score in
-`_on_game_over`, drop the state when the session ends.
+three call sites and no logic: read the two difficulties in `on_host_started`,
+hand over the score in `_on_game_over`, and end the tournament's session when
+`NetworkManager.session_reset` fires. That signal is emitted at the end of every
+`NetworkManager.reset()`, so no way of leaving a session can forget to end the
+tournament with it.
+
+The lobby calls `begin_match()` as it starts a game, and `record_result` only
+takes a score for a game begun that way. One start records one result, however
+many times a game-over is reported.
 
 The save is a `[tournament]` section of the preferences file, written the way
 the trophy ledger is. That file already mirrors to Steam Cloud, so a bracket
@@ -163,7 +173,8 @@ closes on `ui_cancel`.
   smaller New Tournament beside it.
 - **Setup popup** (`TournamentSetupPopup`, new). Pick a club from the twelve
   crests; set Mode, Periods, Period Length, Rules, Fighting, Bot Difficulty and
-  Goalie. Overtime is not offered. Confirming draws the bracket, saves it and opens the lobby.
+  Goalie. Overtime is not offered. Confirming draws the bracket, saves it and
+  opens the lobby.
 - **Bracket panel** (`BracketPanel`, new). One control that draws the eight
   clubs, their seeds, the scores so far and the path still to play, with the
   player's club marked. Used by the lobby, the game-over screen and the Play
@@ -191,6 +202,36 @@ closes on `ui_cancel`.
 
 `tools/ui_preview_runner.gd` gets shots for the setup popup, the tournament
 lobby, the bracket mid-run and the bracket finished.
+
+## Phase 2 as built
+
+- **The Play popup** has a **Tournament** button. With a tournament in progress
+  it reads *Continue Tournament*, with the round and opponent on a line under it
+  ("Semifinal vs Plum") and a smaller New Tournament below. With a finished one
+  the line says how it ended.
+- **The bracket is shown in the lobby only**, as an overlay that opens by
+  itself each time a tournament lobby loads (the draw the first time, the round
+  just played after that) and again from the Bracket button. The game-over
+  screen carries the outcome line and Continue, which leads to that lobby. The
+  Play popup is too narrow for a bracket and shows the status line.
+- **The player's club is marked with a teal bar**, not teal lettering:
+  `MenuStyle.TEAL` is too close to the body text color to read as a mark. Club
+  names are lettered in the neutral text color and each club's color appears
+  only in its crest, so no team color is used as ink.
+- **The club's bot teammates stay with it.** The bots seated on the player's
+  side keep their seats from round to round, moved across when the club changes
+  sides (`LobbyTournamentMode.carry_bot_teammates`); the opponent's seats are
+  emptied and redrawn for each new club.
+- **The host cannot spectate** a tournament game: with no other human it would
+  be a game nobody played.
+- **Finish reloads the lobby scene** as an ordinary lobby. That is enough alone;
+  with clients (Phase 3) it has to take them along.
+- **The pause menu's Rematch** still restarts a tournament game in progress. It
+  is the same as abandoning it: nothing was recorded, and the fresh game's
+  result is.
+- **Only the lobby's seating path is restricted** so far (the first of the
+  three in section 4). The other two cannot occur while the visibility selector
+  is held at Offline.
 
 ## 6. Phases
 

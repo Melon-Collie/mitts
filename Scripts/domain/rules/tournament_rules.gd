@@ -20,6 +20,9 @@ const _QUARTERFINAL_SEEDS: Array[int] = [0, 7, 3, 4, 2, 5, 1, 6]
 const _QUARTERFINAL_COUNT: int = 4
 const _FIRST_GAME_OF_ROUND: Array[int] = [0, 4, 6]
 const _GAMES_IN_ROUND: Array[int] = [4, 2, 1]
+const _ROUND_NAME_KEYS: Array[String] = [
+	"TOURNAMENT_ROUND_QF", "TOURNAMENT_ROUND_SF", "TOURNAMENT_ROUND_FINAL",
+]
 
 # How much likelier the better seed is to win a simulated game, per seed of gap:
 # 54% for fourth against fifth, 78% for first against eighth.
@@ -53,6 +56,13 @@ static func round_of(game: int) -> int:
 	if game < _FIRST_GAME_OF_ROUND[1]:
 		return 0
 	return 1 if game < FINAL else 2
+
+
+# The translation key of a round's name; the caller runs it through tr().
+static func round_name_key(round_index: int) -> String:
+	if round_index < 0 or round_index >= ROUND_COUNT:
+		return ""
+	return _ROUND_NAME_KEYS[round_index]
 
 
 # A club's seed index (0 = first seed), or -1 for a club not in the field.
@@ -104,6 +114,14 @@ static func champion(state: TournamentState) -> int:
 static func player_game(state: TournamentState) -> int:
 	for game: int in range(TournamentState.GAME_COUNT):
 		if not state.is_played(game) and _has_player(state, game):
+			return game
+	return NO_GAME
+
+
+# The latest game the player's club has played, or -1 before its first.
+static func last_player_game(state: TournamentState) -> int:
+	for game: int in range(FINAL, -1, -1):
+		if state.is_played(game) and _has_player(state, game):
 			return game
 	return NO_GAME
 

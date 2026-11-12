@@ -115,6 +115,17 @@ func test_round_of_each_game() -> void:
 		assert_eq(TournamentRules.round_of(game), rounds[game])
 
 
+func test_every_round_has_a_name_of_its_own() -> void:
+	var keys: Dictionary = {}
+	for round_index: int in range(TournamentRules.ROUND_COUNT):
+		var key: String = TournamentRules.round_name_key(round_index)
+		assert_false(key.is_empty())
+		keys[key] = true
+	assert_eq(keys.size(), TournamentRules.ROUND_COUNT)
+	assert_eq(TournamentRules.round_name_key(-1), "")
+	assert_eq(TournamentRules.round_name_key(TournamentRules.ROUND_COUNT), "")
+
+
 # ── results ──────────────────────────────────────────────────────────────────
 
 func test_the_higher_score_wins_from_either_side() -> void:
@@ -172,6 +183,20 @@ func test_a_loss_ends_the_players_run() -> void:
 	assert_true(_win(state, 0, _FIELD[7]))
 	assert_eq(TournamentRules.player_game(state), TournamentRules.NO_GAME)
 	assert_eq(TournamentRules.status(state), TournamentRules.Status.ELIMINATED)
+
+
+func test_the_last_game_the_player_played() -> void:
+	var player: int = _FIELD[5]
+	var state: TournamentState = _state(player)
+	assert_eq(TournamentRules.last_player_game(state), TournamentRules.NO_GAME)
+	assert_true(_win(state, 0, _FIELD[0]))
+	assert_eq(TournamentRules.last_player_game(state), TournamentRules.NO_GAME,
+			"someone else's game")
+	assert_true(_win(state, 2, player))
+	assert_eq(TournamentRules.last_player_game(state), 2)
+	assert_true(_win(state, 3, _FIELD[1]))
+	assert_true(_win(state, 5, _FIELD[1]))
+	assert_eq(TournamentRules.last_player_game(state), 5, "the semifinal they lost")
 
 
 # ── simulated games ──────────────────────────────────────────────────────────

@@ -766,11 +766,20 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 		else:
 			star_lines.append(_star_stat_line(star.stats))
 		star_stripes.append(HudChrome.team_stripe(star.team.team_id))
+	# Before present: it decides which actions exist, and present focuses one.
+	_game_over_popup.set_tournament_outcome(_tournament_outcome_text())
 	_game_over_popup.present(_scorebug.home_score(), _scorebug.away_score(),
 			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
 			result_text, result_color,
 			star_names, star_lines, star_stripes, star_titles)
 	_refresh_goal_saving()
+
+
+# What the final score did to the tournament being played, or "" outside one.
+# The host has recorded the result by the time the screen presents.
+func _tournament_outcome_text() -> String:
+	var state: TournamentState = GameManager.tournament.active
+	return "" if state == null else TournamentCopy.outcome_line(state)
 
 # Compact stat line for a star row. Scorers show goals/assists (plus the GWG
 # tag — the clutch credit the selection weighted); a star who earned it on
@@ -831,6 +840,9 @@ func _on_vote_tally_changed(votes: Dictionary, total: int, local_vote: int) -> v
 	_game_over_popup.update_votes(votes, total, local_vote)
 
 func _on_vote_resolved(choice: int) -> void:
+	# A tournament game is played once: its only way on is the lobby.
+	if GameManager.tournament.is_active():
+		choice = RematchVoteRules.Choice.LOBBY
 	match choice:
 		RematchVoteRules.Choice.REMATCH:
 			GameManager.reset_game()

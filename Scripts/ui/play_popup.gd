@@ -11,11 +11,18 @@ extends Control
 signal start_pressed
 # Emitted with the Steam lobby id of the game the player chose to join.
 signal join_pressed(lobby_id: int)
+# The saved tournament's next game, and the setup for a new one.
+signal tournament_continue_pressed
+signal tournament_new_pressed
 
 var _list_box: VBoxContainer = null
 var _status_label: Label = null
 var _refresh_btn: Button = null
 var _steam_status_label: Label = null
+var _tournament_btn: Button = null
+var _tournament_new_btn: Button = null
+var _tournament_note: Label = null
+var _tournament_in_progress: bool = false
 
 const _STEAM_OK_COLOR: Color = Color(0.45, 0.85, 0.55, 1.0)
 const _STEAM_OFF_COLOR: Color = Color(0.85, 0.5, 0.45, 1.0)
@@ -77,6 +84,8 @@ func _build() -> void:
 		start_pressed.emit())
 	vbox.add_child(start_btn)
 
+	_build_tournament_rows(vbox)
+
 	# ── Public lobby browser ──────────────────────────────────────────────
 	var browse_row := HBoxContainer.new()
 	browse_row.custom_minimum_size = Vector2(308, 0)
@@ -110,6 +119,55 @@ func _build() -> void:
 	_status_label.add_theme_font_size_override("font_size", 16)
 	_status_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65, 1.0))
 	vbox.add_child(_status_label)
+
+
+# The Tournament button continues the saved tournament when one is in progress
+# and sets up a new one otherwise; the note under it says where the save stands.
+func _build_tournament_rows(vbox: VBoxContainer) -> void:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	vbox.add_child(box)
+
+	_tournament_btn = _menu_button(tr(&"TOURNAMENT_TITLE"))
+	_tournament_btn.pressed.connect(_on_tournament_pressed)
+	box.add_child(_tournament_btn)
+
+	_tournament_note = Label.new()
+	_tournament_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tournament_note.add_theme_font_size_override("font_size", 14)
+	_tournament_note.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
+	box.add_child(_tournament_note)
+
+	_tournament_new_btn = Button.new()
+	_tournament_new_btn.text = tr(&"TOURNAMENT_NEW")
+	_tournament_new_btn.add_theme_font_size_override("font_size", 14)
+	_tournament_new_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	MenuStyle.wire_hover_scale(_tournament_new_btn)
+	SoundManager.wire_button(_tournament_new_btn)
+	_tournament_new_btn.pressed.connect(func() -> void:
+		visible = false
+		tournament_new_pressed.emit())
+	box.add_child(_tournament_new_btn)
+
+
+func _refresh_tournament() -> void:
+	var saved: TournamentState = GameManager.tournament.saved()
+	_tournament_in_progress = saved != null \
+			and TournamentRules.status(saved) == TournamentRules.Status.IN_PROGRESS
+	_tournament_btn.text = tr(&"TOURNAMENT_CONTINUE") if _tournament_in_progress \
+			else tr(&"TOURNAMENT_TITLE")
+	_tournament_new_btn.visible = _tournament_in_progress
+	_tournament_note.visible = saved != null
+	if saved != null:
+		_tournament_note.text = TournamentCopy.status_line(saved)
+
+
+func _on_tournament_pressed() -> void:
+	visible = false
+	if _tournament_in_progress:
+		tournament_continue_pressed.emit()
+	else:
+		tournament_new_pressed.emit()
 
 
 func _refresh_steam_status() -> void:
@@ -194,6 +252,7 @@ func _on_overlay_clicked(event: InputEvent) -> void:
 func open() -> void:
 	visible = true
 	_refresh_steam_status()
+	_refresh_tournament()
 	if SteamManager.is_available:
 		_refresh_lobbies()
 	else:

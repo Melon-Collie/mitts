@@ -62,7 +62,11 @@ var _save_goal_btn: Button = null
 var _rematch_btn: Button = null
 var _lobby_btn: Button = null
 var _vote_label: Label = null
+var _tournament_label: Label = null
 var _present_tween: Tween = null
+var _is_spectator: bool = false
+# A tournament game has no rematch, and its way on is the bracket.
+var _in_tournament: bool = false
 
 
 func _ready() -> void:
@@ -114,6 +118,11 @@ func _build_top_block(root: Control) -> void:
 	_result_label = _lbl("", 52, _WHITE)
 	_result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_top_block.add_child(_result_label)
+
+	_tournament_label = _lbl("", 22, _DIM)
+	_tournament_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tournament_label.visible = false
+	_top_block.add_child(_tournament_label)
 
 
 # [stripe] HOME  3   —   2  AWAY [stripe] — the scorebug's stripe language at
@@ -356,9 +365,30 @@ func _append_star_reveal(rank: int) -> void:
 
 
 func set_spectator(is_spec: bool) -> void:
-	_rematch_btn.visible = not is_spec
-	_lobby_btn.visible = not is_spec
-	_vote_label.visible = not is_spec
+	_is_spectator = is_spec
+	_refresh_actions()
+
+
+# `outcome` is what the result did to the player's tournament ("Advance to the
+# Semifinal"); empty for a game that is not a tournament's.
+func set_tournament_outcome(outcome: String) -> void:
+	_in_tournament = not outcome.is_empty()
+	_tournament_label.text = outcome
+	_tournament_label.visible = _in_tournament
+	_lobby_btn.text = _lobby_button_text(RematchVoteRules.Choice.NONE)
+	_refresh_actions()
+
+
+func _refresh_actions() -> void:
+	_rematch_btn.visible = not _is_spectator and not _in_tournament
+	_lobby_btn.visible = not _is_spectator
+	_vote_label.visible = not _is_spectator
+
+
+func _lobby_button_text(local_vote: int) -> String:
+	if local_vote == RematchVoteRules.Choice.LOBBY:
+		return tr(&"GAME_OVER_UNVOTE")
+	return tr(&"GAME_OVER_CONTINUE") if _in_tournament else tr(&"GAME_OVER_RETURN_LOBBY")
 
 
 # Shown when the match has a goal to save and GIF export is built in; disabled
@@ -381,8 +411,7 @@ func hide_popup() -> void:
 func update_votes(votes: Dictionary[int, int], total_voters: int, local_vote: int) -> void:
 	_rematch_btn.text = tr(&"GAME_OVER_UNVOTE") \
 			if local_vote == RematchVoteRules.Choice.REMATCH else tr(&"GAME_OVER_REMATCH")
-	_lobby_btn.text = tr(&"GAME_OVER_UNVOTE") \
-			if local_vote == RematchVoteRules.Choice.LOBBY else tr(&"GAME_OVER_RETURN_LOBBY")
+	_lobby_btn.text = _lobby_button_text(local_vote)
 	var count: int = RematchVoteRules.count_voted(votes)
 	# One key per phrasing rather than a suffix appended to the tally: the
 	# clause does not attach at the end in every language.
