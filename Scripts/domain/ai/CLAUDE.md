@@ -538,6 +538,34 @@ F3_WALL takes the vacated point. So it fires however he got deep (pinch, chase,
 battle), and releases when he is back. The D slots race the lateral trip
 (`SlotSpec.lateral_race`) precisely so a pinching D keeps his job while it runs.
 
+### A man down, the shape is a wedge and one
+
+A team with fewer skaters on the ice than the other (`TeamBrain.man_down`,
+counted off the snapshot, so a held seat counts as a penalty does) cannot tile
+its zone, and the coverage stops trying to. `AIZoneCoverage` answers its three
+questions differently and nothing else changes: the roles, the election, the
+matching and the pressure behaviour are the 5v5 coverage's.
+
+- **Areas.** `ZONE_D_STRONG` and `ZONE_D_WEAK` are the base, each the low
+  house on its side; `ZONE_C` is the tip, the house above them; and
+  `ZONE_W_STRONG` is the one, whose area is everything the house is not. No
+  wedge man's area reaches outside the house, which is the whole of "the wedge
+  stays home".
+- **Anchors.** The base either side of the crease, the tip in the high slot
+  rising as the puck goes to the point.
+- **The puck's owner.** The wedge man whose third it is in, or the one for any
+  puck outside the house: the corners, behind the net, the walls, the points.
+
+One rule of the full coverage is deliberately switched off. There the puck
+owner's area is every defender's while he is on the puck, so a man in it is
+never in nobody's. A man down, with the one on the puck, his area is the
+perimeter the kill has given up, and handing it to the wedge would walk all
+three out of the house for men who cannot score from where they stand
+(`TeamBrain._one_owns`). With two in the box no body is elected the one, the
+perimeter has no owner, and the three hold the wedge alone.
+
+A man UP changes nothing: the offense is the ordinary one.
+
 ## Covering a man is one behavior, and the role only chooses WHO
 
 `AIDefensiveVerbs.cover_threat` is the whole of it: take the ice between him and

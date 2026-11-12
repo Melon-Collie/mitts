@@ -128,6 +128,9 @@ var _force_tick_pending: bool = false
 var _excluded_peers: Dictionary = {}
 # Whether this team is a man short for a penalty, off the newest snapshot.
 var _short_handed: bool = false
+# Whether we have fewer skaters on the ice than they do, off the snapshot the
+# slots were last elected on.
+var _man_down: bool = false
 var _team_id_by_peer: Dictionary = {}
 # Live per-peer AISkaterCaps from PlayerRegistry. Empty when unwired (tests) →
 # league default.
@@ -214,6 +217,7 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 			snapshot, team_id, _own_goal_z, _team_id_by_peer, _last_carrier_team)
 	_last_carrier_team = possession.carrier_team
 	state = possession.state
+	_man_down = _is_outnumbered(snapshot)
 
 	# The shared transition read, before the slot elections so everything
 	# downstream reads ONE answer instead of each bot deriving its own.
@@ -491,13 +495,16 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 		# rather than flickering between two defenders; the matcher's own switch
 		# margin covers the rest. The puck owner's area is everyone's while he is
 		# on the puck, or a man in it is in nobody's.
-		var in_pressure_area: bool = AIZoneCoverage.in_area(pressure_slot, _strong_x,
-				_own_goal_z, mp)
+		# A man down, the one's area is the perimeter the wedge has given up:
+		# while he is on the puck the men out there are nobody's, and no wedge
+		# man leaves the house for them.
+		var in_pressure_area: bool = not _one_owns(pressure_slot) and AIZoneCoverage.in_area(
+				pressure_slot, _strong_x, _own_goal_z, mp, 0.0, _man_down)
 		for def_pid: int in zone_slot_by_def:
 			var margin: float = AIZoneCoverage.AREA_RELEASE_MARGIN_M \
 					if prev.get(def_pid, -1) == pid else 0.0
 			if in_pressure_area or AIZoneCoverage.in_area(zone_slot_by_def[def_pid],
-					_strong_x, _own_goal_z, mp, margin):
+					_strong_x, _own_goal_z, mp, margin, _man_down):
 				if not eligible_men.has(def_pid):
 					eligible_men[def_pid] = {}
 				(eligible_men[def_pid] as Dictionary)[pid] = true
@@ -654,6 +661,28 @@ func covers_whistled() -> bool:
 	return GameRules.whistles_a_cover(rule_set)
 
 
+func man_down() -> bool:
+	return _man_down
+
+
+# Whether the puck's owner is the wedge-and-one's one.
+func _one_owns(pressure_slot: int) -> bool:
+	return _man_down and pressure_slot == AIRoleSlots.Slot.ZONE_W_STRONG
+
+
+func _is_outnumbered(snapshot: WorldSnapshot) -> bool:
+	if snapshot == null:
+		return false
+	var ours: int = 0
+	var theirs: int = 0
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) == team_id:
+			ours += 1
+		else:
+			theirs += 1
+	return ours < theirs
+
+
 func numbers_up() -> bool:
 	return their_rush_read.is_live \
 			and their_rush_read.numbers != AIRushRead.Numbers.EVEN_OR_UP
@@ -686,6 +715,7 @@ func build_view() -> void:
 	v.carrier_lane_val = _carrier_lane
 	v.team_size_val = team_size
 	v.icing_enforced_val = icing_enforced()
+	v.man_down_val = _man_down
 	v.covers_whistled_val = covers_whistled()
 	v.numbers_up_val = numbers_up()
 	v.ping_chase_peer_val = ping_directives.chase_peer()

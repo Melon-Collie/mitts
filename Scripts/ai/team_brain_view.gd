@@ -13,6 +13,7 @@ var strong_x_val: float = 1.0
 var carrier_lane_val: int = 0
 var team_size_val: int = GameRules.DEFAULT_TEAM_SIZE
 var icing_enforced_val: bool = false
+var man_down_val: bool = false
 var covers_whistled_val: bool = false
 var numbers_up_val: bool = false
 var ping_chase_peer_val: int = -1
@@ -79,6 +80,10 @@ func get_team_size() -> int:
 
 func icing_enforced() -> bool:
 	return icing_enforced_val
+
+
+func man_down() -> bool:
+	return man_down_val
 
 
 func covers_whistled() -> bool:

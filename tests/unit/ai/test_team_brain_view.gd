@@ -64,6 +64,28 @@ func test_a_short_handed_team_is_told_it_may_ice_the_puck() -> void:
 	assert_true(brain.get_view().icing_enforced(), "the team with the extra man still is")
 
 
+func _add_skater(snap: WorldSnapshot, peer_id: int) -> void:
+	snap.skater_states[peer_id] = SkaterNetworkState.new()
+
+
+func test_a_team_with_fewer_skaters_on_the_ice_is_a_man_down() -> void:
+	var brain := _make_brain()
+	var snap: WorldSnapshot = _make_snapshot(Vector3.ZERO)
+	_add_skater(snap, P1)
+	_add_skater(snap, OPP)
+	brain._compute_tick(snap)
+	brain.build_view()
+	assert_false(brain.get_view().man_down(), "one against one is even")
+	_add_skater(snap, 10012)   # a second opponent, unknown to the team map
+	brain._compute_tick(snap)
+	brain.build_view()
+	assert_true(brain.get_view().man_down())
+	_add_skater(snap, P2)
+	brain._compute_tick(snap)
+	brain.build_view()
+	assert_false(brain.get_view().man_down(), "two against two again")
+
+
 func test_view_mirrors_numbers_up() -> void:
 	var brain := _make_brain()
 	brain.their_rush_read.is_live = true

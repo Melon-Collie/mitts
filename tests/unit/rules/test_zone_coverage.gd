@@ -172,3 +172,97 @@ func test_defensive_anchor_geometry() -> void:
 	assert_almost_eq(ld.z, GameRules.BLUE_LINE_Z, 0.001)
 	var fwd: Vector3 = AIZoneCoverage.defensive_anchor(false, 0.0, NET_Z)
 	assert_lt(fwd.z, ld.z, "a forward's post is up-ice of the D's")
+
+
+# ── A man down: the wedge and one ────────────────────────────────────────────
+
+const BASE_STRONG: int = AIRoleSlots.Slot.ZONE_D_STRONG
+const BASE_WEAK: int = AIRoleSlots.Slot.ZONE_D_WEAK
+const TIP: int = AIRoleSlots.Slot.ZONE_C
+const THE_ONE: int = AIRoleSlots.Slot.ZONE_W_STRONG
+const WEDGE: Array[int] = [BASE_STRONG, BASE_WEAK, TIP]
+
+
+func _wedge_owner(x: float, depth: float) -> int:
+	return AIZoneCoverage.pressure_owner(1.0, NET_Z, _pt(x, depth), true)
+
+
+func _in_the_house(p: Vector3) -> bool:
+	var depth: float = AIZoneCoverage.depth_of(NET_Z, p)
+	return depth >= 0.0 and depth < AIZoneCoverage.SLOT_TOP_DEPTH_M \
+			and absf(p.x) <= AIZoneCoverage.SLOT_HALF_WIDTH_M
+
+
+func test_the_whole_perimeter_is_the_ones_to_pressure() -> void:
+	assert_eq(_wedge_owner(9.0, 3.0), THE_ONE, "the strong corner")
+	assert_eq(_wedge_owner(-9.0, 3.0), THE_ONE, "the weak corner")
+	assert_eq(_wedge_owner(0.0, -1.5), THE_ONE, "behind the net")
+	assert_eq(_wedge_owner(10.0, 9.0), THE_ONE, "the half wall")
+	assert_eq(_wedge_owner(6.0, 16.0), THE_ONE, "the strong point")
+	assert_eq(_wedge_owner(-6.0, 16.0), THE_ONE, "the weak point")
+
+
+func test_a_puck_in_the_house_is_the_wedge_man_whose_third_it_is_in() -> void:
+	assert_eq(_wedge_owner(1.5, 2.0), BASE_STRONG)
+	assert_eq(_wedge_owner(-1.5, 2.0), BASE_WEAK)
+	assert_eq(_wedge_owner(0.5, 7.0), TIP)
+
+
+func test_every_puck_has_one_owner_and_sits_in_his_area() -> void:
+	for xi: int in range(-12, 13):
+		for di: int in range(-3, 19):
+			var p: Vector3 = _pt(float(xi), float(di))
+			var owner_id: int = AIZoneCoverage.pressure_owner(1.0, NET_Z, p, true)
+			assert_true(AIZoneCoverage.in_area(owner_id, 1.0, NET_Z, p, 0.0, true),
+					"x=%d depth=%d is not in its owner's area" % [xi, di])
+
+
+func test_no_wedge_man_is_handed_a_man_outside_the_house() -> void:
+	for xi: int in range(-12, 13):
+		for di: int in range(-3, 19):
+			var p: Vector3 = _pt(float(xi), float(di))
+			if _in_the_house(p):
+				continue
+			for role: int in WEDGE:
+				assert_false(AIZoneCoverage.in_area(role, 1.0, NET_Z, p, 0.0, true),
+						"wedge role %d would leave the house for x=%d depth=%d"
+						% [role, xi, di])
+
+
+func test_the_wedge_stands_inside_the_house_wherever_the_puck_is() -> void:
+	for puck: Vector3 in [_pt(9.0, 3.0), _pt(0.0, -1.5), _pt(10.0, 9.0), _pt(6.0, 16.0),
+			_pt(-6.0, 16.0)]:
+		for role: int in WEDGE:
+			assert_true(_in_the_house(AIZoneCoverage.anchor_of(role, 1.0, NET_Z, puck, true)),
+					"wedge role %d with the puck at %v" % [role, puck])
+
+
+func test_the_wedge_is_a_triangle_with_its_base_across_the_crease() -> void:
+	var puck: Vector3 = _pt(6.0, 16.0)
+	var strong: Vector3 = AIZoneCoverage.anchor_of(BASE_STRONG, 1.0, NET_Z, puck, true)
+	var weak: Vector3 = AIZoneCoverage.anchor_of(BASE_WEAK, 1.0, NET_Z, puck, true)
+	var tip: Vector3 = AIZoneCoverage.anchor_of(TIP, 1.0, NET_Z, puck, true)
+	assert_almost_eq(strong.x, -weak.x, 0.001, "the base is centred on the net")
+	assert_gt(strong.x, 0.0, "its strong man is on the puck's side")
+	assert_almost_eq(strong.z, weak.z, 0.001, "and level")
+	assert_gt(AIZoneCoverage.depth_of(NET_Z, tip), AIZoneCoverage.depth_of(NET_Z, strong),
+			"the tip is above the base")
+	assert_lt(absf(tip.x), strong.x, "and between its men")
+
+
+func test_the_tip_rises_as_the_puck_goes_to_the_point() -> void:
+	var low: Vector3 = AIZoneCoverage.anchor_of(TIP, 1.0, NET_Z, _pt(9.0, -1.0), true)
+	var high: Vector3 = AIZoneCoverage.anchor_of(TIP, 1.0, NET_Z, _pt(6.0, 16.0), true)
+	assert_gt(AIZoneCoverage.depth_of(NET_Z, high), AIZoneCoverage.depth_of(NET_Z, low))
+
+
+func test_the_wedge_mirrors_with_the_strong_side() -> void:
+	var puck: Vector3 = _pt(-6.0, 16.0)
+	var strong: Vector3 = AIZoneCoverage.anchor_of(BASE_STRONG, -1.0, NET_Z, puck, true)
+	assert_lt(strong.x, 0.0, "the strong base man follows the puck across")
+	assert_eq(AIZoneCoverage.pressure_owner(-1.0, NET_Z, _pt(-1.5, 2.0), true), BASE_STRONG)
+
+
+func test_at_even_strength_the_coverage_is_unchanged() -> void:
+	assert_eq(AIZoneCoverage.pressure_owner(1.0, NET_Z, _pt(9.0, 3.0)),
+			AIRoleSlots.Slot.ZONE_D_STRONG, "the corner is still the battle D's")

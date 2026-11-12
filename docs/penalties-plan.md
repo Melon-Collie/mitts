@@ -1,8 +1,8 @@
 # Penalties — the NHL ruleset calls fouls
 
-Status: **Phases 1–4 built** (faceoff formations; the calls, the box and
-playing short in 5v5; the penalty shot in 3v3; a fight's minors), playtest
-pending. Phases 5–6 not started. Where what is built differs from the proposal, *Phase 2 as built*
+Status: **Phases 1–5 built** (faceoff formations; the calls, the box and
+playing short in 5v5; the penalty shot in 3v3; a fight's minors; the bots'
+penalty kill), playtest pending. Phase 6 not started. Where what is built differs from the proposal, *Phase 2 as built*
 and the penalty shot's own section say how.
 Amends `docs/fighting-plan.md` ("No penalty. Both stay on."), the "Deliberately
 out" line of `docs/defensive-play-plan.md`, and the rule-set paragraph of
@@ -296,13 +296,39 @@ The bots learn each rule in the phase that adds it.
 - **A boxed bot** idles until its time is up.
 - **A bot takes its own penalty shot.** Whether the carrier's search drives the
   net alone without stalling under `PenaltyShotRules` has to be measured first.
-- **A man up and a man down.** A short team already fills its D-zone posts by
-  importance and clears the puck (*Phase 2 as built*). What is left for its own
-  phase is the shape: a passive box at four and a triangle at three that
-  protects the house and pressures only a loose or bobbled puck, where today
-  the short team still plays man-on-man below the dots and sends its puck-side
-  defenseman to the battle. Design it from how a 5-on-4 plays with the bots as
-  they are now.
+- **A man down: the wedge and one** (Phase 5, as built; chosen over a box or
+  a diamond, 2026-11-12). Three men hold a triangle in the house, two at its
+  base either side of the crease and one at its tip in the high slot. Each
+  plays the puck, and picks a man up, only on his own third of the house, and
+  none of them leaves it. The fourth is the one: the whole perimeter is his to
+  pressure, corner to point. With two in the box there is no one, and the
+  three are the wedge alone.
+  - **Why this shape.** It is the 5v5 coverage's own rule, exactly one man on
+    the puck, with the other three told to stay home, so it reuses the roles,
+    the election, the man matching and the pressure behaviour whole
+    (`AIZoneCoverage`: only the areas, the anchors and who owns the puck
+    change). A box asks four men to be passive at once, which the coverage has
+    no way to say, and leaves the slot man in front of the net to nobody. And
+    it degrades without a second design: take the one away and what is left is
+    the three-man kill.
+  - **It is read off the ice, not the penalty.** A team plays it whenever it
+    has fewer skaters on the ice than the other (`TeamBrain.man_down`, counted
+    from the snapshot), so a team short for a held seat plays it too. Four on
+    four is even, and plays the ordinary coverage with a post missing.
+  - **Men outside the house are nobody's** while the one is on the puck. That
+    is the kill's trade, said in `TeamBrain`'s matching: a wedge man is never
+    handed a man on the perimeter.
+  - **Measured** in the duel harness, four killers against five attackers with
+    the puck carried round the strong side (point, half wall, corner): with a
+    forward in the box and with a defenseman in it, each wedge man was inside
+    the house on every D-zone tick, and the one averaged 1.7 m from the puck
+    against 7.5 m to 10.4 m for the wedge (*slow* `test_penalty_kill_shape.gd`).
+    The attackers are scripted and there is no goalie in it, so that is the
+    shape holding, not what the kill is worth.
+  - **A man up** keeps the ordinary offense (decided 2026-11-12): no power-play
+    shape.
+  - **Not built:** a short team's forecheck and neutral zone are the ordinary
+    ones, a man light.
 
 ## Phases
 
@@ -312,7 +338,7 @@ The bots learn each rule in the phase that adds it.
 | 2 | `PenaltyRules`, the ledger, the delayed call, the box, short-handed play, the box camera, the scorebug strip, bots that avoid fouls and serve them (5v5) (**built**) | a penalty start to finish |
 | 3 | The penalty shot (3v3), bots shooting (**built**) | a foul in 3v3 |
 | 4 | Fights' coincidental minors (5v5) (**built**) | a fight under `NHL` |
-| 5 | Bots a man up and a man down | 5-on-4 against bots |
+| 5 | The bots' penalty kill: the wedge and one (**built**). A man up keeps the ordinary offense | 5-on-4 against bots |
 | 6 | Stats (`PlayerStats` penalties, power-play and short-handed goals), career columns, Game Pucks | — |
 
 ## Phase 2 as built
@@ -336,8 +362,8 @@ The bots learn each rule in the phase that adds it.
   is empty now takes a body from any group at its own priority when the team
   has fewer bodies than posts (`AIRoleSlots5.assign`), so the order is the
   puck-side defenseman, the net front, the slot, the strong wall, and the
-  weak-side winger's ice is what goes uncovered. It is still the five-man
-  hybrid coverage with a post missing, not a box.
+  weak-side winger's ice is what goes uncovered. Phase 5 then gave the four
+  the wedge and one to play.
 - **The bots know a short-handed team may ice the puck**
   (`TeamBrain.icing_enforced`, off `WorldSnapshot.short_handed_team_id`), so a
   dump or a rim down the ice is no longer priced as a whistle against them.
