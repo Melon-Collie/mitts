@@ -10,8 +10,8 @@ class_name AIStandUpRead
 # How long before contact the shoulder goes in: the beat a defender squares to
 # a carrier he can't avoid, inside which the carrier can no longer turn away.
 const MEET_S: float = 0.15
-# How long before contact a bot hunting a check throws it: inside the drive's
-# window with margin for a closing speed that eases.
+# How long before contact a bot hunting a check re-presses to throw it: inside
+# the drive's window with margin for a closing speed that eases.
 const THROW_S: float = 0.2
 
 

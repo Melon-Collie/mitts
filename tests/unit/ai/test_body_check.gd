@@ -27,20 +27,12 @@ func _eval(carrier_pos: Vector3, carrier_vel: Vector3,
 			carrier_pos, carrier_vel, threshold, victim_weight)
 
 
-# What a timed check closing at `closing` delivers: the resolver's own kick and
-# the drive's.
-func _hit(closing: float, self_weight: float, victim_weight: float) -> float:
-	return SkaterCollisionRules.victim_kick(closing, self_weight, victim_weight, TRANSFER) \
-			+ CheckDriveRules.kick_dv(
-					GameRules.DEFAULT_SKATER_THRUST_M_S2, self_weight, victim_weight)
-
-
 # ── Real-hit gate ────────────────────────────────────────────────────────────
 
 func test_commits_on_reachable_solid_hit() -> void:
 	# Carrier 4 m away, head-on, stationary: the checker sprints in at ~9 m/s
-	# closing, well past the commit bar, so it commits and steers at the body
-	# intercept.
+	# closing → 9 × 0.65 × 0.5 ≈ 2.93 (well past the 1.6 commit bar), a solid
+	# strip-and-stagger check, so it commits and steers at the body intercept.
 	var r: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO)
 	assert_true(r.commit, "commits to a reachable solid check")
 	assert_almost_eq(r.target.x, 4.0, 0.3, "target is the body intercept")
@@ -50,23 +42,22 @@ func test_commits_on_reachable_solid_hit() -> void:
 
 func test_heavier_checker_commits_where_a_lighter_one_bounces() -> void:
 	# Same stationary carrier and geometry; only the CHECKER's mass differs. A
-	# heavy build delivers a bigger kick than a light one. At a bar between them
-	# the heavy build commits and the light build stays on its feet.
-	var bar: float = 0.5 * (_hit(SELF_SPEED, HEAVY_W, NEUTRAL_W) + _hit(SELF_SPEED, LIGHT_W, NEUTRAL_W))
-	var heavy: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, HEAVY_W, NEUTRAL_W, bar)
-	var light: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, LIGHT_W, NEUTRAL_W, bar)
+	# heavy build delivers a bigger reduced-mass kick (9 × 0.65 × 1.28/2.28 ≈ 3.28)
+	# than a light one (9 × 0.65 × 0.79/1.79 ≈ 2.58). At a bar between them the
+	# heavy build commits and the light build stays on its feet.
+	var heavy: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, HEAVY_W, NEUTRAL_W, 3.0)
+	var light: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, LIGHT_W, NEUTRAL_W, 3.0)
 	assert_true(heavy.commit, "a heavy checker commits to the hit")
 	assert_false(light.commit, "a light checker won't leave its feet for the same hit")
 
 
 func test_heavier_victim_absorbs_the_check() -> void:
 	# Same medium checker and geometry; only the CARRIER's mass differs. A heavier
-	# carrier moves less for the same hit than a light one. At a bar between them
-	# the checker commits on the light carrier but declines the heavy one it'd
-	# bounce off.
-	var bar: float = 0.5 * (_hit(SELF_SPEED, NEUTRAL_W, LIGHT_W) + _hit(SELF_SPEED, NEUTRAL_W, HEAVY_W))
-	var vs_light: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, NEUTRAL_W, LIGHT_W, bar)
-	var vs_heavy: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, NEUTRAL_W, HEAVY_W, bar)
+	# carrier moves less for the same hit (9 × 0.65 × 1/2.28 ≈ 2.57) than a light
+	# one (9 × 0.65 × 1/1.79 ≈ 3.27). At a bar between them the checker commits on
+	# the light carrier but declines the heavy one it'd bounce off.
+	var vs_light: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, NEUTRAL_W, LIGHT_W, 3.0)
+	var vs_heavy: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, NEUTRAL_W, HEAVY_W, 3.0)
 	assert_true(vs_light.commit, "commits on a lighter carrier")
 	assert_false(vs_heavy.commit, "declines a heavy carrier that absorbs the hit")
 
@@ -74,14 +65,13 @@ func test_heavier_victim_absorbs_the_check() -> void:
 # ── Closing-speed dependence ─────────────────────────────────────────────────
 
 func test_closing_carrier_raises_the_hit() -> void:
-	# A carrier skating INTO the check adds its speed to the closing line. At a
-	# bar above the hit on a stationary carrier but below the one on a carrier
-	# closing at 4 m/s, only the bigger collision is worth committing to.
-	var bar: float = 0.5 * (_hit(SELF_SPEED, NEUTRAL_W, NEUTRAL_W)
-			+ _hit(SELF_SPEED + 4.0, NEUTRAL_W, NEUTRAL_W))
-	var still: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, NEUTRAL_W, NEUTRAL_W, bar)
+	# A carrier skating INTO the check adds its speed to the closing line, so the
+	# same geometry that lands a ~2.93 hit on a stationary carrier lands ~4.23 on
+	# one closing at 4 m/s (13 × 0.65 × 0.5). At a bar above the stationary hit but
+	# below the closing one, only the bigger collision is worth committing to.
+	var still: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, NEUTRAL_W, NEUTRAL_W, 3.5)
 	assert_false(still.commit, "holds vs a stationary carrier under a raised bar")
-	var closing: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3(-4, 0, 0), NEUTRAL_W, NEUTRAL_W, bar)
+	var closing: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3(-4, 0, 0), NEUTRAL_W, NEUTRAL_W, 3.5)
 	assert_true(closing.commit, "commits when the carrier closes on it")
 
 
@@ -114,13 +104,12 @@ func test_no_commit_while_staggered() -> void:
 # ── Difficulty commit-threshold (check_aggression pace knob) ─────────────────
 
 func test_raised_commit_threshold_suppresses_a_marginal_hit() -> void:
-	# The same solid head-on hit that commits at the default bar is declined once
-	# an easier tier raises the required impulse above it — the bot only commits
-	# to harder hits, or (at the extreme) none.
+	# The same solid head-on hit that commits at the default bar (impulse ≈ 2.93)
+	# is declined once an easier tier raises the required impulse above it — the
+	# bot only commits to harder hits, or (at the extreme) none.
 	var default_commit: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO)
 	assert_true(default_commit.commit, "commits at the default threshold")
-	var raised: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, NEUTRAL_W, NEUTRAL_W,
-			_hit(SELF_SPEED, NEUTRAL_W, NEUTRAL_W) + 0.5)
+	var raised: AIBodyCheck.Result = _eval(Vector3(4, 0, 0), Vector3.ZERO, NEUTRAL_W, NEUTRAL_W, 3.5)
 	assert_false(raised.commit, "declines the same hit once the threshold is raised")
 
 

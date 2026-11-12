@@ -23,7 +23,10 @@ const KNOWN_STEP_LOSSES: Array[String] = []
 # 2-on-1 starts that end in the lone D's puck today, each with its issue.
 #   z -8, D at x 1.5 — no shot worth taking (0.044 from ~9 m), so the carrier
 #   takes the half-open pass into the D's stick on the lane and loses it: #928.
-const KNOWN_TWO_ON_ONE_LOSSES: Array[String] = ["2-on-1 from z -8, D at x 1.5"]
+#   z -8, D at x 0.0 — the same: no shot (0.034), the carry read at ~0.04, and
+#   a pass priced at 38% kept with the D's stick 0.35 m off its lane: #928.
+const KNOWN_TWO_ON_ONE_LOSSES: Array[String] = ["2-on-1 from z -8, D at x 1.5",
+		"2-on-1 from z -8, D at x 0.0"]
 
 var _goalie: Node
 var _puck: Node

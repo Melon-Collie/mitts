@@ -5,8 +5,9 @@ extends RefCounted
 # view and each shadow map that holds it: the skin (SkaterConnectedMesh) with
 # the rigid parts (SkaterRigidParts) appended. The skin's binds come first;
 # after them the rigid parts bind to their own bones at identity, upper then
-# legs, so a rigid vertex is its bone's pose alone, as on its own mesh; last,
-# the skate upper's feet, which read it from the SKATE bone's frame.
+# legs, so a rigid vertex is its bone's pose alone, as on its own mesh; then
+# the skate upper's feet, which read it from the SKATE bone's frame; last, the
+# neck's foot.
 
 static var _cache: Dictionary = {}
 static var _skin: Skin = null
@@ -41,6 +42,9 @@ static func shared_skin() -> Skin:
 		var foot_from_skate: Transform3D = SkateUpperMesh.SKATE_FROM_FOOT.affine_inverse()
 		for foot: int in [SkaterMeshBuilder.LegBone.FOOT_L, SkaterMeshBuilder.LegBone.FOOT_R]:
 			_skin.add_bind(SkaterBodySkeleton.LEG_BONE_OFFSET + foot, foot_from_skate)
+		# SkaterRigidParts.NECK_FOOT_BIND.
+		_skin.add_bind(SkaterBodySkeleton.deform_bone(SkaterConnectedMesh.Deform.NECK_FOOT),
+				Transform3D.IDENTITY)
 	return _skin
 
 

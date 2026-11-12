@@ -390,5 +390,4 @@ static func evaluate_body_check(ctx: RoleContext) -> AIBodyCheck.Result:
 	return AIBodyCheck.evaluate(
 			ctx.self_pos, ctx.self_max_speed, ctx.self_weight,
 			ctx.self_body_check_transfer, ctx.self_stagger_timer,
-			carrier.position, carrier.velocity, commit_threshold, victim_weight,
-			ctx.self_max_accel)
+			carrier.position, carrier.velocity, commit_threshold, victim_weight)

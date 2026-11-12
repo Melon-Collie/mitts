@@ -52,6 +52,26 @@ func test_the_whip_snaps_out_as_fast_in_a_long_finish() -> void:
 			"the two rise together")
 
 
+# The stick's own envelope: gone at once (the pose bridge is what eases its
+# start), there by the end of the attack, and back down by the finish's end.
+func test_the_whip_leaves_at_speed_and_eases_into_the_hold() -> void:
+	var span: float = _controller.wrister_follow_through_time_max
+	var attack: float = _controller.whip_attack_time
+	var whip := func(elapsed_s: float) -> float:
+		return SkaterShotPoseCoordinator.whip_envelope(elapsed_s / span, span, attack,
+				_controller.wrister_whip_release_frac)
+	var first: float = whip.call(attack * 0.25)
+	var last: float = 1.0 - whip.call(attack * 0.75)
+	assert_gt(first, last * 3.0, "its first quarter covers far more than its last")
+	assert_almost_eq(whip.call(attack), 1.0, 0.001, "fully out by the end of the attack")
+	assert_almost_eq(whip.call(span), 0.0, 0.001, "and back down by the finish's end")
+	var prev: float = 0.0
+	for i: int in range(1, 21):
+		var now: float = whip.call(attack * i / 20.0)
+		assert_gte(now, prev, "it never comes back during the attack")
+		prev = now
+
+
 func test_a_longer_finish_holds_longer() -> void:
 	var soft: float = _controller.wrister_follow_through_time_min
 	var hard: float = _controller.wrister_follow_through_time_max

@@ -70,7 +70,7 @@ var _native: RefCounted = null
 # layer; a blocker who gets run over goes down, so the knockdown is last.
 var _faceoff := GaitFaceoffLayer.new()
 var _stance := GaitStanceLayer.new()
-var _carry := GaitCarryLayer.new()
+var _ready := GaitReadyLayer.new()
 var _shot := GaitShotLayer.new()
 var _check := GaitCheckLayer.new()
 var _press := GaitPressLayer.new()
@@ -79,7 +79,7 @@ var _celebration := GaitCelebrationLayer.new()
 var _stagger := GaitStaggerLayer.new()
 var _block := GaitBlockLayer.new()
 var _knockdown := GaitKnockdownLayer.new()
-var _layers: Array[GaitLayer] = [_faceoff, _stance, _carry, _shot, _check, _press, _lift,
+var _layers: Array[GaitLayer] = [_faceoff, _stance, _ready, _shot, _check, _press, _lift,
 		_celebration, _stagger, _block, _knockdown]
 # Per-stage subsets of _layers in the same order, each beside its layers' bits
 # in the pass's active mask (built in setup).
@@ -317,6 +317,7 @@ func reset_to_rest() -> void:
 		_skater.set_skating_crouch_drop(0.0)
 		_skater.set_trunk_texture(0.0, 0.0)
 		_skater.set_edge_loads(0.0, 0.0)
+		_skater.set_finish_roll(0.0)
 
 
 # Arms the check-delivery drive (GaitCheckLayer.start_drive).
@@ -457,6 +458,7 @@ func apply(delta: float) -> void:
 				_override_layers[i].override(p)
 
 	_skater.set_faceoff_address(_faceoff.address)
+	_skater.set_finish_roll(_shot.wrist_roll)
 	# Off camera the legs and trunk are mesh nobody draws; the crouch is not.
 	if _skater.on_camera():
 		p.publish_legs(_skater, delta)
@@ -471,7 +473,7 @@ func apply(delta: float) -> void:
 		tex_ease = minf(_controller.trunk_texture_smooth_rate * delta, 1.0)
 	_trunk_pitch_s = lerpf(_trunk_pitch_s, p.trunk_pitch, tex_ease)
 	_trunk_roll_s = lerpf(_trunk_roll_s, p.trunk_roll, tex_ease)
-	trunk_pitch_add = _trunk_pitch_s + p.wobble_pitch
+	trunk_pitch_add = _trunk_pitch_s + p.wobble_pitch + p.eased_pitch
 	trunk_roll_add = _trunk_roll_s + p.wobble_roll
 	if _skater.on_camera():
 		_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)

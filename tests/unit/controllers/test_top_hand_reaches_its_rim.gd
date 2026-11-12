@@ -20,6 +20,8 @@ const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const TICKS: int = 120
 const CURSOR_M: float = 3.5
+# A cursor far enough off that it is where he is looking, not a reach asked for.
+const FAR_CURSOR_M: float = 8.0
 # Where the loose puck lies along the cursor's line: inside every build's reach.
 const PUCK_M: float = 2.0
 
@@ -58,7 +60,8 @@ func _make_controller() -> SkaterController:
 # forehand) with the body pinned facing +Z, so the reach and not a turn answers.
 # A loose puck lies on the cursor's line within reach unless `purpose` is false:
 # something to reach for (SkaterIKCoordinator.reach_purpose).
-func _reach(c: SkaterController, deg: float, purpose: bool = true) -> void:
+func _reach(c: SkaterController, deg: float, purpose: bool = true,
+		cursor_m: float = CURSOR_M) -> void:
 	var sk: Skater = c.skater
 	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 	var forward := Vector3(0.0, 0.0, 1.0)
@@ -71,7 +74,7 @@ func _reach(c: SkaterController, deg: float, purpose: bool = true) -> void:
 		sk.set_facing(c._pose.facing)
 		var input := InputState.new()
 		input.delta = DT
-		input.mouse_world_pos = sk.global_position + dir * CURSOR_M
+		input.mouse_world_pos = sk.global_position + dir * cursor_m
 		input.mouse_world_pos.y = 0.0
 		if purpose:
 			c.puck.global_position = sk.global_position + dir * PUCK_M
@@ -82,12 +85,12 @@ func _reach(c: SkaterController, deg: float, purpose: bool = true) -> void:
 		sk._process(DT)
 
 
-# The hand off the shoulder its arm is drawn from, in the arm's level frame —
+# The reach solve's hand off the shoulder its arm is drawn from, in the arm's level frame —
 # where the ROM is a horizontal disc.
 func _hand_off_shoulder(c: SkaterController) -> Vector2:
 	var rot: Vector3 = c.skater.upper_body.rotation
 	var tilt: Basis = Basis.from_euler(Vector3(rot.x, 0.0, rot.z))
-	var hand: Vector3 = tilt * c.skater.get_top_hand_position()
+	var hand: Vector3 = tilt * c._ik.reach_hand_local
 	var shoulder: Vector3 = tilt * c._ik.arm_shoulder()
 	return Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
 
@@ -277,7 +280,7 @@ func test_a_released_bottom_hand_tucks_ahead_of_the_body() -> void:
 # the stick and the trunk keeps its posture.
 func test_with_nothing_to_reach_for_the_stick_rests_in_both_hands() -> void:
 	var c: SkaterController = _make_controller()
-	_reach(c, 0.0, false)
+	_reach(c, 0.0, false, FAR_CURSOR_M)
 	var sk: Skater = c.skater
 	var hand: Vector3 = sk.drawn_top_hand()
 	var shaft: Vector3 = sk.get_blade_position() - hand
@@ -290,6 +293,35 @@ func test_with_nothing_to_reach_for_the_stick_rests_in_both_hands() -> void:
 	assert_gt(reaching.skater.get_blade_contact_global().distance_to(reaching.skater.global_position),
 			sk.get_blade_contact_global().distance_to(sk.global_position) + 0.1,
 			"the same cursor reaches out once there is a puck to reach for")
+
+
+# The cursor says so too (ReachPurposeRules.intent): placed where the stick can
+# go, the blade goes there with no puck about, and just past the rim it asks
+# for the whole reach. Only a cursor far off, where he is looking, rests it.
+func test_a_cursor_placed_within_reach_takes_the_blade_there() -> void:
+	var c: SkaterController = _make_controller()
+	var placed_m: float = 1.5
+	_reach(c, 0.0, false, placed_m)
+	var sk: Skater = c.skater
+	var contact: Vector3 = sk.get_blade_contact_global() - sk.global_position
+	assert_almost_eq(Vector2(contact.x, contact.z).length(), placed_m, 0.03,
+			"mid-blade on the cursor, out past where both hands rest it")
+	var resting: SkaterController = _make_controller()
+	_reach(resting, 0.0, false, FAR_CURSOR_M)
+	var rest: Vector3 = resting.skater.get_blade_contact_global() - resting.skater.global_position
+	assert_gt(placed_m, Vector2(rest.x, rest.z).length() + 0.05,
+			"which is further than a far cursor's rest")
+
+
+func test_a_cursor_just_past_the_rim_reaches_as_a_puck_would() -> void:
+	var asked: SkaterController = _make_controller()
+	_reach(asked, 0.0, false, asked._ik.full_blade_reach())
+	var puck: SkaterController = _make_controller()
+	_reach(puck, 0.0)
+	var a: Vector3 = asked.skater.get_blade_contact_global() - asked.skater.global_position
+	var b: Vector3 = puck.skater.get_blade_contact_global() - puck.skater.global_position
+	assert_almost_eq(Vector2(a.x, a.z).length(), Vector2(b.x, b.z).length(), 0.02)
+	assert_almost_eq(asked._ik.reach_purpose, 1.0, 0.001)
 
 
 func test_the_league_default_reach_is_the_neutral_builds() -> void:

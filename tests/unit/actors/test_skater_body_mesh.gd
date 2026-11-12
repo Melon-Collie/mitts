@@ -33,7 +33,8 @@ func test_the_body_holds_the_skin_and_every_rigid_part() -> void:
 
 # Each rigid vertex's bind names the bone its own mesh's skin bound it to, at
 # identity, but for the skate upper's feet, which read it from the SKATE bone's
-# frame; the skin's vertices keep the skin's binds.
+# frame, and the neck's foot, which is a deform bone of the skin's; the skin's
+# vertices keep the skin's binds.
 func test_the_rigid_parts_bind_to_their_own_bones() -> void:
 	var skin: Skin = SkaterBodyMesh.shared_skin()
 	var arrays: Array = SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_NONE).surface_get_arrays(0)
@@ -63,6 +64,8 @@ func test_the_rigid_parts_bind_to_their_own_bones() -> void:
 			var own: int = upper_bones[(v - skin_verts) * 4 + k] if v < skin_verts + upper_verts \
 					else SkaterBodySkeleton.LEG_BONE_OFFSET \
 					+ leg_bones[(v - skin_verts - upper_verts) * 4 + k]
+			if v < skin_verts + upper_verts and own == SkaterRigidParts.NECK_FOOT_BIND:
+				own = SkaterBodySkeleton.deform_bone(SkaterConnectedMesh.Deform.NECK_FOOT)
 			var pose := Transform3D.IDENTITY
 			var ankle: int = own - SkaterBodySkeleton.LEG_BONE_OFFSET \
 					- SkaterRigidParts.SKATE_UPPER_FOOT_BIND

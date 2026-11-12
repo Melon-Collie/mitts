@@ -1,10 +1,16 @@
 class_name SkaterAgentStandUp
 extends RefCounted
 
-# One bot's timing of the Hit button, every physics tick after dispatch: a check
-# the dispatch is hunting is thrown as the contact comes, and a carrier about to
-# skate into the bot is met the same way (AIStandUpRead), so either contact lands
-# inside the bot's drive (CheckDriveRules). Owns no state.
+# One bot's timing of the Hit button, every physics tick after dispatch. A check
+# the dispatch is hunting stays held through the hunt (the stick off the ice,
+# the stride loaded: a carrier who cuts is gone), and with the drive re-armed
+# the button comes up just before the contact so the press that follows throws
+# a fresh one. A carrier about to skate into the bot is met with a press as the
+# contact comes (AIStandUpRead). Owns no state.
+
+# How long ahead of the throw (AIStandUpRead.THROW_S) the button is up: a few
+# ticks, enough for the drive to read the release whatever the tick rate.
+const REPRESS_S: float = 0.05
 
 static var _check_cfg := BodyCheckRules.Config.new()
 
@@ -34,8 +40,12 @@ func apply(input: InputState, snapshot: WorldSnapshot, check_aggression: float) 
 	if me == null or man == null \
 			or SkaterStateMachine.state_has_puck(me.shot_state):
 		return
-	if input.hit_held and AIPinThreatRead.time_to_contact(me.position, me.velocity,
-			man.position, man.velocity) > AIStandUpRead.THROW_S:
+	var ttc: float = AIPinThreatRead.time_to_contact(me.position, me.velocity,
+			man.position, man.velocity)
+	if input.hit_held and ttc > AIStandUpRead.THROW_S \
+			and ttc <= AIStandUpRead.THROW_S + REPRESS_S \
+			and me.check_drive_phase == CheckDriveRules.Phase.SPENT \
+			and me.check_drive_elapsed >= CheckDriveRules.REARM_S - 1e-3:
 		input.hit_held = false
 	var caps: AISkaterCaps = _caps_by_peer.get(_peer_id)
 	var man_caps: AISkaterCaps = _caps_by_peer.get(carrier_pid)

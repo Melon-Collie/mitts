@@ -1131,14 +1131,12 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		_set_one_timer_ready(would_be_ready)
 		# The pressurer's stick, only with no one-timer live so the lift's lifecycle
 		# doesn't tick during offensive states: a held lift, else the blade on the
-		# carried puck's path. INF falls through to the normal aim. A bot hunting
-		# a check has chosen the body: its stick stays in, as the commit holds it
-		# once the check is thrown.
+		# carried puck's path. INF falls through to the normal aim.
 		var lift_aim: Vector3 = Vector3.INF
 		var stick_aim: Vector3 = Vector3.INF
 		if not would_be_ready:
 			lift_aim = _lift_aim(snapshot, self_pos)
-			if not lift_aim.is_finite() and not decision.commit_check:
+			if not lift_aim.is_finite():
 				stick_aim = _carrier_stick_aim(snapshot, self_pos, self_state, decision)
 		# The stick battle: a tied attacker pulls his stick free before anything
 		# else it could be doing, and a defender whose stick is not on the puck

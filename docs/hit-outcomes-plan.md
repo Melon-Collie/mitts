@@ -518,14 +518,24 @@ is not in.
 
 ### Bots
 
-- **A hunted check is thrown at the contact** (`SkaterAgentStandUp`): the
-  dispatch's commit skates the bot at its man with Hit asked for, and the
-  per-tick pass holds the button back until the contact is inside
-  `AIStandUpRead.THROW_S`, so the bot arrives on full edges and its contact
-  lands inside its drive.
-- **Every prediction of a hit adds the kick** through `CheckDriveRules.kick_dv`:
-  the commit bar (`AIBodyCheck`), the stand-up (`AIStandUpRead.meets`) and the
-  pin reach's knockdown test.
+- **A hunted check is held through the hunt and re-pressed at the contact**
+  (`SkaterAgentStandUp`): the dispatch's commit skates the bot at its man with
+  Hit held, so its stick is off the ice and its stride is the commit's, as a
+  hunt always was; once the drive has re-armed the button comes up
+  `REPRESS_S` ahead of `AIStandUpRead.THROW_S` and the press that follows
+  lands the contact inside a fresh drive. A contact inside the first press's
+  drive is timed too; one between that and the re-arm (0.3 to 1.0 s into the
+  hunt) lands the held share. Holding the button back for the whole hunt
+  instead was tried and measured: the bot closes at full stride with its
+  blade on the ice, and the pincer duel's carrier kept the puck in 4 of 12
+  seeds where it keeps it in 12 of 12 with the hunt held.
+- **The stand-up's prediction adds the kick** (`AIStandUpRead.meets`, through
+  `CheckDriveRules.kick_dv`): it presses inside `MEET_S`, so its contact is
+  always driven. **The commit bar does not** (`AIBodyCheck`): a hunt is held, so
+  whether its contact is driven depends on when it lands, and with the kick in
+  the bar a baseline bot committed from ~2.3 m/s closing where it commits from
+  ~5, gave up its containment loaded on a shoulder, and let a lone carrier walk
+  to the crease untouched (`test_one_on_one_to_the_crease.gd`).
 - Not built: a bot reading its own closing speed against what the hit will cost
   it, and a carrier reading a checker's spent drive.
 

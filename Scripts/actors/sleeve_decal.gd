@@ -10,6 +10,10 @@ extends Node2D
 
 const FONT: Font = preload("res://Assets/Fonts/BarlowSemiCondensed-ExtraBold.ttf")
 const SIZE := Vector2i(512, 512)
+# The highest V a sleeve may sample: a texel down from the texture's top. The
+# body's shader repeats its textures, so a sample on V = 0 filters the cuff's
+# row in across the wrap.
+const TOP_V: float = 1.0 / SIZE.y
 # A sleeve number a little over half the back name's em.
 const NUMBER_EM_M: float = 0.10
 

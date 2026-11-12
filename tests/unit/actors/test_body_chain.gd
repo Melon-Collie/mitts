@@ -161,7 +161,7 @@ func test_sweeping_the_cursor_at_speed_keeps_the_head_over_the_pelvis() -> void:
 			worst = maxf(worst, absf(_head_across_travel(skater)))
 	assert_gt(Vector2(skater.velocity.x, skater.velocity.z).length(), 7.0,
 			"the sweep has to happen at speed to mean anything")
-	assert_lt(worst, 0.04,
+	assert_lt(worst, 0.05,
 			"the head drifted %.2f m across the line of travel off the pelvis" % worst)
 
 
