@@ -14,12 +14,6 @@ signal shots_on_goal_changed(sog_0: int, sog_1: int)
 # Fires once per counted shot on goal, carrying the shooter. TurnoverTracker uses
 # it to treat a rebound recovered by the other team as a shot (not a giveaway).
 signal shot_on_goal_recorded(peer_id: int)
-# Fires on every shot RELEASE (armed pending shot), carrying the shooter —
-# before it's known whether the shot is on goal. TurnoverTracker uses it so
-# recovering ANY shot (saved, missed wide, blocked) reads as a rebound rather
-# than a giveaway/takeaway; shot_on_goal_recorded then refreshes the window at
-# the save so a rebound stays covered past the shot's flight time.
-signal shot_attempted(peer_id: int)
 # Fires once per resolved shot ATTEMPT (Corsi), carrying the full ShotEvent
 # (credited shooter — tipper on a tip; outcome; release position; xG; type;
 # period/clock). A "shot attempt" is a puck DIRECTED AT THE NET that resolves as
@@ -70,12 +64,12 @@ var _pending_directed_at_net: bool = false
 # collected it, and a feed at a man in the crease genuinely projects through the
 # mouth — and logged as a missed shot attempt.
 #
-# What it actually catches is the quick-pass button and the net-clamp
-# knock-loose. It deliberately does NOT catch the charged-wrister pass, which a
-# bot could report and a human could not: exempting one and not the other would
-# break the only thing a Corsi column is for. Own-half releases are refused by
-# geometry instead (ShotOnNetRules.is_release_in_own_half), which applies to
-# everyone equally.
+# What it actually catches is the quick-pass button and a puck the post or the
+# boards knock off the stick. It deliberately does NOT catch the charged-wrister
+# pass, which a bot could report and a human could not: exempting one and not
+# the other would break the only thing a Corsi column is for. Own-half releases
+# are refused by geometry instead (ShotOnNetRules.is_release_in_own_half), which
+# applies to everyone equally.
 #
 # Gates the two resolutions that can invent an attempt out of a pass — the MISS
 # and the BLOCK. A pass that goes in is still a goal (on_goal_confirmed credits
@@ -134,12 +128,15 @@ func setup(registry: PlayerRegistry, state_machine: GameStateMachine) -> void:
 
 # ── Events ────────────────────────────────────────────────────────────────────
 
-func on_pickup(peer_id: int) -> void:
-	# Resolve the pending shot BEFORE clearing: a directed shot the picker didn't
-	# receive as a teammate is a missed-shot attempt (Corsi); a teammate receiving
-	# it (backdoor feed / saucer) is a pass, not a shot. _resolve_pending_miss
-	# reads the picker's team, so it must see it before the clear.
+# Returns true if a stat was credited (the pickup blocked the pending shot).
+func on_pickup(peer_id: int) -> bool:
+	# Resolve the pending shot BEFORE clearing: a defender taking it clean on the
+	# blade has blocked it as surely as one it glanced off; otherwise a directed
+	# shot the picker didn't receive as a teammate is a missed-shot attempt
+	# (Corsi), and a teammate receiving it (backdoor feed / saucer) is a pass, not
+	# a shot. Both read the picker's team, so they must see it before the clear.
 	_fed_from_x = _pass_origin_x(peer_id)
+	var blocked: bool = on_block(peer_id)
 	_resolve_pending_miss(peer_id)
 	clear_pending()
 	_holder_peer_id = peer_id
@@ -147,6 +144,7 @@ func on_pickup(peer_id: int) -> void:
 	# A pickup alone is only a touch — a momentary attach in a scramble must
 	# not break the opposing assist chain. on_possession_established upgrades.
 	_record_toucher(peer_id, false)
+	return blocked
 
 
 # The current carrier ESTABLISHED possession (PossessionTracker). Upgrade
@@ -251,9 +249,6 @@ func on_shot_started(shooter_peer_id: int, is_one_timer: bool = false) -> void:
 	# Assume a shot too, until note_release_intent says pass — same over-credit
 	# default as the two reads above.
 	_pending_is_shot = true
-	# A shot went off — mark the turnover shot window so a recovery of it reads as
-	# a rebound (not a turnover), whether or not it turns out to be on goal.
-	shot_attempted.emit(shooter_peer_id)
 
 
 # Updates the pending shot's on-net read (computed by the caller from the live
@@ -274,6 +269,13 @@ func note_directed_at_net(directed: bool) -> void:
 	if _shooter_peer_id == -1:
 		return
 	_pending_directed_at_net = directed
+
+
+# Whether the pending release is a shot attempt: released as a shot and directed
+# at the net, the two reads a miss needs to count. Both are assumed from the
+# release until noted otherwise; false without a pending shot.
+func pending_is_shot_attempt() -> bool:
+	return _pending_is_shot and _pending_directed_at_net
 
 
 # Records what the release was INTENDED as, read from the shooter's input rather
@@ -362,6 +364,9 @@ func on_block(blocker_peer_id: int) -> bool:
 	if blocker_peer_id == -1:
 		return false
 	if _shooter_peer_id == -1:
+		return false
+	# The goalie already stopped it: what a defender touches now is the rebound.
+	if _shot_on_goal_counted:
 		return false
 	# Only a touch within the short post-release window is a block — a later loose
 	# puck touch is just a takeaway/rebound, not a blocked shot.

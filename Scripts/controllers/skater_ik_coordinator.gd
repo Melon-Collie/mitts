@@ -589,7 +589,7 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 			var release_dir: Vector3 = ShotMechanics.wall_pin_release_direction(
 					wall_normal, _skater.velocity, _skater.wall_pin_inward_bias)
 			if release_dir.length() > 0.0:
-				_controller._do_release(release_dir, 3.0)
+				_controller._do_release(release_dir, 3.0, true)
 			else:
 				# Fully degenerate: no wall normal and no along-wall momentum. A squeeze
 				# past the threshold implies a wall normal, so this is essentially
@@ -600,7 +600,7 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 				back.y = 0.0
 				if back.length_squared() < 0.0001:
 					back = -_skater.global_transform.basis.z
-				_controller._do_release(back.normalized(), 3.0)
+				_controller._do_release(back.normalized(), 3.0, true)
 
 	# The goalie, then the net, both pure collision: neither strips.
 	# All work in world space; convert back once at the end.
@@ -734,7 +734,8 @@ func _native_blade_toward(target_world: Vector3, delta: float, hold_blade: bool,
 	_smoothed_blade_initialized = true
 	_skater.set_blade_wall_normal(_native_pass.get_wall_normal())
 	while _native_pass.get_pending():
-		_controller._do_release(_native_pass.get_pending_dir(), _native_pass.get_pending_power())
+		_controller._do_release(
+				_native_pass.get_pending_dir(), _native_pass.get_pending_power(), true)
 		_native_pass.resume(_controller.has_puck)
 	_net_side_anchor = _native_pass.get_net_anchor()
 	_has_net_side_anchor = _native_pass.get_has_net_anchor()

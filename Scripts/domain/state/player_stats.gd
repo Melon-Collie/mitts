@@ -47,14 +47,13 @@ var ot_goals: int = 0
 # Advanced-stat shot-attempt counters (analytics plan A1), host-authoritative and
 # broadcast like the counters above. Individual Corsi/Fenwick; team CF%/FF% and
 # PDO derive from these + the existing goals/SOG at display time.
-#   shot_attempts         — individual Corsi (iCF): every shot RELEASE this player
+#   shot_attempts         — individual Corsi (iCF): every shot attempt this player
 #                           took (on goal, missed, or blocked). Off ShotOnGoalTracker's
-#                           shot_attempted, so one per release (rebound re-shots and
-#                           mid-flight tips don't re-count in v1).
+#                           shot_resolved, so one per resolved attempt.
 #   shot_attempts_blocked — of those attempts, the ones a defender blocked, so
 #                           Fenwick (iFF) = shot_attempts − shot_attempts_blocked.
-#                           Off ShotOnGoalTracker's shot_attempt_blocked, which fires
-#                           on the same on-net-blocked set as the shots_blocked stat
+#                           The shot_resolved events whose outcome is BLOCKED, the
+#                           same on-net-blocked set as the shots_blocked stat
 #                           (v1: a blocked-off-net shot isn't counted as a block).
 var shot_attempts: int = 0
 var shot_attempts_blocked: int = 0
