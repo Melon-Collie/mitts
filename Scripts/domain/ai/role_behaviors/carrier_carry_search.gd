@@ -719,10 +719,8 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 		if AICarrierField.leaves_ahead_of_line(released_at, ctx.attacking_goal_pos):
 			cand_release = AIGoalieModel.release_ahead_of_goalie(released_at,
 					ctx.attacking_goal_pos, tracked_goalie)
-		# The shot is decided on ARRIVAL, against the keeper as he is then: a carry
-		# that outran him leaves him still pushing toward his square, at the share
-		# of the push he has left (goalie_unsettled). A goalie-motion-blind tier
-		# reads him still.
+		# Decided on ARRIVAL, against the keeper then: one the carry outran still
+		# pushing to his square (goalie_unsettled), down for a carrier in tight.
 		var lag: float = AIGoalieModel.goalie_arc_match_x(
 				tracked_goalie, ctx.attacking_goal_pos, cand_release) - tracked_goalie.x
 		var keeper_vel_x: float = signf(lag) * AIGoalieModel.GOALIE_MAX_LATERAL_SPEED_MPS \
@@ -732,7 +730,8 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 		# feed, which in tight promise odds the shot on arrival never has.
 		dest_score += _field.value_at(ctx, cand_release, self_pos,
 				_scratch_opponents_path, tracked_goalie, keeper_vel_x, cand_keep,
-				_field.keeper_stance_at(local_time + cand_windup),
+				_field.keeper_stance_at(local_time + cand_windup, candidate + cand_hold,
+						ctx.attacking_goal_pos),
 				atan2(tracked_goalie.x - cand_release.x, tracked_goalie.z - cand_release.z),
 				local_time, arrive_vel, AIShotOdds.History.CARRIED)
 	dest_score /= samples

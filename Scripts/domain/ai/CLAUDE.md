@@ -832,7 +832,9 @@ he gets there); his positioning is the same on every tier.
 
 **The skater AI's goalie model is a MIRROR, not a second tier.** What the bots
 predict of him outside the shot field — his leg read, his push, the depth he
-takes, the post he holds, his rise — lives on `AIGoalieModel`, read from his own
+takes, the post he holds, his rise, his going down for a carrier in tight
+(`down_in_tight`, which a carry's shot on arrival reads his stance by) — lives
+on `AIGoalieModel`, read from his own
 code (`KeeperPositioning`, `KeeperFootwork`, `KeeperDrop`, his gear), with the
 leg read synced from the match's profile by `set_goalie_profile`.
 `test_ai_goalie_model_mirrors.gd` holds each one against him. The shot field

@@ -2804,8 +2804,13 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 		var hold: Vector2 = c._field.holds.arrival_offset
 		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
 				spot + Vector3(hold.x, 0.0, hold.y), ctx.attacking_goal_pos, keeper)
+		# In tight he is down for it, as he plays a carrier there (AIGoalieModel
+		# .down_in_tight, held to his brain in test_ai_goalie_model_mirrors.gd).
+		var stance: int = AIShotOdds.Stance.DOWN \
+				if AIGoalieModel.down_in_tight(spot + Vector3(hold.x, 0.0, hold.y),
+						ctx.attacking_goal_pos) else AIShotOdds.Stance.UPRIGHT
 		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(release,
-				ctx.attacking_goal_pos, keeper, 0.0, AIShotOdds.Stance.UPRIGHT,
+				ctx.attacking_goal_pos, keeper, 0.0, stance,
 				atan2(keeper.x - release.x, keeper.z - release.z),
 				AIShotOdds.History.CARRIED)) * c._field.holds.arrival_keep
 		var kept: float = c._field.continuation_at(release)
