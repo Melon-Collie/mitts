@@ -196,7 +196,7 @@ unit-tested:
 
 | Event | Signal / hook | Advanced-stat use |
 |---|---|---|
-| Every release | `shot_attempted(peer_id)` | Corsi attempt |
+| Every resolved attempt | `shot_resolved(event)` | Corsi attempt |
 | On-net read | `note_trajectory(on_net)` (`ShotOnNetRules`) | on-net vs. missed split |
 | Miss / post | `on_post_hit()` → `_pending_on_net = false` | Corsi-yes, Fenwick-yes, SOG-no |
 | Blocked | `on_block(blocker)` → `shots_blocked` | Corsi-yes, Fenwick-**no** |
@@ -365,7 +365,7 @@ floats; confirm `WorldStateCodec` encoding for the new fields).
 
 New host-only collaborator: **`AdvancedStatsTracker`** (RefCounted, sibling to
 `ShotOnGoalTracker` / `HitTracker` / `PossessionTracker`, constructed and fed only
-on the host). It subscribes to the signals in the §1 table — `shot_attempted`,
+on the host). It subscribes to the signals in the §1 table — `shot_resolved`,
 `on_block`, `on_post_hit`, `shot_on_goal_recorded`, `on_goal_confirmed`,
 `possession_established` — computes xG at release, and writes CF/FF/xG counters
 onto `PlayerStats` (+ team counters on `GameStateMachine`, alongside `team_shots`).

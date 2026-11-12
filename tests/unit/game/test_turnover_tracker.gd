@@ -148,7 +148,7 @@ func test_rebound_recovery_is_neither_giveaway_nor_takeaway() -> void:
 	var shooter := _add_player(10, 0)
 	var recoverer := _add_player(20, 1)
 	_gain_and_establish(10)
-	tracker.note_shot(10)  # fed from every shot release, on goal or not
+	tracker.note_shot(10)  # fed from a release at the net, on goal or not
 	tracker.on_carrier_gained(20, false)
 	tracker.on_possession_established(20)
 	assert_eq(shooter.stats.giveaways, 0, "a shot is never a giveaway")

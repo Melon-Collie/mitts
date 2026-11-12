@@ -1921,17 +1921,16 @@ func _wire_subsystems() -> void:
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
 
-	# Host-only takeaway / giveaway / faceoff-win attribution off possession
-	# changes. Fed by the pickup, strip, and shot hooks below. Every shot RELEASE
-	# opens the rebound window (so recovering a missed/wide shot isn't a turnover);
-	# a confirmed shot-on-goal refreshes it at the save so the rebound stays
-	# covered past the shot's flight.
+	# Host-only takeaway / giveaway / interception / faceoff-win attribution off
+	# possession changes. Fed by the pickup and strip hooks below and by each
+	# release from carry (_note_release_for_turnovers); a confirmed shot-on-goal
+	# refreshes the shot window at the save, so the rebound stays covered past the
+	# shot's flight.
 	_turnover_tracker = TurnoverTracker.new()
 	_turnover_tracker.setup(_registry)
 	_feat_tracker = FeatTracker.new()
 	_feat_tracker.setup(_registry)
 	_turnover_tracker.possession_won.connect(_feat_tracker.on_possession_won)
-	_shot_tracker.shot_attempted.connect(_turnover_tracker.note_shot)
 	_shot_tracker.shot_on_goal_recorded.connect(_turnover_tracker.note_shot)
 
 	# Host-only advanced-stat attribution (analytics A1): per-player Corsi/Fenwick
@@ -3535,21 +3534,6 @@ func _on_server_puck_released_by_carrier(peer_id: int) -> void:
 	if _hit_tracker != null and _state_machine != null \
 			and _state_machine.current_phase == GamePhase.Phase.PLAYING:
 		_hit_tracker.note_possession_released(peer_id)
-	# A non-shot release with no teammate in its flight corridor is a dump / clear
-	# / rim — mark the dump window so recovering it reads as a concession, not a
-	# giveaway (mirrors the shot window). Otherwise it is a pass, and an opponent
-	# picking it off is an interception. Gated to live play (a whistle drop lands
-	# here too); shots already opened the window via note_shot, so skip when a
-	# shot is pending to keep the pass/dump geometry off them.
-	if _turnover_tracker != null and _state_machine != null \
-			and _state_machine.current_phase == GamePhase.Phase.PLAYING \
-			and (_shot_tracker == null or not _shot_tracker.has_pending_shot()):
-		var launch: Vector3 = puck.get_release_velocity() if puck != null else Vector3.ZERO
-		if _is_dump_release(peer_id):
-			_turnover_tracker.note_dump(peer_id)
-		elif Vector2(launch.x, launch.z).length() >= 0.001:
-			# A puck dropped dead (a ghosted or departing carrier) was never passed.
-			_turnover_tracker.note_pass(peer_id)
 	if _possession_tracker != null:
 		_possession_tracker.on_puck_lost(peer_id)
 	record.controller.on_puck_released_network()
@@ -3560,24 +3544,25 @@ func _on_server_puck_released_by_carrier(peer_id: int) -> void:
 	_force_retick_team_brains()
 
 
-# Host: was `peer_id`'s just-fired non-shot release a dump/clear/rim (no teammate
-# positioned to receive) rather than a pass? Reads the puck's queued launch and
-# the releaser's teammates' positions; the pure geometry is TurnoverRules. Runs
-# on a release event (not the hot per-tick path), so the small teammate gather is
-# fine. get_release_velocity (not linear_velocity) — release() queues the launch
-# for the next drive step, so linear_velocity reads ~zero in this same-frame window.
-func _is_dump_release(peer_id: int) -> bool:
-	if puck == null or _registry == null:
-		return false
+# Host: `peer_id` just fired the puck. Opens the one turnover window the release
+# earns (TurnoverRules.release_kind): a shot's rebound, a dump's concession, or a
+# pass an opponent can pick off. Runs after _note_shot_trajectory, whose
+# directed-at-net read it takes, and only from the paths that fire a puck: a
+# strip, a nudge and a whistle drop also raise the puck's release signal, and
+# none of them is a pass. A one-timer redirects a puck its shooter never
+# carried, so `redirected` reads it as a shot wherever it goes.
+# get_release_velocity (not linear_velocity): release() queues the launch for the
+# next drive step, so linear_velocity reads ~zero in this same-frame window.
+func _note_release_for_turnovers(peer_id: int, redirected: bool = false) -> void:
+	if _turnover_tracker == null or _shot_tracker == null or puck == null \
+			or _state_machine == null \
+			or _state_machine.current_phase != GamePhase.Phase.PLAYING:
+		return
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	if record == null or record.team == null:
-		return false
+		return
 	var vel: Vector3 = puck.get_release_velocity()
-	var launch_dir: Vector2 = Vector2(vel.x, vel.z)
-	if launch_dir.length() < 0.001:
-		return false
 	var launch_pos: Vector3 = puck.get_puck_position()
-	var launch: Vector2 = Vector2(launch_pos.x, launch_pos.z)
 	var team_id: int = record.team.team_id
 	var teammates: Array[Vector2] = []
 	for pid: int in _registry.all():
@@ -3588,7 +3573,15 @@ func _is_dump_release(peer_id: int) -> bool:
 			continue
 		var pos: Vector3 = r.skater.global_position
 		teammates.append(Vector2(pos.x, pos.z))
-	return TurnoverRules.is_dump_release(launch, launch_dir, teammates)
+	match TurnoverRules.release_kind(
+			redirected or _shot_tracker.pending_directed_at_net(),
+			Vector2(launch_pos.x, launch_pos.z), Vector2(vel.x, vel.z), teammates):
+		TurnoverRules.Release.SHOT:
+			_turnover_tracker.note_shot(peer_id)
+		TurnoverRules.Release.DUMP:
+			_turnover_tracker.note_dump(peer_id)
+		TurnoverRules.Release.PASS:
+			_turnover_tracker.note_pass(peer_id)
 
 
 # Forces both team brains to re-evaluate possession state + role
@@ -3762,9 +3755,11 @@ func _on_puck_release_requested(direction: Vector3, power: float, is_slapper: bo
 		# Host-local (or bot) shot: every client needs the cue. No shooter to
 		# exclude — the host already played it locally above.
 		NetworkManager.send_shot_to_all(puck.get_puck_position(), is_slapper, power)
+		var releaser_peer_id: int = _registry.resolve_peer_id(puck.get_carrier())
 		_start_pending_shot_from_carrier()
 		puck.release(direction, power)
 		_note_shot_trajectory()
+		_note_release_for_turnovers(releaser_peer_id)
 	else:
 		var record := _registry.get_local()
 		if record != null:
@@ -3943,6 +3938,7 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater) -
 	puck.set_carrier(skater)
 	puck.release(direction, power)
 	_note_shot_trajectory()
+	_note_release_for_turnovers(pid, true)
 
 
 # Fires a remote human's authoritative shot on the host. Called only from
@@ -3996,6 +3992,7 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 		_start_pending_shot_from_carrier()
 		puck.release(direction, power)
 		_note_shot_trajectory()
+		_note_release_for_turnovers(shooter_peer_id)
 		return
 	puck.release(direction, power)
 

@@ -14,12 +14,6 @@ signal shots_on_goal_changed(sog_0: int, sog_1: int)
 # Fires once per counted shot on goal, carrying the shooter. TurnoverTracker uses
 # it to treat a rebound recovered by the other team as a shot (not a giveaway).
 signal shot_on_goal_recorded(peer_id: int)
-# Fires on every shot RELEASE (armed pending shot), carrying the shooter —
-# before it's known whether the shot is on goal. TurnoverTracker uses it so
-# recovering ANY shot (saved, missed wide, blocked) reads as a rebound rather
-# than a giveaway/takeaway; shot_on_goal_recorded then refreshes the window at
-# the save so a rebound stays covered past the shot's flight time.
-signal shot_attempted(peer_id: int)
 # Fires once per resolved shot ATTEMPT (Corsi), carrying the full ShotEvent
 # (credited shooter — tipper on a tip; outcome; release position; xG; type;
 # period/clock). A "shot attempt" is a puck DIRECTED AT THE NET that resolves as
@@ -251,9 +245,6 @@ func on_shot_started(shooter_peer_id: int, is_one_timer: bool = false) -> void:
 	# Assume a shot too, until note_release_intent says pass — same over-credit
 	# default as the two reads above.
 	_pending_is_shot = true
-	# A shot went off — mark the turnover shot window so a recovery of it reads as
-	# a rebound (not a turnover), whether or not it turns out to be on goal.
-	shot_attempted.emit(shooter_peer_id)
 
 
 # Updates the pending shot's on-net read (computed by the caller from the live
@@ -274,6 +265,12 @@ func note_directed_at_net(directed: bool) -> void:
 	if _shooter_peer_id == -1:
 		return
 	_pending_directed_at_net = directed
+
+
+# The pending release's directed-at-net read. True from the release until
+# note_directed_at_net says otherwise; false without a pending shot.
+func pending_directed_at_net() -> bool:
+	return _pending_directed_at_net
 
 
 # Records what the release was INTENDED as, read from the shooter's input rather

@@ -3,8 +3,9 @@ class_name TurnoverTracker extends RefCounted
 ## wins from possession changes. GameManager feeds it the authoritative hooks —
 ## a possession gain (puck picked up), an ESTABLISHED possession (see
 ## PossessionTracker), a strip (puck_stripped_from, carrying the defender who
-## made the play), a shot attempt, and a non-shot release read as a pass or a
-## dump — and it mutates the affected players' PlayerStats. The pure decision
+## made the play), and each release from carry as the shot, pass or dump
+## TurnoverRules.release_kind read it as — and it mutates the affected players'
+## PlayerStats. The pure decision
 ## lives in TurnoverRules; this holds the short-lived context (last established
 ## owner + recent strip/shot/pass/dump) needed to classify each gain. A takeaway
 ## credits the STRIPPER (the defender who caused the loss), not whoever recovers
@@ -235,8 +236,9 @@ func note_strip(victim_peer_id: int, stripper_peer_id: int) -> void:
 
 # `shooter_peer_id` put the puck at the net (any shot attempt — saved, missed,
 # or blocked). Opens the window in which recovering the loose puck reads as a
-# rebound, not a turnover. Fed from every shot release, and refreshed at a
-# confirmed shot-on-goal so a save's rebound stays covered past the shot flight.
+# rebound, not a turnover. Fed from a release TurnoverRules.release_kind reads as
+# a shot, and refreshed at a confirmed shot-on-goal so a save's rebound stays
+# covered past the shot flight.
 func note_shot(shooter_peer_id: int) -> void:
 	_shot_time = _now()
 	_shot_team = _team_of(shooter_peer_id)
@@ -244,16 +246,16 @@ func note_shot(shooter_peer_id: int) -> void:
 
 # `dumper_peer_id` deliberately surrendered the puck to open ice (a dump-and-chase,
 # a zone clear, or a rim) — no receiver. Opens the window in which recovering the
-# loose puck reads as a concession, not a giveaway. Fed from a non-shot release
-# the geometry (TurnoverRules.is_dump_release) classifies as a dump, not a pass.
+# loose puck reads as a concession, not a giveaway. Fed from a release
+# TurnoverRules.release_kind reads as a dump.
 func note_dump(dumper_peer_id: int) -> void:
 	_dump_time = _now()
 	_dump_team = _team_of(dumper_peer_id)
 
 
-# `passer_peer_id` released the puck at a teammate (a non-shot release that
-# TurnoverRules.is_dump_release did not read as a dump). Opens the window in
-# which an opponent's first pickup is an interception.
+# `passer_peer_id` released the puck at a teammate (a release
+# TurnoverRules.release_kind reads as a pass). Opens the window in which an
+# opponent's first pickup is an interception.
 func note_pass(passer_peer_id: int) -> void:
 	_pass_time = _now()
 	_pass_team = _team_of(passer_peer_id)
