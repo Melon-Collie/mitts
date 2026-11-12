@@ -83,6 +83,22 @@ func test_every_bone_is_a_rotation() -> void:
 			assert_almost_eq(m.determinant(), 1.0, 1e-4, "%s bone %d is unit" % [stance[0], b])
 
 
+# To the engine's own tolerance, which Basis.slerp holds the jersey's shoulder
+# and elbow blends to: a limb lying along its front is where the front's part
+# square to it is all rounding.
+func test_a_limb_along_its_front_is_still_a_rotation() -> void:
+	var front: Vector3 = Vector3(-0.56, -0.12, -0.82).normalized()
+	var square: Vector3 = front.cross(Vector3.UP).normalized()
+	for exponent: int in range(1, 7):
+		var off: float = pow(10.0, -float(exponent))
+		for turn: int in 8:
+			var limb: Vector3 = (front * cos(off)
+					+ square.rotated(front, float(turn) * TAU / 8.0) * sin(off)) * KeeperAnatomy.FOREARM_M
+			var m: Basis = KeeperSkeleton.limb_basis(limb, front)
+			assert_true(m.is_conformal() and is_equal_approx(m.determinant(), 1.0),
+					"1e-%d rad off its front, turn %d" % [exponent, turn])
+
+
 func test_no_gear_sinks_into_the_ice() -> void:
 	for stance: Array in _stances():
 		_solve(stance)
