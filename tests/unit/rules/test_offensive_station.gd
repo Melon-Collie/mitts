@@ -2,7 +2,7 @@ extends GutTest
 
 # The offensive stations' pinch read (docs/transition-defense-plan.md §13).
 # Replaces the counter-channel race for every station holding forward ice while
-# we have the puck. Team 0 defends +Z (net at +26.65) and attacks -Z.
+# we have the puck. Team 0 defends +Z (net at GOAL_LINE_Z) and attacks -Z.
 #
 # The doctrine being pinned:
 #   "The only time a defenseman should be standing on the offensive blue line is
@@ -14,8 +14,8 @@ extends GutTest
 #    3 on 1" — the retreat target is a numbers layer, not your own net.
 
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65
-const OPP_BLUE_Z: float = -7.29
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
+const OPP_BLUE_Z: float = -GameRules.BLUE_LINE_Z
 
 
 # `ours` / `theirs` are [peer_id, pos, vel] rows. Peer 1 is the bot under test.

@@ -47,7 +47,7 @@ const SLOT_DEPTH_M: float = 10.0
 const SLOT_HALF_WIDTH_M: float = 4.0
 # Where the break starts: their high slot, already at speed, with our forwards
 # caught behind it.
-const RUSH_Z: float = 16.0
+const RUSH_Z: float = GameRules.BLUE_LINE_Z + 8.71
 
 
 class Rush:

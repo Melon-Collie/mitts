@@ -11,7 +11,7 @@ extends GutTest
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 
-# Team 0 attacks -Z (attacking goal at z = -26.65).
+# Team 0 attacks -Z (attacking goal at z = -GOAL_LINE_Z).
 const FINISHER_ID := 1
 const CARRIER_ID := 2
 const OPP_MARK := 11

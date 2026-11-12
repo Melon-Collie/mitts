@@ -72,16 +72,20 @@ const OT_DURATION: float           = 4.0 * 60.0   # 240 s per OT period
 const FIGHTING_ENABLED: bool       = true
 
 # ── Rink Geometry ─────────────────────────────────────────────────────────────
-const GOAL_LINE_Z: float = 26.65  # rink_length / 2 - distance_from_end (30 - 3.35)
-const BLUE_LINE_Z: float = 7.29  # 64 ft from goal line to near edge + 0.15m to center
+const GOAL_LINE_Z: float = 27.1272  # rink_length / 2 - distance_from_end (11 ft)
+# Centre of the line: the two lines' neutral-zone edges are 50 ft apart, each
+# 64 ft from its goal line's back edge.
+const BLUE_LINE_Z: float = 7.77
 # Net frame. HockeyGoal draws the same frame from its own constants; every pair
 # is pinned by test_net_geometry_mirrors.
-const NET_HALF_WIDTH: float = 0.915      # half of goal opening (post centerline)
+# The rulebook's 72" x 48" opening is clear of the pipes, so the centerlines sit
+# a pipe radius outside it.
+const NET_HALF_WIDTH: float = 0.9444     # half of goal opening (post centerline)
 const NET_POST_RADIUS: float = 0.030     # goal-pipe radius
 const NET_DEPTH: float = 1.016           # 40" goal-line-to-back-frame depth (NHL rulebook)
 const NET_BACK_HALF_WIDTH: float = 1.02  # half-width at back of net (trapezoid wider end)
-const NET_HEIGHT: float = 1.22           # crossbar height (pipe centerline)
-const NET_CROWN_HALF_WIDTH: float = 0.815  # half-span of the crossbar / top net panel
+const NET_HEIGHT: float = 1.2492         # crossbar height (pipe centerline)
+const NET_CROWN_HALF_WIDTH: float = 0.8444  # half-span of the crossbar / top net panel
 # Radius of the post-to-crossbar bend. The frame is continuous by construction:
 # the post stands to NET_HEIGHT − this, the bend sweeps a quarter circle from
 # there to the crossbar end, and NET_CROWN_HALF_WIDTH is NET_HALF_WIDTH − this
@@ -103,19 +107,16 @@ const NET_PUCK_BUFFER: float = 0.10
 # in the mesh touches nothing on either side of it.
 const NET_BLADE_MESH_GIVE: float = 0.04
 
-# Half the skater's body so the blue line keys off the body EDGE, not its
-# centre — matching real hockey. You tag up the instant any part of your body
-# reaches the line (centre still a body-width inside the zone), and you're only
-# ruled offside once your whole body is over it. Shared by is_offside (entry) and
-# has_tagged_up (clear) so the strict-< / ≥ split keeps a dead-band and the ghost
-# never oscillates at the boundary. Tracks the medium collision-cylinder radius
-# (Skater.tscn) — the canonical body half-width.
+# Half the skater's body, standing in for the skates: offside keys off the body's
+# trailing edge against the blue line's zone-side edge (InfractionRules). Tracks
+# the medium collision-cylinder radius (Skater.tscn) — the canonical body
+# half-width.
 const OFFSIDE_LINE_SLACK: float = 0.35
 
 # Rink dimensions. HockeyRink's export defaults mirror these — pinned by
 # test_rink_geometry_mirrors.
 const RINK_HALF_WIDTH: float     = 13.0   # half of 26 m
-const RINK_HALF_LENGTH: float    = 30.0   # half of 60 m
+const RINK_HALF_LENGTH: float    = 30.48  # half of 200 ft
 const CORNER_RADIUS: float       = 8.53  # 28 ft
 const WALL_THICKNESS: float      = 0.3
 # The kickplate's inward lip sticks 1 cm inside the boards' inner face, so the
@@ -134,10 +135,10 @@ const BOARD_TOP_HEIGHT: float = 1.07
 # collision at the kickplate lip), so physics, blade clamp, AI trajectory
 # reflection, and the OOB check all share one boundary.
 const INNER_HALF_WIDTH: float    = RINK_HALF_WIDTH  - WALL_THICKNESS * 0.5 - KICKPLATE_INWARD_LIP  # 12.84
-const INNER_HALF_LENGTH: float   = RINK_HALF_LENGTH - WALL_THICKNESS * 0.5 - KICKPLATE_INWARD_LIP  # 29.84
+const INNER_HALF_LENGTH: float   = RINK_HALF_LENGTH - WALL_THICKNESS * 0.5 - KICKPLATE_INWARD_LIP  # 30.32
 const INNER_CORNER_RADIUS: float = CORNER_RADIUS    - WALL_THICKNESS * 0.5 - KICKPLATE_INWARD_LIP  # 8.37
 const CORNER_CENTER_X: float     = INNER_HALF_WIDTH  - INNER_CORNER_RADIUS  # 4.47
-const CORNER_CENTER_Z: float     = INNER_HALF_LENGTH - INNER_CORNER_RADIUS  # 21.47
+const CORNER_CENTER_Z: float     = INNER_HALF_LENGTH - INNER_CORNER_RADIUS  # 21.95
 
 # Returns world_xz projected onto the inner rink boundary (rounded rectangle).
 # If the point is already inside, returns it unchanged.
@@ -400,6 +401,14 @@ const NET_STUCK_PLAYABLE_HEIGHT: float = 0.30  # m above ice; at/under → drop 
 # Centre red line and blue lines: 12 in in the NHL book. A puck touching the
 # red line has "gained the line" and cannot be iced.
 const THICK_LINE_WIDTH_M: float = 0.3
+# The blue line's two edges, as |z|. The line belongs to the zone the puck is in
+# (NHL 83.1): the puck enters the attacking zone wholly past the zone-side edge,
+# and leaves it wholly past the neutral-side edge.
+const BLUE_LINE_ZONE_EDGE_Z: float = BLUE_LINE_Z + THICK_LINE_WIDTH_M * 0.5
+const BLUE_LINE_NEUTRAL_EDGE_Z: float = BLUE_LINE_Z - THICK_LINE_WIDTH_M * 0.5
+# Goal line: 2 in in the NHL book, centred on GOAL_LINE_Z. A goal (78.1) and an
+# icing (81.1) need the whole puck past its far edge.
+const GOAL_LINE_WIDTH_M: float = 0.05
 # Hybrid icing race (NHL Rule 81). A race too close to call at the end-zone dots
 # is icing: the attacker must reach the dots this far ahead of the nearest
 # defender to wave it off — about a stride at race pace.
@@ -426,13 +435,11 @@ const CREASE_DWELL_DURATION: float = 0.6  # seconds in the crease before ghostin
 # line; X is 22' (6.7056m) from the centre line. The icing race re-uses the Z
 # value as the dot players sprint toward in hybrid icing.
 const END_ZONE_FACEOFF_DOT_X: float = 6.7056
-const ICING_FACEOFF_DOT_Z: float = GOAL_LINE_Z - 6.096   # 20.554
-# Faceoff circle radius round each end-zone dot — NHL spec, 15' (4.572m).
-const FACEOFF_CIRCLE_RADIUS_M: float = 4.572
+const ICING_FACEOFF_DOT_Z: float = GOAL_LINE_Z - 6.096   # 21.031
 # Neutral-zone faceoff dots — NHL spec. Painted 5' (1.524m) from each blue
-# line on the neutral-zone side. Used as the faceoff spot when an offside is
+# line's neutral-zone edge. Used as the faceoff spot when an offside is
 # called and as candidates when the puck goes out of play in the neutral zone.
-const NEUTRAL_ZONE_FACEOFF_DOT_Z: float = BLUE_LINE_Z - 1.524   # 5.766
+const NEUTRAL_ZONE_FACEOFF_DOT_Z: float = BLUE_LINE_NEUTRAL_EDGE_Z - 1.524
 
 # Rule preset that gates which infractions are detected and how they're punished
 # (each set's rules: docs/gameplay-design.md, Game format).

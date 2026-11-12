@@ -117,11 +117,12 @@ static func _paced_depth_z(ctx: RoleContext, carrier_pos: Vector3,
 
 
 # Offside filter: the puck is outside the attacking zone in both this role's
-# states, so a candidate past the opp blue line is offside. Velocity-corrected:
+# states, so a candidate past the offside line (InfractionRules.OFFSIDE_DEPTH_M) is
+# offside. Velocity-corrected:
 # a candidate counts as past it if braking to it (v²/2B on the velocity toward
 # the line) would stop past the line.
 static func _is_offside(c: Vector3, ctx: RoleContext) -> bool:
 	var attack: float = -ctx.own_goal_dir
 	var v_toward: float = maxf(attack * ctx.self_velocity.z, 0.0)
 	var overshoot: float = v_toward * v_toward / (2.0 * AISteering.ARRIVAL_BRAKE_DECEL_M_S2)
-	return attack * c.z + overshoot > GameRules.BLUE_LINE_Z
+	return attack * c.z + overshoot > InfractionRules.OFFSIDE_DEPTH_M

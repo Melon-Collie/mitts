@@ -19,7 +19,8 @@ class_name GoalDetectionRules
 #
 # The NHL rule (78.1): the ENTIRE puck must COMPLETELY cross the goal line,
 # between the posts and below the crossbar. We model the puck by its center and
-# require that center to cross the goal-line plane travelling INTO the net, with
+# require the whole disc to clear the line's far edge (`scoring_depth`)
+# travelling INTO the net, with
 # the crossing point inside a mouth tightened by the puck's own extent (so the
 # whole disc is within the posts / under the bar). Because we work from the swept
 # segment prev_center -> curr_center, a fast shot that clears the full goal depth
@@ -47,14 +48,14 @@ static func crossed_into_net(
 	# Signed depth past the goal line, positive = deeper into the net.
 	var prev_depth: float = (prev_center.z - goal_z) * facing
 	var curr_depth: float = (curr_center.z - goal_z) * facing
-	# Require the WHOLE puck to finish crossing THIS tick: last tick it was not
-	# yet fully across (center within a radius of the line, or in front), and now
-	# it is (center at least a radius past the line). This single edge condition
-	# also encodes DIRECTION — a puck pulled back out, or fed across from behind
-	# the net, crosses the other way and never satisfies it.
-	if prev_depth >= puck_radius:
+	# Require the WHOLE puck to finish crossing THIS tick: last tick some of it
+	# was still on the line or in front of it, and now none is. This single edge
+	# condition also encodes DIRECTION — a puck pulled back out, or fed across
+	# from behind the net, crosses the other way and never satisfies it.
+	var clear_depth: float = scoring_depth(puck_radius)
+	if prev_depth >= clear_depth:
 		return false  # already fully in the net last tick — not a fresh crossing
-	if curr_depth < puck_radius:
+	if curr_depth < clear_depth:
 		return false  # not fully across the line yet
 	# Interpolate where the center pierces the goal-line plane (depth == 0), so a
 	# puck curling in is judged at the spot it actually crossed. If it was already
@@ -108,8 +109,14 @@ static func crossed_into_net(
 			net_height, post_radius, puck_radius, puck_half_height, net_depth)
 
 
+# Signed depth of the puck's CENTER past the goal line's centre at which the
+# whole disc has cleared the line's far edge — where a goal is scored.
+static func scoring_depth(puck_radius: float) -> float:
+	return GameRules.GOAL_LINE_WIDTH_M * 0.5 + puck_radius
+
+
 # Whether a puck CENTER already known to be past the line (`depth` is the
-# caller's signed depth — `crossed_into_net` passes >= puck_radius, the public
+# caller's signed depth — `crossed_into_net` passes >= scoring_depth, the public
 # `center_inside_net` any >= 0) sits unambiguously INSIDE the net
 # cavity: clear of the side panels (which stand at the post centerline),
 # below the crossbar/top netting, and in front of the back mesh. The bounds

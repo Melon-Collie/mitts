@@ -139,11 +139,9 @@ func test_outlet_side_follows_strong_x_not_the_carrier_wobble() -> void:
 # ── Offside filter ──────────────────────────────────────────────────────────
 
 func test_offside_filter_rejects_oz_candidates() -> void:
-	# Team 0: opp blue line at z = -BLUE_LINE_Z. The OUTLET search
-	# center sits BLUE_LINE_BUFFER_M NZ-side of that line (z = -BLUE
-	# + buffer). Polar samples at SEARCH_STEP_M (3 m) toward -Z would
-	# be at z = -BLUE - (3 - buffer), in OZ. Those must be filtered.
-	# Verify the chosen target.z is NZ-side.
+	# Team 0: the OUTLET search center sits BLUE_LINE_BUFFER_M NZ-side of
+	# the opp blue line (z = -BLUE + buffer); polar samples deeper than the
+	# offside line (z = -OFFSIDE_DEPTH_M) must be filtered.
 	var self_pos := Vector3(-4, 0, -GameRules.BLUE_LINE_Z + 2.5)
 	var carrier_pos := Vector3(0, 0, 0)
 	var skaters: Array = [
@@ -152,8 +150,8 @@ func test_offside_filter_rejects_oz_candidates() -> void:
 	]
 	var ctx: RoleContext = _make_ctx(self_pos, 100, skaters)
 	var d: RoleDecision = AIRoleOutlet.decide(ctx)
-	assert_gt(d.target_position.z, -GameRules.BLUE_LINE_Z,
-			"OUTLET stays NZ-side of opp blue line; got %s" % d.target_position)
+	assert_lte(-d.target_position.z, InfractionRules.OFFSIDE_DEPTH_M + 0.001,
+			"OUTLET stays onside of the opp blue line; got %s" % d.target_position)
 
 
 # ── Velocity-corrected offside filter ──────────────────────────────────────
@@ -190,11 +188,11 @@ func test_velocity_buffer_pushes_target_back_at_speed() -> void:
 
 
 func test_offside_overshoot_is_the_stopping_distance() -> void:
-	# own_goal_dir = +1 attacks -Z: the opp blue line sits at z = -BLUE_LINE_Z.
+	# own_goal_dir = +1 attacks -Z: the offside line sits at z = -OFFSIDE_DEPTH_M.
 	var ctx: RoleContext = _make_ctx(Vector3.ZERO)
 	ctx.self_velocity = Vector3(0.0, 0.0, -8.0)
 	var stop: float = 64.0 / (2.0 * AISteering.ARRIVAL_BRAKE_DECEL_M_S2)
-	var line_z: float = -GameRules.BLUE_LINE_Z
+	var line_z: float = -InfractionRules.OFFSIDE_DEPTH_M
 	assert_false(AIRoleOutlet._is_offside(Vector3(0, 0, line_z + stop + 0.05), ctx),
 			"a spot just over one stopping distance short of the line is legal")
 	assert_true(AIRoleOutlet._is_offside(Vector3(0, 0, line_z + stop - 0.05), ctx),
@@ -206,7 +204,7 @@ func test_retreating_momentum_buys_no_offside_room() -> void:
 	# spot already past the line — no negative overshoot.
 	var ctx: RoleContext = _make_ctx(Vector3.ZERO)
 	ctx.self_velocity = Vector3(0.0, 0.0, 9.0)
-	assert_true(AIRoleOutlet._is_offside(Vector3(0, 0, -GameRules.BLUE_LINE_Z - 1.0), ctx),
+	assert_true(AIRoleOutlet._is_offside(Vector3(0, 0, -InfractionRules.OFFSIDE_DEPTH_M - 1.0), ctx),
 			"a spot past the line is offside whatever the momentum")
 
 

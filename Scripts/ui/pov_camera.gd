@@ -23,7 +23,7 @@ extends Camera3D
 # Same puck-in-play test as GameCamera: a stashed / off-rink puck must not
 # drive the zoom.
 @export var rink_half_width: float = 13.0
-@export var rink_half_length: float = 30.0
+@export var rink_half_length: float = 30.48
 const _ON_RINK_MARGIN: float = 5.0
 
 var _target_getter: Callable = Callable()

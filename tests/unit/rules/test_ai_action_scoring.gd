@@ -5,7 +5,7 @@ extends GutTest
 
 const NET_HW: float = 0.915
 # Goal at +Z for these tests; shooter shoots toward +Z, goalie sits in front.
-const GOAL := Vector3(0.0, 0.0, 26.65)
+const GOAL := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
 
 
 func test_shoot_score_falls_off_with_pressure() -> void:
@@ -83,7 +83,7 @@ func test_shoot_blocked_by_close_on_line_defender() -> void:
 	# past" an unreacting low-t defender; the reachability model doesn't —
 	# they don't need to react, they're already there.)
 	var shooter := Vector3(0.0, 0.0, 15.0)
-	var aim := Vector3(0.0, 0.0, 26.65)
+	var aim := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
 	var slapper := GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
 	var clear: float = AIPuckLane.lane_clear(shooter, aim, [], slapper)
 	var close_blocker: Array[Vector3] = [Vector3(-0.1, 0.0, 17.0)]
@@ -122,9 +122,9 @@ func test_pass_lane_only_counts_opponents_between_endpoints() -> void:
 
 
 func test_shoot_score_zero_from_behind_goal_line() -> void:
-	# GOAL.z = +26.65; shooter past it (z=27) is behind the net.
-	var shooter := Vector3(0.0, 0.0, 27.0)
-	var goalie := Vector3(0.0, 0.0, 26.0)
+	# GOAL.z = GOAL_LINE_Z; a shooter past it is behind the net.
+	var shooter := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z + 0.35)
+	var goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 0.65)
 	var s: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, [])
 	assert_eq(s, 0.0, "shot from behind goal line should score 0")
 
@@ -135,9 +135,9 @@ func test_shoot_score_zero_from_behind_net_off_center() -> void:
 	# beside the goalie (release_ahead_of_goalie) and scored a wide-open net
 	# (danger 1.0). Behind the line is behind the line — always 0, and the
 	# release clamp must not move a behind-the-line release at all.
-	var goalie := Vector3(0.0, 0.0, 25.9)
+	var goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 0.75)
 	for x: float in [1.5, 3.0]:
-		var shooter := Vector3(x, 0.0, 27.5)
+		var shooter := Vector3(x, 0.0, GameRules.GOAL_LINE_Z + 0.85)
 		assert_eq(AIActionScoring.score_shoot_value(shooter, GOAL, goalie, []), 0.0,
 				"behind-the-net shot at x=%.1f must score 0" % x)
 		assert_eq(AIGoalieModel.release_ahead_of_goalie(shooter, GOAL, goalie), shooter,
@@ -219,8 +219,8 @@ func test_pass_trailing_defender_pressures_reception_but_not_the_lane() -> void:
 func test_net_blocker_oz_corner_to_corner_through_back_of_net() -> void:
 	# Bot in attacking-zone right corner just inside the net depth,
 	# teammate mirrored on the left. Pass goes through the net rect.
-	var from := Vector3(5.0, 0.0, 27.0)   # inside net z-range
-	var to := Vector3(-5.0, 0.0, 27.0)
+	var from := Vector3(5.0, 0.0, GameRules.GOAL_LINE_Z + 0.35)   # inside net z-range
+	var to := Vector3(-5.0, 0.0, GameRules.GOAL_LINE_Z + 0.35)
 	assert_true(AINetObstacle.pass_lane_blocked_by_net(from, to),
 			"corner-to-corner pass through the back of the net should be blocked")
 
@@ -228,8 +228,8 @@ func test_net_blocker_oz_corner_to_corner_through_back_of_net() -> void:
 func test_net_blocker_dz_pass_across_goal_mouth() -> void:
 	# Pass crossing in front of the goal at the goal-line z. Just clipping
 	# the front face of the net rect.
-	var from := Vector3(3.0, 0.0, 28.0)   # behind own net
-	var to := Vector3(-3.0, 0.0, 25.0)    # front of own net
+	var from := Vector3(3.0, 0.0, GameRules.GOAL_LINE_Z + 1.35)   # behind own net
+	var to := Vector3(-3.0, 0.0, GameRules.GOAL_LINE_Z - 1.65)    # front of own net
 	assert_true(AINetObstacle.pass_lane_blocked_by_net(from, to),
 			"pass crossing the goal mouth at goal-line z should be blocked by the net")
 
@@ -276,7 +276,7 @@ func test_score_pass_zero_when_segment_crosses_net() -> void:
 	var receiver := Vector3(-5.0, 0.0, 27.0)
 	var goalie := Vector3(0.0, 0.0, -25.0)
 	# Far-side goal so receiver isn't past attacking goal line.
-	var attacking_goal := Vector3(0.0, 0.0, -26.65)
+	var attacking_goal := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 	var s: float = AIActionScoring.score_pass_value(shooter, receiver, attacking_goal, goalie, [])
 	assert_almost_eq(s, 0.0, 0.001,
 			"score_pass returns zero when the segment crosses a net rect")
@@ -285,7 +285,7 @@ func test_score_pass_zero_when_segment_crosses_net() -> void:
 # pass_crosses_own_slot — own-DZ slot danger filter.
 
 func test_own_slot_pass_blocked_team0() -> void:
-	# Cross-crease slot pass for team 0 (own goal at +z=26.65). Segment
+	# Cross-crease slot pass for team 0 (own goal at +z=GOAL_LINE_Z). Segment
 	# at z=22 (slot depth) crossing x=0 → blocked.
 	var from := Vector3(3.0, 0.0, 22.0)
 	var to := Vector3(-3.0, 0.0, 22.0)
@@ -344,7 +344,7 @@ func test_not_in_offensive_zone_at_or_before_blue_line() -> void:
 
 func test_in_offensive_zone_folds_for_negative_z_attack() -> void:
 	# Attacking toward -Z: the O-zone is z < -BLUE_LINE_Z.
-	var neg_goal := Vector3(0.0, 0.0, -26.65)
+	var neg_goal := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 	assert_true(AIActionScoring.in_offensive_zone(Vector3(0, 0, -20.0), neg_goal))
 	assert_false(AIActionScoring.in_offensive_zone(Vector3(0, 0, -5.0), neg_goal))
 	assert_false(AIActionScoring.in_offensive_zone(Vector3(0, 0, 20.0), neg_goal))
@@ -354,16 +354,16 @@ func test_in_offensive_zone_folds_for_negative_z_attack() -> void:
 # GOAL is at +Z, so "in front of the goalie" = farther out = smaller z.
 
 func test_release_clamped_when_behind_goalie() -> void:
-	var goalie := Vector3(0.0, 0.0, 24.65)          # 2 m out from GOAL (z 26.65)
+	var goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 2.0)          # 2 m out from GOAL (z GOAL_LINE_Z)
 	var behind := Vector3(0.5, 0.0, 25.5)           # in the crease, past the goalie
 	var clamped: Vector3 = AIGoalieModel.release_ahead_of_goalie(behind, GOAL, goalie)
-	assert_almost_eq(clamped.z, 24.65 - AIGoalieModel.GOALIE_JAM_DISTANCE_M, 1e-4,
+	assert_almost_eq(clamped.z, GameRules.GOAL_LINE_Z - 2.0 - AIGoalieModel.GOALIE_JAM_DISTANCE_M, 1e-4,
 			"pushed out to the jam distance in front of the goalie")
 	assert_almost_eq(clamped.x, 0.5, 1e-6, "lateral offset is untouched")
 
 
 func test_release_untouched_when_in_front_of_goalie() -> void:
-	var goalie := Vector3(0.0, 0.0, 24.65)
+	var goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 2.0)
 	var in_front := Vector3(1.0, 0.0, 20.0)         # out in the slot, well in front
 	var out: Vector3 = AIGoalieModel.release_ahead_of_goalie(in_front, GOAL, goalie)
 	assert_eq(out, in_front, "a normal in-front shot is not clamped")
@@ -1187,7 +1187,7 @@ func test_lane_loss_point_picks_worst_blocker() -> void:
 	assert_almost_eq(p.z, 7.0, 0.001, "loss point follows the strongest blocker")
 
 
-const OUR_NET := Vector3(0.0, 0.0, 26.65)        # we defend +Z
+const OUR_NET := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)        # we defend +Z
 
 
 # ── pass_miss_prob: derived execution-miss probability ────────────────────────
@@ -1320,7 +1320,7 @@ func test_derive_post_seal_only_fires_in_the_sharp_near_line_zone() -> void:
 	# and, outside it, a look whose net window his standing span covers. A
 	# dead-angle corner seals; a normal slot / mid look does not; an in-tight
 	# look wide enough to shoot past his body does not.
-	var goal := Vector3(0, 0, -26.65)
+	var goal := Vector3(0, 0, -GameRules.GOAL_LINE_Z)
 	assert_ne(AIGoalieModel.derive_post_seal_x_sign(Vector3(8, 0, -25.5), goal), 0.0,
 			"dead-angle corner (1.15 m out, ~82°) is sealed")
 	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(0, 0, -20.65), goal), 0.0,
@@ -1338,14 +1338,14 @@ func test_arc_match_x_bounded_by_goalie_radius() -> void:
 	# A puck reference near the goal line at wide x used to explode the arc-x
 	# toward the corner boards. The goalie squares along his ARC: |x offset|
 	# can never exceed his radial distance from the goal.
-	var goal := Vector3(0, 0, -26.65)
-	var goalie := Vector3(0, 0, -24.9)   # 1.75 out
+	var goal := Vector3(0, 0, -GameRules.GOAL_LINE_Z)
+	var goalie := Vector3(0, 0, -(GameRules.GOAL_LINE_Z - 1.75))   # 1.75 out
 	var x: float = AIGoalieModel.goalie_arc_match_x(
-			goalie, goal, Vector3(4.0, 0, -26.4))   # wide, 0.25 m off the line
+			goalie, goal, Vector3(4.0, 0, -(GameRules.GOAL_LINE_Z - 0.25)))   # wide, 0.25 m off the line
 	assert_lte(absf(x), 1.7501, "arc-x is bounded by the goalie's own radius")
 	# Moderate angles unchanged: well inside the radius, wider than the post.
 	var mid: float = AIGoalieModel.goalie_arc_match_x(
-			goalie, goal, Vector3(1.75, 0, -24.05))
+			goalie, goal, Vector3(1.75, 0, -(GameRules.GOAL_LINE_Z - 2.6)))
 	assert_almost_eq(mid, 1.75 * 1.75 / 2.6, 0.001,
 			"a moderate-angle arc-x is the raw arc match (unclamped)")
 

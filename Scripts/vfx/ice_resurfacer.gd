@@ -41,7 +41,7 @@ const _COLOR_DARK := Color(0.15, 0.15, 0.17)
 const _COLOR_BEACON := Color(1.0, 0.55, 0.1)
 
 var _rink_width: float = 26.0
-var _rink_length: float = 60.0
+var _rink_length: float = 60.96
 var _scratch_map: IceScratchMap = null
 
 var _machines: Array[Node3D] = []

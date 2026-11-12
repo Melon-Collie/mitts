@@ -10,7 +10,7 @@ extends GutTest
 # respects area eligibility is pinned in test_team_brain.gd.
 
 const TEAM_ID: int = 0
-const NET_Z: float = 26.65
+const NET_Z: float = GameRules.GOAL_LINE_Z
 
 
 func _pt(x: float, depth: float) -> Vector3:

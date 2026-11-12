@@ -56,7 +56,8 @@ const BRANDS: Array[Dictionary] = [
 #
 # Hand-picked the way a rink crew picks them — the stretches of sheet that carry
 # no painted marking. One fills each neutral-zone quadrant, boxed in by the
-# centre red line, a blue line, the centre circle, and a neutral-zone dot; one
+# centre red line, a blue line, the centre circle, and a neutral-zone dot (and,
+# on the officials' side, the referee's crease, which shortens those two); one
 # sits in each high slot, between the blue line and the tops of the end-zone
 # faceoff circles. A slot is long in Z and narrow in X because the wordmark runs
 # along the length of the rink, reading from the broadcast side.
@@ -67,8 +68,8 @@ const BRANDS: Array[Dictionary] = [
 const ICE_SLOTS: Array[Dictionary] = [
 	{"center": Vector2( 10.1,  3.65), "size": Vector2(2.8, 6.3), "brand": 0},
 	{"center": Vector2( 10.1, -3.65), "size": Vector2(2.8, 6.3), "brand": 6},
-	{"center": Vector2(-10.1,  3.65), "size": Vector2(2.8, 6.3), "brand": 4},
-	{"center": Vector2(-10.1, -3.65), "size": Vector2(2.8, 6.3), "brand": 11},
+	{"center": Vector2(-10.1,  4.95), "size": Vector2(2.8, 3.6), "brand": 4},
+	{"center": Vector2(-10.1, -4.95), "size": Vector2(2.8, 3.6), "brand": 11},
 	{"center": Vector2(  0.0,  12.2), "size": Vector2(2.6, 5.6), "brand": 2},
 	{"center": Vector2(  0.0, -12.2), "size": Vector2(2.6, 5.6), "brand": 9},
 ]

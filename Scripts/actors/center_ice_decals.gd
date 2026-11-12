@@ -17,9 +17,8 @@ const FONT: Font = preload("res://Assets/Fonts/BarlowSemiCondensed-ExtraBold.ttf
 const TEXT_TOP: String = "MITTS"
 const TEXT_BOTTOM: String = "ARENA"
 
-# Center-ice faceoff circle radius is 4.572 m (15 ft). The logo sits inside
-# the dot area; the text rides just inside the circle's outline.
-const FACEOFF_CIRCLE_RADIUS_M: float = 4.572
+# The logo sits inside the dot area; the text rides just inside the circle's
+# outline.
 const LOGO_DIAMETER_M: float = 5.5
 const TEXT_RADIUS_FRACTION: float = 0.84
 const TEXT_HEIGHT_M: float = 0.8
@@ -42,7 +41,7 @@ func _draw() -> void:
 	draw_texture_rect(LOGO_TEX, logo_rect, false, text_color)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
-	var text_radius: float = FACEOFF_CIRCLE_RADIUS_M * px_per_meter * TEXT_RADIUS_FRACTION
+	var text_radius: float = RinkMarkings.FACEOFF_CIRCLE_RADIUS_M * px_per_meter * TEXT_RADIUS_FRACTION
 	var font_size: int = int(TEXT_HEIGHT_M * px_per_meter)
 
 	# Arches oriented for a long-side broadcast view (camera on +X looking -X):

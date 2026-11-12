@@ -9,7 +9,7 @@ extends GutTest
 #   - degenerate (no men / no defenders),
 #   - cover_anchor geometry (goal-side of the man).
 
-const OUR_NET := Vector3(0.0, 0.0, 26.65)
+const OUR_NET := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
 
 
 func _vel_zero(peers: Array) -> Dictionary:

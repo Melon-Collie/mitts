@@ -43,3 +43,19 @@ static func spring_step(x: Vector2, v: Vector2, target: Vector2,
 	var x1: Vector2 = target + (d + c * dt) * e
 	var v1: Vector2 = (v - c * (omega * dt)) * e
 	return Vector4(x1.x, x1.y, v1.x, v1.y)
+
+
+# The lean the boards leave room for. A body tipping toward a wall goes over
+# until its shoulders meet it, and the wall holds it there: the tilt toward the
+# wall is capped where the shoulders, `height_m` over the ice the lean pivots
+# on, have crossed the `room_m` between the body's edge and the wall.
+# `wall_out` is the wall's outward unit normal (XZ), ZERO with no wall in reach.
+static func wall_held_tilt(tilt: Vector2, wall_out: Vector2, room_m: float,
+		height_m: float) -> Vector2:
+	if wall_out == Vector2.ZERO:
+		return tilt
+	var into: float = tilt.dot(wall_out)
+	var most: float = asin(clampf(room_m / maxf(height_m, 0.01), 0.0, 1.0))
+	if into <= most:
+		return tilt
+	return tilt - wall_out * (into - most)

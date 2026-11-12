@@ -10,7 +10,7 @@ extends GutTest
 #     the opp blue line (doesn't drop deep into F1's area).
 
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65   # Team 0 defends +Z, attacks -Z
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z   # Team 0 defends +Z, attacks -Z
 const OPP_NET_Z: float = -OUR_NET_Z
 
 

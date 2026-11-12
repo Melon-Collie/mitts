@@ -5,11 +5,11 @@ extends GutTest
 # role consumes it: who counts as an attacker, who is back, what the numbers
 # read says, and whether coverage is accounted for.
 #
-# Team 0 defends +Z (our net at +26.65) and attacks -Z. So an opponent rushing
+# Team 0 defends +Z (our net at GOAL_LINE_Z) and attacks -Z. So an opponent rushing
 # us travels in +Z, and "goal-side / more defensive" means larger z.
 
-const OUR_NET_Z: float = 26.65
-const BLUE: float = 7.29
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
+const BLUE: float = GameRules.BLUE_LINE_Z
 
 
 func _skater(pos: Vector3, vel: Vector3 = Vector3.ZERO) -> SkaterNetworkState:

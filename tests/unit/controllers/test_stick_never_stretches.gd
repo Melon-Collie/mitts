@@ -96,7 +96,7 @@ func _worst_shaft(c: SkaterController, start: Vector3, move: Vector2,
 # mouth, and alongside the side twine.
 const SPOTS: Array[Vector3] = [
 	Vector3(12.0, 0.0, 20.0), Vector3(11.0, 0.0, 25.0), Vector3(9.0, 0.0, 28.0),
-	Vector3(0.0, 0.0, 29.0), Vector3(0.0, 0.0, 26.65), Vector3(1.5, 0.0, 27.5)]
+	Vector3(0.0, 0.0, 29.0), Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z), Vector3(1.5, 0.0, 27.5)]
 const MODES: Array[String] = ["skate", "wrister", "slapper", "block"]
 
 

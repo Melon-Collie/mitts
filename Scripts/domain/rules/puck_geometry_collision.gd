@@ -10,7 +10,7 @@ class_name PuckGeometryCollision
 # x = ±GameRules.NET_HALF_WIDTH, z = ±GameRules.GOAL_LINE_Z, radius GameRules.NET_POST_RADIUS,
 # spanning y ∈ [0, NET_HEIGHT]; the crossbar is a horizontal pipe joining the post tops at
 # y = NET_HEIGHT; the top net panel is the mesh roof behind it. The crossbar and top panel
-# sit above the LAUNCHED loft ceiling (a clean loft shot tops ~1.14 m, under the 1.19 m
+# sit above the LAUNCHED loft ceiling (a clean loft shot tops ~1.14 m, under the 1.22 m
 # crossbar underside) — but deflections and goalie rebounds can carry the puck higher
 # (Puck.max_height is 3.0), so these are reachable in live play, not dead code. A post hit is 2D in XZ (circle vs circle); the
 # crossbar is 2D in Y-Z; the top panel is a horizontal-plane bounce.
@@ -105,7 +105,7 @@ static func _resolve_one_post(pos: Vector3, vel: Vector3, puck_radius: float,
 # Resolve a puck against the CROSSBAR — a horizontal pipe (axis along X) at y = NET_HEIGHT,
 # z = ±GOAL_LINE_Z, spanning |x| <= NET_CROWN_HALF_WIDTH. The test is 2D in the Y-Z plane:
 # circle (puck) vs circle (pipe). Reflects the Y-Z velocity off the iron, keeping the
-# along-bar X channel. Launched loft tops out under the bar (~1.14 m vs the 1.19 m
+# along-bar X channel. Launched loft tops out under the bar (~1.14 m vs the 1.22 m
 # underside), but deflections / goalie rebounds can arrive higher, so this does fire in
 # live play. Puck treated as a sphere of
 # puck_radius here (the flat disc is oblate in Y-Z, so this is slightly generous vertically —

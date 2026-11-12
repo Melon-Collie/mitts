@@ -182,8 +182,10 @@ func test_a_dump_their_keeper_covers_is_a_faceoff_in_his_zone() -> void:
 	# Their keeper plays no puck out: one slowing at his feet he covers, and where
 	# a cover is whistled the faceoff in his zone is what losing it to him is
 	# worth, priced as an icing's. One he saves stays live, whistle or not.
-	var ctx: RoleContext = _ctx(Vector3(-1.0, 0.0, 2.0), Vector3(0.0, 0.0, -7.5), [
-		[201, 1, Vector3(-1.0, 0.0, -5.5), Vector3(0.0, 0.0, -2.0)]])
+	# Placed off their goal line, so the dump's trip to him is the fixture's.
+	var their_line: float = -GameRules.GOAL_LINE_Z
+	var ctx: RoleContext = _ctx(Vector3(-1.0, 0.0, their_line + 28.65), Vector3(0.0, 0.0, -7.5), [
+		[201, 1, Vector3(-1.0, 0.0, their_line + 21.15), Vector3(0.0, 0.0, -2.0)]])
 	var field := AICarrierField.new()
 	field.fill(ctx)
 	field.fill_receivers(ctx, ctx.self_pos)

@@ -150,8 +150,8 @@ func test_the_layout_is_deterministic() -> void:
 # Each assertion re-derives the marking from GameRules rather than restating a
 # number, so a slot is checked against the ice that actually gets painted.
 
-const FACEOFF_CIRCLE_RADIUS: float = 4.572
-const FACEOFF_DOT_RADIUS: float = 0.3048
+const FACEOFF_CIRCLE_RADIUS: float = RinkMarkings.FACEOFF_CIRCLE_RADIUS_M
+const FACEOFF_DOT_RADIUS: float = RinkMarkings.FACEOFF_DOT_RADIUS_M
 const THICK_LINE_HALF: float = 0.15    # centre red and blue lines are 0.3 m wide
 const THIN_LINE_HALF: float = 0.025    # goal lines
 const CREASE_ARC_RADIUS: float = 1.83
@@ -203,6 +203,36 @@ func test_ice_slots_clear_both_creases() -> void:
 			assert_gte(_slot_distance_to(slot, goal_centre),
 					CREASE_ARC_RADIUS + ICE_CLEARANCE,
 					"slot clears the crease at z = %.2f" % goal_centre.y)
+
+func test_ice_slots_clear_the_referees_crease() -> void:
+	var centre := Vector2(-GameRules.INNER_HALF_WIDTH, 0.0)
+	for slot: Dictionary in AdBrands.ICE_SLOTS:
+		assert_gte(_slot_distance_to(slot, centre),
+				RinkMarkings.REFEREE_CREASE_RADIUS_M + THIN_LINE_HALF + ICE_CLEARANCE,
+				"slot at %s clears the referee's crease" % slot.center)
+
+func test_ice_slots_clear_the_hash_marks_and_trapezoids() -> void:
+	var r: float = RinkMarkings.FACEOFF_CIRCLE_RADIUS_M
+	var dz: float = RinkMarkings.HASH_MARK_SPACING_M * 0.5
+	var on_circle: float = sqrt(r * r - dz * dz)
+	var marks: Array[PackedVector2Array] = []
+	for dot: Vector2 in GameRules.END_ZONE_FACEOFF_DOTS:
+		for side: float in [-1.0, 1.0]:
+			for z: float in [dot.y - dz, dot.y + dz]:
+				var x0: float = dot.x + side * on_circle
+				marks.append(PackedVector2Array([Vector2(x0, z),
+						Vector2(x0 + side * RinkMarkings.HASH_MARK_LENGTH_M, z)]))
+	for end: float in [-1.0, 1.0]:
+		for side: float in [-1.0, 1.0]:
+			marks.append(PackedVector2Array([
+					Vector2(side * RinkMarkings.TRAPEZOID_GOAL_LINE_HALF_M, end * GameRules.GOAL_LINE_Z),
+					Vector2(side * RinkMarkings.TRAPEZOID_BOARDS_HALF_M, end * GameRules.RINK_HALF_LENGTH)]))
+	for slot: Dictionary in AdBrands.ICE_SLOTS:
+		for mark: PackedVector2Array in marks:
+			for i: int in 11:
+				var p: Vector2 = mark[0].lerp(mark[1], float(i) / 10.0)
+				assert_gte(_slot_distance_to(slot, p), THIN_LINE_HALF + ICE_CLEARANCE,
+						"slot at %s clears the marking through %s" % [slot.center, p])
 
 func test_ice_slots_do_not_overlap_each_other() -> void:
 	for i: int in AdBrands.ICE_SLOTS.size():

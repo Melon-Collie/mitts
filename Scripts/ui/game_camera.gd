@@ -71,7 +71,7 @@ const _ON_RINK_MARGIN: float = 5.0
 
 # ── Rink Bounds ───────────────────────────────────────────────────────────────
 @export var rink_half_width: float = 13.0
-@export var rink_half_length: float = 30.0
+@export var rink_half_length: float = 30.48
 
 # ── Smoothing ─────────────────────────────────────────────────────────────────
 @export var smooth_speed: float = 3.0
