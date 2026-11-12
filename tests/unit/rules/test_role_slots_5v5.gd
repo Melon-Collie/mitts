@@ -572,3 +572,62 @@ func test_trans_od_a_man_more_than_a_stick_behind_the_carrier_is_behind_him() ->
 			_positions())
 	assert_true(_slot_of(a, AIRoleSlots.Slot.BACK_STRONG) in [4, 5],
 			"BACK_STRONG stays with a D, got peer %d" % _slot_of(a, AIRoleSlots.Slot.BACK_STRONG))
+
+
+
+# ── A man short in our own end (a penalty) ───────────────────────────────────
+
+# Their carrier on our strong-side half wall. Ours: 1=C, 2=LW, 3=RW, 4=LD, 5=RD.
+func _dzone_short(ours: Array) -> Dictionary:
+	var skaters: Array = ours.duplicate()
+	skaters.append([10, 1, Vector3(8.0, 0.0, OUR_NET_Z - 9.0)])
+	return _assign(skaters, AIPossessionState.State.DZONE, 10)
+
+
+func _our(seat: String) -> Array:
+	match seat:
+		"C":
+			return [1, 0, Vector3(1.0, 0.0, OUR_NET_Z - 6.0)]
+		"LW":
+			return [2, 0, Vector3(-6.0, 0.0, OUR_NET_Z - 10.0)]
+		"RW":
+			return [3, 0, Vector3(7.0, 0.0, OUR_NET_Z - 10.0)]
+		"LD":
+			return [4, 0, Vector3(-2.0, 0.0, OUR_NET_Z - 2.5)]
+	return [5, 0, Vector3(3.0, 0.0, OUR_NET_Z - 3.0)]
+
+
+func test_with_a_defenseman_off_a_forward_fronts_the_net() -> void:
+	for boxed: String in ["LD", "RD"]:
+		var ours: Array = []
+		for seat: String in ["C", "LW", "RW", "LD", "RD"]:
+			if seat != boxed:
+				ours.append(_our(seat))
+		var a: Dictionary = _dzone_short(ours)
+		assert_ne(_slot_of(a, AIRoleSlots.Slot.ZONE_D_STRONG), -1, "%s off" % boxed)
+		var net_front: int = _slot_of(a, AIRoleSlots.Slot.ZONE_D_WEAK)
+		assert_true(net_front in [1, 2, 3], "%s off: a forward takes the net front" % boxed)
+		assert_ne(_slot_of(a, AIRoleSlots.Slot.ZONE_C), -1, "%s off: the slot is held" % boxed)
+		assert_eq(_slot_of(a, AIRoleSlots.Slot.ZONE_W_WEAK), -1,
+				"%s off: the weak-side winger's is the ice given up" % boxed)
+
+
+func test_with_a_forward_off_both_defensemen_stay_low() -> void:
+	var a: Dictionary = _dzone_short([_our("C"), _our("LW"), _our("LD"), _our("RD")])
+	var low: Array[int] = [a[4], a[5]]
+	low.sort()
+	assert_eq(low, [AIRoleSlots.Slot.ZONE_D_STRONG, AIRoleSlots.Slot.ZONE_D_WEAK] as Array[int])
+	assert_eq(_slot_of(a, AIRoleSlots.Slot.ZONE_W_WEAK), -1)
+
+
+func test_three_men_hold_the_puck_the_net_front_and_the_slot() -> void:
+	var a: Dictionary = _dzone_short([_our("C"), _our("RW"), _our("RD")])
+	for slot: int in [AIRoleSlots.Slot.ZONE_D_STRONG, AIRoleSlots.Slot.ZONE_D_WEAK,
+			AIRoleSlots.Slot.ZONE_C]:
+		assert_ne(_slot_of(a, slot), -1, "%s is held" % AIRoleSlots.Slot.keys()[slot])
+
+
+func test_a_full_team_still_keeps_the_net_front_for_a_defenseman() -> void:
+	var a: Dictionary = _dzone_short(
+			[_our("C"), _our("LW"), _our("RW"), _our("LD"), _our("RD")])
+	assert_true(_slot_of(a, AIRoleSlots.Slot.ZONE_D_WEAK) in [4, 5])

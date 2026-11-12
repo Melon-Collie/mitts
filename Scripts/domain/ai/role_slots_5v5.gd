@@ -160,6 +160,10 @@ static func assign(
 	# Pass 1 — group-scoped elections in priority order. A slot whose group
 	# has no free peer left is deferred to the cross-fill pass.
 	var deferred: Array[SlotSpec] = []
+	# Fewer bodies than posts (a man in the penalty box, a seat nobody holds):
+	# pass 2 has no spare to hand out, so a D-zone post whose group is empty
+	# would be the one left open, and the lower posts would be full.
+	var short_handed: bool = teammates.size() < specs.size()
 	var carrier_depth_z: float = NAN
 	if carrier_pid != -1 and snapshot.skater_states.has(carrier_pid):
 		carrier_depth_z = snapshot.skater_states[carrier_pid].position.z
@@ -189,6 +193,12 @@ static func assign(
 			if pid == -1:
 				pid = _pick_soonest(snapshot, teammates, assigned,
 						prev_assignments, spec, caps_by_peer, position_by_peer, false)
+		if pid == -1 and short_handed and is_zone_slot(spec.slot):
+			# The posts are in order of importance, so this one takes a body
+			# from any group now: with a defenseman off, a forward fronts the
+			# net and it is the weak-side winger's ice that goes uncovered.
+			pid = _pick_soonest(snapshot, teammates, assigned,
+					prev_assignments, spec, caps_by_peer, position_by_peer, false)
 		if pid == -1:
 			deferred.append(spec)
 			continue

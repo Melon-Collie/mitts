@@ -3463,6 +3463,8 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 	snap.loose_puck_released_by = _loose_puck_released_by \
 			if puck != null and puck.get_carrier() == null else -1
 	snap.fouls_called = _state_machine != null and _fouls_called()
+	snap.short_handed_team_id = _state_machine.short_handed_team_id \
+			if _state_machine != null else -1
 	for pid: int in _tag_up_peers:
 		snap.tag_up_peers[pid] = true
 	if _registry == null:

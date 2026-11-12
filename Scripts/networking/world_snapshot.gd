@@ -49,6 +49,9 @@ var loose_puck_released_by: int = -1
 # Whether this match calls fouls on body checks (PenaltyRules.calls_fouls).
 # AI-only, host-filled like the field above.
 var fouls_called: bool = false
+# The team a man short for a penalty, -1 at even strength
+# (GameStateMachine.short_handed_team_id). AI-only, host-filled.
+var short_handed_team_id: int = -1
 
 func get_skater_state(peer_id: int) -> SkaterNetworkState:
 	return skater_states.get(peer_id)

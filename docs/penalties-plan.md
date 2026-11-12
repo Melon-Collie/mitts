@@ -244,10 +244,13 @@ The bots learn each rule in the phase that adds it.
 - **A boxed bot** idles until its time is up.
 - **A bot takes its own penalty shot.** Whether the carrier's search drives the
   net alone without stalling under `PenaltyShotRules` has to be measured first.
-- **A man up and a man down.** `AIRoleSlots5` already elects jobs for a short
-  roster. Before any power-play or penalty-kill shape is designed, measure what
-  a 5-on-4 is worth with the bots as they are (the duel harness and the host
-  benchmarks); the shape is its own phase and is designed from that number.
+- **A man up and a man down.** A short team already fills its D-zone posts by
+  importance and clears the puck (*Phase 2 as built*). What is left for its own
+  phase is the shape: a passive box at four and a triangle at three that
+  protects the house and pressures only a loose or bobbled puck, where today
+  the short team still plays man-on-man below the dots and sends its puck-side
+  defenseman to the battle. Design it from how a 5-on-4 plays with the bots as
+  they are now.
 
 ## Phases
 
@@ -276,6 +279,18 @@ Until Phase 3 ships, 3v3 under `NHL` calls nothing.
   possession they read is the snapshot's, already delayed by the tier's
   reaction, so no new knob was needed. A boxed bot's team brain drops him
   (`exclude_skater`) and plays the roles it has left.
+- **A team short in its own end fills the posts by importance.** Measured on
+  the 5v5 election as it stood, a team with a defenseman in the box left the
+  net front empty and kept both wingers high: the net-front post is the D
+  group's, and the forwards' posts were filled first. A D-zone post whose group
+  is empty now takes a body from any group at its own priority when the team
+  has fewer bodies than posts (`AIRoleSlots5.assign`), so the order is the
+  puck-side defenseman, the net front, the slot, the strong wall, and the
+  weak-side winger's ice is what goes uncovered. It is still the five-man
+  hybrid coverage with a post missing, not a box.
+- **The bots know a short-handed team may ice the puck**
+  (`TeamBrain.icing_enforced`, off `WorldSnapshot.short_handed_team_id`), so a
+  dump or a rim down the ice is no longer priced as a whistle against them.
 - **The thresholds are the proposal's**, untested in play: the 1.5 m boarding
   zone, the rear 90°, the 0.3 s turn grace, the 2 m loose-puck reach.
 

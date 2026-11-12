@@ -126,6 +126,8 @@ var _force_tick_pending: bool = false
 # Peers that must NOT receive a slot: tutorial bots puppeted in scripted mode,
 # which a role behavior would otherwise steer.
 var _excluded_peers: Dictionary = {}
+# Whether this team is a man short for a penalty, off the newest snapshot.
+var _short_handed: bool = false
 var _team_id_by_peer: Dictionary = {}
 # Live per-peer AISkaterCaps from PlayerRegistry. Empty when unwired (tests) →
 # league default.
@@ -162,6 +164,8 @@ func tick(delta: float, snapshot: WorldSnapshot) -> void:
 	# Ping directives age in real host time, not brain-tick time — advance
 	# before the rate-limit gate so expiry never stretches with the cadence.
 	ping_directives.advance(delta)
+	if snapshot != null:
+		_short_handed = snapshot.short_handed_team_id == team_id
 	if snapshot != null and snapshot.puck_state != null:
 		var carrier: int = snapshot.puck_state.carrier_peer_id
 		if carrier != _held_by:
@@ -641,8 +645,9 @@ func get_team_size() -> int:
 	return team_size
 
 
+# A team a man short for a penalty may ice the puck.
 func icing_enforced() -> bool:
-	return rule_set == GameRules.RuleSet.NHL
+	return rule_set == GameRules.RuleSet.NHL and not _short_handed
 
 
 func covers_whistled() -> bool:

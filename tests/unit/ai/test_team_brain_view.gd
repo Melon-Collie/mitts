@@ -47,6 +47,23 @@ func test_view_mirrors_slots_and_flags() -> void:
 			"threat memo frozen")
 
 
+func test_a_short_handed_team_is_told_it_may_ice_the_puck() -> void:
+	var brain := _make_brain()
+	brain.rule_set = GameRules.RuleSet.NHL
+	var snap: WorldSnapshot = _make_snapshot(Vector3.ZERO)
+	brain.tick(0.0, snap)
+	brain.build_view()
+	assert_true(brain.get_view().icing_enforced(), "at even strength icing is called")
+	snap.short_handed_team_id = HOME
+	brain.tick(0.0, snap)
+	brain.build_view()
+	assert_false(brain.get_view().icing_enforced(), "a man short, it is not")
+	snap.short_handed_team_id = 1
+	brain.tick(0.0, snap)
+	brain.build_view()
+	assert_true(brain.get_view().icing_enforced(), "the team with the extra man still is")
+
+
 func test_view_mirrors_numbers_up() -> void:
 	var brain := _make_brain()
 	brain.their_rush_read.is_live = true
