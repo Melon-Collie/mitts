@@ -209,6 +209,57 @@ func test_a_client_records_nothing() -> void:
 	assert_false(client.active.is_played(TournamentRules.player_game(client.active)))
 
 
+# ── The cup ──────────────────────────────────────────────────────────────────
+
+func test_the_cup_is_won_once_on_the_final_and_not_before() -> void:
+	var host: TournamentCoordinator = _started()
+	watch_signals(host)
+	assert_true(_play(host, true))
+	assert_true(host.begin_match())
+	assert_true(_play(host, true))
+	assert_signal_not_emitted(host, "cup_won")
+	assert_true(host.begin_match())
+	assert_true(_play(host, true))
+	assert_signal_emit_count(host, "cup_won", 1)
+
+
+func test_losing_the_final_wins_no_cup() -> void:
+	var host: TournamentCoordinator = _started()
+	watch_signals(host)
+	assert_true(_play(host, true))
+	assert_true(host.begin_match())
+	assert_true(_play(host, true))
+	assert_true(host.begin_match())
+	assert_true(_play(host, false))
+	assert_signal_not_emitted(host, "cup_won")
+
+
+func test_a_client_wins_the_cup_when_the_result_reaches_it() -> void:
+	var host: TournamentCoordinator = _started()
+	assert_true(_play(host, true))
+	assert_true(host.begin_match())
+	assert_true(_play(host, true))
+	var client: TournamentCoordinator = _coordinator()
+	client.adopt_remote(host.active.to_dict())
+	watch_signals(client)
+	assert_true(host.begin_match())
+	assert_true(_play(host, true))
+	client.adopt_remote(host.active.to_dict())
+	assert_signal_emit_count(client, "cup_won", 1)
+
+
+func test_a_cup_already_won_is_not_the_late_joiners() -> void:
+	var host: TournamentCoordinator = _started()
+	for i: int in 3:
+		assert_true(host.begin_match())
+		assert_true(_play(host, true))
+	var client: TournamentCoordinator = _coordinator()
+	watch_signals(client)
+	client.adopt_remote(host.active.to_dict())
+	client.adopt_remote(host.active.to_dict())
+	assert_signal_not_emitted(client, "cup_won")
+
+
 # ── Seats ────────────────────────────────────────────────────────────────────
 
 func test_every_seat_is_open_outside_a_tournament() -> void:

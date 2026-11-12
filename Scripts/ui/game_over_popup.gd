@@ -30,6 +30,13 @@ const _STAR_REVEAL_DELAY: float = 0.55
 const _STAR_REVEAL_GAP: float = 0.55
 
 const _MAX_STARS: int = 3
+# The tournament line under the result: a quiet note for most games, and the
+# club's crest beside gold lettering when the game just won the cup.
+const _OUTCOME_SIZE: int = 22
+const _CUP_SIZE: int = 44
+const _CUP_CREST_PX: float = 68.0
+const _CUP_REVEAL_DELAY: float = 0.45
+const _CUP_REVEAL_OVERSCALE: float = 1.35
 # Translation keys, tr()'d at the display seam (see _build_star_row); localized
 # copy lives in locale/translations.csv.
 const _RANK_TAG_KEYS: Array[String] = ["STAR_FIRST", "STAR_SECOND", "STAR_THIRD"]
@@ -62,7 +69,11 @@ var _save_goal_btn: Button = null
 var _rematch_btn: Button = null
 var _lobby_btn: Button = null
 var _vote_label: Label = null
+var _tournament_row: HBoxContainer = null
 var _tournament_label: Label = null
+var _cup_crest: ClubCrest = null
+var _cup_club: int = TournamentRules.NO_CLUB
+var _cup_tween: Tween = null
 var _present_tween: Tween = null
 var _is_spectator: bool = false
 # A tournament game has no rematch, and its way on is the bracket.
@@ -119,10 +130,17 @@ func _build_top_block(root: Control) -> void:
 	_result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_top_block.add_child(_result_label)
 
-	_tournament_label = _lbl("", 22, _DIM)
-	_tournament_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_tournament_label.visible = false
-	_top_block.add_child(_tournament_label)
+	_tournament_row = HBoxContainer.new()
+	_tournament_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_tournament_row.add_theme_constant_override("separation", 16)
+	_tournament_row.visible = false
+	_top_block.add_child(_tournament_row)
+	_cup_crest = ClubCrest.new(_CUP_CREST_PX)
+	_cup_crest.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_cup_crest.visible = false
+	_tournament_row.add_child(_cup_crest)
+	_tournament_label = _lbl("", _OUTCOME_SIZE, _DIM)
+	_tournament_row.add_child(_tournament_label)
 
 
 # [stripe] HOME  3   —   2  AWAY [stripe] — the scorebug's stripe language at
@@ -342,6 +360,11 @@ func present(home_score: int, away_score: int,
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_present_tween.parallel().tween_property(_bottom_block, "modulate:a", 1.0, 0.35) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if _cup_club != TournamentRules.NO_CLUB:
+		_play_cup_reveal(_CUP_REVEAL_DELAY)
+	else:
+		_tournament_row.modulate.a = 1.0
+		_tournament_row.scale = Vector2.ONE
 	if star_count > 0:
 		_present_tween.tween_interval(_STAR_REVEAL_DELAY)
 		# Arena order: lowest rank announced first, first star last.
@@ -370,13 +393,42 @@ func set_spectator(is_spec: bool) -> void:
 
 
 # `outcome` is what the result did to the player's tournament ("Advance to the
-# Semifinal"), empty while that is not known yet.
-func set_tournament(in_tournament: bool, outcome: String) -> void:
+# Semifinal"), empty while that is not known yet. `cup_club` is the player's
+# club when this game won it the cup, which the line then celebrates.
+func set_tournament(in_tournament: bool, outcome: String,
+		cup_club: int = TournamentRules.NO_CLUB) -> void:
+	var won_cup: bool = cup_club != TournamentRules.NO_CLUB
+	var cup_just_arrived: bool = won_cup and _cup_club == TournamentRules.NO_CLUB
 	_in_tournament = in_tournament
-	_tournament_label.text = outcome
-	_tournament_label.visible = in_tournament and not outcome.is_empty()
+	_cup_club = cup_club
+	_cup_crest.set_club(cup_club)
+	_cup_crest.visible = won_cup
+	# At headline size it is lettered like the headline above it.
+	_tournament_label.text = outcome.to_upper() if won_cup else outcome
+	_tournament_label.add_theme_font_size_override("font_size",
+			_CUP_SIZE if won_cup else _OUTCOME_SIZE)
+	_tournament_label.add_theme_color_override("font_color", _GOLD if won_cup else _DIM)
+	_tournament_row.visible = in_tournament and not outcome.is_empty()
 	_lobby_btn.text = _lobby_button_text(RematchVoteRules.Choice.NONE)
 	_refresh_actions()
+	# On a client the result can land with the screen already up.
+	if cup_just_arrived and visible:
+		_play_cup_reveal(0.0)
+
+
+# The cup line lands the way a first star does: a spring from an overscale.
+func _play_cup_reveal(delay: float) -> void:
+	if _cup_tween != null and _cup_tween.is_running():
+		_cup_tween.kill()
+	_tournament_row.modulate.a = 0.0
+	_cup_tween = create_tween()
+	_cup_tween.tween_interval(delay)
+	_cup_tween.tween_callback(func() -> void:
+		_tournament_row.pivot_offset = _tournament_row.size / 2.0
+		_tournament_row.scale = Vector2(_CUP_REVEAL_OVERSCALE, _CUP_REVEAL_OVERSCALE))
+	_cup_tween.tween_property(_tournament_row, "modulate:a", 1.0, 0.2)
+	_cup_tween.parallel().tween_property(_tournament_row, "scale", Vector2.ONE, 0.5) \
+		.set_trans(Tween.TRANS_SPRING).set_ease(Tween.EASE_OUT)
 
 
 func _refresh_actions() -> void:
@@ -401,6 +453,8 @@ func set_goal_saving(available: bool, can_save: bool) -> void:
 func hide_popup() -> void:
 	if _present_tween != null and _present_tween.is_running():
 		_present_tween.kill()
+	if _cup_tween != null and _cup_tween.is_running():
+		_cup_tween.kill()
 	visible = false
 
 

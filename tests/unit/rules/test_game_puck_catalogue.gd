@@ -172,6 +172,7 @@ func test_event_lookups_resolve_and_fail_closed() -> void:
 	assert_gt(GamePucks.event_threshold("big_hit"), 0.0)
 	assert_eq(GamePucks.event_puck("tutorials_done"), GamePucks.STUDENT)
 	assert_eq(GamePucks.event_puck("build_edited"), GamePucks.CUSTOM_BUILD)
+	assert_eq(GamePucks.event_puck("cup_won"), GamePucks.CUP_WINNER)
 	assert_eq(GamePucks.event_puck("nope"), "")
 	assert_eq(GamePucks.event_threshold("nope"), -1.0)
 

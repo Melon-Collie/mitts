@@ -641,8 +641,18 @@ func _show_matchup_overlay() -> void:
 		return a.team_slot < b.team_slot
 	home_records.sort_custom(by_slot)
 	away_records.sort_custom(by_slot)
+	var title: String = ""
+	var home_header: String = ""
+	var away_header: String = ""
+	var state: TournamentState = GameManager.tournament.active
+	var game: int = _tournament_game(state)
+	if game != TournamentRules.NO_GAME:
+		title = TournamentCopy.intro_title(game)
+		home_header = TournamentCopy.seeded_club(state, TournamentRules.home_club(state, game))
+		away_header = TournamentCopy.seeded_club(state, TournamentRules.away_club(state, game))
 	_matchup_overlay.present(home_records, away_records,
-			HudChrome.team_stripe(0), HudChrome.team_stripe(1))
+			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
+			title, home_header, away_header)
 
 func _hide_matchup_overlay() -> void:
 	if _matchup_overlay != null:
@@ -777,17 +787,26 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 
 
 # Tells the game-over screen whether this was a tournament game and what its
-# result did. The match's two kits are the bracket's clubs, which is what names
-# the game. Re-run when the bracket changes: a client's copy of the result
+# result did. Re-run when the bracket changes: a client's copy of the result
 # arrives after the horn.
 func _refresh_tournament_outcome() -> void:
 	var state: TournamentState = GameManager.tournament.active
 	if state == null:
 		_game_over_popup.set_tournament(false, "")
 		return
-	var game: int = TournamentRules.game_between(state,
+	var game: int = _tournament_game(state)
+	var cup_club: int = state.player_club if game == TournamentRules.FINAL \
+			and TournamentRules.champion(state) == state.player_club else TournamentRules.NO_CLUB
+	_game_over_popup.set_tournament(true, TournamentCopy.outcome_line(state, game), cup_club)
+
+
+# The bracket game this match is, or NO_GAME outside a tournament. The match's
+# two kits are the bracket's clubs, and two clubs meet at most once.
+func _tournament_game(state: TournamentState) -> int:
+	if state == null:
+		return TournamentRules.NO_GAME
+	return TournamentRules.game_between(state,
 			NetworkManager.pending_home_color_slot, NetworkManager.pending_away_color_slot)
-	_game_over_popup.set_tournament(true, TournamentCopy.outcome_line(state, game))
 
 # Compact stat line for a star row. Scorers show goals/assists (plus the GWG
 # tag — the clutch credit the selection weighted); a star who earned it on

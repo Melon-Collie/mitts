@@ -139,15 +139,20 @@ func build_matchup_column(header: Label, background: Control) -> VBoxContainer:
 	return column
 
 
-func _club_row(side_label: String, club: int) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+# One club of the matchup: which side it has as a caption, then its mark, crest,
+# seed and name on a line. The caption sits above so a long word for a side
+# cannot widen the column.
+func _club_row(side_label: String, club: int) -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 0)
 	var side := Label.new()
 	side.text = side_label
-	side.add_theme_font_size_override("font_size", 12)
+	side.add_theme_font_size_override("font_size", 10)
 	side.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
-	side.custom_minimum_size = Vector2(72, 0)
-	row.add_child(side)
+	box.add_child(side)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
 	var bar: ColorRect = BracketPanel.player_bar()
 	bar.modulate.a = 1.0 if club == _state.player_club else 0.0
 	row.add_child(bar)
@@ -165,4 +170,4 @@ func _club_row(side_label: String, club: int) -> HBoxContainer:
 	name_label.add_theme_font_override("font", MenuStyle.NAME_FONT)
 	name_label.add_theme_color_override("font_color", MenuStyle.TEXT_BODY)
 	row.add_child(name_label)
-	return row
+	return box

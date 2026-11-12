@@ -16,6 +16,16 @@ static func club_name(club: int) -> String:
 	return TeamColorRegistry.get_preset_name(club)
 
 
+# A club as a bracket line names it: its seed, then its name.
+static func seeded_club(state: TournamentState, club: int) -> String:
+	return "#%d %s" % [TournamentRules.seed_of(state, club) + 1, club_name(club).to_upper()]
+
+
+# The matchup intro's title for `game`.
+static func intro_title(game: int) -> String:
+	return t(&"TOURNAMENT_INTRO_TITLE") % round_name(TournamentRules.round_of(game)).to_upper()
+
+
 # Where the player's tournament stands: the game they play next, or how it ended.
 static func status_line(state: TournamentState) -> String:
 	var player: String = club_name(state.player_club)

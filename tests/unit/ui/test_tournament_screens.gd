@@ -255,17 +255,19 @@ func test_a_tournament_game_has_no_rematch() -> void:
 	var rematch: Button = popup.get("_rematch_btn") as Button
 	var lobby: Button = popup.get("_lobby_btn") as Button
 	var outcome: Label = popup.get("_tournament_label") as Label
+	var outcome_row: Control = popup.get("_tournament_row") as Control
 	assert_true(rematch.visible)
-	assert_false(outcome.visible)
+	assert_false(outcome_row.visible)
 
 	popup.set_tournament(true, "")
 	assert_false(rematch.visible, "no rematch even before the result is in")
-	assert_false(outcome.visible)
+	assert_false(outcome_row.visible)
 
 	popup.set_tournament(true, "Advance to the Semifinal")
 	assert_false(rematch.visible)
-	assert_true(outcome.visible)
+	assert_true(outcome_row.visible)
 	assert_eq(outcome.text, "Advance to the Semifinal")
+	assert_false((popup.get("_cup_crest") as Control).visible, "an ordinary round has no crest")
 	assert_eq(lobby.text, tr(&"GAME_OVER_CONTINUE"))
 	var votes: Dictionary[int, int] = {}
 	popup.update_votes(votes, 1, RematchVoteRules.Choice.NONE)
@@ -273,8 +275,45 @@ func test_a_tournament_game_has_no_rematch() -> void:
 
 	popup.set_tournament(false, "")
 	assert_true(rematch.visible, "the next ordinary game gets its rematch back")
-	assert_false(outcome.visible)
+	assert_false(outcome_row.visible)
 	assert_eq(lobby.text, tr(&"GAME_OVER_RETURN_LOBBY"))
+
+
+func test_winning_the_cup_shows_the_clubs_crest_in_gold() -> void:
+	var popup := GameOverPopup.new()
+	add_child_autofree(popup)
+	var crest: ClubCrest = popup.get("_cup_crest") as ClubCrest
+	var outcome: Label = popup.get("_tournament_label") as Label
+	popup.set_tournament(true, "Champions", _PLAYER_CLUB)
+	assert_true(crest.visible)
+	assert_eq(outcome.text, "CHAMPIONS", "lettered like the headline it sits under")
+	assert_eq(crest.get("_club"), _PLAYER_CLUB)
+	assert_eq(outcome.get_theme_color("font_color"), MenuStyle.GOLD)
+	popup.set_tournament(true, "Eliminated")
+	assert_false(crest.visible, "the next tournament game starts plain")
+	assert_ne(outcome.get_theme_color("font_color"), MenuStyle.GOLD)
+
+
+func test_the_matchup_intro_names_the_round_and_the_clubs() -> void:
+	var overlay := MatchupIntroOverlay.new()
+	add_child_autofree(overlay)
+	var no_one: Array[PlayerRecord] = []
+	var state: TournamentState = _state()
+	var game: int = TournamentRules.player_game(state)
+	overlay.present(no_one, no_one, Color.RED, Color.BLUE, TournamentCopy.intro_title(game),
+			TournamentCopy.seeded_club(state, _FIELD[2]),
+			TournamentCopy.seeded_club(state, _PLAYER_CLUB))
+	var texts: Array[String] = _labels(overlay)
+	assert_has(texts, TournamentCopy.t(&"TOURNAMENT_INTRO_TITLE")
+			% TournamentCopy.round_name(0).to_upper())
+	assert_has(texts, "#3 " + TournamentCopy.club_name(_FIELD[2]).to_upper())
+	assert_has(texts, "#6 " + TournamentCopy.club_name(_PLAYER_CLUB).to_upper())
+
+	overlay.present(no_one, no_one, Color.RED, Color.BLUE)
+	texts = _labels(overlay)
+	assert_has(texts, tr(&"MATCHUP_TITLE"), "an ordinary game gets the ordinary title back")
+	assert_has(texts, tr(&"TEAM_HOME"))
+	assert_has(texts, tr(&"TEAM_AWAY"))
 
 
 func test_a_spectator_of_a_tournament_game_still_has_no_vote() -> void:

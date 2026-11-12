@@ -558,3 +558,6 @@ TOURNAMENT_SETUP_START,Start Tournament,Empezar torneo
 TOURNAMENT_SETUP_NOTE,"Eight clubs, single elimination. Win three games to take the cup.","Ocho clubes, eliminación directa. Gana tres partidos para llevarte la copa."
 TOURNAMENT_REPLACE_CONFIRM,Start a new tournament? The one in progress will be lost.,¿Empezar un torneo nuevo? Se perderá el que está en curso.
 GAME_OVER_CONTINUE,Continue,Continuar
+PUCK_CUP_WINNER,Cup Winner,Ganador de la copa
+PUCK_CUP_WINNER_DESC,Win a tournament.,Gana un torneo.
+TOURNAMENT_INTRO_TITLE,TOURNAMENT · %s,TORNEO · %s

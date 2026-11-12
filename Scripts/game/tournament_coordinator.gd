@@ -11,6 +11,9 @@ extends RefCounted
 ## (`adopt_remote`), never stored and never recorded into.
 
 signal changed
+# The player's club won the final in this session: on the host as the result is
+# recorded, on a client as the host's copy of it arrives.
+signal cup_won
 
 var active: TournamentState = null
 
@@ -77,9 +80,16 @@ func end_session() -> void:
 # Client: takes the host's copy as the session's tournament. Anything that is
 # not a possible bracket, the empty dictionary included, means there is none.
 func adopt_remote(data: Variant) -> void:
+	# A copy that is already won when it first arrives (a lobby joined after the
+	# final) is someone else's cup.
+	var was_in_final: bool = active != null \
+			and TournamentRules.player_game(active) == TournamentRules.FINAL
 	var state: TournamentState = TournamentState.from_variant(data)
 	active = state if TournamentRules.is_valid(state) else null
 	changed.emit()
+	if was_in_final and active != null \
+			and TournamentRules.status(active) == TournamentRules.Status.CHAMPION:
+		cup_won.emit()
 
 
 # Whether a human may take a seat on `team_id`. In a tournament the humans all
@@ -113,6 +123,8 @@ func record_result(home_score: int, away_score: int, overtime: bool) -> bool:
 		TournamentRules.simulate_to_end(active)
 	_store()
 	changed.emit()
+	if TournamentRules.status(active) == TournamentRules.Status.CHAMPION:
+		cup_won.emit()
 	return true
 
 

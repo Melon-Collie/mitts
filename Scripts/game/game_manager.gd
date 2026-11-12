@@ -545,6 +545,7 @@ func _ready() -> void:
 	_trophies.puck_earned.connect(game_puck_earned.emit)
 	NetworkManager.session_reset.connect(tournament.end_session)
 	tournament.changed.connect(_broadcast_tournament)
+	tournament.cup_won.connect(_on_cup_won)
 	# End-of-tick capture + broadcast (physics priority 2, after all actor
 	# integration). The callback body carries all the session gates, so the hook
 	# is safe to run from boot.
@@ -5383,6 +5384,14 @@ func _broadcast_tournament() -> void:
 func _send_tournament_to(peer_id: int) -> void:
 	if NetworkManager.is_host:
 		NetworkManager.send_tournament_to(peer_id, _tournament_wire())
+
+
+# The Game Puck for a cup goes to whoever skated in the final: a spectator has
+# no record in the registry.
+func _on_cup_won() -> void:
+	if _trophies != null and _achievements_active() \
+			and _registry != null and _registry.get_local() != null:
+		_trophies.on_cup_won()
 
 
 func _tournament_wire() -> Dictionary:

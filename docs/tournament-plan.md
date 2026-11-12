@@ -1,9 +1,9 @@
 # Tournament — design plan
 
-Status: **approved; Phases 1 to 3 built.** A whole cup can be played alone or
-with friends on the player's side; Phases 2 and 3 await a local playtest, and
-Phase 3 has not run over Steam. Phase 4 is not started. Where what is built
-differs from the text below, the *as built* sections say how.
+Status: **approved; all four phases built.** A whole cup can be played alone or
+with friends on the player's side. Phases 2 to 4 await a local playtest, and
+Phase 3 has not run over Steam. Where what is built differs from the text
+below, the *as built* sections say how.
 
 A tournament is an eight-club single-elimination bracket. The player picks a
 club, is drawn a seed, and wins three games to take the cup: quarterfinal,
@@ -274,6 +274,39 @@ What was run: a host and a client as two headless processes over a local ENet
 peer standing in for Steam, through two rounds, a side change and Finish, with
 the two lobbies compared seat for seat each round. No game was played out: the
 host forced each final score.
+
+## Phase 4 as built
+
+- **The matchup intro names the round and the clubs.** In a tournament game its
+  title reads "TOURNAMENT · SEMIFINAL" in place of "TONIGHT'S MATCHUP", and the
+  HOME and AWAY headers become the two clubs with their seeds ("#2
+  POMEGRANATE"). `MatchupIntroOverlay.present` takes the three strings and
+  falls back to the ordinary ones.
+- **The champion moment is on the game-over screen.** When the game just won
+  the cup, the outcome line is the club's crest beside "CHAMPIONS" in gold at
+  twice the size, and it lands with the spring a first star has. On a client it
+  plays when the host's result arrives, which can be after the screen is up.
+  The bracket's champion is lettered in gold too. There is no new sound or
+  on-ice effect: the final horn's own flash and chyron come first, as in any
+  game.
+- **Cup Winner** is a Game Puck (`cup_winner`, an event puck). Each machine
+  earns its own: `TournamentCoordinator.cup_won` fires on the host as the final
+  is recorded and on a client as that result reaches it, and `GameManager`
+  earns the puck only for a player who has a skater in the match, so a
+  spectator of the final does not get one. A lobby joined after the final was
+  won earns nothing. It is not mirrored to Steam.
+- **Spanish was checked by rendering** the Play popup, the setup popup, the
+  lobby and the bracket with the game in Spanish. Every string fit. One layout
+  fault came out of it: the lobby's matchup column put the side beside each
+  club, and "VISITANTE" widened the column until the spectators column wrapped.
+  The side is now a caption above each club.
+- **Preview shots** `tournament_intro` and `tournament_champion` start a final
+  from its lobby. The intro is the real one. The cup-winning screen is staged
+  during it: the result is recorded as the host records one and the HUD's own
+  presenter is called, because playing a final out takes the software renderer
+  many minutes. Stepping the match faster is not a way round that: past the
+  engine's default of 8 physics steps a frame, the movement-locked phases
+  break the bots' stick aim (from about 32) and the skater's cosmetic rig.
 
 ## 6. Phases
 

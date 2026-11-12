@@ -63,6 +63,8 @@ func show_state(state: TournamentState) -> void:
 	_champion_crest.set_club(champion)
 	_champion_name.text = "—" if champion == TournamentRules.NO_CLUB \
 			else TournamentCopy.club_name(champion).to_upper()
+	_champion_name.add_theme_color_override("font_color",
+			MenuStyle.TEXT_MUTED if champion == TournamentRules.NO_CLUB else MenuStyle.GOLD)
 	queue_redraw()
 
 

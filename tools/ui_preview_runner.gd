@@ -14,6 +14,7 @@ const _STAGE_FREE_PLAY: String = "free_play"
 const _STAGE_TUTORIAL: String = "tutorial"
 const _STAGE_LOBBY: String = "lobby"
 const _STAGE_TOURNAMENT: String = "tournament"
+const _STAGE_TOURNAMENT_FINAL: String = "tournament_final"
 const _STAGE_MATCH: String = "match"
 
 const _SHOTS: Array[Dictionary] = [
@@ -51,6 +52,9 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "tournament_lobby", "stage": _STAGE_TOURNAMENT, "open": "_close_tournament_bracket"},
 	{"name": "tournament_after_a_win", "stage": _STAGE_TOURNAMENT, "open": "_open_tournament_bracket_after", "arg": 1},
 	{"name": "tournament_won", "stage": _STAGE_TOURNAMENT, "open": "_open_tournament_bracket_after", "arg": 2},
+	# A tournament's final, from its matchup intro to the screen that wins the cup.
+	{"name": "tournament_intro", "stage": _STAGE_TOURNAMENT_FINAL, "open": "_open_nothing"},
+	{"name": "tournament_champion", "stage": _STAGE_TOURNAMENT_FINAL, "open": "_open_tournament_champion"},
 	{"name": "hud_match", "stage": _STAGE_MATCH, "open": "_open_nothing"},
 ]
 
@@ -155,13 +159,15 @@ func _enter_stage(stage: String) -> void:
 		_STAGE_LOBBY, _STAGE_MATCH:
 			NetworkManager.start_offline()
 			path = Constants.SCENE_LOBBY
-		_STAGE_TOURNAMENT:
+		_STAGE_TOURNAMENT, _STAGE_TOURNAMENT_FINAL:
 			NetworkManager.start_offline()
 			var draft := TournamentState.new()
 			draft.player_club = TeamColorRegistry.DEFAULT_HOME_SLOT
 			if not GameManager.tournament.begin_new(draft, _TOURNAMENT_SEED,
 					TeamColorRegistry.get_all_slots()):
 				_fail("could not draw the preview tournament")
+			if stage == _STAGE_TOURNAMENT_FINAL:
+				_win_tournament_games(2)
 			path = Constants.SCENE_LOBBY
 	_stage = stage
 	tree.change_scene_to_file(path)
@@ -169,6 +175,8 @@ func _enter_stage(stage: String) -> void:
 		await tree.process_frame
 	if stage == _STAGE_MATCH:
 		await _start_match()
+	elif stage == _STAGE_TOURNAMENT_FINAL:
+		await _start_tournament_final()
 	# Bottom centre is below every menu column and dialog, so no shot catches a
 	# button in its hover state.
 	var view: Vector2 = get_viewport().get_visible_rect().size
@@ -199,6 +207,42 @@ func _start_match() -> void:
 	while Engine.get_physics_frames() < target:
 		await tree.process_frame
 	Engine.max_physics_steps_per_frame = default_steps
+
+
+# From the final's lobby to its matchup intro on the ice.
+func _start_tournament_final() -> void:
+	var tree: SceneTree = get_tree()
+	_invoke(_find(tree.current_scene, LobbyManager), "_on_start_pressed")
+	var waited: int = 0
+	while tree.current_scene == null \
+			or tree.current_scene.scene_file_path != Constants.SCENE_HOCKEY \
+			or not _matchup_intro_showing():
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the final never showed its matchup intro")
+			return
+
+
+func _matchup_intro_showing() -> bool:
+	var intro: MatchupIntroOverlay = _find(get_tree().current_scene,
+			MatchupIntroOverlay) as MatchupIntroOverlay
+	return intro != null and intro.visible
+
+
+# Records `wins` games for the player's club, whichever side it is on.
+func _win_tournament_games(wins: int) -> void:
+	var coordinator: TournamentCoordinator = GameManager.tournament
+	for i: int in wins:
+		var state: TournamentState = coordinator.active
+		var at_home: bool = TournamentRules.home_club(state,
+				TournamentRules.player_game(state)) == state.player_club
+		coordinator.begin_match()
+		var recorded: bool = coordinator.record_result(3, 2, i == 0) if at_home \
+				else coordinator.record_result(2, 3, i == 0)
+		if not recorded:
+			_fail("the preview tournament had no game to win")
+			return
 
 
 func _settle(frames: int, seconds: float) -> void:
@@ -347,23 +391,53 @@ func _close_tournament_bracket() -> void:
 
 # The bracket after the player's club has won `wins` more games.
 func _open_tournament_bracket_after(wins: int) -> void:
-	var coordinator: TournamentCoordinator = GameManager.tournament
-	for i: int in wins:
-		var state: TournamentState = coordinator.active
-		var at_home: bool = TournamentRules.home_club(state,
-				TournamentRules.player_game(state)) == state.player_club
-		coordinator.begin_match()
-		var recorded: bool = coordinator.record_result(3, 2, i == 0) if at_home \
-				else coordinator.record_result(2, 3, i == 0)
-		if not recorded:
-			_fail("the preview tournament had no game to win")
-			return
+	_win_tournament_games(wins)
 	var mode: LobbyTournamentMode = _find(get_tree().current_scene,
 			LobbyTournamentMode) as LobbyTournamentMode
 	if mode == null:
 		_fail("the lobby is not in tournament mode")
 		return
 	mode.open_bracket(null)
+
+
+# The screen that wins the cup, without playing the final to get there: the
+# result is recorded as the host records one, the score put on the scorebug as
+# a goal would put it, and the HUD's own presenter called. Playing it out costs
+# the software renderer many minutes, and stepping the match faster through its
+# movement-locked phases breaks the bots' stick aim and the skater rig.
+func _open_tournament_champion() -> void:
+	var tree: SceneTree = get_tree()
+	var hud: HUD = _find(tree.current_scene, HUD) as HUD
+	var side: int = GameManager.tournament.roster_side
+	var home_score: int = 3 if side == 0 else 2
+	var away_score: int = 5 - home_score
+	if hud == null or not GameManager.tournament.record_result(home_score, away_score, false):
+		_fail("the final had no HUD, or no result to record")
+		return
+	GameManager.score_changed.emit(home_score, away_score)
+	# The shot is staged during the matchup intro, which a played final would
+	# have long since dismissed.
+	_invoke(hud, "_hide_matchup_overlay")
+	await _settle(_SHOT_SETTLE_FRAMES, _SHOT_SETTLE_SEC)
+	var result_key: StringName = &"RESULT_HOME_WINS" if side == 0 else &"RESULT_AWAY_WINS"
+	if not hud.has_method("_present_game_over_screen"):
+		_fail("HUD no longer has _present_game_over_screen")
+		return
+	hud.call("_present_game_over_screen", tr(result_key), HudChrome.team_ink(side))
+	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
+	# The reveal runs on game time, which crawls here: wait for it by its tweens.
+	var waited: int = 0
+	while _tween_running(popup, "_present_tween") or _tween_running(popup, "_cup_tween"):
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the game-over screen's reveal never finished")
+			return
+
+
+func _tween_running(holder: Object, field: String) -> bool:
+	var tween: Tween = holder.get(field) as Tween
+	return tween != null and tween.is_running()
 
 
 func _open_side_menu(handler: String) -> void:
