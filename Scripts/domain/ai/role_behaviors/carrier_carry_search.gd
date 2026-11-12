@@ -356,7 +356,7 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	_move_reach[m] = 0
 	if not _move_legal(ctx, rollout, m, ctx.self_pos):
 		return
-	var reach: int = _priced_reach(rollout, m, ctx.self_pos, behind_net, ctx.self_shot_lookahead_s)
+	var reach: int = rollout.reach_short_of_net(m, _max_abs_z(behind_net))
 	if reach == 0:
 		return
 	_move_reach[m] = reach
@@ -410,20 +410,6 @@ func _fan_aim(ctx: RoleContext) -> Vector3:
 # The |z| a move from in front of the goal lines may not pass; none from behind.
 static func _max_abs_z(behind_net: bool) -> float:
 	return INF if behind_net else GameRules.GOAL_LINE_Z - AIStationSearch.GOAL_LINE_BUFFER_M
-
-
-# How many of rolled move `m`'s samples, skated from `from`, are priced: up to
-# its last one short of the net (AICarryRollout.reach_short_of_net) whose shot on
-# arrival still leaves in front of the goal line. The wind-up carries the puck on
-# at his pace, and a release behind the line is no shot.
-static func _priced_reach(roll: AICarryRollout, m: int, from: Vector3,
-		behind_net: bool, lookahead_s: float) -> int:
-	var max_abs_z: float = _max_abs_z(behind_net)
-	var reach: int = roll.reach_short_of_net(m, max_abs_z)
-	while reach > 0 and absf(roll.reach_pos(m, reach).z + roll.reach_vel(m, reach, from).z
-			* lookahead_s) > max_abs_z:
-		reach -= 1
-	return reach
 
 
 # Whether rolled move `m` of `roll`, skated from `from`, is one the carrier may
@@ -494,7 +480,7 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 	for m: int in AICarryRollout.MOVE_COUNT:
 		if not _move_legal(ctx, _rollout2, m, start):
 			continue
-		var reach: int = _priced_reach(_rollout2, m, start, behind_net, ctx.self_shot_lookahead_s)
+		var reach: int = _rollout2.reach_short_of_net(m, _max_abs_z(behind_net))
 		if reach == 0:
 			continue
 		var t2: float = AICarryRollout.HORIZON_S * reach / AICarryRollout.SAMPLES
@@ -705,10 +691,12 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 	# carry is too short for waited out in the wind-up the keeper races.
 	var cand_wait: float = 0.0
 	var cand_keep: float = 1.0
+	var cand_hold := Vector3.ZERO
 	if AICarrierField.shot_reads(ctx, self_pos,
 			candidate + arrive_vel * ctx.self_shot_lookahead_s):
 		cand_wait = _field.arrival_hold_wait(ctx, candidate, arrive_vel, local_time)
 		cand_keep = _field.holds.arrival_keep
+		cand_hold = Vector3(_field.holds.arrival_offset.x, 0.0, _field.holds.arrival_offset.y)
 	var cand_windup: float = ctx.self_shot_lookahead_s + cand_wait
 	# The keeper backs in as the carry closes on him (the planning depth model).
 	# Closing is the rate this carry shortens the puck's distance to the goal.
@@ -717,9 +705,16 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 	var tracked_goalie: Vector3 = AIGoalieModel.predict_goalie_pos(
 			AICarrierField.goalie_now(ctx), ctx.attacking_goal_pos, local_time, candidate,
 			carry_closing)
-	var cand_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
-			candidate + arrive_vel * cand_windup,
-			ctx.attacking_goal_pos, tracked_goalie)
+	# Released from the hold, as the shot now is (a body-centred release prices a
+	# shot nearly a metre behind the puck, from a spot whose real release is
+	# already on the goal line). One that cannot leave in front of the line is
+	# left there, where value_at prices it as no shot: the jam clamp would carry
+	# it out in front of the keeper.
+	var released_at: Vector3 = candidate + cand_hold + arrive_vel * cand_windup
+	var cand_release: Vector3 = released_at
+	if AICarrierField.leaves_ahead_of_line(released_at, ctx.attacking_goal_pos):
+		cand_release = AIGoalieModel.release_ahead_of_goalie(released_at,
+				ctx.attacking_goal_pos, tracked_goalie)
 	# The shot is decided on ARRIVAL, against the keeper as he is then: a carry
 	# that outran him leaves him still pushing toward his square, at the share of
 	# the push he has left (goalie_unsettled). The field prices what he does over

@@ -83,11 +83,7 @@ func _shot_history() -> int:
 static func _settle_handicap(value: float, penalty: float) -> float:
 	return value - penalty * absf(value)
 
-# Minimum forward distance (m) the PUCK must sit in front of the goal-line plane
-# for a direct shot to be scored at all — on/behind the line the mouth faces
-# away and the only play is a wrap/walk-out carry. Feel gate; a walk-out shooter
-# is well past this by release.
-const SHOT_MIN_FORWARD_OF_LINE_M: float = 0.3
+const SHOT_MIN_FORWARD_OF_LINE_M: float = AICarrierField.SHOT_MIN_FORWARD_OF_LINE_M
 
 
 # ── Where the shot is held (shoot-now eval) ──────────────────────────────────
@@ -670,7 +666,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 # the goal line through his pull and wind-up has no shot to price.
 static func _shootable_from(released_at: Vector3, attacking_goal: Vector3,
 		goalie_now: Vector3) -> bool:
-	if (released_at.z - attacking_goal.z) * -signf(attacking_goal.z) <= SHOT_MIN_FORWARD_OF_LINE_M:
+	if not AICarrierField.leaves_ahead_of_line(released_at, attacking_goal):
 		return false
 	return AIActionScoring.in_offensive_zone(released_at, attacking_goal) \
 			or goalie_now.distance_to(attacking_goal) >= AIActionScoring.THREAT_GOALIE_HOME_M

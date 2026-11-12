@@ -17,7 +17,7 @@ const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const DRIVE_FROM_M: float = 25.0
 const DRIVE_M_S: float = 9.0
-const RELEASE_DISTS_M: Array[float] = [12.0, 10.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.5, 2.0]
+const RELEASE_DISTS_M: Array[float] = [8.0, 6.0, 5.0, 4.0, 3.5, 3.0, 2.5, 2.0, 1.5]
 # The charge, skated: the wind-up is published over the last this-many metres.
 const CHARGE_M: float = DRIVE_M_S * float(Stager.CHARGE_TICKS) * Stager.DT
 
@@ -74,46 +74,54 @@ static func _best_window(hits: Array[int]) -> float:
 
 func test_report_breakaway_release_truth() -> void:
 	var lines: PackedStringArray = [
-		"lane 0, driving %.0f m/s, charged over the last %.2f m, %d aims × %d lifts" % [
-				DRIVE_M_S, CHARGE_M, Stager.AIM_POINTS, Stager.LOFTS.size()],
-		"release off line | keeper depth  gap   poke | priced  best-aim | scores: all   FLAT   LOW   HIGH | FLAT post to post"]
+		"lane 0, %d aims × %d lifts; drive: %.0f m/s from %.0f m, charged over the last %.2f m; set: the field's own staging (Stager.stage_set)" % [
+				Stager.AIM_POINTS, Stager.LOFTS.size(), DRIVE_M_S, DRIVE_FROM_M, CHARGE_M],
+		"release off line | carrier | keeper depth  gap   poke | priced  best-aim | scores: all   FLAT   LOW   HIGH | FLAT post to post"]
 	for d: float in RELEASE_DISTS_M:
-		var goals: int = 0
-		var shots: int = 0
-		var by_loft: PackedStringArray = []
-		var flat_row: String = ""
-		var depth: float = NAN
-		var gap: float = NAN
-		var poking: int = 0
-		var priced: float = NAN
-		var best: float = 0.0
-		for loft: int in Stager.LOFTS:
-			var lg: int = 0
-			var hits: Array[int] = []
-			for i: int in Stager.AIM_POINTS:
-				var aim := Vector3(Stager.aim_x(i), 0.0, GOAL_Z)
-				var at: Vector3 = _drive(0.0, d, aim, loft)
-				var keeper: Vector3 = (_goalie as Node3D).global_position
-				depth = keeper.z - GOAL_Z
-				gap = Vector2(at.x - keeper.x, at.z - keeper.z).length()
-				if _ctrl._poking:
-					poking += 1
-				if is_nan(priced):
-					var goal := Vector3(0.0, 0.0, GOAL_Z)
-					priced = AIShotValue.now(at, goal, keeper, 0.0, AIShotOdds.Stance.UPRIGHT,
-							atan2(keeper.x - at.x, keeper.z - at.z), AIShotOdds.History.CARRIED)
-				var scored: bool = _fire(at, aim, loft)
-				shots += 1
-				hits.append(1 if scored else 0)
-				if scored:
-					goals += 1
-					lg += 1
-				if loft == ShotMechanics.ELEVATION_FLAT:
-					flat_row += "G" if scored else "."
-			by_loft.append("%.2f" % (float(lg) / Stager.AIM_POINTS))
-			best = maxf(best, _best_window(hits))
-		lines.append("%6.1f m        |   %4.2f m  %4.2f m  %3d |  %.2f    %.2f   | %.2f   %s | %s" % [
-				d, depth, gap, poking, priced, best, float(goals) / maxf(shots, 1),
-				"  ".join(by_loft), flat_row])
+		for driving: bool in [true, false]:
+			lines.append(_row(d, driving))
 	gut.p("\n" + "\n".join(lines))
 	assert_true(true)
+
+
+func _row(d: float, driving: bool) -> String:
+	var goals: int = 0
+	var shots: int = 0
+	var by_loft: PackedStringArray = []
+	var flat_row: String = ""
+	var depth: float = NAN
+	var gap: float = NAN
+	var poking: int = 0
+	var priced: float = NAN
+	var best: float = 0.0
+	var goal := Vector3(0.0, 0.0, GOAL_Z)
+	for loft: int in Stager.LOFTS:
+		var lg: int = 0
+		var hits: Array[int] = []
+		for i: int in Stager.AIM_POINTS:
+			var aim := Vector3(Stager.aim_x(i), 0.0, GOAL_Z)
+			var at: Vector3 = _drive(0.0, d, aim, loft) if driving \
+					else _s.stage_set(Vector3(0.0, 0.0, GOAL_Z + d))
+			if not driving:
+				_h.hold_windup_at(at, aim, loft, Stager.SHOT_SPEED, Stager.CHARGE_TICKS)
+			var keeper: Vector3 = (_goalie as Node3D).global_position
+			depth = keeper.z - GOAL_Z
+			gap = Vector2(at.x - keeper.x, at.z - keeper.z).length()
+			if _ctrl._poking:
+				poking += 1
+			if is_nan(priced):
+				priced = AIShotValue.now(at, goal, keeper, 0.0, AIShotOdds.Stance.UPRIGHT,
+						atan2(keeper.x - at.x, keeper.z - at.z), AIShotOdds.History.CARRIED)
+			var scored: bool = _fire(at, aim, loft)
+			shots += 1
+			hits.append(1 if scored else 0)
+			if scored:
+				goals += 1
+				lg += 1
+			if loft == ShotMechanics.ELEVATION_FLAT:
+				flat_row += "G" if scored else "."
+		by_loft.append("%.2f" % (float(lg) / Stager.AIM_POINTS))
+		best = maxf(best, _best_window(hits))
+	return "%6.1f m        | %-7s |   %4.2f m  %4.2f m  %3d |  %.2f    %.2f   | %.2f   %s | %s" % [
+			d, "drive" if driving else "set", depth, gap, poking, priced, best,
+			float(goals) / maxf(shots, 1), "  ".join(by_loft), flat_row]

@@ -37,6 +37,11 @@ const OZ_RECEIVE_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 0.7
 # survive until the carrier arrives and releases. Tactical haircut; the grounded
 # terms are inside the option itself.
 const PASS_OPTION_DISCOUNT: float = 0.8
+# Minimum forward distance (m) the PUCK must sit in front of the goal-line plane
+# for a direct shot to be scored at all — on/behind the line the mouth faces
+# away and the only play is a wrap/walk-out carry. Feel gate; a walk-out shooter
+# is well past this by release.
+const SHOT_MIN_FORWARD_OF_LINE_M: float = 0.3
 
 # Opponents, index-matched: positions, velocities, AISkaterCaps (entries may be
 # null, so the reachable-set model reads each defender's real reach), and
@@ -412,6 +417,8 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		history: int = AIShotOdds.History.ANY) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, keeper_vel_x, keeper_pos):
 		return horizon_value(pos, arrive_s, arrive_vel)
+	if not leaves_ahead_of_line(pos, ctx.attacking_goal_pos):
+		return _regime_value(ctx, pos, from_pos, 0.0, arrive_s, arrive_vel)
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
 			stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
@@ -442,6 +449,14 @@ func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: 
 						AIPuckLane.release_point_toward(pos, ctx.attacking_goal_pos),
 						opps, opponent_caps)
 	return _regime_value(ctx, pos, from_pos, shoot_s, arrive_s, arrive_vel)
+
+
+# Whether a shot released at `release` leaves far enough in front of the goal
+# line at `goal` to be a shot at all (SHOT_MIN_FORWARD_OF_LINE_M). The one gate
+# for the shot now and the shot on a carry's arrival, so a carry is never priced
+# at a shot the carrier would refuse once he got there.
+static func leaves_ahead_of_line(release: Vector3, goal: Vector3) -> bool:
+	return (release.z - goal.z) * -signf(goal.z) > SHOT_MIN_FORWARD_OF_LINE_M
 
 
 # Hot-path skip (the same proof AIPossessionValue.threat_of_carrier runs): with the keeper HOME
