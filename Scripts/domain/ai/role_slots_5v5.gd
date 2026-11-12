@@ -143,6 +143,11 @@ static func assign(
 	var puck_pos: Vector3 = snapshot.puck_state.position if snapshot.puck_state else Vector3.ZERO
 	var specs: Array[SlotSpec] = _specs_for_state(
 			state, own_goal_z, strong_x, puck_pos, carrier_lane)
+	if state == AIPossessionState.State.OZONE and assigned.has(carrier_pid) \
+			and _group_of(carrier_pid, position_by_peer) == Group.D \
+			and snapshot.skater_states.has(carrier_pid):
+		_drop_point_he_holds(specs, snapshot.skater_states[carrier_pid].position,
+				own_goal_z, _point_given_to_a_forward(prev_assignments, position_by_peer))
 
 	# TRANS_DEFENSE: our line's posts are held only by a body that can be SET on
 	# them before the carrier gets there (the brake margin: the seconds a skater
@@ -211,16 +216,20 @@ static func assign(
 	#
 	# The OUR-POSSESSION states spec only four, because CARRIER is assigned only
 	# while one of ours really holds the puck — so every pass in flight leaves a
-	# body over. That body gets SUPPORT, never MARK: the threat partition does
-	# not run outside DZONE / TRANS_DEFENSE, so MARK would fall to its recovery
-	# argmax, a defender's read pointed at our own end. SUPPORT orients off
-	# resolve_offensive_play_ref, which answers with the puck when nobody
-	# carries, so a pass in flight is a situation it already handles.
-	var attacking: bool = state == AIPossessionState.State.OZONE \
-			or state == AIPossessionState.State.TRANS_OFFENSE \
-			or state == AIPossessionState.State.BREAKOUT
-	var spare_slot: int = AIRoleSlots.Slot.SUPPORT if attacking \
-			else AIRoleSlots.Slot.MARK
+	# body over, and so does a D carrying on his point (_drop_point_he_holds).
+	# Never MARK: the threat partition does not run outside DZONE /
+	# TRANS_DEFENSE, so MARK would fall to its recovery argmax, a defender's read
+	# pointed at our own end. In the O-zone he is the third low forward, a
+	# FINISHER (holding his station while a pass travels); in transition SUPPORT,
+	# which orients off resolve_offensive_play_ref and so answers a pass in
+	# flight with the puck. SUPPORT's O-zone post is at their line, and a low
+	# man sent there on every pass is how the attack ends up four high.
+	var spare_slot: int = AIRoleSlots.Slot.MARK
+	if state == AIPossessionState.State.OZONE:
+		spare_slot = AIRoleSlots.Slot.FINISHER
+	elif state == AIPossessionState.State.TRANS_OFFENSE \
+			or state == AIPossessionState.State.BREAKOUT:
+		spare_slot = AIRoleSlots.Slot.SUPPORT
 	for pid: int in teammates:
 		if not assigned.has(pid):
 			result[pid] = spare_slot
@@ -535,6 +544,41 @@ static func _deadline_time(s: SkaterNetworkState, spec: SlotSpec, t: float) -> f
 static func _group_of(pid: int, position_by_peer: Dictionary) -> int:
 	var lobby_slot: int = position_by_peer.get(pid, 0)
 	return Group.D if PlayerRules.is_defense_slot(lobby_slot) else Group.F
+
+
+# A D carrying the puck on his point IS that point: the point slot nearer him
+# leaves the election, and the forward it would have pulled up to the line stays
+# low as the spare. Once he has left it (the pinch rotation's read,
+# AIRoleDefenseman.carrier_off_the_point) both points are elected and a forward
+# covers his. `covered` (a forward held a point last tick) drops the read's
+# slack, so a cover already made holds until he is back on the stand.
+static func _drop_point_he_holds(specs: Array[SlotSpec], carrier_pos: Vector3,
+		own_goal_z: float, covered: bool) -> void:
+	var depth_inside: float = -signf(own_goal_z) * carrier_pos.z - GameRules.BLUE_LINE_Z
+	if AIRoleDefenseman.carrier_off_the_point(depth_inside, covered):
+		return
+	var nearest: int = -1
+	var nearest_dx: float = INF
+	for i: int in specs.size():
+		if specs[i].slot != AIRoleSlots.Slot.POINT_STRONG \
+				and specs[i].slot != AIRoleSlots.Slot.POINT_WEAK:
+			continue
+		var dx: float = absf(specs[i].target.x - carrier_pos.x)
+		if dx < nearest_dx:
+			nearest_dx = dx
+			nearest = i
+	if nearest != -1:
+		specs.remove_at(nearest)
+
+
+static func _point_given_to_a_forward(prev_assignments: Dictionary,
+		position_by_peer: Dictionary) -> bool:
+	for pid: int in prev_assignments:
+		var slot: int = prev_assignments[pid]
+		if (slot == AIRoleSlots.Slot.POINT_STRONG or slot == AIRoleSlots.Slot.POINT_WEAK) \
+				and _group_of(pid, position_by_peer) == Group.F:
+			return true
+	return false
 
 
 # Cross-state hysteresis continuity for the 5v5 slots (the 3v3 sibling is

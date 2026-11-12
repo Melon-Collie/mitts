@@ -149,7 +149,8 @@ Per-state specs (behavior module in parentheses; **bold = new code**, others reu
 - **OZONE** — the standard even-strength 3-low/2-high. NET_FRONT (reuses `AIRoleFinisher`)
   is the crease-edge screen/backdoor man — FINISHER's argmax already lives in that space.
   HIGH_SLOT (**new decide in `AIRoleHighSlot`**, thin) is F3: floats the soft ice between
-  the dots at depth ~8–10.7, stays **above the puck** (own-goal-side of it), is the
+  the dots at depth ~8–10.7, stays **above the puck** (own-goal-side of it) while the
+  puck is no higher than that band (with it at the points he keeps the band, below it), is the
   one-timer seam option, and is the designated first man back — the same
   race-home-radius sag F3 uses in FORECHECK bounds how deep he sinks. POINT_STRONG /
   POINT_WEAK (**new, `AIRoleDefenseman`, §4**): strong-side point sinks down his wall
@@ -157,7 +158,10 @@ Per-state specs (behavior module in parentheses; **bold = new code**, others reu
   just inside the blue line shaded to middle — the researched staggered/diagonal point
   pair. Election: D group fills the points (strong = soonest-to-strong-point), F group
   fills NET_FRONT then HIGH_SLOT; a D **carrier** cross-fills his vacated point with the
-  leftover F (the "F3 covers" half of the pinch rotation, emergent).
+  leftover F (the "F3 covers" half of the pinch rotation, emergent). A D carrying on his
+  point has not vacated it (the rotation's own read): only the other point is elected,
+  and the leftover F plays low as a FINISHER, as does the spare body while a pass is in
+  flight (#942).
 
 - **FORECHECK (1-2-2)** — F1_PRESSURE (reuses `AIRolePressure`) attacks the retrieval:
   pressure.gd's goal-side cutoff already angles inside-out (body between puck and
