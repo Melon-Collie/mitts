@@ -261,8 +261,9 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   `fight_chest_deg` on `SkaterController`).
 - **Bare fists**: `SkaterBodyMesh` has a bare variant per glove pair
   (`SkaterRigidParts.upper_body_mesh(top_right, bare)`), the glove's fist at
-  `BARE_FIST_SCALE` in the skin's zone, on the end of the sleeve. There is no
-  wrist: one drawn where the cuff was clipped through the sleeve.
+  `BARE_FIST_SCALE` in the skin's zone, and a short wrist bridging it to the
+  sleeve's end: the cuff's fist half, its section at `BARE_WRIST_GIRTH`. A
+  wrist reaching up inside the sleeve, which narrows there, showed through it.
   `SkaterConnectedRig` switches to it on `Skater.gloves_off()`, and the arm rig
   gives each bare fist `FightGuardRules.FIST_GRIP_AXIS`.
 - **The stick is hidden** (shaft, knob and blade; `Skater._show_stick`), and
