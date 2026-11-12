@@ -78,3 +78,31 @@ func test_zero_launch_is_not_a_dump() -> void:
 	var teammates: Array[Vector2] = [Vector2(0, 10)]
 	assert_false(TurnoverRules.is_dump_release(
 			Vector2(0, 0), Vector2.ZERO, teammates))
+
+
+# ── What a release was (release_kind) ────────────────────────────────────────
+
+func test_release_at_the_net_is_a_shot_whoever_stands_in_its_lane() -> void:
+	# The feed through the mouth at a man in the crease: geometry reads a shot.
+	var teammates: Array[Vector2] = [Vector2(0.5, 10)]
+	assert_eq(TurnoverRules.release_kind(true, Vector2(0, 0), Vector2(0, 20), teammates),
+			TurnoverRules.Release.SHOT)
+
+
+func test_release_off_the_net_at_a_teammate_is_a_pass() -> void:
+	var teammates: Array[Vector2] = [Vector2(0.5, 10)]
+	assert_eq(TurnoverRules.release_kind(false, Vector2(0, 0), Vector2(0, 20), teammates),
+			TurnoverRules.Release.PASS)
+
+
+func test_release_off_the_net_at_nobody_is_a_dump() -> void:
+	var teammates: Array[Vector2] = [Vector2(8, 10)]
+	assert_eq(TurnoverRules.release_kind(false, Vector2(0, 0), Vector2(0, 20), teammates),
+			TurnoverRules.Release.DUMP)
+
+
+func test_puck_let_go_with_no_launch_is_no_release() -> void:
+	var teammates: Array[Vector2] = [Vector2(0, 10)]
+	assert_eq(TurnoverRules.release_kind(true, Vector2(0, 0), Vector2.ZERO, teammates),
+			TurnoverRules.Release.NONE)
+

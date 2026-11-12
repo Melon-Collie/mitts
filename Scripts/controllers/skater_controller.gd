@@ -2635,14 +2635,21 @@ var last_release_hand: String = ""
 # comparative stat has to mean the same thing on every row (#579). The cost is
 # symmetric: sniping with the pass button loses an attempt when it misses the net.
 var last_release_was_shot: bool = false
+# Whether the most recent release was knocked off the stick (the post, the
+# boards) rather than played. GameManager reads it beside last_release_was_shot:
+# a puck nobody threw is no pass for an opponent to pick off.
+var last_release_was_forced: bool = false
 # Fired when the player releases slap while the puck is nearby but not yet
 # carried — the leniency one-timer. GameManager acquires + releases the puck;
 # the controller transitions to follow-through immediately.
 signal one_timer_release_requested(direction: Vector3, power: float)
 
-func _do_release(direction: Vector3, power: float) -> void:
+func _do_release(direction: Vector3, power: float, forced: bool = false) -> void:
 	if is_replaying:
 		return
+	last_release_was_forced = forced
+	if forced:
+		last_release_was_shot = false
 	# The retention hold is the tail of a slapper swing, so a shot leaving from it
 	# is a slapper too — without this the one-timer's crack and replay tag would
 	# come out as a wrister's.
@@ -2717,8 +2724,7 @@ func _collide_pinned_puck_with_net() -> void:
 		if dir.length() >= 0.001:
 			_has_prev_carry_pin = false
 			skater.carry_pin_correction = Vector3.ZERO
-			last_release_was_shot = false  # forced dispossession, not an attempt
-			_do_release(dir.normalized(), maxf(ring.length(), post_catch_release_speed))
+			_do_release(dir.normalized(), maxf(ring.length(), post_catch_release_speed), true)
 			return
 
 	# TWINE — solid, and it does NOT strip. Pressing the puck into the mesh holds it
