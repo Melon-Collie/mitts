@@ -841,11 +841,11 @@ func test_range_opens_less_of_the_window_than_in_tight() -> void:
 # Beat his man down the wing at 8.5 m/s, the beaten man trailing at the same
 # pace, far-side low cover, keeper squared 1.2 m out.
 func _wing_step_ctx() -> RoleContext:
-	var self_pos := Vector3(9.0, 0.0, -14.0)
+	var self_pos := Vector3(9.0, 0.0, OPP_NET_Z + 12.65)
 	var ctx: RoleContext = _make_ctx(self_pos, [
 			[1, TEAM_ID, self_pos],
-			[10, 1 - TEAM_ID, Vector3(9.0, 0.0, -10.0)],
-			[11, 1 - TEAM_ID, Vector3(-2.0, 0.0, -23.0)]])
+			[10, 1 - TEAM_ID, Vector3(9.0, 0.0, OPP_NET_Z + 16.65)],
+			[11, 1 - TEAM_ID, Vector3(-2.0, 0.0, OPP_NET_Z + 3.65)]])
 	ctx.self_velocity = Vector3(0.0, 0.0, -8.5)
 	ctx.snapshot.skater_states[1].velocity = ctx.self_velocity
 	ctx.snapshot.skater_states[10].velocity = Vector3(0.0, 0.0, -8.5)
@@ -2155,7 +2155,7 @@ func test_pass_option_prefers_the_spot_that_reopens_the_lane() -> void:
 	assert_lt(open, 0.12, "the option is a discounted cut, never par with a live pass")
 
 
-const _PINCH_SPOT := Vector3(0.0, 0.0, -18.0)     # OZ, attacking -Z
+const _PINCH_SPOT := Vector3(0.0, 0.0, OPP_NET_Z + 8.65)     # OZ, attacking -Z
 const _TIGHT_WALL_HALF_GAP: float = 0.5           # 1.0 m apart: no seam for a body or a puck
 # 6 m up the middle: each man ~3 m off the carrier's line, past his full reach
 # and the poke's contact (AICarrySpace._crossing_span), so the seam is real.
@@ -2167,9 +2167,9 @@ const _SPLITTABLE_HALF_GAP: float = 3.0
 func _pinch(half_gap: float) -> AIRoleCarrier:
 	var ctx := _make_ctx(_PINCH_SPOT, [
 			[1, TEAM_ID, _PINCH_SPOT],
-			[2, TEAM_ID, Vector3(-7.0, 0.0, -17.0)],
-			[3, 1, Vector3(-half_gap, 0.0, -19.6)],
-			[4, 1, Vector3(half_gap, 0.0, -19.6)]])
+			[2, TEAM_ID, Vector3(-7.0, 0.0, OPP_NET_Z + 9.65)],
+			[3, 1, Vector3(-half_gap, 0.0, OPP_NET_Z + 7.05)],
+			[4, 1, Vector3(half_gap, 0.0, OPP_NET_Z + 7.05)]])
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = _squared_goalie(
 			_PINCH_SPOT, Vector3(0.0, 0.0, OPP_NET_Z), 1.3)
 	return _decided(ctx)
