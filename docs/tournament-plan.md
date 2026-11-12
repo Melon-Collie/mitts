@@ -1,8 +1,7 @@
 # Tournament — design plan
 
-Status: **proposed; nothing built.** The four decisions in the first table are
-agreed. The five under *Open questions* carry a recommendation each and need a
-yes or a change before Phase 1 starts.
+Status: **approved; Phase 1 built** (the bracket's state and rules, with their
+tests). Nothing is visible in the game yet. Phases 2 to 4 are not started.
 
 A tournament is an eight-club single-elimination bracket. The player picks a
 club, is drawn a seed, and wins three games to take the cup: quarterfinal,
@@ -24,6 +23,11 @@ the two are kept apart in the names below for that reason.
 | Opponents | **Bots only.** No human ever sits on the opposing side. |
 | Opponent strength | **Seeding is cosmetic.** One Bot Difficulty and one Goalie setting apply to every bot on the ice, as they do in any lobby match. A seed decides who meets whom and who is at home; it does not make a club play better. No per-side skill plumbing. |
 | Persistence | **Saved on the host.** The bracket outlives the session. Human teammates may differ from round to round; whoever is in the lobby plays the next game. |
+| The player's seed | **A random draw.** One cup is a favorite's run and the next an eighth seed's. |
+| Simulated games | **Seeds weigh lightly.** The better seed wins a game nobody plays somewhat more often than not (`TournamentRules.SIM_SEED_EDGE`), so the bracket behaves like one on paper, with upsets. |
+| An abandoned game | **Unplayed, not lost.** A game that does not reach `GAME_OVER` is played again. That lets a player quit a game they are losing; counting it as a loss would let a crash or a dropped host end a cup. Worth revisiting once the mode has been played. |
+| Home ice | **The better seed is at home.** The player's side is sometimes side 1, in the away kit and on the away bench. |
+| Difficulty | **Latched for the whole tournament.** Bot Difficulty and Goalie are picked in the setup popup and stored with the other settings, so a cup is won at one difficulty. |
 
 ## 1. The bracket (domain)
 
@@ -38,32 +42,45 @@ holds only what cannot be derived:
 | `rng_seed` | Drew the field and the seeds; also seeds every simulated game. |
 | `clubs_by_seed` | Eight club slots, index 0 = first seed. |
 | `player_club` | The club slot the player picked. |
-| `team_size`, `num_periods`, `period_duration`, `rule_set`, `fighting` | Match settings, latched when the tournament is created. |
-| `results` | Seven entries in bracket order, each a home score, an away score and an overtime flag, or empty for a game not yet played. |
+| `team_size`, `num_periods`, `period_duration`, `rule_set`, `fighting`, `bot_difficulty`, `goalie_difficulty` | Match settings, latched when the tournament is created. |
+| results | Seven entries in bracket order, each a home score, an away score and an overtime flag, or empty for a game not yet played. |
 
 Who advanced, which round is current, the player's next opponent and whether
-the tournament is over are all read off `results` by `TournamentRules`, never
-stored. `to_dict` / `from_dict` are the save format and the wire format.
+the tournament is over are all read off the results by `TournamentRules`, never
+stored. `to_dict` / `from_variant` are the save format and the wire format;
+`from_variant` returns null for anything that is not a tournament of this
+version and shape.
 
 **`Scripts/domain/rules/tournament_rules.gd`** (`TournamentRules`, static):
 
 - `draw(rng_seed, player_club, all_clubs)` picks the seven other clubs and
   shuffles the eight into seeds.
-- `matchup(state, game_index)` returns the two clubs of a game, or nothing when
-  a feeder game is unplayed. Quarterfinals pair 1v8 and 4v5 in the top half,
-  3v6 and 2v7 in the bottom, so the first and second seeds can meet only in the
-  final.
-- `home_club(state, game_index)` is the better seed of the two. Home takes
-  side 0, the home kit and the home bench.
+- `home_club(state, game)` and `away_club(state, game)` are the two clubs of a
+  game, home being the better seed, or -1 while a feeder game is unplayed.
+  Home takes side 0, the home kit and the home bench. Quarterfinals pair 1v8
+  and 4v5 in the top half, 3v6 and 2v7 in the bottom, so the first and second
+  seeds can meet only in the final. `entrant(state, game, line)` gives one
+  line of a game on its own, for a bracket drawn with one club still unknown.
+- `winner(state, game)` and `champion(state)` read a result.
 - `player_game(state)` is the index of the game the player plays next, or -1
-  once eliminated or champion.
-- `record(state, game_index, home_score, away_score, overtime)` writes one
-  result. A tied score is rejected: an elimination game has a winner.
+  once eliminated or champion; `status(state)` says which.
+- `record(state, game, home_score, away_score, overtime)` writes one result.
+  A level score is refused: an elimination game has a winner.
 - `simulate_round(state, round)` fills in every unplayed game of that round
-  that has both clubs. Each game's RNG is seeded from `rng_seed` and its game
-  index, so a result does not depend on the order games are resolved in.
-- `round_name_key(round)` returns `TOURNAMENT_ROUND_QF` / `_SF` / `_FINAL`;
-  the UI calls `tr()` on it.
+  that has both clubs, except the player's own. Each game's RNG is seeded from
+  `rng_seed` and its game index, so a result does not depend on the order games
+  are resolved in. `simulate_to_end(state)` does every round, which finishes
+  the bracket once the player is out.
+- `is_valid(state)` says whether the bracket is a possible one. A save or a
+  peer's copy that fails it is discarded.
+
+The round's display name is not in the domain yet: a `round_name_key(round)`
+returning `TOURNAMENT_ROUND_QF` / `_SF` / `_FINAL` arrives in Phase 2 with the
+catalogue rows and the first screen that shows one.
+
+A simulated score is sized from the match length by
+`TournamentRules.SIM_GOALS_PER_MINUTE`, which is a guess. It only shapes scores
+nobody watched, and wants setting from real box scores once there are some.
 
 Tests: `tests/unit/rules/test_tournament_rules.gd` (the draw always contains
 the player's club and eight distinct clubs; the pairing table; a result
@@ -80,7 +97,8 @@ reads its final score.
 - **Inputs.** The lobby's Start builds the same config dictionary it builds
   today. In a tournament the two color slots are the home and away clubs of the
   player's game, the match settings come from `TournamentState`, and
-  `ot_enabled` is forced on. `GameStateMachine` already plays further overtime
+  `ot_enabled` is forced on. `GameManager.on_host_started` reads the two
+  difficulties from the tournament in place of the host's lobby preferences. `GameStateMachine` already plays further overtime
   periods until someone scores, so a game cannot end level.
 - **Result.** On the host, at `GAME_OVER`, the score is recorded, the rest of
   that round is simulated, and the state is saved and sent to clients. If the
@@ -88,7 +106,7 @@ reads its final score.
   champion.
 - **A game that does not reach `GAME_OVER` was not played.** Leaving, a crash,
   or the pause menu's instant Return to Lobby all leave the bracket where it
-  was, and the game is played again. (Open question 3.)
+  was, and the game is played again.
 - **Stats and Game Pucks count as they do in any match against bots.** No new
   gate; `_achievements_active()` already covers it.
 
@@ -144,8 +162,8 @@ closes on `ui_cancel`.
   in progress it reads as a continue ("Continue: Semifinal vs Plum") with a
   smaller New Tournament beside it.
 - **Setup popup** (`TournamentSetupPopup`, new). Pick a club from the twelve
-  crests; set Mode, Periods, Period Length, Rules and Fighting. Overtime is not
-  offered. Confirming draws the bracket, saves it and opens the lobby.
+  crests; set Mode, Periods, Period Length, Rules, Fighting, Bot Difficulty and
+  Goalie. Overtime is not offered. Confirming draws the bracket, saves it and opens the lobby.
 - **Bracket panel** (`BracketPanel`, new). One control that draws the eight
   clubs, their seeds, the scores so far and the path still to play, with the
   player's club marked. Used by the lobby, the game-over screen and the Play
@@ -194,30 +212,6 @@ Each phase ends with the suite green and something to test locally.
 
 Phases 2 and 3 change gameplay flow and networking, so each stops for a local
 playtest before the next begins.
-
-## Open questions
-
-Each has a recommendation; the plan above is written as if it were accepted.
-
-1. **How is the player's seed chosen?** Recommended: a random draw, so one cup
-   is a favorite's run and the next an eighth seed's. The alternative is letting
-   the player pick the seed, which turns it into a difficulty-flavored choice
-   that changes no difficulty.
-2. **Do seeds weigh on simulated games?** Recommended: lightly. The better seed
-   wins a simulated game somewhat more often than not, so the bracket behaves
-   like one on paper, with upsets. This touches only games nobody plays. The
-   alternative is a coin flip.
-3. **Is an abandoned game a loss?** Recommended: no, it is unplayed. That lets
-   a player quit a game they are losing and try it again. Counting it as a loss
-   closes that, at the price of a crash or a dropped host ending a cup. Worth
-   revisiting once the mode has been played.
-4. **Is the better seed at home?** Recommended: yes. The cost is that the
-   player's side is sometimes side 1, in the away kit and on the away bench.
-   The alternative pins the player's club to side 0 in the home kit every game.
-5. **Are Bot Difficulty and Goalie latched for the whole tournament?**
-   Recommended: yes, picked in the setup popup and stored with the other
-   settings, so a cup is won at one difficulty. The alternative leaves them as
-   the host's lobby preferences, editable between rounds.
 
 ## Not in the first version
 
