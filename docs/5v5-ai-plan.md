@@ -568,6 +568,8 @@ geometry). Full source URLs live with the research notes in the PR description.
   lost low outlet.
 
 ### O-zone structure (drives §2 OZONE + §4)
+A newer survey, including the NHL's move to a 2-3 shape, is in
+`docs/bot-net-front-offense-plan.md` → *How the O-zone is played*.
 - Even strength = **3 low / 2 high** (the umbrella/1-3-1 is a power-play shape).
 - Points staggered: strong-side D sinks toward the circle top on his wall (~6–8 m off
   the boards, above the dot lane); weak-side D holds the line shaded central.

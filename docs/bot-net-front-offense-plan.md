@@ -38,6 +38,72 @@ bot to go and use them.
 
 ---
 
+## How the O-zone is played (research)
+
+A web survey of coaching and analytics sources, condensed. Nothing could be
+fetched from this environment, so the numbers come from search summaries of
+the sources listed. They are real-hockey numbers, so they are hypotheses for
+what our own measurements should find and targets for the shape; no evaluator
+reads them as constants.
+
+- **The shape has moved to a "2-3".** Two forwards work low (cutbacks, slip
+  passes). The other three, both D and F3, are a moving high line, and F3
+  skates downhill into the slot when space opens, or arrives at the far post.
+  It replaced the 3-2 spread and the box+1 because standard D-zone coverage is
+  outnumbered up high. (Jack Han, jhanhky.substack.com: "The hidden benefit of
+  attacking downhill", "The DZC dilemma".)
+- **F3 is not a fixed spot between the dots.** He is the low-to-high outlet,
+  the safety valve, and a moving third point who attacks the seam when the
+  defence collapses low.
+- **Width beats a collapsed box.** Shots with no lateral puck movement score
+  about 3%. A pass across the "royal road" through the slot first lifts that to
+  roughly 15–33% (Valiquette; Stimson via NHL.com). Defenders who collapse onto
+  the low man leave the weak-side D or forward open for the cross-ice
+  one-timer.
+- **Someone is always weak-side low.** The backdoor spot is 1–3 m off the goal
+  line and 1.5–3 m outside the far post. It is filled by the net-front man
+  sliding across, the weak-side forward, or the weak D sneaking down the flank.
+- **Rebounds.** Shots with a rebound are about 5% of shots and over 15% of
+  goals. A second shot within 2–3 s scores at about 4× the rate. Rebounds go in
+  about 23% of the time at 5v5. They come out far-post and into the slot when
+  the keeper does not control them. A low far-pad shot is "shooting to pass"
+  for a teammate crashing. The players must arrive within about 2 s of the
+  shot.
+- **Screens and tips.** A clear-sight shot scores about 3%, a screened one
+  about 14% and a deflection about 15% (Valiquette). Tips score about 17–19%,
+  against 9% for wrist shots. A single static screen is the easiest one for a
+  goalie, so the screener moves with the shooter's sightline. Defenders box
+  out early, so position is won before the shot. The tipper stands just off
+  the shot line, 1.5–4.5 m out, facing the shooter, blade on the ice.
+- **Point shots set up the tip, screen or rebound.** On its own a point shot
+  is about 3%. The D walks the line to open a lane, uses a wrister or snap
+  shot over a slapshot, and goes D-to-D or back low when no lane opens.
+- **Only one D below the circle tops at a time,** with a forward covering his
+  point.
+- **3v3.** Two high and one low. When the puck goes high, the next-highest
+  player becomes support or a shot option. Players arrive late from above the
+  hash marks with speed. Teams regroup, even out of the zone, rather than
+  force a play. Against a man-to-man defence, crossing routes and curl-and-
+  delays make 2-on-1s.
+- **Shot danger by location.** The low slot is about 2× the high slot, and
+  perimeter shots are about 2–4%. A royal-road pass, a rebound inside 3 s, a
+  screen or a tip each multiply the danger several times over.
+
+What this means for the plan:
+
+- **Step 1's model fix is the right direction.** Pricing F3's spot at the
+  one-timer's worth lets the shot field's feed cells pay for cross-seam and
+  weak-side spots, which is the royal road.
+- **The shape question is a doctrine decision,** made with the user below. It
+  is whether the 5v5 O-zone stays 3 low / 2 high (`docs/5v5-ai-plan.md` §2,
+  held by `test_ozone_spacing.gd`) or becomes the 2-3 with F3 in the high line.
+- **The net-front steps get targets.** Rebound stations are reached within 2 s
+  of the release (3b). The screener moves with the shooter's sightline rather
+  than standing still (step 4). The point shot is worth taking mostly for what
+  happens at the net, which 3a's credit prices.
+
+---
+
 ## What the bots do today
 
 ### 1. Rebounds
