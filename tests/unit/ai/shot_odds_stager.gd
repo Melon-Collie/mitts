@@ -95,7 +95,7 @@ func _feed(spot: Vector3, passer: Vector3, speed: float) -> Vector3:
 	for i: int in ticks:
 		_puck.global_position = passer.lerp(spot, float(i + 1) / float(ticks))
 		_puck.linear_velocity = vel
-		_ctrl._physics_process(DT)
+		_h.step_keeper()
 	return spot
 
 
@@ -138,7 +138,7 @@ func _carry(from: Vector3, to: Vector3) -> void:
 		_shooter.velocity = vel
 		_puck.global_position = at
 		_puck.linear_velocity = Vector3.ZERO
-		_ctrl._physics_process(DT)
+		_h.step_keeper()
 
 
 # Settled on the carrier `across` metres to the side of `spot` (and a stride

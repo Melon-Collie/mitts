@@ -188,7 +188,7 @@ func _measure(key: String, tier: int) -> int:
 # Stepped by hand the engine's physics frame never advances, and his view of
 # the skaters is cached per frame: each staging looks afresh, so no row reads
 # a view left by the last, and the scoreboard's own ticks look again each tick
-# (the harness's own ticks keep the staging's first look).
+# as the harness's do.
 func _reset(tier: int) -> void:
 	_ctrl.apply_skill_profile(GoalieSkillProfile.for_difficulty(tier))
 	_ctrl.reset_to_crease()
