@@ -6,6 +6,13 @@ extends Node
 # player has to read — the referee's arm going up, his own time in the box,
 # and a penalty shot being taken.
 
+# Under the icing race's band, so a race and a delayed call can show at once.
+const _BANNER_TOP: float = 336.0
+# From the seat in the box the play is across the middle of the screen, where
+# the banner otherwise sits; the band above it is clear of the far boards.
+const _BOX_BANNER_TOP: float = 96.0
+const _BANNER_HEIGHT: float = 94.0
+
 var _strip_wrap: Control = null
 var _strip_label: Label = null
 var _banner_root: Control = null
@@ -40,9 +47,8 @@ func build(scale_root: Control) -> void:
 
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	# Under the icing race's band, so a race and a delayed call can show at once.
-	root.offset_top = 336.0
-	root.offset_bottom = 430.0
+	root.offset_top = _BANNER_TOP
+	root.offset_bottom = _BANNER_TOP + _BANNER_HEIGHT
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_banner_root = root
 	scale_root.add_child(root)
@@ -149,11 +155,15 @@ func _refresh_strip() -> void:
 
 
 func _refresh_banner() -> void:
+	var boxed: bool = _ledger != null and _ledger.shooter_peer_id() == -1 \
+			and _ledger.is_boxed(_local_peer_id)
+	_banner_root.offset_top = _BOX_BANNER_TOP if boxed else _BANNER_TOP
+	_banner_root.offset_bottom = _banner_root.offset_top + _BANNER_HEIGHT
 	if _ledger != null and _ledger.shooter_peer_id() != -1:
 		_title_label.text = tr(&"PENALTY_SHOT_TITLE")
 		_detail_label.text = _shooter_name
 		_banner_root.visible = true
-	elif _ledger != null and _ledger.is_boxed(_local_peer_id):
+	elif boxed:
 		_title_label.text = tr(&"PENALTY_BOX_TITLE")
 		var remaining: float = _ledger.remaining_for(_local_peer_id)
 		var foul: String = tr(PenaltyRules.name_key(_ledger.foul_of(_local_peer_id)))

@@ -401,8 +401,11 @@ Known gaps, each small enough to leave for the playtest to rank:
   peer's own, from its ledger mirror; the bit exists because a replay poses
   whatever the frames hold, and a goal replay runs on the live skaters after
   the goal has already let the man out.
-- **The box camera's seat is unseen.** Its position is derived from the rink's
-  numbers and has not been rendered or played.
+- **The box camera's seat has been rendered, not played**
+  (`render-ui.sh penalty_box_view_home` / `_away`): behind the near boards at
+  each box, looking across the ice at the benches. The boxed player's banner
+  sits in the band above the play there, since from the seat the play crosses
+  the band it holds for everyone else.
 - **Contact is judged wherever skaters are free to make it**
   (`PenaltyRules.judges_contact`): in live play, at a dropped faceoff before
   the first touch, and in the celebration after a goal. With the play dead

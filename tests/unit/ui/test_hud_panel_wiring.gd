@@ -102,6 +102,23 @@ func test_the_penalty_panel_shows_the_call_then_the_manpower() -> void:
 	assert_eq(panel.banner_title(), tr(&"PENALTY_BOX_TITLE"), "the boxed player sees his own clock")
 
 
+# From the box the camera looks across the ice, so the play crosses the band
+# the banner holds for everyone else.
+func test_the_boxed_players_banner_sits_above_the_one_everyone_else_reads() -> void:
+	var panel: HudPenalties = _panel(&"_penalties") as HudPenalties
+	var ledger := PenaltyLedger.new()
+	ledger.call_foul(7, 1, PenaltyRules.Foul.BOARDING)
+	panel.show_ledger(ledger, 5, 7, 1, Vector2(8.0, 80.0))
+	var called_top: float = panel._banner_root.offset_top
+	ledger.assess(24.0, 2)
+	panel.show_ledger(ledger, 5, 7, 1, Vector2(8.0, 80.0))
+	assert_lt(panel._banner_root.offset_bottom, called_top)
+	ledger.clear()
+	ledger.call_foul(3, 0, PenaltyRules.Foul.BOARDING)
+	panel.show_ledger(ledger, 5, 7, 1, Vector2(8.0, 80.0))
+	assert_eq(panel._banner_root.offset_top, called_top, "back in the game, back where it was")
+
+
 func test_the_penalty_panel_names_the_shooter_through_a_penalty_shot() -> void:
 	var panel: HudPenalties = _panel(&"_penalties") as HudPenalties
 	var ledger := PenaltyLedger.new()
