@@ -47,6 +47,9 @@ var fight_rattle: float = 0.0
 var diving: bool = false
 # Skater.is_stumbling: the down window is a stumble's, on a knee.
 var stumbling: bool = false
+# Sitting out a penalty, out of sight in the box, as the host drew him. For
+# replays alone: a live client seats the box from the ledger and never reads it.
+var boxed: bool = false
 # Skater.is_slapshot_pinning: the carried puck holds its spot on the ice instead
 # of riding the blade — through a slapshot's wind-up, and through the recovery
 # after one is called off, while the blade comes back down to it. Remotes and
@@ -168,6 +171,7 @@ func to_array() -> Array:
 		fight_grip,
 		fight_punch_side,
 		fight_rattle,
+		boxed,
 	]
 
 # The stick-play, dive, check-drive and fight fields, which are discrete: a reader
@@ -187,6 +191,7 @@ func copy_stick_play_from(s: SkaterNetworkState) -> void:
 	diving = s.diving
 	stumbling = s.stumbling
 	slapshot_pinned = s.slapshot_pinned
+	boxed = s.boxed
 
 
 func copy_from(s: SkaterNetworkState) -> void:
@@ -228,6 +233,7 @@ func copy_from(s: SkaterNetworkState) -> void:
 	check_drive_phase = s.check_drive_phase
 	check_drive_elapsed = s.check_drive_elapsed
 	stumbling = s.stumbling
+	boxed = s.boxed
 	slapshot_pin_offset = s.slapshot_pin_offset
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
@@ -294,4 +300,6 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.fight_punch_side = data[36]
 	if data.size() > 37:
 		state.fight_rattle = data[37]
+	if data.size() > 38:
+		state.boxed = data[38]
 	return state

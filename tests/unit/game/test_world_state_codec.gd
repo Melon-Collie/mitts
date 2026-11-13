@@ -537,17 +537,19 @@ func test_skater_stick_tied_round_trips_beside_every_flag() -> void:
 
 
 func test_the_body_state_bits_do_not_disturb_each_other() -> void:
-	for bits: int in 8:
+	for bits: int in 16:
 		var s := SkaterNetworkState.new()
 		s.diving = bits & 1 != 0
 		s.slapshot_pinned = bits & 2 != 0
 		s.stumbling = bits & 4 != 0
+		s.boxed = bits & 8 != 0
 		s.fight_role = FightRules.Role.NONE if bits & 1 != 0 else FightRules.Role.FIGHTING
 		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 				WorldStateCodec._encode_skater_quantized(s))
 		assert_eq(dec.diving, s.diving)
 		assert_eq(dec.slapshot_pinned, s.slapshot_pinned)
 		assert_eq(dec.stumbling, s.stumbling)
+		assert_eq(dec.boxed, s.boxed)
 		assert_eq(dec.fight_role, s.fight_role)
 
 

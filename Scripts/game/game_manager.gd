@@ -704,8 +704,10 @@ func _physics_process(delta: float) -> void:
 		if _penalties != null:
 			if playing and not NetworkManager.is_host:
 				_penalties.ledger.tick_mirror(delta)
-			_penalties.update_visibility(
-					_state_machine.current_phase == GamePhase.Phase.FACEOFF_PREP)
+			# A replay draws each skater in or out of the box as the clip has him.
+			if not NetworkManager.is_replay_mode():
+				_penalties.update_visibility(
+						_state_machine.current_phase == GamePhase.Phase.FACEOFF_PREP)
 	# His gear once a tick, for every skater's stick and body: on host AND
 	# clients, before the host gate below, since both clamp everywhere.
 	_refresh_goalie_boxes()

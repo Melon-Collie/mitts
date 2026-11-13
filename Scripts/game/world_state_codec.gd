@@ -36,9 +36,10 @@ extends RefCounted
 #                      torso_lean 2×s16 + posture_lean s16, all @π/32767 rad (v62),
 #                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63),
 #                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v70),
-#                      body state u8 (diving[2] (v75) + slapshot_pinned[3] (v91)
+#                      body state u8 (boxed[0] (v106) + diving[2] (v75)
+#                                     + slapshot_pinned[3] (v91)
 #                                     + fight_role[5:4] FightRules.Role (v100)
-#                                     + stumbling[6] (v104); bits 0-1 unused since v104),
+#                                     + stumbling[6] (v104); bit 1 unused since v104),
 #                      check_drive u8 (phase[1:0] + ticks elapsed[7:2]) (v104),
 #                      fight u8 (grip[1:0] FightHoldRules.Grip + punch_side[2]
 #                                FightHoldRules.Side (v101) + rattle[7:3] @0.1 s
@@ -570,7 +571,8 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	# peaks near 13°, so a half step tilts the torso by well under 0.2°.
 	b.encode_u8(o, posmod(roundi(atan2(s.recoil_dir.x, s.recoil_dir.y) / TAU * 256.0), 256)); o += 1
 	b.encode_u8(o, StickCheckRules.pack(s.stick_check_phase, s.stick_check_elapsed)); o += 1
-	b.encode_u8(o, (0x04 if s.diving else 0) | (0x08 if s.slapshot_pinned else 0)
+	b.encode_u8(o, (0x01 if s.boxed else 0) | (0x04 if s.diving else 0)
+			| (0x08 if s.slapshot_pinned else 0)
 			| ((s.fight_role & 0x03) << 4) | (0x40 if s.stumbling else 0)); o += 1
 	b.encode_u8(o, CheckDriveRules.pack(s.check_drive_phase, s.check_drive_elapsed)); o += 1
 	b.encode_u8(o, (s.fight_grip & 0x03) | ((s.fight_punch_side & 0x01) << 2)
@@ -661,6 +663,7 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	s.stick_check_phase = StickCheckRules.unpack_phase(stick_check)
 	s.stick_check_elapsed = StickCheckRules.unpack_elapsed(stick_check)
 	var lock: int = b.decode_u8(o); o += 1
+	s.boxed = (lock & 0x01) != 0
 	s.diving = (lock & 0x04) != 0
 	s.slapshot_pinned = (lock & 0x08) != 0
 	var fight: int = (lock >> 4) & 0x03

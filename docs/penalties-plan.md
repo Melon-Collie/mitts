@@ -386,9 +386,11 @@ The bots learn each rule in the phase that adds it.
 
 Known gaps, each small enough to leave for the playtest to rank:
 
-- **A recorded replay draws a boxed skater.** Hiding is per peer and live, so a
-  goal replay or a `.mreplay` shows him as a ghost standing at his door. Fixing
-  it puts `in_box` in the snapshot (the body-state byte has two spare bits).
+- **A replay hides a boxed skater by the snapshot's `boxed` bit** (out of
+  sight in the box, as the host drew him). Hiding in live play is still each
+  peer's own, from its ledger mirror; the bit exists because a replay poses
+  whatever the frames hold, and a goal replay runs on the live skaters after
+  the goal has already let the man out.
 - **The box camera's seat is unseen.** Its position is derived from the rink's
   numbers and has not been rendered or played.
 - **Contact is judged wherever skaters are free to make it**

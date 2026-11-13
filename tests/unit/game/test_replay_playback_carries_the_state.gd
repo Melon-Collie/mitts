@@ -101,6 +101,20 @@ func test_a_replayed_wrister_addresses_the_recorded_side() -> void:
 				"the replay addresses the recorded side (%d)" % side)
 
 
+# A boxed skater is out of sight for as long as the clip has him in the box.
+func test_a_replayed_skater_is_hidden_while_the_clip_has_him_in_the_box() -> void:
+	var controller: SkaterController = _replayed_skater()
+	var state := SkaterNetworkState.new()
+	state.position = controller.skater.global_position
+	state.facing = Vector2(0.0, -1.0)
+	state.boxed = true
+	controller.apply_replay_state(state, 1.0 / 60.0)
+	assert_false(controller.skater.visible)
+	state.boxed = false
+	controller.apply_replay_state(state, 1.0 / 60.0)
+	assert_true(controller.skater.visible, "and back on the ice when it lets him out")
+
+
 # And a replayed carry keeps the side the carrier had, so its puck is pinned
 # where it was; a live carry decides it again once the replay lets go.
 func test_a_replayed_carry_keeps_the_recorded_side() -> void:

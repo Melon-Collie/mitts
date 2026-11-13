@@ -555,9 +555,11 @@ here whenever you bump, in the same format.
 #        change and to a joiner. A client seats the box and sidelines the
 #        skaters watching a penalty shot from it, and runs the same faceoff
 #        cast as the host only if it knows who is boxed.
-#      No snapshot field changed and no phase was added: a boxed skater rides
-#      the existing ghost bit, and a penalty shot is set up and taken in the
-#      faceoff's own phases.
+#      No phase was added: a penalty shot is set up and taken in the
+#      faceoff's own phases. One snapshot bit was: body-state bit 0 is
+#      `boxed`, a skater out of sight in the penalty box, which only a
+#      replay reads (a live client seats the box from the ledger, and he
+#      rides the existing ghost bit).
 #      The stats sync (reliable) grows with them: PlayerStats.to_array goes
 #      from 21 fields to 30 (pim, pp_goals, sh_goals, penalty_shot_goals,
 #      pp_assists, pp_opportunities, pp_on_ice_goals, pk_opportunities,
@@ -566,4 +568,5 @@ here whenever you bump, in the same format.
 #      A v105 peer would cast a boxed centre onto the dot, never lock or hide
 #      a boxed skater, skate freely through a penalty shot and refuse every
 #      stats payload as malformed, so mixed builds must be refused.
-#      Replay FORMAT_VERSION unchanged.
+#      Replay FORMAT_VERSION unchanged: the bit was zero in every v22 frame,
+#      so an older file plays as it did.

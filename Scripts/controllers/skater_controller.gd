@@ -2444,6 +2444,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.fight_rattle = skater.fight_rattle
 	state.diving = skater.is_diving
 	state.stumbling = skater.is_stumbling
+	state.boxed = skater.in_box and not skater.visible
 	state.slapshot_pinned = skater.is_slapshot_pinning()
 	# Host-only shaft segment for stick-lift claim resolution (paired with
 	# blade_contact_world). World-space grip point — the wire top_hand_position
@@ -2584,6 +2585,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# The replay poses the recorded body; a live celebration's knee bounce and
 	# fist pump are read off this controller, and its timer is frozen here.
 	end_celebration()
+	skater.visible = not state.boxed
 	skater.global_position = state.position
 	skater.visual_offset = Vector3.ZERO
 	skater.velocity = state.velocity
