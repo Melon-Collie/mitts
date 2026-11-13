@@ -16,7 +16,11 @@ extends GutTest
 # MITTS_OZ_SHARD=i MITTS_OZ_SHARDS=n runs every n-th of them from i. Every run
 # prints an OZRUN line (index | end | shot kind | the shot's set read | passes |
 # seconds) for merging shards, and the summary gives each rate with its
-# standard error.
+# standard error. MITTS_OZ_TRACE=1 also prints, every TRACE_EVERY_TICKS while
+# one of ours carries in the zone, an OZTRC line: the carrier's compete (its
+# intent, shot, best pass and its receiver's slot, carry) and every receiver's
+# feed as the pass search priced it (slot:EV:lane:worth:gate, the pass
+# search's trace).
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const SECS: float = 12.0
@@ -28,6 +32,7 @@ const POINT_OUT_M: float = 15.0
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const KEEPER_SETTLE_S: float = 1.5
 const JITTER_M: float = 1.0
+const TRACE_EVERY_TICKS: int = 9
 # A jittered spawn behind the goal line keeps this far outside the post.
 const JITTER_NET_CLEAR_M: float = GameRules.NET_HALF_WIDTH + 0.6
 const OURS: Array[int] = [101, 102, 103, 104, 105]
@@ -41,6 +46,9 @@ var _ctrl: GoalieController
 # velocity), or only his position as the harness's default keeper.
 var _keeper_state: GoalieNetworkState = GoalieNetworkState.new()
 var _full_keeper: bool = true
+# The run being swept (its OZRUN index), and whether it is traced.
+var _run_index: int = 0
+var _trace: bool = false
 
 
 func before_all() -> void:
@@ -106,6 +114,8 @@ func _run(duel: Object) -> Dictionary:
 			passing = false
 		if ours and _out(duel.puck_pos) <= DOTS_OUT_M:
 			r["low_s"] += Duel.DT
+		if _trace and ours and i % TRACE_EVERY_TICKS == 0:
+			_print_trace(duel, c, t)
 		if not released.is_empty():
 			if _is_shot(released):
 				var at: Vector3 = released["pos"]
@@ -191,6 +201,29 @@ func _run(duel: Object) -> Dictionary:
 	return r
 
 
+func _print_trace(duel: Object, c: int, t: float) -> void:
+	var agent: SkaterAgentStateMachine = null
+	for sk: Object in duel.skaters:
+		if sk.peer_id == c:
+			agent = sk.agent
+	if agent == null or agent._carrier == null:
+		return
+	var car: AIRoleCarrier = agent._carrier
+	var brain: TeamBrain = duel.brains[0]
+	var trace: AICarrierPassTrace = car._pass.trace
+	var recv: PackedStringArray = []
+	for k: int in trace.peer.size():
+		recv.append("%s:%.4f:%.3f:%.4f:%d" % [
+				AIRoleSlots.label(brain.slot_assignments.get(trace.peer[k], 0)),
+				trace.ev[k], trace.lane[k], trace.worth[k], trace.gate[k]])
+	var cp: Vector3 = duel.skater_pos(c)
+	gut.p("OZTRC|%d|%.2f|%d|%.4f|%.4f|%s|%.4f|%.1f|%.1f|%s" % [_run_index, t,
+			car.intended_action, car.debug_shoot_score, car.debug_pass_score,
+			AIRoleSlots.label(brain.slot_assignments.get(car.debug_pass_peer_id, 0))
+					if car.debug_pass_peer_id > 0 else "-",
+			car.debug_carry_score, cp.x, _out(cp), ";".join(recv)])
+
+
 # Our carrier low (`carrier`, skating at `vel`), two forwards at `fa` and `fb`,
 # both D on the points; their five in zone coverage, tight (the strong D already
 # on the carrier) or home.
@@ -220,6 +253,10 @@ func _setup(carrier: Vector3, vel: Vector3, fa: Vector3, fb: Vector3, tight: boo
 	duel.add_skater(THEIRS[3], 1, _jit(strong_d, rng), hard)
 	duel.add_skater(THEIRS[4], 1, _jit(Vector3(-side * 1.0, 0, -24.0), rng), hard)
 	duel.start(OURS[0])
+	if _trace:
+		for sk: Object in duel.skaters:
+			if sk.team_id == 0:
+				sk.agent._carrier._pass.trace = AICarrierPassTrace.new()
 	_ctrl.reset_to_crease()
 	_shooter.global_position = carrier
 	_puck.set_carrier(_shooter)
@@ -287,6 +324,7 @@ func _sweep(label: String) -> void:
 	var jitter: int = _env_int("MITTS_OZ_JITTER", 0)
 	var shards: int = maxi(_env_int("MITTS_OZ_SHARDS", 1), 1)
 	var shard: int = _env_int("MITTS_OZ_SHARD", 0)
+	_trace = _env_int("MITTS_OZ_TRACE", 0) == 1
 	var set_sum: float = 0.0
 	var set_sq: float = 0.0
 	var g: int = -1
@@ -305,6 +343,7 @@ func _sweep(label: String) -> void:
 			if copy > 0:
 				rng = RandomNumberGenerator.new()
 				rng.seed = 7919 * g + 17
+			_run_index = g
 			var r: Dictionary = _run(_setup(start[0] * m, vel, start[1] * m, start[2] * m,
 					tight, rng))
 			runs += 1

@@ -55,6 +55,10 @@ var best_hold_keep: float = 1.0
 # decides on it): not poked at the release, the lane, the execution miss, kept on
 # reception (kept = x · y · (1 − z) · w; x < 0: none priced), its origin, spot and pace.
 var debug_completion := Vector4(-1.0, 0.0, 0.0, 0.0)
+# The instrument's per-receiver record of each search (null: none kept).
+var trace: AICarrierPassTrace = null
+# The gate the last _pass_variant_ev stopped at (AICarrierPassTrace.Gate).
+var _gate: int = 0
 var debug_spot: Vector3 = Vector3.INF
 var debug_origin_pace := Vector4.ZERO
 var _debug_best_ev: float = -INF
@@ -140,12 +144,15 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 	var rim_t: float = 0.0
 	var rim_lane: float = 0.0
 	var rim_miss: float = 0.0
+	if trace != null:
+		trace.clear()
 	for peer_id: int in teammate_ids:
 		var receiver_state: SkaterNetworkState = snapshot.skater_states[peer_id]
-		if snapshot.is_out_of_play(peer_id):
-			continue
-		if carrier_in_oz and not AIActionScoring.in_offensive_zone(
-				receiver_state.position, attacking_goal):
+		if snapshot.is_out_of_play(peer_id) or (carrier_in_oz
+				and not AIActionScoring.in_offensive_zone(receiver_state.position,
+						attacking_goal)):
+			if trace != null:
+				trace.record(peer_id, -1.0, 0.0, 0.0, AICarrierPassTrace.Gate.LEAD_OUT_OF_ZONE)
 			continue
 		var receiver_is_one_timer: bool = (ctx.team_brain != null
 				and ctx.team_brain.is_one_timer_ready(peer_id))
@@ -193,7 +200,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		# Exact prune floor for this receiver: the running best, divided by any
 		# bonus applied to him AFTER scoring (the ping multiplier below), so the
 		# bound stays sound.
-		var prune_floor: float = best_pass_score
+		var prune_floor: float = 0.0 if trace != null else best_pass_score
 		if peer_id == ctx.ping_pass_target_peer:
 			prune_floor /= PING_PASS_EV_MULT
 		# Flat feed, at each pace from full down; the saucer gate reads the winning
@@ -208,6 +215,8 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var win_pull: float = full_pull
 		var win_keep: float = 1.0
 		var win_hold := Vector3(holds.pass_from.x, 0.0, holds.pass_from.y)
+		var raw_best: float = -INF
+		var full_gate: int = 0
 		var prev_speed: float = -1.0
 		var prev_hold: float = INF
 		var fracs: Array[float] = AIPuckLane.PASS_PACE_FRACS
@@ -244,9 +253,11 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 					origin, speed, false, receiver_is_one_timer,
 					self_facing_xz, our_goalie, carrier_in_oz, maxf(prune_floor, s),
 					frac < 1.0, pull, keep)
+			raw_best = maxf(raw_best, s_pace)
 			if frac == 1.0:
 				full_speed = speed
 				full_lane = _last_flat_variant_lane
+				full_gate = _gate
 			if s_pace > s:
 				s = s_pace
 				pass_speed = speed
@@ -303,6 +314,9 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		# Smart-ping PASS_TO_ME / IM_OPEN (see PING_PASS_EV_MULT).
 		if peer_id == ctx.ping_pass_target_peer and s > 0.0:
 			s *= PING_PASS_EV_MULT
+		if trace != null:
+			trace.record(peer_id, maxf(raw_best, s), full_lane,
+					_field.receiver_value_at(receiver_state.position), full_gate)
 		if s > best_pass_score:
 			best_pass_score = s
 			best_pass_peer = peer_id
@@ -427,6 +441,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	# is the SOLVED time. He skates on through the pull and the windup, so the
 	# lead is solved from the release, where the state machine aims it and
 	# pass_origin throws it.
+	_gate = AICarrierPassTrace.Gate.PRICED
 	var lead: Array = AIPassLead.lead(pass_origin, receiver_state, pass_speed, PASS_LEAD_MAX_S,
 			AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s)
 	var receiver: Vector3 = lead[0]
@@ -437,16 +452,16 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	if one_timed:
 		receiver = AIPassLead.one_timer_tape(receiver, receiver_caps, ctx.attacking_goal_pos)
 	if soft and flight_t >= PASS_LEAD_MAX_S - 0.0001:
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.SOFT_TOO_LONG)
 	if ctx.own_goal_dir * receiver.z > GameRules.GOAL_LINE_Z:
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.LEAD_PAST_GOAL_LINE)
 	if carrier_in_oz and not AIActionScoring.in_offensive_zone(
 			receiver, ctx.attacking_goal_pos, AICarrierField.OZ_RECEIVE_LINE_BUFFER_M):
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.LEAD_OUT_OF_ZONE)
 	# A delayed offside is up: a feed caught in the zone is a touch that whistles.
 	if ctx.zone_entry_blocked and not carrier_in_oz \
 			and AIActionScoring.in_offensive_zone(receiver, ctx.attacking_goal_pos):
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.ENTRY_BLOCKED)
 	var lane: float
 	# Execution miss (AIPuckLane.pass_miss_prob): this bot's release error
 	# projected over the pass distance vs the receiver's catch envelope.
@@ -503,6 +518,12 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			Vector3.ZERO, Vector3.INF, closing, false, pass_origin, keep)
 
 
+# A gate that zeroes a feed, noted for the trace.
+func _stop(gate: int) -> float:
+	_gate = gate
+	return 0.0
+
+
 # Expected value of firing a pass from our current position to
 # `receiver_spot`. Shared by the live pass scoring (search) and the
 # developing-outlet hold (_developing_outlet_feed), so "the pass this wait is
@@ -546,17 +567,17 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# segment — AIRimPass checked each of its legs instead.
 	var is_rim: bool = rim_dir != Vector3.ZERO
 	if not is_rim and AINetObstacle.pass_lane_blocked_by_net(origin, receiver_spot):
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.THROUGH_NET)
 	if not is_rim and AINetObstacle.pass_crosses_own_slot(
 			origin, receiver_spot, ctx.own_goal_dir * GameRules.GOAL_LINE_Z):
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.ACROSS_OWN_SLOT)
 	if lane < 0.0:
 		lane = AIPuckLane.lane_clear(
 				origin, receiver_spot, _field.opponents_release, pass_speed,
 				_field.opponent_vels, _field.opponent_caps, true,
 				_field.opponent_blades_release)
 	if lane <= 0.0:
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.LANE_CLOSED)
 	# RELEASE CONTEST — the cough-up loss mode: a forechecker whose stick reaches
 	# the release point inside the ~135 ms windup pokes the puck off the blade
 	# before it flies (the same race as the shot's release_contest_clean). It is

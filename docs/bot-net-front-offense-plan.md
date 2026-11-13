@@ -35,6 +35,12 @@ bot to go and use them.
   or a shot-field cell kind).
 - **A second man on an O-zone loose puck is in scope** (§3d), together with
   #604's attacking-zone chase decline.
+- **The shape the bots play is a cycle-and-retrieve,** not the NHL's 2-3 as
+  such. The bots are not bad in the zone; they get gummed up. The step-1
+  additions all stay (the value-priced HIGH_SLOT, the general rotation, the
+  weak D's activation, the shared cover), since they cost nothing measurable
+  and give the cycle its moving parts. What comes next is why the carrier
+  does not use them.
 
 ---
 
