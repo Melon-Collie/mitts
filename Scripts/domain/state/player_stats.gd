@@ -72,6 +72,31 @@ var icings: int = 0
 # Game Pucks; absent from to_dict() — the career_stats table has no column.
 var fights: int = 0
 var fight_wins: int = 0
+# Penalties and what comes of them (docs/penalties-plan.md), broadcast like the
+# counters above.
+#   pim                — penalty minutes: PenaltyRules.MINOR_PIM for each call he
+#                        paid for (a foul's minor, a fight's under NHL rules in
+#                        5v5, or a penalty shot his foul gave up), whatever the
+#                        minor's length on this match's clock.
+#   pp_goals, sh_goals — his goals with his team a man up, or a man down
+#                        (PenaltyRules.goal_situation).
+#   pp_assists         — his assists on a teammate's power-play goal.
+#   penalty_shot_goals — his goals on a penalty shot. Absent from to_dict():
+#                        the career_stats table has no column for it.
+#   pp_opportunities, pp_on_ice_goals — the power plays he was on the ice for,
+#                        and his team's goals on them with him out there.
+#   pk_opportunities, pk_on_ice_goals_against — the same for the kills. A man
+#                        in the box is on the ice for neither
+#                        (SpecialTeamsTally).
+var pim: int = 0
+var pp_goals: int = 0
+var sh_goals: int = 0
+var penalty_shot_goals: int = 0
+var pp_assists: int = 0
+var pp_opportunities: int = 0
+var pp_on_ice_goals: int = 0
+var pk_opportunities: int = 0
+var pk_on_ice_goals_against: int = 0
 # Tracked locally on every peer (game_manager._physics_process) rather than
 # host-authoritative + broadcast like the counters above. Each peer's own
 # value is what ships to Supabase, since report() runs per-peer at game-over.
@@ -87,7 +112,8 @@ func to_array() -> Array:
 			hits_taken, takeaways, giveaways, faceoff_wins, faceoff_losses,
 			game_winning_goals, one_timer_goals, tip_goals, ot_goals,
 			shot_attempts, shot_attempts_blocked, xg_for, icings, interceptions,
-			fights, fight_wins]
+			fights, fight_wins, pim, pp_goals, sh_goals, penalty_shot_goals, pp_assists,
+			pp_opportunities, pp_on_ice_goals, pk_opportunities, pk_on_ice_goals_against]
 
 static func from_array(a: Array) -> PlayerStats:
 	var s := PlayerStats.new()
@@ -121,6 +147,31 @@ func update_from_array(a: Array) -> void:
 	interceptions = a[18]
 	fights = a[19]
 	fight_wins = a[20]
+	pim = a[21]
+	pp_goals = a[22]
+	sh_goals = a[23]
+	penalty_shot_goals = a[24]
+	pp_assists = a[25]
+	pp_opportunities = a[26]
+	pp_on_ice_goals = a[27]
+	pk_opportunities = a[28]
+	pk_on_ice_goals_against = a[29]
+
+
+# Power-play points: goals and assists with his team a man up.
+func pp_points() -> int:
+	return pp_goals + pp_assists
+
+
+# Credits a goal this player just scored to the situation it came in.
+func credit_goal_situation(situation: int) -> void:
+	match situation:
+		PenaltyRules.GoalSituation.POWER_PLAY:
+			pp_goals += 1
+		PenaltyRules.GoalSituation.SHORT_HANDED:
+			sh_goals += 1
+		PenaltyRules.GoalSituation.PENALTY_SHOT:
+			penalty_shot_goals += 1
 
 func to_dict() -> Dictionary:
 	return {
@@ -138,5 +189,13 @@ func to_dict() -> Dictionary:
 		"shot_attempts": shot_attempts,
 		"shot_attempts_blocked": shot_attempts_blocked,
 		"xg_for": snappedf(xg_for, 0.001),
+		"pim": pim,
+		"pp_goals": pp_goals,
+		"pp_assists": pp_assists,
+		"sh_goals": sh_goals,
+		"pp_opportunities": pp_opportunities,
+		"pp_on_ice_goals": pp_on_ice_goals,
+		"pk_opportunities": pk_opportunities,
+		"pk_on_ice_goals_against": pk_on_ice_goals_against,
 		"toi_seconds": roundi(toi_seconds),
 	}

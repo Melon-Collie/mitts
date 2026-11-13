@@ -316,14 +316,14 @@ func _drive_from_input(delta: float) -> void:
 	# every gap. Fall through when clock isn't ready to preserve behaviour during
 	# NTP warmup.
 	if NetworkManager.is_clock_ready():
-		_drain_backlog(NetworkManager.sim_time(), not _game_state.is_movement_locked())
+		_drain_backlog(NetworkManager.sim_time(), not _movement_locked())
 	var input_due: bool = _input_queue.size() > 0 and (
 			not NetworkManager.is_clock_ready() or
 			_input_queue.front().host_timestamp <= NetworkManager.sim_time())
 	if input_due:
 		var input: InputState = _input_queue.pop_front()
 		last_processed_host_timestamp = input.host_timestamp
-		if not _game_state.is_movement_locked():
+		if not _movement_locked():
 			# Recorded for LIVE pops only: locked-phase pops (faceoff prep,
 			# celebrations) measure phase cadence, not link health, and would skew
 			# the metric the input lead is judged by.
@@ -332,7 +332,7 @@ func _drive_from_input(delta: float) -> void:
 			# NetworkManager's sim clock).
 			NetworkTelemetry.record_input_lead(
 					NetworkManager.sim_time() - input.host_timestamp)
-		if not _game_state.is_movement_locked():
+		if not _movement_locked():
 			_process_input(input, delta)
 		elif not tick_faceoff_approach(delta):
 			# Faceoff / intro skate-in glides the body to the dot (host-authoritative;
@@ -343,7 +343,7 @@ func _drive_from_input(delta: float) -> void:
 			# sync with their mouse so world state broadcasts the right blade
 			# position for everyone else to see. _process_input still doesn't
 			# run, so body/shot inputs stay suppressed.
-			if _game_state.allows_blade_aim_during_lock():
+			if _blade_aim_allowed_in_lock():
 				apply_blade_aim_only(input, delta)
 		# The fallback replays through a queue gap: its presses must not re-fire
 		# every tick. Held and absolute state (elevation_level) stays — holding
@@ -351,10 +351,10 @@ func _drive_from_input(delta: float) -> void:
 		input.clear_edges()
 		_fallback_input = input
 	else:
-		if _game_state.is_movement_locked():
+		if _movement_locked():
 			if not tick_faceoff_approach(delta):
 				skater.velocity = Vector3.ZERO
-				if _game_state.allows_blade_aim_during_lock():
+				if _blade_aim_allowed_in_lock():
 					# Keep the stick on the most recent mouse aim we have — stale
 					# but better than freezing mid-swing while the input queue gaps.
 					apply_blade_aim_only(_fallback_input, delta)

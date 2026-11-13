@@ -21,10 +21,12 @@ var _drop_return: int
 # Records the skate-in it was handed instead of gliding a body.
 class StubController extends SkaterController:
 	var durations: Array[float] = []
+	var targets: Array[Vector3] = []
 
-	func begin_approach(_start: Vector3, _target: Vector3, _settle_facing: Vector2,
+	func begin_approach(_start: Vector3, target: Vector3, _settle_facing: Vector2,
 			duration: float, _initial_velocity: Vector3 = Vector3.ZERO) -> void:
 		durations.append(duration)
+		targets.append(target)
 
 	func faceoff_center_distance() -> float:
 		return 1.0
@@ -151,6 +153,44 @@ func test_goal_credits_carrier_and_updates_score() -> void:
 	assert_eq(sm.current_phase, GamePhase.Phase.GOAL_CELEBRATION)
 
 
+func _score_for_team_0(short_handed_team_id: int) -> PlayerStats:
+	var scorer: PlayerRecord = _add_player(10, 0)
+	_drop_return = 10
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.short_handed_team_id = short_handed_team_id
+	coord.on_goal_scored_into(teams[1])
+	return scorer.stats
+
+
+func test_a_goal_against_the_shorter_team_is_a_power_play_goal() -> void:
+	var stats: PlayerStats = _score_for_team_0(1)
+	assert_eq([stats.goals, stats.pp_goals, stats.sh_goals], [1, 1, 0])
+
+
+func test_a_goal_by_the_shorter_team_is_short_handed() -> void:
+	var stats: PlayerStats = _score_for_team_0(0)
+	assert_eq([stats.goals, stats.pp_goals, stats.sh_goals], [1, 0, 1])
+
+
+func test_a_goal_at_even_strength_is_neither() -> void:
+	var stats: PlayerStats = _score_for_team_0(-1)
+	assert_eq([stats.goals, stats.pp_goals, stats.sh_goals], [1, 0, 0])
+
+
+func test_a_penalty_shot_goal_is_its_own_stat() -> void:
+	var scorer: PlayerRecord = _add_player(10, 0)
+	scorer.skater = SKATER_SCENE.instantiate() as Skater
+	add_child_autofree(scorer.skater)
+	scorer.skater.set_physics_process(false)
+	scorer.skater.set_process(false)
+	scorer.skater.takes_penalty_shot = true
+	_drop_return = 10
+	sm.current_phase = GamePhase.Phase.PLAYING
+	coord.on_goal_scored_into(teams[1])
+	assert_eq([scorer.stats.goals, scorer.stats.penalty_shot_goals, scorer.stats.pp_goals],
+			[1, 1, 0])
+
+
 func test_own_goal_does_not_credit_the_own_goaler() -> void:
 	_add_player(10, 1)        # carrier is on the DEFENDING team → own goal
 	_drop_return = 10
@@ -275,6 +315,195 @@ func test_client_skate_in_never_outlasts_the_hosts_hold() -> void:
 	coord.on_faceoff_positions([10, 0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.5], 0.5)
 	assert_eq(c.durations.size(), 1)
 	assert_lte(c.durations[0], 0.5 - GameRules.FACEOFF_SET_BEAT + 0.0001)
+
+
+# ── A team short at the faceoff (FaceoffFormation) ───────────────────────────
+
+func test_resetting_the_faceoff_places_everyone_by_the_seats_as_they_are_now() -> void:
+	var centre: PlayerRecord = _add_seated_player(10, 0, 0)
+	var winger: PlayerRecord = _add_seated_player(11, 0, 1)
+	_add_seated_player(12, 1, 0)
+	var dot := Vector2(6.5, -22.1)
+	sm.begin_faceoff_prep(dot)
+	coord.handle_phase_entered()
+	sm.tick(1.0)
+	# The centre takes the other wing: the winger is now the lowest seat on
+	# the ice, and the draw is his.
+	centre.team_slot = 2
+	coord.reset_faceoff()
+	var winger_controller: StubController = winger.controller as StubController
+	assert_eq(winger_controller.targets.size(), 2, "placed, and placed again")
+	assert_eq(winger_controller.targets[1],
+			PlayerRules.faceoff_position(0, FaceoffFormation.CENTER_SPOT, dot, 1.0, sm.team_size))
+	assert_almost_eq(sm.faceoff_prep_time_until_drop(),
+			coord.last_prep_preroll + GameRules.FACEOFF_PREP_DURATION, 0.0001,
+			"and the countdown starts over")
+	assert_signal_emit_count(coord, "faceoff_positions_ready", 2)
+
+
+func test_resetting_does_nothing_once_the_puck_is_down() -> void:
+	_add_seated_player(10, 0, 0)
+	sm.current_phase = GamePhase.Phase.PLAYING
+	coord.reset_faceoff()
+	assert_signal_not_emitted(coord, "faceoff_positions_ready")
+
+func _add_seated_player(peer_id: int, team_id: int, team_slot: int) -> PlayerRecord:
+	var record: PlayerRecord = _add_player(peer_id, team_id)
+	record.team_slot = team_slot
+	var c := StubController.new()
+	autofree(c)
+	record.controller = c
+	return record
+
+
+func _placed_position(peer_id: int) -> Vector3:
+	var positions: Array = get_signal_parameters(coord, "faceoff_positions_ready")[0]
+	for at: int in range(0, positions.size(), 4):
+		if int(positions[at]) == peer_id:
+			return Vector3(positions[at + 1], positions[at + 2], positions[at + 3])
+	return Vector3.INF
+
+
+func test_with_no_centre_a_winger_is_placed_on_the_dot_and_his_defenseman_on_the_wing() -> void:
+	sm.team_size = 5
+	_add_seated_player(11, 0, 1)  # LW
+	_add_seated_player(12, 0, 2)  # RW
+	_add_seated_player(13, 0, 3)  # LD
+	_add_seated_player(14, 0, 4)  # RD
+	sm.begin_faceoff_prep()
+	coord.handle_phase_entered()
+	var dot: Vector2 = GameRules.CENTER_ICE_DOT
+	var reach: float = 1.0  # StubController.faceoff_center_distance
+	assert_eq(_placed_position(11), PlayerRules.faceoff_position(0, 0, dot, reach, 5),
+			"the left wing takes the draw, at his own reach from the dot")
+	assert_eq(_placed_position(13), PlayerRules.faceoff_position(0, 1, dot, -1.0, 5),
+			"the left defenseman steps up to the wing")
+	assert_eq(_placed_position(12), PlayerRules.faceoff_position(0, 2, dot, -1.0, 5))
+	assert_eq(_placed_position(14), PlayerRules.faceoff_position(0, 4, dot, -1.0, 5))
+
+
+func test_a_full_team_is_placed_seat_for_seat() -> void:
+	sm.team_size = 5
+	for seat: int in PlayerRules.MAX_PER_TEAM:
+		_add_seated_player(10 + seat, 1, seat)
+	sm.begin_faceoff_prep()
+	coord.handle_phase_entered()
+	for seat: int in PlayerRules.MAX_PER_TEAM:
+		var reach: float = 1.0 if seat == 0 else -1.0
+		assert_eq(_placed_position(10 + seat),
+				PlayerRules.faceoff_position(1, seat, GameRules.CENTER_ICE_DOT, reach, 5),
+				"seat %d" % seat)
+
+
+func test_a_client_reads_the_draw_taker_off_who_the_host_placed() -> void:
+	var wing: PlayerRecord = _add_seated_player(11, 0, 1)
+	var defender: PlayerRecord = _add_seated_player(13, 0, 3)
+	var centre: PlayerRecord = _add_seated_player(20, 1, 0)
+	for record: PlayerRecord in [wing, defender, centre]:
+		record.skater = Skater.new()
+		autofree(record.skater)
+	sm.current_phase = GamePhase.Phase.PLAYING
+	coord.on_faceoff_positions([
+			11, 0.0, 1.0, 1.0,
+			13, -4.7, 1.0, 0.9,
+			20, 0.0, 1.0, -1.0], 0.0)
+	assert_true(wing.skater.is_faceoff_center, "his team placed no centre")
+	assert_false(defender.skater.is_faceoff_center)
+	assert_true(centre.skater.is_faceoff_center)
+
+
+# ── A skater in the penalty box ──────────────────────────────────────────────
+
+const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
+
+
+func _box(record: PlayerRecord) -> void:
+	record.skater = SKATER_SCENE.instantiate() as Skater
+	add_child_autofree(record.skater)
+	record.skater.set_physics_process(false)
+	record.skater.set_process(false)
+	record.skater.in_box = true
+
+
+func test_a_boxed_skater_is_skated_to_his_door_and_the_rest_fill_in() -> void:
+	sm.team_size = 5
+	var centre: PlayerRecord = _add_seated_player(10, 0, 0)
+	_box(centre)
+	_add_seated_player(11, 0, 1)  # LW
+	_add_seated_player(12, 0, 2)  # RW
+	_add_seated_player(13, 0, 3)  # LD
+	_add_seated_player(14, 0, 4)  # RD
+	sm.begin_faceoff_prep()
+	coord.handle_phase_entered()
+	var door: Vector3 = PlayerRules.penalty_box_position(0)
+	assert_eq((centre.controller as StubController).targets, [door] as Array[Vector3])
+	assert_eq(_placed_position(10), door, "his own client skates him there too")
+	var dot: Vector2 = GameRules.CENTER_ICE_DOT
+	assert_eq(_placed_position(11), PlayerRules.faceoff_position(0, 0, dot, 1.0, 5),
+			"the left wing takes the draw he left")
+	assert_eq(_placed_position(13), PlayerRules.faceoff_position(0, 1, dot, -1.0, 5),
+			"and the left defenseman the wing")
+
+
+func test_the_placement_is_announced_before_anyone_is_placed() -> void:
+	_add_seated_player(10, 0, 0)
+	sm.begin_faceoff_prep()
+	coord.handle_phase_entered()
+	assert_signal_emitted(coord, "faceoff_placement_starting")
+
+
+func test_a_boxed_skater_does_not_skate_off_for_the_period_break() -> void:
+	var boxed: PlayerRecord = _add_seated_player(10, 0, 0)
+	_box(boxed)
+	var free: PlayerRecord = _add_seated_player(11, 0, 1)
+	free.skater = SKATER_SCENE.instantiate() as Skater
+	add_child_autofree(free.skater)
+	free.skater.set_physics_process(false)
+	free.skater.set_process(false)
+	coord._is_host = true
+	coord.on_period_break_entered()
+	assert_eq((boxed.controller as StubController).targets.size(), 0)
+	assert_eq((free.controller as StubController).targets.size(), 1)
+
+
+# ── A penalty shot set up in the faceoff's place ─────────────────────────────
+
+func _with_skater(record: PlayerRecord) -> PlayerRecord:
+	record.skater = SKATER_SCENE.instantiate() as Skater
+	add_child_autofree(record.skater)
+	record.skater.set_physics_process(false)
+	record.skater.set_process(false)
+	return record
+
+
+func test_a_penalty_shot_puts_the_shooter_at_centre_and_the_rest_at_their_benches() -> void:
+	var shooter: PlayerRecord = _with_skater(_add_seated_player(10, 0, 1))
+	shooter.skater.takes_penalty_shot = true
+	var mate: PlayerRecord = _with_skater(_add_seated_player(11, 0, 0))
+	mate.skater.sidelined = true
+	var opponent: PlayerRecord = _with_skater(_add_seated_player(20, 1, 0))
+	opponent.skater.sidelined = true
+	sm.begin_faceoff_prep(Vector2(6.7, 21.0))
+	coord.handle_phase_entered()
+	assert_eq(_placed_position(10), PlayerRules.penalty_shot_start())
+	assert_eq(_placed_position(11), PlayerRules.bench_start_position(0, 0))
+	assert_eq(_placed_position(20), PlayerRules.bench_start_position(1, 0))
+	for record: PlayerRecord in [shooter, mate, opponent]:
+		assert_false(record.skater.is_faceoff_center, "nobody takes a draw")
+		assert_eq((record.controller as StubController).targets.size(), 1)
+	assert_gt(sm.faceoff_prep_time_until_drop(), GameRules.FACEOFF_PREP_DURATION,
+			"the countdown waits for everyone to be set")
+
+
+func test_a_client_takes_no_draw_through_a_penalty_shot() -> void:
+	var shooter: PlayerRecord = _with_skater(_add_seated_player(10, 0, 0))
+	shooter.skater.takes_penalty_shot = true
+	var opponent: PlayerRecord = _with_skater(_add_seated_player(20, 1, 0))
+	opponent.skater.sidelined = true
+	sm.current_phase = GamePhase.Phase.PLAYING
+	coord.on_faceoff_positions([10, 0.0, 1.0, 0.0, 20, 11.5, 1.0, -4.4], 1.0)
+	assert_false(shooter.skater.is_faceoff_center)
+	assert_false(opponent.skater.is_faceoff_center)
 
 
 # ── Period break → period-start bench intro ──────────────────────────────────

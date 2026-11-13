@@ -544,3 +544,29 @@ here whenever you bump, in the same format.
 #      a client's lobby and game-over screen can show it). A new @rpc method
 #      shifts the method table, so mixed builds must be refused. No match-time
 #      wire change.
+# v106: penalties (docs/penalties-plan.md), one bump for the
+#      branch. Three reliable RPCs join the method set, which shifts the
+#      rpc-config ordering both peers hash:
+#      - notify_penalty_called: the referee's delayed call against a peer.
+#      - notify_penalty_whistled(shot_missed): the whistle when his team has
+#        the puck, or a penalty shot ending without a goal.
+#      - notify_penalty_ledger: the whole PenaltyLedger (to_wire: peer, team,
+#        foul, state, ms left, and the peer fouled, per entry), sent on every
+#        change and to a joiner. A client seats the box and sidelines the
+#        skaters watching a penalty shot from it, and runs the same faceoff
+#        cast as the host only if it knows who is boxed.
+#      No phase was added: a penalty shot is set up and taken in the
+#      faceoff's own phases. One snapshot bit was: body-state bit 0 is
+#      `boxed`, a skater out of sight in the penalty box, which only a
+#      replay reads (a live client seats the box from the ledger, and he
+#      rides the existing ghost bit).
+#      The stats sync (reliable) grows with them: PlayerStats.to_array goes
+#      from 21 fields to 30 (pim, pp_goals, sh_goals, penalty_shot_goals,
+#      pp_assists, pp_opportunities, pp_on_ice_goals, pk_opportunities,
+#      pk_on_ice_goals_against), and each team's power plays and power-play
+#      goals follow the team shots in its footer.
+#      A v105 peer would cast a boxed centre onto the dot, never lock or hide
+#      a boxed skater, skate freely through a penalty shot and refuse every
+#      stats payload as malformed, so mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged: the bit was zero in every v22 frame,
+#      so an older file plays as it did.

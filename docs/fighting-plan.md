@@ -8,8 +8,10 @@ differs from the text below, the "as built" sections say how.
 Two skaters can fight. Both must agree to it, the referee blows the play
 dead, and the fight is played with the same hands the stick is: the cursor
 places a fist exactly as it places the blade, and a button holds the other
-man's sweater. There is no penalty; the fight ends, play restarts with a
-faceoff, and both stay on.
+man's sweater. The fight ends and play restarts with a faceoff. Under `NHL`
+rules in 5v5 each man then sits a minor and the teams play four on four
+(`docs/penalties-plan.md`); everywhere else there is no penalty and both stay
+on.
 
 ## Decisions already made (from chat, 2026-11-11)
 
@@ -17,7 +19,7 @@ faceoff, and both stay on.
 |---|---|
 | Consent | **Challenge + accept.** One player presses Fight squared up to an opponent nearby; the opponent has a short window to press it back. An unanswered challenge just lapses, with nothing lost. |
 | When, and the whistle | **In live play**, the dropped puck included: the whistle goes the instant both have agreed, and a faceoff follows every fight. Not in a faceoff's set-up (a press there does nothing, and is not held for the drop; revised 2026-11-11), and not in the goal celebration (see *Phase 1 as built*). |
-| Afterwards | **No penalty.** Both stay on. |
+| Afterwards | **No penalty.** Both stay on. *Revised 2026-11-12:* under `NHL` rules in 5v5 each sits a minor (`docs/penalties-plan.md`). |
 | Controls | **The cursor drives the fist, and a button grabs.** The fist uses the stick's IK, reach and speed limits; punch power is the fist's speed at contact. Holding a button grabs with the other hand and keeps the grip. A key swaps the hands. |
 | Bots | A **grudge** per bot per opponent, filled by his body checks: past one level the bot accepts, past a higher one it challenges (2026-11-11, below). Before that, bots accepted every challenge and never challenged. |
 | Setting | **A lobby toggle, "Fighting: On / Off".** Fights are **never** possible in free play or in the `OFF` ruleset, even if free play ever goes multiplayer. |

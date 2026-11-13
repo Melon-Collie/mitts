@@ -488,6 +488,17 @@ func _on_totals_received(totals: Dictionary) -> void:
 		["Hits taken", str(_safe_int(totals.get("hits_taken", 0)))],
 		["Shots blocked", str(_safe_int(totals.get("shots_blocked", 0)))],
 	])
+	# Null until a game with a power play (or a kill) in it is on record.
+	var pp_pct: Variant = totals.get("pp_pct", null)
+	var pk_pct: Variant = totals.get("pk_pct", null)
+	_add_stat_group(tr(&"CAREER_GROUP_SPECIAL_TEAMS"), [
+		[tr(&"CAREER_PP_PCT"), "%.1f%%" % _safe_float(pp_pct) if pp_pct != null else "—"],
+		[tr(&"CAREER_PK_PCT"), "%.1f%%" % _safe_float(pk_pct) if pk_pct != null else "—"],
+		[tr(&"CAREER_PP_GOALS"), str(_safe_int(totals.get("pp_goals", 0)))],
+		[tr(&"CAREER_PP_POINTS"), str(_safe_int(totals.get("pp_points", 0)))],
+		[tr(&"CAREER_SH_GOALS"), str(_safe_int(totals.get("sh_goals", 0)))],
+		[tr(&"CAREER_PIM"), str(_safe_int(totals.get("pim", 0)))],
+	])
 
 
 # One headline figure: big value over a small caps label.

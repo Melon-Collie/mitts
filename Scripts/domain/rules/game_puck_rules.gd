@@ -31,6 +31,11 @@ static func game_dict(stats: PlayerStats) -> Dictionary:
 		"ot_goals": stats.ot_goals,
 		"fights": stats.fights,
 		"fight_wins": stats.fight_wins,
+		"pim": stats.pim,
+		"pp_goals": stats.pp_goals,
+		"pp_points": stats.pp_points(),
+		"sh_goals": stats.sh_goals,
+		"penalty_shot_goals": stats.penalty_shot_goals,
 	}
 
 

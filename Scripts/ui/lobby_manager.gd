@@ -1226,12 +1226,15 @@ func _on_settings_panel_changed(num_periods: int, period_duration: float, ot_ena
 	_goalie_difficulty = goalie_difficulty
 	_fighting = fighting
 	_apply_team_size(team_size)
-	# Remember the mode across sessions — an authored HOST pick only, which
-	# this local-panel path is (the synced receive path deliberately doesn't
-	# save: a joined lobby's mode is the host's choice, not yours). Gated on
-	# an actual change so period/OT tweaks don't rewrite the prefs file.
-	if NetworkManager.is_host and team_size != PlayerPrefs.preferred_team_size:
+	# Remember the mode and rule set across sessions — an authored HOST pick
+	# only, which this local-panel path is (the synced receive path
+	# deliberately doesn't save: a joined lobby's settings are the host's
+	# choice, not yours). Gated on an actual change so period/OT tweaks don't
+	# rewrite the prefs file.
+	if NetworkManager.is_host and (team_size != PlayerPrefs.preferred_team_size
+			or rule_set != PlayerPrefs.preferred_rule_set):
 		PlayerPrefs.preferred_team_size = team_size
+		PlayerPrefs.preferred_rule_set = rule_set
 		PlayerPrefs.save()
 	NetworkManager.send_lobby_settings(num_periods, period_duration, ot_enabled, rule_set, team_size,
 			bot_difficulty, goalie_difficulty, fighting)

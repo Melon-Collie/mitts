@@ -61,6 +61,7 @@ const _API_LIMIT: int = 25
 const _WIDE: Array[String] = [
 	"res://Scripts/actors/puck.gd",
 	"res://Scripts/actors/skater.gd",
+	"res://Scripts/ai/team_brain.gd",
 	"res://Scripts/controllers/puck_controller.gd",
 	"res://Scripts/controllers/skater_controller.gd",
 	"res://Scripts/domain/keeper/keeper_motor.gd",

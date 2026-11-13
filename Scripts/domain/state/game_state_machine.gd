@@ -65,6 +65,17 @@ var reserved_slots: Array[Dictionary] = []
 # ── Icing ────────────────────────────────────────────────────────────────────
 # Host-side; read-only outside this class (GameManager reads pending_team_id).
 var icing: IcingRace = IcingRace.new()
+# The team with fewer skaters on the ice for a penalty, -1 at even strength
+# (host, from the PenaltyLedger). A short-handed team may ice the puck.
+var short_handed_team_id: int = -1
+# Power plays each team has had this match, and the goals each scored on one.
+# On every peer: they ride the stats sync.
+var power_plays: Array[int] = [0, 0]
+var power_play_goals: Array[int] = [0, 0]
+# Host: the power play running now has not been scored on.
+var _power_play_open: bool = false
+# Host: the game clock is stopped though the puck is live, for a penalty shot.
+var clock_held: bool = false
 
 # ── Offsides ─────────────────────────────────────────────────────────────────
 # ARCADE path: peer IDs currently serving an offside ghost. Cleared per-peer
@@ -106,7 +117,7 @@ var _crease_dwell: Dictionary[int, float] = {}
 # When the domain decides a stoppage should fire (NHL icing confirmed, NHL
 # offside touch), it stashes the dot + reason here for GameManager to consume
 # in the same tick and route through the whistle + faceoff_prep pipeline.
-enum FaceoffReason { NONE, ICING, OFFSIDE }
+enum FaceoffReason { NONE, ICING, OFFSIDE, PENALTY }
 var pending_faceoff_dot: Vector2 = Vector2.ZERO
 var pending_faceoff_reason: int = FaceoffReason.NONE
 # Where the faceoff after a fight is taken: chosen as the whistle went.
@@ -148,6 +159,9 @@ func on_goal_scored(defending_team_id: int) -> int:
 		return -1
 	scores[scoring_team_id] += 1
 	period_scores[scoring_team_id][current_period - 1] += 1
+	if short_handed_team_id == defending_team_id:
+		power_play_goals[scoring_team_id] += 1
+		_power_play_open = false
 	last_scoring_team_id = scoring_team_id
 	_set_phase(GamePhase.Phase.GOAL_CELEBRATION)
 	return scoring_team_id
@@ -230,6 +244,10 @@ func check_icing_for_loose_puck(puck_z: float, player_positions: Dictionary = {}
 		player_velocities: Dictionary = {}) -> void:
 	if rule_set != GameRules.RuleSet.NHL or current_phase != GamePhase.Phase.PLAYING:
 		return
+	if short_handed_team_id != -1 and _last_touch_team_id == short_handed_team_id:
+		return
+	if clock_held:
+		return  # a penalty shot that misses the net is not an icing
 	_apply_icing_call(icing.update(puck_z, player_positions, player_velocities, players))
 
 
@@ -240,6 +258,29 @@ func _apply_icing_call(icing_call: InfractionRules.IcingCall) -> void:
 		pending_faceoff_dot = GameRules.icing_faceoff_dot(icing.pending_team_id, icing.pending_release_x)
 		pending_faceoff_reason = FaceoffReason.ICING
 	icing.end_race(icing_call)
+
+# Host-side: the team a penalty is pending against has the puck, so the play
+# is whistled dead and faces off in that team's end, on the puck's side.
+# A team going short gives the other one power play, however many of its men
+# sit before it is back to even: a second minor that makes it five on three
+# is not counted as a second. A goal ends a power play, so a team still short
+# after one is on a new one. Returns whether a power play began.
+func set_short_handed_team(team_id: int) -> bool:
+	var began: bool = team_id != -1 \
+			and (team_id != short_handed_team_id or not _power_play_open)
+	if began:
+		power_plays[1 - team_id] += 1
+	_power_play_open = team_id != -1
+	short_handed_team_id = team_id
+	return began
+
+
+func request_penalty_faceoff(offending_team_id: int, puck_x: float) -> void:
+	if current_phase != GamePhase.Phase.PLAYING \
+			or pending_faceoff_reason != FaceoffReason.NONE:
+		return
+	pending_faceoff_dot = GameRules.icing_faceoff_dot(offending_team_id, puck_x)
+	pending_faceoff_reason = FaceoffReason.PENALTY
 
 # Host-side: compute ghost state for all players into `result` as
 # {peer_id: should_ghost}. Runs every host tick, so the caller owns the
@@ -599,6 +640,13 @@ func reset_all() -> void:
 	current_period = 1
 	time_remaining = period_duration
 	icing.reset()
+	short_handed_team_id = -1
+	power_plays[0] = 0
+	power_plays[1] = 0
+	power_play_goals[0] = 0
+	power_play_goals[1] = 0
+	_power_play_open = false
+	clock_held = false
 	_last_touch_team_id = -1
 	_offside_peer_ids.clear()
 	_delayed_offside_peer_ids.clear()
@@ -712,6 +760,10 @@ func apply_remote_faceoff_prep() -> bool:
 
 # ── Queries ──────────────────────────────────────────────────────────────────
 
+func seconds_in_phase() -> float:
+	return _phase_timer
+
+
 func is_movement_locked() -> bool:
 	return PhaseRules.is_movement_locked(current_phase)
 
@@ -727,6 +779,15 @@ func faceoff_prep_time_until_drop() -> float:
 	return maxf(GameRules.FACEOFF_PREP_DURATION + _prep_extra_time - _phase_timer, 0.0)
 
 
+# Host: the set-up running now starts over. False outside FACEOFF_PREP.
+func restart_faceoff_prep() -> bool:
+	if current_phase != GamePhase.Phase.FACEOFF_PREP:
+		return false
+	_phase_timer = 0.0
+	_prep_extra_time = 0.0
+	return true
+
+
 # Extends the CURRENT prep's window (host-side) so a distance-based skate-in has
 # time to finish before the drop. Unlike begin_faceoff_prep's extra_prep_time
 # (set at entry), this is applied by PhaseCoordinator._enter_faceoff_prep after
@@ -736,17 +797,6 @@ func set_faceoff_prep_extra(extra: float) -> void:
 	if current_phase != GamePhase.Phase.FACEOFF_PREP:
 		return
 	_prep_extra_time = maxf(extra, 0.0)
-
-# Returns { peer_id: Vector3 } — each player's faceoff position derived from
-# their slot/team around the active dot. PlayerRules.faceoff_position is the
-# single source of truth; we hold no cached positions ourselves.
-func get_faceoff_positions() -> Dictionary:
-	var result: Dictionary = {}
-	for peer_id in players:
-		var p: Dictionary = players[peer_id]
-		result[peer_id] = PlayerRules.faceoff_position(
-				p.team_id, p.team_slot, active_faceoff_dot, -1.0, team_size)
-	return result
 
 
 # ── Internal ─────────────────────────────────────────────────────────────────
@@ -760,6 +810,8 @@ func _set_phase(phase: int) -> void:
 
 func _tick_phase(delta: float) -> bool:
 	if current_phase == GamePhase.Phase.PLAYING:
+		if clock_held:
+			return false
 		if infinite_time:
 			time_remaining += delta
 			return false

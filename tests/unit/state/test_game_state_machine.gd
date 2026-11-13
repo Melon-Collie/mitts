@@ -284,6 +284,63 @@ func test_uncontested_icing_is_whistled_on_the_crossing() -> void:
 	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING,
 			"nobody racing for it — icing on the crossing")
 
+func test_a_short_handed_team_may_ice_the_puck() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.short_handed_team_id = 0
+	sm.notify_puck_carried(0, 5.0)
+	sm.check_icing_for_loose_puck(-30.0)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE)
+
+func test_a_team_going_short_gives_the_other_a_power_play() -> void:
+	sm.set_short_handed_team(1)
+	assert_eq(sm.power_plays, [1, 0])
+	sm.set_short_handed_team(1)
+	assert_eq(sm.power_plays, [1, 0], "still the same power play")
+	sm.set_short_handed_team(-1)
+	sm.set_short_handed_team(0)
+	assert_eq(sm.power_plays, [1, 1])
+	sm.set_short_handed_team(1)
+	assert_eq(sm.power_plays, [2, 1], "the advantage changed hands")
+
+func test_a_team_still_short_after_a_power_play_goal_is_on_a_new_one() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	assert_true(sm.set_short_handed_team(1))
+	assert_false(sm.set_short_handed_team(1), "a second man sat: the same power play")
+	sm.on_goal_scored(1)
+	assert_true(sm.set_short_handed_team(1), "one man came out, the other still sits")
+	assert_eq(sm.power_plays, [2, 0])
+	assert_eq(sm.power_play_goals, [1, 0])
+
+func test_a_goal_against_the_shorter_team_is_counted_for_the_power_play() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.set_short_handed_team(1)
+	sm.on_goal_scored(1)
+	assert_eq(sm.power_play_goals, [1, 0])
+
+func test_a_short_handed_or_even_strength_goal_is_not_a_power_play_goal() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.set_short_handed_team(0)
+	sm.on_goal_scored(1)
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.set_short_handed_team(-1)
+	sm.on_goal_scored(1)
+	assert_eq(sm.power_play_goals, [0, 0])
+
+func test_a_rematch_clears_the_power_play_counts() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.set_short_handed_team(1)
+	sm.on_goal_scored(1)
+	sm.reset_all()
+	assert_eq([sm.power_plays, sm.power_play_goals, sm.short_handed_team_id],
+			[[0, 0], [0, 0], -1])
+
+func test_the_team_on_the_power_play_is_still_called_for_icing() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.short_handed_team_id = 1
+	sm.notify_puck_carried(0, 5.0)
+	sm.check_icing_for_loose_puck(-30.0)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING)
+
 func test_race_keeps_the_puck_live_until_someone_reaches_the_dots() -> void:
 	_open_race()
 	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE,
@@ -927,17 +984,18 @@ func test_apply_remote_faceoff_prep_does_not_regress_from_faceoff() -> void:
 	assert_false(changed)
 	assert_eq(sm.current_phase, GamePhase.Phase.FACEOFF)
 
-# ── Faceoff positions ───────────────────────────────────────────────────────
+# ── The faceoff dot ──────────────────────────────────────────────────────────
 
-func test_faceoff_positions_per_player_slot() -> void:
-	var host_assignment: Dictionary = sm.register_host(1)
-	var peer_assignment: Dictionary = sm.on_player_connected(100)
-	var positions: Dictionary = sm.get_faceoff_positions()
-	assert_eq(positions.size(), 2)
-	assert_eq(positions[1],
-			PlayerRules.faceoff_position(host_assignment.team_id, host_assignment.team_slot))
-	assert_eq(positions[100],
-			PlayerRules.faceoff_position(peer_assignment.team_id, peer_assignment.team_slot))
+func test_a_set_up_can_start_over() -> void:
+	sm.begin_faceoff_prep(Vector2(6.5, -22.1), 2.0)
+	sm.tick(1.5)
+	assert_true(sm.restart_faceoff_prep())
+	assert_almost_eq(sm.faceoff_prep_time_until_drop(), GameRules.FACEOFF_PREP_DURATION, 0.0001)
+	assert_eq(sm.active_faceoff_dot, Vector2(6.5, -22.1), "at the same dot")
+
+func test_nothing_starts_over_outside_a_set_up() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	assert_false(sm.restart_faceoff_prep())
 
 func test_active_faceoff_dot_defaults_to_center() -> void:
 	assert_eq(sm.active_faceoff_dot, GameRules.CENTER_ICE_DOT)
@@ -960,14 +1018,46 @@ func test_period_advance_resets_dot_to_center() -> void:
 	sm.tick(GameRules.INTERMISSION_DURATION + 0.01)  # → FACEOFF_PREP
 	assert_eq(sm.active_faceoff_dot, GameRules.CENTER_ICE_DOT)
 
-func test_get_faceoff_positions_uses_active_dot() -> void:
-	sm.register_host(1)
-	var dot := Vector2(6.5, 22.1)
-	sm.begin_faceoff_prep(dot)
-	var positions: Dictionary = sm.get_faceoff_positions()
-	var slot: Dictionary = sm.players[1]
-	assert_eq(positions[1],
-			PlayerRules.faceoff_position(slot.team_id, slot.team_slot, dot))
+# ── Penalties ────────────────────────────────────────────────────────────────
+
+func test_a_penalty_whistle_faces_off_in_the_offending_teams_end() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.request_penalty_faceoff(0, 3.0)
+	assert_eq(sm.pending_faceoff_dot, GameRules.icing_faceoff_dot(0, 3.0))
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.PENALTY)
+
+
+func test_a_penalty_whistle_does_not_override_one_already_pending() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.pending_faceoff_reason = GameStateMachine.FaceoffReason.OFFSIDE
+	sm.request_penalty_faceoff(0, 3.0)
+	assert_eq(sm.pending_faceoff_reason, GameStateMachine.FaceoffReason.OFFSIDE)
+
+
+func test_no_penalty_whistle_outside_live_play() -> void:
+	sm.current_phase = GamePhase.Phase.FACEOFF_PREP
+	sm.request_penalty_faceoff(0, 3.0)
+	assert_eq(sm.pending_faceoff_reason, GameStateMachine.FaceoffReason.NONE)
+
+
+func test_the_clock_is_held_through_a_penalty_shot() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	var before: float = sm.time_remaining
+	sm.clock_held = true
+	sm.tick(5.0)
+	assert_eq(sm.time_remaining, before)
+	sm.clock_held = false
+	sm.tick(5.0)
+	assert_almost_eq(sm.time_remaining, before - 5.0, 0.0001)
+
+
+func test_a_penalty_shot_that_misses_the_net_is_not_an_icing() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.clock_held = true
+	sm.notify_puck_carried(0, 5.0)
+	sm.check_icing_for_loose_puck(-30.0)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE)
+
 
 # ── Period / clock ───────────────────────────────────────────────────────────
 

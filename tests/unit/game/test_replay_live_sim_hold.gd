@@ -44,3 +44,18 @@ func test_a_skater_freed_mid_replay_is_skipped_on_release() -> void:
 	leaver.free()
 	hold.release()
 	assert_eq(stayer.physics_interpolation_mode, Node.PHYSICS_INTERPOLATION_MODE_INHERIT)
+
+
+# A clip hides a skater where it has him in the box and shows him where it does
+# not; when it ends each is drawn as the live game has him.
+func test_release_draws_each_skater_as_the_live_game_has_him() -> void:
+	var out_since: Skater = _skater(Node.PHYSICS_INTERPOLATION_MODE_INHERIT)
+	var boxed_now: Skater = _skater(Node.PHYSICS_INTERPOLATION_MODE_INHERIT)
+	boxed_now.in_box = true
+	var skaters: Array[Skater] = [out_since, boxed_now]
+	var hold: ReplayLiveSimHold = _hold(skaters)
+	out_since.visible = false   # the clip had him in the box
+	boxed_now.visible = true    # the clip is from before his penalty
+	hold.release()
+	assert_true(out_since.visible)
+	assert_false(boxed_now.visible)

@@ -320,6 +320,7 @@ func _team_totals() -> Array[Dictionary]:
 	for t: int in 2:
 		out[t]["box"] = true
 		out[t]["icings"] = 0
+		out[t]["pim"] = 0
 	var players: Dictionary[int, PlayerRecord] = GameManager.get_players()
 	for peer_id: int in players:
 		var rec: PlayerRecord = players[peer_id]
@@ -341,6 +342,7 @@ func _team_totals() -> Array[Dictionary]:
 		out[t]["interceptions"] = int(out[t]["interceptions"]) + s.interceptions
 		out[t]["giveaways"] = int(out[t]["giveaways"]) + s.giveaways
 		out[t]["icings"] = int(out[t]["icings"]) + s.icings
+		out[t]["pim"] = int(out[t]["pim"]) + s.pim
 	for t: int in 2:
 		out[t]["sog"] = GameManager.get_team_shots(t)
 	return out
@@ -367,10 +369,15 @@ func _build_tape_rows(totals: Array[Dictionary]) -> void:
 		_add_count_row(_tape, &"TAPE_TAKEAWAYS", home["takeaways"], away["takeaways"])
 		_add_count_row(_tape, &"TAPE_INTERCEPTIONS", home["interceptions"], away["interceptions"])
 		_add_count_row(_tape, &"TAPE_GIVEAWAYS", home["giveaways"], away["giveaways"], false)
-	# Live game only (no stored record carries icings), and only where icing is
-	# called.
+	# Live game only (no stored record carries icings or penalties), and only
+	# where they are called.
 	if home.has("icings") and GameManager.get_rule_set() == GameRules.RuleSet.NHL:
 		_add_count_row(_tape, &"TAPE_ICINGS", home["icings"], away["icings"], false)
+		_add_count_row(_tape, &"TAPE_PIM", home["pim"], away["pim"], false)
+		_add_count_row(_tape, &"TAPE_POWER_PLAYS",
+				GameManager.get_power_plays(0), GameManager.get_power_plays(1))
+		_add_count_row(_tape, &"TAPE_PP_GOALS",
+				GameManager.get_power_play_goals(0), GameManager.get_power_play_goals(1))
 
 	_add_count_row(_advanced, &"TAPE_CORSI", home["corsi"], away["corsi"])
 	_add_count_row(_advanced, &"TAPE_FENWICK", home["fenwick"], away["fenwick"])

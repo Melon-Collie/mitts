@@ -18,6 +18,7 @@ var _chyron: HudGoalChyron = null
 var _prompts: HudPrompts = null
 var _ghost_banner: HudGhostBanner = null
 var _icing_race: HudIcingRace = null
+var _penalties: HudPenalties = null
 var _stat_feed: HudStatFeed = HudStatFeed.new()
 var _votes: HudRematchVotes = HudRematchVotes.new()
 
@@ -74,6 +75,9 @@ func _ready() -> void:
 	_icing_race = HudIcingRace.new()
 	add_child(_icing_race)
 	_icing_race.build(_scale_root)
+	_penalties = HudPenalties.new()
+	add_child(_penalties)
+	_penalties.build(_scale_root)
 	_build_bug_icon()
 	_prompts = HudPrompts.new()
 	add_child(_prompts)
@@ -167,6 +171,9 @@ func _ready() -> void:
 	GameManager.fight_challenged.connect(_on_fight_challenged)
 	GameManager.fight_challenge_lapsed.connect(_on_fight_challenge_lapsed)
 	GameManager.fight_called.connect(_on_fight_called)
+	GameManager.penalty_called.connect(_on_penalty_called)
+	GameManager.penalty_whistled.connect(_on_penalty_whistled)
+	GameManager.penalties_changed.connect(_on_penalties_changed)
 	GameManager.local_player_hit.connect(_on_local_player_hit)
 	# Arrives just before faceoff_prep_announced on the opening faceoff; the
 	# countdown consumes it to lead with the matchup card.
@@ -596,7 +603,7 @@ func _on_phase_changed(new_phase: int) -> void:
 			# Drop instant: hold "DROP!" briefly, then dismiss on PLAYING.
 			# No whistle here — refs whistle to stop play, not to start it.
 			_chyron.stop_faceoff_countdown()
-			_chyron.show_hero(tr(&"PHASE_DROP"))
+			_chyron.show_hero(tr(&"PHASE_GO" if _penalty_shot_is_on() else &"PHASE_DROP"))
 		GamePhase.Phase.FIGHT:
 			# The whistle may land in a faceoff's countdown, which then waits for
 			# the faceoff after the fight to announce itself again.
@@ -623,7 +630,7 @@ func _on_faceoff_prep_announced() -> void:
 	# A reel-less (scoreless) break's band has no intermission_ended to dismiss
 	# it — the next prep is its exit. Idempotent for reel breaks (already hidden).
 	_on_intermission_ended()
-	_chyron.begin_faceoff_prep()
+	_chyron.begin_faceoff_prep(_penalty_shot_is_on())
 
 
 # Compose the opening matchup rosters from the live registry: one column per
@@ -712,6 +719,40 @@ func _on_fight_called(a_peer_id: int, b_peer_id: int) -> void:
 		var swap: String = ControllerGlyphs.prompt(PlayerPrefs.action_display(&"slapshot"),
 				ControllerGlyphs.trigger_label(false))
 		_toast_stack.push(tr(&"TOAST_FIGHT_CONTROLS") % [grab, swap], MenuStyle.BROADCAST_CREAM)
+
+
+func _on_penalty_called(peer_id: int, foul: int) -> void:
+	if _toast_stack == null:
+		return
+	# A fight's minor is assessed at once; every other call waits on the play.
+	var key: StringName = &"TOAST_PENALTY_ASSESSED" \
+			if foul == PenaltyRules.Foul.FIGHTING else &"TOAST_PENALTY_CALLED"
+	_toast_stack.push(tr(key) % [_peer_name(peer_id), tr(PenaltyRules.name_key(foul))],
+			MenuStyle.BROADCAST_CREAM)
+
+
+func _on_penalty_whistled(shot_missed: bool) -> void:
+	if _toast_stack != null:
+		_toast_stack.push(tr(&"TOAST_PENALTY_SHOT_NO_GOAL" if shot_missed else &"TOAST_PENALTY"),
+				MenuStyle.BROADCAST_CREAM)
+
+
+# Whether the faceoff being counted in is a penalty shot's set-up.
+func _penalty_shot_is_on() -> bool:
+	var ledger: PenaltyLedger = GameManager.get_penalty_ledger()
+	return ledger != null and ledger.shooter_peer_id() != -1
+
+
+func _on_penalties_changed() -> void:
+	var local: PlayerRecord = GameManager.get_players().get(
+			NetworkManager.local_peer_id(), null)
+	# Just under the scorebug, on its left edge.
+	var strip_at := Vector2(8.0, 8.0 + _scorebug.panel_size().y + 6.0)
+	var ledger: PenaltyLedger = GameManager.get_penalty_ledger()
+	_penalties.show_ledger(ledger, GameManager.get_team_size(),
+			NetworkManager.local_peer_id(),
+			local.team.team_id if local != null and local.team != null else -1, strip_at,
+			_peer_name(ledger.shooter_peer_id()) if ledger != null else "")
 
 
 func _peer_name(peer_id: int) -> String:

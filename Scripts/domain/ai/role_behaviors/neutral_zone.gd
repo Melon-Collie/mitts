@@ -5,7 +5,8 @@ class_name AIRoleNeutralZone
 #
 #   NZ_F1 — the high "1": in their half and goal-side of the carrier, steers him
 #     to the outside from a stand off him; once he is past, or in our half, he
-#     runs him down (AIRoleTrack's hip).
+#     runs him down (AIRoleTrack's hip). A man down he is the one of a 1-3 and
+#     waits for the carrier at their blue line.
 #   NZ_MID (5v5) — the middle "1": mid-ice between the carrier and our line, a
 #     layer up from it; once the carrier is past him, back through the middle
 #     (AIRoleTrack's mid recovery).
@@ -44,6 +45,12 @@ static func decide(ctx: RoleContext, slot: int) -> RoleDecision:
 
 # Depth (metres off our goal line) of our line's stand.
 static func line_depth_m() -> float:
+	return GameRules.GOAL_LINE_Z - GameRules.BLUE_LINE_Z + BACK_LINE_STAND_OUT_M
+
+
+# How far off THEIR goal line their blue line's neutral-zone side is: as far
+# up the ice as the high man of a 1-3 goes.
+static func their_line_depth_m() -> float:
 	return GameRules.GOAL_LINE_Z - GameRules.BLUE_LINE_Z + BACK_LINE_STAND_OUT_M
 
 
@@ -89,10 +96,14 @@ static func _decide_f1(ctx: RoleContext) -> RoleDecision:
 	var stand: Vector3 = AIDefensiveVerbs.carrier_stand(ap, gap)
 	# Not into their zone past their circle tops (the forecheck we did not take),
 	# nor into our half (past the red line he is the backcheck, not a second D).
+	# A man down, not into their zone at all: three behind him is all there is.
 	var their_depth: float = GameRules.GOAL_LINE_Z + ctx.own_goal_dir * stand.z
+	var deepest_m: float = AIZoneCoverage.HOUSE_TOP_DEPTH_M
+	if ctx.team_brain != null and ctx.team_brain.man_down():
+		deepest_m = their_line_depth_m()
 	var held: bool = false
-	if their_depth < AIZoneCoverage.HOUSE_TOP_DEPTH_M:
-		stand.z = -ctx.own_goal_dir * (GameRules.GOAL_LINE_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M)
+	if their_depth < deepest_m:
+		stand.z = -ctx.own_goal_dir * (GameRules.GOAL_LINE_Z - deepest_m)
 		held = true
 	elif ctx.own_goal_dir * stand.z > 0.0:
 		stand.z = 0.0

@@ -21,7 +21,7 @@ func _panel(field: StringName) -> Object:
 
 func test_ready_builds_every_panel() -> void:
 	for field: StringName in [&"_scorebug", &"_chyron", &"_prompts", &"_ghost_banner",
-			&"_icing_race", &"_stat_feed", &"_votes"]:
+			&"_icing_race", &"_penalties", &"_stat_feed", &"_votes"]:
 		assert_not_null(_panel(field), "HUD._ready must build %s" % field)
 
 
@@ -75,6 +75,61 @@ func test_icing_race_reaches_its_banner() -> void:
 	assert_eq(banner.title_text(), tr(&"ICING_WAVED_OFF"), "a waved-off race shows the washout")
 	GameManager.icing_race_changed.emit(-1, false)
 	assert_false(banner.is_showing(), "a race ended by the whistle hands over to the toast")
+
+
+func test_penalty_signals_reach_the_hud() -> void:
+	GameManager.penalty_called.emit(7, PenaltyRules.Foul.BOARDING)
+	GameManager.penalty_called.emit(7, PenaltyRules.Foul.FIGHTING)
+	GameManager.penalty_whistled.emit(false)
+	GameManager.penalty_whistled.emit(true)
+	GameManager.penalties_changed.emit()
+	assert_eq((_panel(&"_penalties") as HudPenalties).banner_title(), "",
+			"no ledger outside a match, so nothing is up")
+
+
+func test_the_penalty_panel_shows_the_call_then_the_manpower() -> void:
+	var panel: HudPenalties = _panel(&"_penalties") as HudPenalties
+	var ledger := PenaltyLedger.new()
+	ledger.call_foul(7, 1, PenaltyRules.Foul.BOARDING)
+	panel.show_ledger(ledger, 5, 3, 0, Vector2(8.0, 80.0))
+	assert_eq(panel.banner_title(), tr(&"PENALTY_DELAYED_TITLE"), "the referee's arm is up")
+	assert_eq(panel.strip_text(), "", "nobody is short until it is assessed")
+	ledger.assess(24.0, 2)
+	panel.show_ledger(ledger, 5, 3, 0, Vector2(8.0, 80.0))
+	assert_eq(panel.banner_title(), "", "the call is in; the local player is not the one sitting")
+	assert_eq(panel.strip_text(), "%s   0:24" % (tr(&"PENALTY_STRENGTH") % [5, 4]))
+	panel.show_ledger(ledger, 5, 7, 1, Vector2(8.0, 80.0))
+	assert_eq(panel.banner_title(), tr(&"PENALTY_BOX_TITLE"), "the boxed player sees his own clock")
+
+
+# From the box the camera looks across the ice, so the play crosses the band
+# the banner holds for everyone else.
+func test_the_boxed_players_banner_sits_above_the_one_everyone_else_reads() -> void:
+	var panel: HudPenalties = _panel(&"_penalties") as HudPenalties
+	var ledger := PenaltyLedger.new()
+	ledger.call_foul(7, 1, PenaltyRules.Foul.BOARDING)
+	panel.show_ledger(ledger, 5, 7, 1, Vector2(8.0, 80.0))
+	var called_top: float = panel._banner_root.offset_top
+	ledger.assess(24.0, 2)
+	panel.show_ledger(ledger, 5, 7, 1, Vector2(8.0, 80.0))
+	assert_lt(panel._banner_root.offset_bottom, called_top)
+	ledger.clear()
+	ledger.call_foul(3, 0, PenaltyRules.Foul.BOARDING)
+	panel.show_ledger(ledger, 5, 7, 1, Vector2(8.0, 80.0))
+	assert_eq(panel._banner_root.offset_top, called_top, "back in the game, back where it was")
+
+
+func test_the_penalty_panel_names_the_shooter_through_a_penalty_shot() -> void:
+	var panel: HudPenalties = _panel(&"_penalties") as HudPenalties
+	var ledger := PenaltyLedger.new()
+	ledger.call_foul(7, 1, PenaltyRules.Foul.BOARDING, 3)
+	ledger.stage_shot()
+	panel.show_ledger(ledger, 3, 3, 0, Vector2(8.0, 80.0), "JONES")
+	assert_eq(panel.banner_title(), tr(&"PENALTY_SHOT_TITLE"))
+	assert_eq(panel.strip_text(), "", "nobody is short for a penalty shot")
+	ledger.end_shot()
+	panel.show_ledger(ledger, 3, 3, 0, Vector2(8.0, 80.0))
+	assert_eq(panel.banner_title(), "")
 
 
 func test_roster_announcements_reach_the_toast_stack() -> void:

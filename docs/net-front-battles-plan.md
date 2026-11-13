@@ -11,7 +11,8 @@ is `docs/net-play-plan.md`. Each phase is its own PR and playtest.
 
 ## Decisions banked
 
-- **The cross-check goes.** It is openly illegal, Mitts calls no penalties, and
+- **The cross-check goes.** It is openly illegal, Mitts called no penalties when
+  this was decided (`docs/penalties-plan.md` has since added them), and
   a burst shove is not how a net-front battle plays: it is a sustained
   contest of leverage. It stays until the press has been played, as the
   fallback, then retires (Phase 3).

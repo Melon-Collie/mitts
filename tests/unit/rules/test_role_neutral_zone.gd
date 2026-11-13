@@ -67,6 +67,35 @@ func test_f1_does_not_dive_into_a_forecheck_we_declined() -> void:
 			"held at their circle tops; got %s" % d.target_position)
 
 
+class ManDownView extends TeamStrategyView:
+	func man_down() -> bool:
+		return true
+
+
+func test_a_man_down_the_high_man_waits_at_their_blue_line() -> void:
+	# The same carrier behind his own net. A man short there is no one to spare
+	# for their zone: he holds the neutral-zone side of their line.
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, -6.0),
+			[[10, 1, Vector3(0.0, 0.0, -28.0)]], 10)
+	ctx.team_brain = ManDownView.new()
+	var d: RoleDecision = AIRoleNeutralZone.decide(ctx, AIRoleSlots.Slot.NZ_F1)
+	var their_depth: float = OUR_NET_Z + d.target_position.z
+	assert_almost_eq(their_depth, AIRoleNeutralZone.their_line_depth_m(), 0.05,
+			"held at their blue line; got %s" % d.target_position)
+	assert_gt(AIRoleNeutralZone.their_line_depth_m(),
+			GameRules.GOAL_LINE_Z - GameRules.BLUE_LINE_Z, "outside their zone")
+
+
+func test_a_man_down_the_high_man_still_steers_a_carrier_in_the_neutral_zone() -> void:
+	var carrier := Vector3(4.0, 0.0, -6.0)
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, -2.0),
+			[[10, 1, carrier, Vector3(0.0, 0.0, 3.0)]], 10)
+	ctx.team_brain = ManDownView.new()
+	var d: RoleDecision = AIRoleNeutralZone.decide(ctx, AIRoleSlots.Slot.NZ_F1)
+	assert_gt(d.target_position.z, carrier.z, "he stands goal-side of him")
+	assert_lt(d.target_position.x, carrier.x, "angled to the inside, giving him the wall")
+
+
 func test_f1_runs_him_down_once_he_is_past() -> void:
 	var carrier := Vector3(0.0, 0.0, -4.0)
 	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, -10.0),

@@ -174,7 +174,7 @@ camera following it, printing `PuckSpinRig`'s spin, tilt and tumble per frame
 **To see a SCREEN, render it.** `.claude/hooks/render-ui.sh [shots]` drives the
 real menus and HUD (title card, each Options tab, the free-play HUD and every
 side-menu overlay, the tutorial HUD, the lobby, a tournament's lobby and bracket,
-a 3v3 against bots a few seconds in) and writes PNGs to `.preview/ui/`. Shot list in `tools/ui_preview_runner.gd`;
+a 3v3 against bots a few seconds in, the view from each penalty box) and writes PNGs to `.preview/ui/`. Shot list in `tools/ui_preview_runner.gd`;
 `--list` prints it. Each run gets a throwaway user data directory, so it shows
 first-run defaults and never touches your prefs. The UI comes out faithful but the 3D behind it does not (software
 Compatibility renderer), and a match runs at about a frame a second, so the full

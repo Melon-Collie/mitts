@@ -215,9 +215,26 @@ too.
 | Heavyweight (`fight_wins`) | ladder | 5 / 10 / 25 / 50 fights won (`STAT_FIGHT_WINS`) |
 | Enforcer | combo | `hits@100` + `fight_wins@10`: the Enforcer title |
 
-The ladder counts wins, not fights: there is no penalty for fighting, so a
-ladder on fights would pay for starting them. A game puck's condition is a
+The ladder counts wins, not fights: outside `NHL` 5v5 a fight costs nothing,
+so a ladder on fights would pay for starting them. A game puck's condition is a
 `mins` map of game stats, so one puck can ask for several at once.
+
+### Penalty pucks
+
+Penalties (`docs/penalties-plan.md`) count a goal by the strength it went in
+at, on the host, and the counts ride the broadcast `PlayerStats` like the
+fight stats. All three are `NHL`-only: the first two need a minor, so 5v5,
+and the third a penalty shot, so 3v3.
+
+| puck | kind | earned by |
+|---|---|---|
+| Man Advantage (`power_play_goal`) | game | a power-play goal |
+| Shorty (`shorty`) | game | a short-handed goal |
+| Ice in the Veins (`penalty_shot_goal`) | game | a penalty-shot goal |
+
+Penalty minutes, power-play goals and power-play points are Steam stats
+(`STAT_PIM`, `STAT_PP_GOALS`, `STAT_PP_POINTS`) with no ladder on them yet. A
+ladder on penalty minutes would pay for fouling.
 
 ## Architecture
 
