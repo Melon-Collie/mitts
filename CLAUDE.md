@@ -209,6 +209,16 @@ adds CPU render time and draw calls. No playtest needed, so it is the A/B for
 CPU-side performance work: compare runs on the same machine, never a run here
 against a number from someone else's machine.
 
+**To see whether the HOST runs with nobody on it, probe it.**
+`.claude/hooks/probe-headless-host.sh [--team-size=3] [--max-fps=30]` plays a
+whole bot match headless on a host seated as a spectator and prints whether it
+reached `GAME_OVER`, each phase with the tick rate held in it, the cores the
+process used and every engine error it logged
+(`tools/headless_host_probe_runner.gd`). The match runs in real time, so a run
+takes as long as the match. It is the check for dedicated-server work
+(`docs/dedicated-server-plan.md`): a host-side change that quietly needs a local
+player shows up here as a phase that never ends.
+
 A render answers *how it reads*; it does not answer *whether two placements
 agree*. When the question is the second one — does the sleeve stay inside the
 glove, does the mirrored side land where the near side does — measure it in a
