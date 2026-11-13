@@ -123,6 +123,8 @@ var seat_places_only: bool = false
 # the render instant; null where none is predicted (host, replays, a warm-up).
 var _predictor: KeeperPredictor = null
 var _world_source: KeeperWorldSource = null
+var _restep_ease := KeeperRestepEase.new()
+var _drew_predicted: bool = false
 
 
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
@@ -181,9 +183,12 @@ func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
 
 
 # Him drawn from his predictor at the render instant
-# (PuckController._render_instant's); false where it has nothing to draw, and
-# he is drawn interpolated instead.
-func _draw_predicted() -> bool:
+# (PuckController._render_instant's), eased where the prediction jumped
+# (KeeperRestepEase); false where it has nothing to draw, and he is drawn
+# interpolated instead.
+func _draw_predicted(delta: float) -> bool:
+	var continues: bool = _drew_predicted
+	_drew_predicted = false
 	if _predictor == null:
 		return false
 	if not NetworkManager.is_clock_ready():
@@ -191,11 +196,15 @@ func _draw_predicted() -> bool:
 		return false
 	var render_t: float = NetworkManager.estimated_host_time() \
 			+ LagCompRewind.clamped_lead_s(NetworkManager.get_input_lead_ms())
+	var resteps: int = _predictor.resteps
 	if not _predictor.advance(render_t):
 		NetworkTelemetry.record_keeper_predict_fallback()
 		return false
 	NetworkTelemetry.record_keeper_predict_us(_predictor.last_frame_us)
-	_apply_interpolated(_predictor.drawn)
+	_drew_predicted = true
+	var jumped: bool = _predictor.resteps != resteps or not continues
+	_apply_interpolated(_restep_ease.apply(_predictor.drawn, jumped, delta,
+			Engine.get_physics_frames()))
 	return true
 
 
@@ -258,7 +267,7 @@ func _physics_process(delta: float) -> void:
 		step_sim(delta)
 	else:
 		var was: Vector3 = goalie.global_position
-		if not _draw_predicted():
+		if not _draw_predicted(delta):
 			if _rejoin_blend_elapsed >= 0.0:
 				_rejoin_blend_elapsed += delta
 			_interpolate_and_apply()
@@ -694,6 +703,7 @@ func _lerp_goalie_state(from_s: GoalieNetworkState, to_s: GoalieNetworkState, t:
 
 
 func _apply_interpolated(s: GoalieNetworkState) -> void:
+	_restep_ease.note_drawn(s, Engine.get_physics_frames())
 	_current_x = s.position_x
 	_follow(s)
 
