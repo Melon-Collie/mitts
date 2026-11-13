@@ -80,7 +80,7 @@ Sub-batch 6a (wire/codec — landed, round-trip tested headless):
 
 Sub-batch 6b (reconcile/lag-comp determinism — NO wire change, needs 2P validation):
 - [x] P1-5  Lead-aware lag-comp rewind — superseded by the one render clock: claims carry their lead and every resolver rewinds through `LagCompRewind`
-- [ ] P1-7  Reconcile replay determinism holes (snapshot live puck/goalie reads) — still open: the shot-block facing snap, the one-timer puck view and the blade's goalie clamp read live state in replay
+- [x] P1-7  Reconcile replay determinism holes — the live tick's puck view and goalie boxes are recorded on `PredictedState` and played back (the block's facing snap, the one-timer view and power, the deflect lift, the blade's goalie wall, the body's goalie clamp). The IK's own puck reads (`_reach_purpose`, the blade pass's `PUCK_POS`/`PUCK_VEL`) still read live
 - [x] P1-6  Host-measured ping for claim-stamp plausibility (`host_ping`/`host_pong`)
 - [x] Part1-P2 body-check impulse replay phasing — superseded: the replay re-resolves contact against the buffered history, nothing is injected. Contested-pickup present-time state — `PickupClaimResolver.arbitrate_present_grab`
 - [x] P2-17b telemetry 5 Hz dead-puck phase-gate — moot: the broadcast rate is never downshifted per phase

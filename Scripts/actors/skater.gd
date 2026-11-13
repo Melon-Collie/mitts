@@ -701,6 +701,7 @@ func contact_others() -> Array:
 # each goalie — skater-vs-goalie contact is analytic.
 # Empty Callable (tutorial dummy / test) → no goalie block.
 var _goalie_boxes_provider: Callable = Callable()
+var _no_goalie_boxes := PackedFloat32Array()
 
 
 func set_goalie_boxes_provider(provider: Callable) -> void:
@@ -1469,13 +1470,22 @@ func clamp_body_to_net() -> void:
 # less his stick) and strip any velocity pointing into him so the skater slides
 # along him instead of being re-seated next tick. A ghosted skater (crease-dwell
 # / offside) passes through, matching the is_ghost gate in
-# _resolve_player_collisions. Called live after the rink/net clamps; same replay
-# and allocation contract.
+# _resolve_player_collisions. Called live after the rink/net clamps; same
+# allocation contract. The replay passes the boxes its live tick clamped against
+# (clamp_body_to_goalie_boxes), never the ones the goalie holds now.
 func clamp_body_to_goalies() -> void:
-	if is_ghost or not _goalie_boxes_provider.is_valid():
-		return
-	var boxes: PackedFloat32Array = _goalie_boxes_provider.call()
-	if boxes.is_empty():
+	clamp_body_to_goalie_boxes(goalie_body_boxes())
+
+
+# His body boxes as this tick's clamp reads them; empty with no provider.
+func goalie_body_boxes() -> PackedFloat32Array:
+	if not _goalie_boxes_provider.is_valid():
+		return _no_goalie_boxes
+	return _goalie_boxes_provider.call()
+
+
+func clamp_body_to_goalie_boxes(boxes: PackedFloat32Array) -> void:
+	if is_ghost or boxes.is_empty():
 		return
 	var push: Vector3 = GoalieGearCollision.body_out(global_position, collision_radius(), boxes)
 	if push.length_squared() <= 1e-12:

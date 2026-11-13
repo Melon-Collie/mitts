@@ -126,7 +126,6 @@ var _pass_scalars := PackedFloat64Array()
 # The hold config the native pass last took (_sync_hold_config).
 var _native_hold_cfg: StickHoldRules.Config = null
 var _pass_vectors := PackedVector3Array()
-var _no_goalies := PackedFloat32Array()
 # NativeBladePass.run's inputs, by index (its Scalar and Vec enums).
 enum PassS {
 	DELTA, HOLD_BLADE, HOLD_SEAT, HAS_PUCK, LEFT_HANDED, WRISTER_AIM, TRUNK_FOLD,
@@ -1629,9 +1628,7 @@ func resolve_blade_against_goalies(heel_world: Vector3, hand_world: Vector3) -> 
 
 
 func _goalie_boxes() -> PackedFloat32Array:
-	if not _controller._game_state.has_method("get_goalie_boxes"):
-		return _no_goalies
-	return _controller._game_state.get_goalie_boxes()
+	return _controller.goalie_save_boxes()
 
 # ── Geometry Helpers ──────────────────────────────────────────────────────────
 # Converts the world-space blade_height to upper-body-local Y.
