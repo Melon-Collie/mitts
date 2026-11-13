@@ -484,10 +484,18 @@ Known gaps, each small enough to leave for the playtest to rank:
 
 ## Open questions
 
-1. **What a penalty shot is worth.** Still unmeasured: it needs the live
-   goalie, and the harness that skates a bot through a shot has a static one.
-   If shooters score far more often than a 5v5 power play does, a foul costs
-   much more in 3v3 than in 5v5. The drill's results card is the quickest read.
+1. **What a penalty shot is worth to a human shooter.** Between bots it is
+   measured (`tests/instruments/ai/test_penalty_shot_conversion.gd`, a real
+   bot from centre against the real keeper, 15 shots a tier pairing): about
+   18% over all nine pairings, 13 to 14% with shooter and keeper both on
+   Normal or both on Hard, 21% with both on Easy, and 40% at the most for a
+   Normal shooter on an Easy keeper. Every tier walks in to about 2 m before
+   it shoots. That is in the range of a real power play (about one in five),
+   so between bots a 3v3 foul is not obviously dearer than a 5v5 one; what
+   the bots' own 5v5 power play converts at is not measured, and is the other
+   half of the comparison. Fifteen shots make one goal 6.7 points, so read
+   the pairings as a band. What a human scores is not measured either; the
+   drill's results card is the quickest read.
 2. **Which winger takes the draw.** Built as the left wing before the right
    (the lowest seat). The other reading is the winger on a particular side of
    the dot.
