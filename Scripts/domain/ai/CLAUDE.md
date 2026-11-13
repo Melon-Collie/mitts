@@ -369,7 +369,7 @@ Three verbs exist as shared code; the roles compose them.
 | verb | seam | callers |
 |---|---|---|
 | **cover a threat** — take the ice between him and our net, in the feed lane, riding him | `AIDefensiveVerbs.cover_threat` | MARK, the 5v5 zone soft-lock, BACK_MID, BACK_WEAK, NZ_MID |
-| **close the carrier** — read his approach, hold the ladder's gap, angle him off the middle | `read_carrier_approach` + `carrier_stand` | PRESSURE, BACK_STRONG, NZ_F1's steer, and the read alone for NZ_F1's backcheck |
+| **close the carrier** — read his approach, hold the ladder's gap, angle him off the middle | `read_carrier_approach` + `carrier_stand` | PRESSURE, BACK_STRONG, NZ_F1's steer, MARK's spare marker a rung deeper, and the read alone for NZ_F1's backcheck |
 | **go get the puck** — race it, or hold the pre-contain stand when somebody else has won it | `AIDefensiveVerbs.chase_puck` | CHASE |
 
 `AICarrierApproach` is the carrier half's subject: his position and velocity, the
@@ -844,12 +844,26 @@ a D retrieving behind his own goal line, so the two
 carrier-owning roles agree at the TRANS_DEFENSE → DZONE handoff exactly as they
 do on the ladder itself.
 
+### A marker with no man is the carrier's next layer
+
+More markers than receivers leaves a marker with nobody to cover, and in our
+zone he is named the carrier: the closing verb's stand one ladder rung deeper
+than the man on the puck holds, riding the carrier, so a carrier who beats the
+first man meets the second (`AIRoleMark._layer_carrier`). Further spare markers
+stack a rung deeper each, nearest the second layer first, and the stack ends at
+the net front. He publishes no lock — the carrier is the pressurer's to play —
+and his route takes BACK_STRONG's retreat floor. Sent to recover to "the most
+dangerous ice" instead, he was priced standing still against a carrier at
+speed: with two back against one rusher the spare D walked up the ice above
+him, and with three back the third stood on his own feet in the slot while the
+carrier went by (`test_advantage_scenarios.gd`, `test_role_mark.gd`).
+
 ### Hold a post — the open question
 
-The per-role fallbacks and their anchor constants are still unfactored. Whether
-"hold a post" should be a verb at all is open: if the assigner always names a
-man, the carrier, or the puck, there is no fourth state and the constants go
-with it.
+The remaining per-role fallbacks (a loose puck, a carrier still up the ice) and
+their anchor constants are still unfactored. Whether "hold a post" should be a
+verb at all is open: if the assigner always names a man, the carrier, or the
+puck, there is no fourth state and the constants go with it.
 
 ## Determinism
 
