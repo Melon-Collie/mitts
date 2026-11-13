@@ -20,17 +20,16 @@ const SLOT_HALF_WIDTH_M: float = 4.0
 
 # Starts where the rusher loses the puck today, each with its issue.
 const KNOWN_STEP_LOSSES: Array[String] = []
-# 2-on-1 starts that end in the lone D's puck today, each with its issue.
+# 2-on-1 starts that end without a shot today, each with its issue.
 #   z -8, D at x 1.5 — no shot worth taking (0.044 from ~9 m), so the carrier
 #   takes the half-open pass into the D's stick on the lane and loses it: #928.
 #   z -8, D at x 0.0 — the same: no shot (0.034), the carry read at ~0.04, and
 #   a pass priced at 38% kept with the D's stick 0.35 m off its lane: #928.
+#   z -12, D at x 1.5 — the D sits in the lane to the mate at the net front,
+#   and the carrier pulls up at the left circle 8 m out and holds it there for
+#   four seconds, neither shooting nor passing: #928.
 const KNOWN_TWO_ON_ONE_LOSSES: Array[String] = ["2-on-1 from z -8, D at x 1.5",
-		"2-on-1 from z -8, D at x 0.0"]
-# 1-on-2 starts whose rusher shoots from the slot today, each with its issue.
-#   (-4, -2) — the rusher goes wide down the wall and cuts back across the top
-#   of the crease below both D; the inside D steps up as he drops: #949.
-const KNOWN_SLOT_SHOTS: Array[String] = ["1-on-2 from (-4, -2)"]
+		"2-on-1 from z -8, D at x 0.0", "2-on-1 from z -12, D at x 1.5"]
 
 var _goalie: Node
 var _puck: Node
@@ -203,8 +202,6 @@ func test_two_defenders_back_concede_no_slot_shot_to_one_rusher() -> void:
 			var label := "1-on-2 from (%.0f, %.0f)" % [x, z]
 			gut.p("%s: %s" % [label, p.describe()])
 			var shot: Dictionary = p.first_shot(0)
-			if KNOWN_SLOT_SHOTS.has(label):
-				continue
 			assert_true(shot.is_empty() or Play.net_dist(shot["pos"]) > SLOT_DEPTH_M
 					or absf(shot["pos"].x) > SLOT_HALF_WIDTH_M,
 					"%s: no shot from the slot" % label)

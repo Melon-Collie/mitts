@@ -310,9 +310,14 @@ drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
   ladder's gap, his partner a stick off it on his own side, each skated
   straight to rather than through `depth_first`. Once the ladder steps up on a
   stalled carrier, one D steps up and the partner goes back to his own job: two
-  stepping up together leave the men still at speed behind them. The depth the
-  pair holds is still sized from the carrier alone, so a stalled carrier with
-  a winger at speed on the stepping D's outside beats the step-up (#930). That is the coached 3-on-2 —
+  stepping up together leave the men still at speed behind them. The stand is
+  sized from the carrier alone, so the route is bounded by the men still at
+  speed beside him (`AIBackLineRunners.hold_depth`): while an attacker coming
+  at pace whom no teammate is goal-side of would gain all the depth the D holds
+  on him, were the D to settle to the pace his stand rides at, the route
+  commands at least that runner's pace toward our net, down to the house gate.
+  A carrier who slows at our line otherwise brakes his D flat while the winger
+  takes the pass at speed behind him. That is the coached 3-on-2 —
   make him pick a side, no seam between the D — and it replaces the one-man
   cross to the middle, which gave up the crossing D's depth on the wingers and
   his lane to the pass (`test_five_on_five_set_shape.gd`). Crossing
@@ -364,7 +369,7 @@ Three verbs exist as shared code; the roles compose them.
 | verb | seam | callers |
 |---|---|---|
 | **cover a threat** — take the ice between him and our net, in the feed lane, riding him | `AIDefensiveVerbs.cover_threat` | MARK, the 5v5 zone soft-lock, BACK_MID, BACK_WEAK, NZ_MID |
-| **close the carrier** — read his approach, hold the ladder's gap, angle him off the middle | `read_carrier_approach` + `carrier_stand` | PRESSURE, BACK_STRONG, NZ_F1's steer, and the read alone for NZ_F1's backcheck |
+| **close the carrier** — read his approach, hold the ladder's gap, angle him off the middle | `read_carrier_approach` + `carrier_stand` | PRESSURE, BACK_STRONG, NZ_F1's steer, MARK's spare marker a rung deeper, and the read alone for NZ_F1's backcheck |
 | **go get the puck** — race it, or hold the pre-contain stand when somebody else has won it | `AIDefensiveVerbs.chase_puck` | CHASE |
 
 `AICarrierApproach` is the carrier half's subject: his position and velocity, the
@@ -738,9 +743,15 @@ putting the cursor down the route). Draped or stepping up, he faces the man.
 The race is priced down the carrier's line to the net, so it only governs a
 route that is mostly that retreat: a route to a stand more across the ice than
 goal-side stays square to the man, so a cut back reverses his crossover instead
-of a turn he has to undo (`test_role_rush_d.gd`). What a cut back still beats is
-a defender who has matched a wide carrier's drift (`test_nz_turnover_recovery`'s
-header; #799).
+of a turn he has to undo (`test_role_rush_d.gd`).
+
+**A ridden stand is not a turn to carve.** The stance carve
+(`AISteering.stance_carves_to`) is for a turn the upright edges cannot make
+before the body reaches its anchor, and a stand that rides a man is reached at
+the speed the body closes on it, not the speed it skates at. Timed by his ice
+speed, a stand a metre off a defender riding the rush at 7 m/s read as a turn
+no edge makes on almost every tick, and he skated his whole retreat in the
+stance, at its cost in stride and top speed (`test_nz_turnover_recovery.gd`).
 
 The turn's cost is what keeps it honest: from a stand a turn costs more ground
 than backpedalling, so a standing defender backpedals first and turns once he
@@ -833,12 +844,26 @@ a D retrieving behind his own goal line, so the two
 carrier-owning roles agree at the TRANS_DEFENSE → DZONE handoff exactly as they
 do on the ladder itself.
 
+### A marker with no man is the carrier's next layer
+
+More markers than receivers leaves a marker with nobody to cover, and in our
+zone he is named the carrier: the closing verb's stand one ladder rung deeper
+than the man on the puck holds, riding the carrier, so a carrier who beats the
+first man meets the second (`AIRoleMark._layer_carrier`). Further spare markers
+stack a rung deeper each, nearest the second layer first, and the stack ends at
+the net front. He publishes no lock — the carrier is the pressurer's to play —
+and his route takes BACK_STRONG's retreat floor. Sent to recover to "the most
+dangerous ice" instead, he was priced standing still against a carrier at
+speed: with two back against one rusher the spare D walked up the ice above
+him, and with three back the third stood on his own feet in the slot while the
+carrier went by (`test_advantage_scenarios.gd`, `test_role_mark.gd`).
+
 ### Hold a post — the open question
 
-The per-role fallbacks and their anchor constants are still unfactored. Whether
-"hold a post" should be a verb at all is open: if the assigner always names a
-man, the carrier, or the puck, there is no fourth state and the constants go
-with it.
+The remaining per-role fallbacks (a loose puck, a carrier still up the ice) and
+their anchor constants are still unfactored. Whether "hold a post" should be a
+verb at all is open: if the assigner always names a man, the carrier, or the
+puck, there is no fourth state and the constants go with it.
 
 ## Determinism
 
@@ -1169,7 +1194,11 @@ reaches back into what remains.
     against the puck's own time to the crossing point, so it self-narrows with
     puck speed and stays "extend the stick", never a second chaser. It overrides
     the one-timer camp and the race-lost decline, and yields only to a **dead**
-    puck (the `-1` election) or a **teammate already first to it**.
+    puck (the `-1` election), a **teammate already first to it**, or a teammate
+    whose own band the puck's path reaches sooner
+    (`teammate_band_meets_first`): a slow feed crawling through our slot crosses
+    four bands, and one man breaks off his job for it, not four, who each
+    dropped the man he was covering.
 
 - **Teammates don't stab at each other's puck**
   (`AILoosePuckChase.teammate_first_to_puck`). The contested-pickup rule is

@@ -617,6 +617,33 @@ func test_the_stance_turn_holds_until_well_inside_the_upright_rate() -> void:
 			"above the release fraction a held stance stays held")
 
 
+# A stand a metre off his hip at 7 m/s: parked, the arc onto it asks
+# 2·7/1.8 ≈ 7.8 rad/s of edges that give 9/7 ≈ 1.3; ridden beside him, he is not
+# closing on it and it asks nothing.
+func test_a_stand_ridden_matched_is_not_a_turn_to_carve() -> void:
+	var v := Vector2(7.0, 0.0)
+	var beside := Vector3(0.0, 0.0, 1.0)
+	var across := Vector2(0.0, 1.0)
+	assert_true(AISteering.stance_carves_to(Vector3.ZERO, beside, across, v, UPRIGHT_A, 1.8,
+			false), "fixture: the same stand parked is a turn the upright edges cannot make")
+	assert_false(AISteering.stance_carves_to(Vector3.ZERO, beside, across, v, UPRIGHT_A, 1.8,
+			false, Vector2(7.0, 0.5)), "riding beside it, there is no turn to make")
+
+
+# The 60° turn of the first test onto a stand 3 m off that rides away along the
+# same bearing: at 1 m/s he closes at 8·cos60 − 1 = 3 and the turn asks
+# 2·3·sin60/3 ≈ 1.7 rad/s of edges that give 9/8 ≈ 1.1; at 3.5 m/s he closes at
+# 0.5 and it asks 0.3.
+func test_the_turn_onto_a_riding_stand_has_the_time_he_takes_to_close_on_it() -> void:
+	var v := Vector2(8.0, 0.0)
+	var dir: Vector2 = _dir_at(60.0)
+	var stand := Vector3(dir.x * 3.0, 0.0, dir.y * 3.0)
+	assert_true(AISteering.stance_carves_to(Vector3.ZERO, stand, dir, v, UPRIGHT_A, 1.8,
+			false, dir * 1.0), "closing on it fast, the turn needs the doubled edge")
+	assert_false(AISteering.stance_carves_to(Vector3.ZERO, stand, dir, v, UPRIGHT_A, 1.8,
+			false, dir * 3.5), "closing on it slowly, the upright edges have the time")
+
+
 # The rule's upright rate is the movement core's: a full-lock upright turn at
 # speed rotates travel by turn_accel × grip / v per second.
 func test_the_upright_rate_the_rule_assumes_is_the_physics() -> void:

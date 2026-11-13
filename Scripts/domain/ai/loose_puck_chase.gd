@@ -318,6 +318,38 @@ static func reach_meet_time(traj: Array[Vector3], puck_pos: Vector3, puck_vel: V
 	return INF
 
 
+# Whether the puck on `traj` comes to a teammate's reach band sooner than it
+# comes to mine at `self_meet_s` (reach_meet_time, each man on his own caps).
+# The band belongs to the man the puck reaches first: a slow puck whose path
+# crosses four bands breaks one man off his job, not four. A meet is resolved
+# to a step of the walk, so men it reaches within one step tie, and the tie
+# goes to the man nearer the puck now, then to the lower peer id. A teammate
+# out of play is nobody it comes to.
+static func teammate_band_meets_first(traj: Array[Vector3], puck_pos: Vector3,
+		puck_vel: Vector3, skater_states: Dictionary, teammate_ids: Array,
+		self_pid: int, self_meet_s: float, caps_by_peer: Dictionary,
+		tag_up_peers: Dictionary = _NO_PEERS) -> bool:
+	var me: SkaterNetworkState = skater_states.get(self_pid)
+	var my_dist: float = _xz_dist(me.position, puck_pos) if me != null else INF
+	for pid: int in teammate_ids:
+		if pid == self_pid:
+			continue
+		var s: SkaterNetworkState = skater_states.get(pid)
+		if s == null or s.is_ghost or tag_up_peers.has(pid):
+			continue
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
+		var theirs: float = reach_meet_time(traj, puck_pos, puck_vel, s.position,
+				s.velocity, race_vmax(caps), race_reach(caps), false)
+		if theirs < self_meet_s:
+			return true
+		if theirs > self_meet_s:
+			continue
+		var their_dist: float = _xz_dist(s.position, puck_pos)
+		if their_dist < my_dist or (their_dist == my_dist and pid < self_pid):
+			return true
+	return false
+
+
 # ── Teammate yield (Scripts/domain/ai/CLAUDE.md → "Teammates don't stab") ───
 # Yielding requires the OTHER blade to be nearer the puck by more than this, a
 # relation that cannot hold in both directions, so two bots never both yield.

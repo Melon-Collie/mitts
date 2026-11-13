@@ -23,18 +23,7 @@ extends GutTest
 # Team 0 (them) attacks -Z; team 1 (us) defends it.
 #
 # Reference readings over the 12 starts: the back line is never thinner than
-# two at entry outside KNOWN_THIN, and nobody of theirs stands behind it.
-#
-# Starts whose back line is beaten at entry today, each with its issue: they
-# count against neither the line nor the open share.
-#   v8.5/z24/c-6 — the carrier cuts across and stalls at our line with both
-#   wingers at speed; his D steps up alone and the winger on his outside takes
-#   the pass behind him: one man thin at entry. The ladder sizes the pair's
-#   depth from the carrier alone (#930).
-#   v7.0/z20/c-6 — the middle man loses the puck at the red line; our weak D
-#   steps up onto it and stops, their winger collects it at speed down the wall
-#   and beats him to our line: one man thin at entry (#948).
-const KNOWN_THIN: Array[String] = ["v8.5/z24/c-6", "v7.0/z20/c-6"]
+# two at entry, and nobody of theirs stands behind it.
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
@@ -157,14 +146,13 @@ func test_a_failed_forecheck_sets_the_1_1_3_and_it_holds() -> void:
 			for cx: float in [-6.0, 0.0, 6.0]:
 				var r: Rush = _rush(cx, fwd_z, speed)
 				var label := "v%.1f/z%.0f/c%.0f" % [speed, fwd_z, cx]
-				if not KNOWN_THIN.has(label):
-					open_sum += r.open_ticks
-					zone_sum += r.zone_ticks
+				open_sum += r.open_ticks
+				zone_sum += r.zone_ticks
 				row += "  c%+2.0f formed %d open %3d/%3d %4s%s" % [cx, r.formed,
 						r.open_ticks, r.zone_ticks, r.outcome,
 						"@%.1f" % r.shot_at.distance_to(NET) if r.shot_at.is_finite()
 						else ("@z%+.0f" % r.won_z if r.won_z < INF else "")]
-				if r.formed != -1 and r.formed < 2 and not KNOWN_THIN.has(label):
+				if r.formed != -1 and r.formed < 2:
 					thin.append(label)
 				if r.in_slot():
 					slot_shots.append(label)

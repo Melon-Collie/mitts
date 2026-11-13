@@ -171,13 +171,18 @@ static func _attacker_behind(ctx: RoleContext, stand: Vector3,
 	return false
 
 
-# True when a teammate is deeper toward our net than we are — a layer that picks
-# the carrier up if our challenge is beaten. False: we are the last man back.
-# A depth read, not a race: "beaten wide, nobody home" is a positional question.
+# True when a teammate is deeper toward our net than we are and than the puck —
+# a layer that picks the carrier up if our challenge is beaten. False: we are
+# the last man back. A depth read, not a race: "beaten wide, nobody home" is a
+# positional question. A teammate the puck is already past is beaten with us,
+# not behind us: counted, a defender behind the play threw the check his
+# beaten partner was supposed to cover.
 static func has_support_behind(ctx: RoleContext) -> bool:
 	if ctx.snapshot == null:
 		return false
 	var my_depth: float = ctx.own_goal_dir * ctx.self_pos.z
+	if ctx.snapshot.puck_state != null:
+		my_depth = maxf(my_depth, ctx.own_goal_dir * ctx.snapshot.puck_state.position.z)
 	for pid: int in ctx.snapshot.skater_states:
 		if pid == ctx.peer_id:
 			continue

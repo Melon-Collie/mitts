@@ -10,6 +10,11 @@ extends GutTest
 # the speed neither priced; and the defence he priced was carried on at its
 # retreat, so every delay of the entry read as a blue line the defender had
 # left, and pulling up to wait for it won.
+#
+# The path is the premise. A defender who starts close and off his line keeps
+# pace with him across the ice and angles him into the wall short of the line:
+# that is the defence playing it right, and a carrier alone with no dump-in
+# (#863) has no entry to take. There he is held only to keeping the puck.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
@@ -60,8 +65,11 @@ func test_defender_square_with_a_mid_gap() -> void:
 	_assert_carries_in(10.0, 0.0)
 
 
-func test_defender_off_his_line_close() -> void:
-	_assert_carries_in(7.0, 2.5)
+func test_defender_off_his_line_close_angles_him_off_and_he_keeps_the_puck() -> void:
+	var r: Dictionary = _carry(7.0, 2.5)
+	gut.p("gap 7 m, defender 2.5 m across: entered %s, lost %s at %.2f s, slowest %.1f m/s" % [
+			r["entered"], r["lost"], r["t"], r["min_speed"]])
+	assert_false(r["lost"], "angled to the wall, he keeps the puck")
 
 
 func test_defender_off_his_line_far() -> void:

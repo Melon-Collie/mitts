@@ -493,3 +493,24 @@ func test_the_last_man_checks_a_carrier_drawn_level_but_not_one_a_gap_away() -> 
 	assert_true(level.commit_check, "level, the inside is lost: the check is his play")
 	var away: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.0, 0.0, 8.5), 8.0, 1.0))
 	assert_false(away.commit_check, "a gap away, the last man never throws one")
+
+
+# ── Support behind is behind the play ────────────────────────────────────────
+
+func test_a_partner_the_puck_is_already_past_is_not_support_behind() -> void:
+	# The carrier is below both of us: my partner is nearer our net than I am,
+	# and beaten with me.
+	var skaters: Array = [[1, TEAM_ID, Vector3(-3, 0, 14)], [2, TEAM_ID, Vector3(-6, 0, 16)],
+			[10, 1, Vector3(-9, 0, 20)]]
+	assert_false(AILastManDiscipline.has_support_behind(_make_ctx(Vector3(-3, 0, 14), 10,
+			skaters)), "nobody is goal-side of the puck")
+	skaters[1][2] = Vector3(-2, 0, 23)
+	assert_true(AILastManDiscipline.has_support_behind(_make_ctx(Vector3(-3, 0, 14), 10,
+			skaters)), "a partner goal-side of the puck is the layer")
+
+
+func test_support_behind_a_defender_in_front_of_the_puck_reads_as_before() -> void:
+	var skaters: Array = [[1, TEAM_ID, Vector3(0, 0, 10)], [2, TEAM_ID, Vector3(3, 0, 14)],
+			[10, 1, Vector3(0, 0, 4)]]
+	assert_true(AILastManDiscipline.has_support_behind(_make_ctx(Vector3(0, 0, 10), 10,
+			skaters)), "a partner deeper than me, the puck up the ice of us both")

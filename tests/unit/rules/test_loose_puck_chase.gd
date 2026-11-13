@@ -439,6 +439,78 @@ func test_reach_band_covers_a_settled_puck_at_your_feet() -> void:
 	assert_false(far, "a dead puck 8 m away is the election's business")
 
 
+# ── The band is the man's the puck reaches first ─────────────────────────────
+
+# A 4 m/s puck sliding along +X from x = -6, a metre off the skates of every
+# man in `xs` (peer id = 10 + index): whether the band of the man at `self_i`
+# is a teammate's first.
+func _slow_feed_is_a_teammates(xs: Array[float], self_i: int,
+		tag_up: Dictionary = {}) -> bool:
+	var from := Vector3(-6, 0, 0)
+	var vel := Vector3(4, 0, 0)
+	var states: Dictionary = {}
+	var ids: Array = []
+	for i: int in xs.size():
+		states[10 + i] = _skater(Vector3(xs[i], 0, 1.0))
+		ids.append(10 + i)
+	var traj: Array[Vector3] = AILoosePuckChase.walk_race(from, vel)
+	var mine: float = AILoosePuckChase.reach_meet_time(traj, from, vel,
+			states[10 + self_i].position, Vector3.ZERO, REF, 1.8, false)
+	assert_lt(mine, INF, "fixture: the puck comes to his own band")
+	return AILoosePuckChase.teammate_band_meets_first(traj, from, vel, states, ids,
+			10 + self_i, mine, {}, tag_up)
+
+
+func test_a_slow_puck_crossing_several_bands_is_one_mans() -> void:
+	var xs: Array[float] = [3.0, -3.0, 0.0]
+	assert_false(_slow_feed_is_a_teammates(xs, 1), "the man it reaches first takes it")
+	assert_true(_slow_feed_is_a_teammates(xs, 2), "the next man down its path keeps his job")
+	assert_true(_slow_feed_is_a_teammates(xs, 0), "and so does the last")
+
+
+func test_the_band_passes_down_the_path_when_the_first_man_is_out_of_play() -> void:
+	var xs: Array[float] = [3.0, -3.0, 0.0]
+	assert_false(_slow_feed_is_a_teammates(xs, 2, {11: true}),
+			"a man owing a tag-up is nobody the puck comes to")
+
+
+func test_men_the_puck_reaches_inside_one_walk_step_go_by_who_is_nearer_it() -> void:
+	# Half a metre apart down its path: one meet time, to the walk's step. The
+	# nearer man holds the higher peer id, so the id is not what decides it.
+	var xs: Array[float] = [0.5, 0.0]
+	assert_true(_slow_feed_is_a_teammates(xs, 0), "the man further down the path yields")
+	assert_false(_slow_feed_is_a_teammates(xs, 1), "the nearer man takes it")
+
+
+func test_two_men_the_puck_reaches_together_do_not_both_yield() -> void:
+	# Mirrored either side of its line: bit-identical meet times.
+	var from := Vector3(-6, 0, 0)
+	var vel := Vector3(4, 0, 0)
+	var states: Dictionary = {7: _skater(Vector3(0, 0, 1.0)), 3: _skater(Vector3(0, 0, -1.0))}
+	var traj: Array[Vector3] = AILoosePuckChase.walk_race(from, vel)
+	var meet: float = AILoosePuckChase.reach_meet_time(traj, from, vel,
+			states[7].position, Vector3.ZERO, REF, 1.8, false)
+	assert_false(AILoosePuckChase.teammate_band_meets_first(traj, from, vel, states,
+			[7, 3], 3, meet, {}), "the lower peer id takes the dead heat")
+	assert_true(AILoosePuckChase.teammate_band_meets_first(traj, from, vel, states,
+			[7, 3], 7, meet, {}), "and the other yields it")
+
+
+func test_a_teammate_who_cannot_make_his_crossing_does_not_take_the_band() -> void:
+	# The 30 m/s slapper of the timing test passes a standing teammate 3 m off
+	# its line before it reaches me: geometrically his first, but no stride gets
+	# him there, so it is still mine.
+	var from := Vector3(0, 0, -25)
+	var vel := Vector3(0, 0, 30)
+	var states: Dictionary = {1: _skater(Vector3(3.0, 0, -22)), 2: _skater(Vector3(0.5, 0, 20))}
+	var traj: Array[Vector3] = AILoosePuckChase.walk_race(from, vel)
+	var mine: float = AILoosePuckChase.reach_meet_time(traj, from, vel,
+			states[2].position, Vector3.ZERO, REF, 1.8, false)
+	assert_lt(mine, INF, "fixture: it comes to me")
+	assert_false(AILoosePuckChase.teammate_band_meets_first(traj, from, vel, states,
+			[1, 2], 2, mine, {}))
+
+
 # ── Containment gate (losing a race is only a reason to STOP if it buys something)
 
 func test_lost_race_is_still_run_when_a_teammate_is_home() -> void:

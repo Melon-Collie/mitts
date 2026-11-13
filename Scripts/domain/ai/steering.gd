@@ -607,19 +607,28 @@ static func pivot_cuts_in_stance(desired: Vector2, velocity_xz: Vector2) -> bool
 # one the body is already on, not one it must turn to reach. `was_holding` is the
 # previous tick's answer, so the stance releases at STANCE_RELEASE_FRACTION of
 # the upright rate rather than strobing the replicated stance bit.
+#
+# A stand that rides a man (`anchor_velocity_xz`) is reached at the speed the
+# body closes on it, not the speed it skates at, so the turn has d / closing to
+# be made in: 2 · closing · sin θ / d. Read at his ice speed, a stand ridden a
+# metre off at 7 m/s is a turn no edge makes on every tick, and the stance's
+# stride and top-speed cost is paid for the whole retreat.
 static func stance_carves_to(self_pos: Vector3, anchor: Vector3, desired: Vector2,
 		velocity_xz: Vector2, upright_lateral_accel: float, arrival_floor: float,
-		was_holding: bool) -> bool:
+		was_holding: bool, anchor_velocity_xz: Vector2 = Vector2.ZERO) -> bool:
 	var speed: float = velocity_xz.length()
 	var desired_len: float = desired.length()
 	if speed < 0.01 or desired_len < 0.01:
 		return false
+	var to_anchor := Vector2(anchor.x - self_pos.x, anchor.z - self_pos.z)
 	var cos_off: float = velocity_xz.dot(desired) / (speed * desired_len)
 	var sin_off: float = 1.0 if cos_off <= 0.0 else sqrt(maxf(1.0 - cos_off * cos_off, 0.0))
-	var dist: float = maxf(Vector2(anchor.x - self_pos.x, anchor.z - self_pos.z).length(),
-			arrival_floor)
-	return _stance_out_turns(2.0 * speed * sin_off / dist, speed, upright_lateral_accel,
-			was_holding)
+	var closing: float = speed
+	if anchor_velocity_xz != Vector2.ZERO:
+		closing = maxf((velocity_xz - anchor_velocity_xz).dot(to_anchor)
+				/ maxf(to_anchor.length(), 0.01), 0.0)
+	return _stance_out_turns(2.0 * closing * sin_off / maxf(to_anchor.length(), arrival_floor),
+			speed, upright_lateral_accel, was_holding)
 
 
 # The same read for a held stick with no anchor (a rolled carry move's): the turn

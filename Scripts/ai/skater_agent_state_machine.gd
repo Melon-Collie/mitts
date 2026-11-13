@@ -3425,8 +3425,9 @@ func _should_chase_loose_puck(snapshot: WorldSnapshot, self_pos: Vector3) -> boo
 
 
 # Does the loose puck's own path cross inside our reach band
-# (AILoosePuckChase.puck_comes_to_reach)? False unless the puck is genuinely
-# loose. The path walk is memoized on the puck state, one walk per tick.
+# (AILoosePuckChase.reach_meet_time) before it crosses a teammate's? False
+# unless the puck is genuinely loose. The path walk is memoized on the puck
+# state, one walk per tick.
 func _loose_puck_in_reach_band(snapshot: WorldSnapshot, self_pos: Vector3) -> bool:
 	if snapshot == null or snapshot.puck_state == null \
 			or snapshot.real_puck_carrier_peer_id != -1:
@@ -3443,9 +3444,18 @@ func _loose_puck_in_reach_band(snapshot: WorldSnapshot, self_pos: Vector3) -> bo
 	# A teammate's blade first to it makes the puck his.
 	if _teammate_first_to_puck(snapshot, snapshot.puck_state.position):
 		return false
-	return AILoosePuckChase.puck_comes_to_reach(
-			snapshot.puck_state.position, snapshot.puck_state.velocity,
-			self_pos, self_state.velocity, _self_max_speed, _blade_reach)
+	var puck_pos: Vector3 = snapshot.puck_state.position
+	var puck_vel: Vector3 = snapshot.puck_state.velocity
+	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(puck_pos, puck_vel)
+	var meet_s: float = AILoosePuckChase.reach_meet_time(traj, puck_pos, puck_vel,
+			self_pos, self_state.velocity, _self_max_speed, _blade_reach, false)
+	if meet_s == INF:
+		return false
+	if not snapshot.teammate_ids_by_team.has(_team_id):
+		return true
+	return not AILoosePuckChase.teammate_band_meets_first(traj, puck_pos, puck_vel,
+			snapshot.skater_states, snapshot.teammate_ids_by_team[_team_id], _peer_id,
+			meet_s, _caps_by_peer, snapshot.tag_up_peers)
 
 
 # Is a teammate's blade clearly first to this puck? See
