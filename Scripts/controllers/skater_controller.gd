@@ -3754,6 +3754,11 @@ func sample_shooter_puck_view(_input: InputState, out: PuckView) -> void:
 	_sample_live_puck_view(out)
 
 
+# The puck as this tick reads it, for a collaborator: _sample_live_puck_view.
+func read_puck_view(out: PuckView) -> void:
+	_sample_live_puck_view(out)
+
+
 # The puck as this machine sees it now; a client's is LocalController's override.
 func _sample_live_puck_view(out: PuckView) -> void:
 	out.position = puck.global_position
