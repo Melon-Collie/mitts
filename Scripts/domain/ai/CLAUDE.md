@@ -743,9 +743,15 @@ putting the cursor down the route). Draped or stepping up, he faces the man.
 The race is priced down the carrier's line to the net, so it only governs a
 route that is mostly that retreat: a route to a stand more across the ice than
 goal-side stays square to the man, so a cut back reverses his crossover instead
-of a turn he has to undo (`test_role_rush_d.gd`). What a cut back still beats is
-a defender who has matched a wide carrier's drift (`test_nz_turnover_recovery`'s
-header; #799).
+of a turn he has to undo (`test_role_rush_d.gd`).
+
+**A ridden stand is not a turn to carve.** The stance carve
+(`AISteering.stance_carves_to`) is for a turn the upright edges cannot make
+before the body reaches its anchor, and a stand that rides a man is reached at
+the speed the body closes on it, not the speed it skates at. Timed by his ice
+speed, a stand a metre off a defender riding the rush at 7 m/s read as a turn
+no edge makes on almost every tick, and he skated his whole retreat in the
+stance, at its cost in stride and top speed (`test_nz_turnover_recovery.gd`).
 
 The turn's cost is what keeps it honest: from a stand a turn costs more ground
 than backpedalling, so a standing defender backpedals first and turns once he

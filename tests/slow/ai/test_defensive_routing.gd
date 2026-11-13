@@ -233,13 +233,6 @@ func test_a_defender_with_a_trip_to_make_still_arrives_in_shape() -> void:
 # a defender who starts inside the gate holds where he stands rather than
 # stepping out to it, so this reading is legitimately below the gate.
 const MIN_CONCEDED_DEPTH_M: float = 4.0
-# Starts that go under the bar today, each with its reason.
-#   z-14/x0 — the patient carrier above, not a fault in the floor: the defender
-#   starts inside the gate, the drape read from a standstill there
-#   (AIRoleRushD.set_retreat_floor) has a carrier at 8 m/s catching a standing
-#   man, so he rides him in with a 4-5 m gap, and since the carry prices its
-#   shot on the way (#946) the carrier drives in to ~7 m before shooting: 3.8 m.
-const KNOWN_WALKED: Array[String] = ["z-14/x0"]
 
 
 func test_a_defender_is_not_walked_into_his_own_net() -> void:
@@ -260,7 +253,7 @@ func test_a_defender_is_not_walked_into_his_own_net() -> void:
 			conceded_sum += c
 			worst = minf(worst, c)
 			var label := "z%.0f/x%.0f" % [dz, cx]
-			if c < MIN_CONCEDED_DEPTH_M and not KNOWN_WALKED.has(label):
+			if c < MIN_CONCEDED_DEPTH_M:
 				walked.append(label)
 			row += "  x%+5.1f closest to own net %5.1f m" % [cx, c]
 		gut.p(row)

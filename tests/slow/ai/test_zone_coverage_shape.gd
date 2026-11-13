@@ -101,12 +101,13 @@ const ZONE_SLOTS: Array[int] = [
 ]
 
 # Attackers in the zone that no defender has, per tick, in the low cycle
-# (measured 0.29: the strong D strips the carrier at 2.1 s, and the loose ticks
-# after it carry the count).
-const UNCOVERED_CEILING: float = 0.57
+# (measured 1.06). The carrier rims it up the strong wall at 1.6 s, before the
+# strong D reaches him, and the attack works it point to wall and back: 168 of
+# its 360 ticks are a loose puck, which carry the count.
+const UNCOVERED_CEILING: float = 1.34
 # The same count over the low cycle's ticks with an attacker on the puck
-# (measured 0.03 over 186).
-const UNCOVERED_CARRIED_CEILING: float = 0.31
+# (measured 0.43 over 192: each feed taken starts a handoff).
+const UNCOVERED_CARRIED_CEILING: float = 0.71
 # The scripted crossing cutter (measured 0.00). The cutter himself — the man
 # this fixture is about — is pinned on his own below.
 const UNCOVERED_CEILING_CROSSING_CUTTER: float = 0.28
