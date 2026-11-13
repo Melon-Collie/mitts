@@ -196,6 +196,11 @@ var shot_power_t: float = 1.0
 # The state machine carries the puck to it and presses once the load is there.
 var shot_hold_offset: Vector3 = Vector3.ZERO
 var shot_hold_share: float = 1.0
+# Where the body presses a committed shot: the planned release (_plan_release),
+# committed before the carrier gets there so the press waits for the spot rather
+# than for the next re-plan, which at a lower tier's cadence comes a couple of
+# metres on. INF: press as soon as the load is ready.
+var shot_press_point: Vector3 = Vector3.INF
 # The same for a committed pass, rim or dump-in: where the press holds it (a
 # pocket, or where the puck sits when it already carries the pace) and the
 # share it waits for there (0: no hold, aim the ring).
@@ -271,6 +276,11 @@ var _full_eval_pending: bool = true
 # NONE until the possession's first eval.
 enum CarryPlan { NONE, ROLLED, DRIVE_IN }
 var _carry_plan: CarryPlan = CarryPlan.NONE
+# The release point the rolled carry plans to shoot from, and its worth when it
+# was planned: kept until a re-plan finds one better by the hysteresis margin or
+# the carrier is past it (_plan_release). INF while no shot is planned.
+var _planned_release: Vector3 = Vector3.INF
+var _planned_release_value: float = 0.0
 # Fire-phase products consumed by the commit phase (instance fields so a
 # sliced eval hands them across the dispatch boundary):
 var _phase_current_safety: float = 0.0
@@ -369,6 +379,40 @@ func decide(ctx: RoleContext) -> RoleDecision:
 	return _decision
 
 
+# Keeps the planned release (_planned_release) against this re-plan's and says
+# whether it is due: 1 when the carrier reaches it before the next re-plan, the
+# last re-eval's period on (the press then waits for it: shot_press_point), 0
+# when it is still further on, -1 when nothing is planned. Never re-pick it
+# afresh each re-plan: on a grid that moves with the carrier the best read sits
+# a step ahead every time, and the release is carried past the keeper's window.
+func _plan_release(ctx: RoleContext) -> int:
+	var vel := Vector3(ctx.self_velocity.x, 0.0, ctx.self_velocity.z)
+	var speed: float = vel.length()
+	if _planned_release.is_finite() and (_planned_release - ctx.self_pos).dot(vel) <= 0.0:
+		_planned_release = Vector3.INF
+	var fresh: Vector3 = _carry.plan_release_pos if _carry_plan == CarryPlan.ROLLED \
+			else Vector3.INF
+	if not fresh.is_finite():
+		_planned_release = Vector3.INF
+		return -1
+	if not _planned_release.is_finite() or _carry.plan_release_value \
+			> _planned_release_value * (1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC):
+		_planned_release = fresh
+		_planned_release_value = _carry.plan_release_value
+	var to_point: float = maxf((_planned_release - ctx.self_pos).dot(vel), 0.0) \
+			/ maxf(speed * speed, 0.0001)
+	# The longest a steady re-eval takes: the open-ice period, rounded up to whole
+	# dispatches either side. Longer is the possession's first.
+	var longest: int = PICK_ACTION_PERIOD_TICKS * OPEN_ICE_LOD_PERIOD_MULT \
+			+ 2 * ctx.dispatch_period_ticks
+	var period_ticks: int = _ticks_since_pick \
+			if _ticks_since_pick > 0 and _ticks_since_pick <= longest \
+			else PICK_ACTION_PERIOD_TICKS
+	var period_s: float = float(maxi(period_ticks, ctx.dispatch_period_ticks)) \
+			/ float(_PhysicsConstants.PHYSICS_TICK)
+	return 1 if to_point <= period_s else 0
+
+
 # Post-commit cooldown from `base_ticks` (the eval period, less any dispatch a
 # sliced eval's commit phase already consumed), extended by the open-ice LOD
 # (see OPEN_ICE_LOD_RADIUS_M) when the argmax answered CARRY with nobody near.
@@ -399,6 +443,7 @@ func reset() -> void:
 	shot_power_t = 1.0
 	shot_hold_offset = Vector3.ZERO
 	shot_hold_share = 1.0
+	shot_press_point = Vector3.INF
 	shoot_now_hold = Vector3.ZERO
 	pass_now_hold = Vector3.ZERO
 	pass_now_keep = 1.0
@@ -410,6 +455,7 @@ func reset() -> void:
 	last_carry_anchor = Vector3.ZERO
 	carry_move = -1
 	_carry_plan = CarryPlan.NONE
+	_planned_release = Vector3.INF
 	dump_target = Vector3.INF
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
 	dump_lofted = false
@@ -588,7 +634,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		keeper_yaw = opp_keeper.rotation_y
 		if not shot_unavailable:
 			AIShotOdds.pick_shot_now(wrister_base_release, attacking_goal, keeper_now,
-					keeper_vel_x, keeper_stance, _shot_pick, keeper_yaw, null, _shot_history())
+					keeper_vel_x, _stance_met(keeper_stance, wrister_base_release, attacking_goal),
+					_shot_pick, keeper_yaw, null, _shot_history())
 	var shot_target: Vector3 = _shot_pick.aim if _shot_pick.aim.is_finite() else attacking_goal
 	var shot_dir: Vector3 = shot_target - wrister_base_release
 	shot_dir.y = 0.0
@@ -630,7 +677,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 			sum += AIActionScoring.score_shoot_value(
 					AIGoalieModel.release_ahead_of_goalie(released_at, attacking_goal, goalie_now),
 					attacking_goal, keeper_now, _field.opponents_release,
-					keeper_vel_x, keeper_stance, sample_speed,
+					keeper_vel_x, _stance_met(keeper_stance, released_at, attacking_goal),
+					sample_speed,
 					_field.opponent_caps, -1.0, keeper_yaw, true, _shot_history())
 		if not shootable:
 			continue
@@ -665,6 +713,17 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		_phase_dump_score = _dump.best_score
 		_phase_dump_dir = _dump.best_dir
 		_phase_dump_pace = _dump.best_pace
+
+
+# The stance a shot released at `released_at` meets the keeper in, he being in
+# `read` now: down when the puck leaves in tight, since he goes down for a carrier
+# there as it comes (AIGoalieModel.down_in_tight), within the charge he reads
+# the shot over. Never read him as he stands at the decision: a release a metre
+# further in meets him dropped.
+static func _stance_met(read: int, released_at: Vector3, attacking_goal: Vector3) -> int:
+	if AIGoalieModel.down_in_tight(released_at, attacking_goal):
+		return AIShotOdds.Stance.DOWN
+	return read
 
 
 # Whether a shot released at `released_at` can score at all, by the proofs the
@@ -768,6 +827,14 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# soft in-tight roof to a full-power rip.
 	var best_shot_score: float = shoot_score
 	var best_shot_intent: int = INTENT_SHOOT
+	# A carry worth its best shot on the way is a planned release: the shot goes
+	# when the carrier reaches it, before the next re-plan would carry him past
+	# it, and not before unless the shot now clearly beats it.
+	var due: int = _plan_release(ctx)
+	if due > 0 and shoot_score > 0.0:
+		best_shot_score = maxf(shoot_score, carry_score)
+	elif due == 0 and shoot_score <= carry_score * keep_margin:
+		best_shot_score = -INF
 
 	var settle_penalty: float = _settle_penalty(ctx)
 
@@ -906,6 +973,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			shot_power_t = 1.0
 			shot_hold_offset = shoot_now_hold
 			shot_hold_share = _shot_sample_share
+			shot_press_point = _planned_release if due > 0 else Vector3.INF
 	elif retention_hopeless and not staggered:
 		# Nothing to fire and nothing worth holding for: keep the puck, and the next
 		# re-eval looks again.

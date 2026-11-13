@@ -1848,6 +1848,25 @@ func test_a_shot_is_priced_over_the_hold_it_can_be_let_go_in() -> void:
 				"the samples average to the priced lookahead (error %.2f s)" % err)
 
 
+func test_a_planned_shot_presses_at_its_point() -> void:
+	# A shot committed ahead of its planned release waits for the body to reach
+	# it: within half a dispatch's skate, so the press lands nearest the point.
+	var st := SkaterNetworkState.new()
+	st.velocity = Vector3(0.0, 0.0, -9.0)
+	sm._dispatch_period_ticks = 6
+	sm._intended_action = SkaterAgentStateMachine.State.SHOOT_PRESSED
+	var half_dispatch_m: float = 0.5 * 9.0 * 6.0 / float(Agent._PhysicsConstants.PHYSICS_TICK)
+	sm._shot_press_point = Vector3(0.0, 0.0, -20.0)
+	assert_false(sm._press_point_reached(Vector3(0.0, 0.0, -20.0 + 2.0 * half_dispatch_m), st),
+			"two half-dispatches short: the next dispatch lands nearer it")
+	assert_true(sm._press_point_reached(Vector3(0.0, 0.0, -20.0 + 0.9 * half_dispatch_m), st),
+			"inside half a dispatch: press now")
+	assert_true(sm._press_point_reached(Vector3(0.0, 0.0, -21.0), st), "past it: press now")
+	sm._shot_press_point = Vector3.INF
+	assert_true(sm._press_point_reached(Vector3(0.0, 0.0, -10.0), st),
+			"no planned point: the press waits for nothing")
+
+
 # ── Cognition gates (difficulty-tiered hockey IQ) ────────────────────────────
 
 func test_apply_profile_sets_cognition_gates() -> void:

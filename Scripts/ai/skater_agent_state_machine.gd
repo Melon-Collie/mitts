@@ -425,6 +425,9 @@ const _ONE_TICK_S: float = 1.0 / _PhysicsConstants.PHYSICS_TICK
 # goalie and the cursor never converges. INF on CARRY entry and after pre-aim
 # hands off to the press state.
 var _locked_pre_aim_point: Vector3 = Vector3.INF
+# The carrier's shot_press_point, mirrored at the intent transition: a latched
+# shot presses once the body reaches it (_press_point_reached).
+var _shot_press_point: Vector3 = Vector3.INF
 
 # Per-bot RNG for hands-side execution sampling (per-release aim/timing errors),
 # seeded in setup() so each bot has a deterministic but distinct stream.
@@ -1629,6 +1632,7 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		_shot_hold_offset_locked = Vector3.ZERO
 		_shot_hold_share_locked = 1.0
 		_locked_pre_aim_point = Vector3.INF
+		_shot_press_point = Vector3.INF
 		_dump_target = Vector3.INF
 		_set_state(_post_puck_lost_state(snapshot))
 		return
@@ -1681,6 +1685,7 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 					_locked_pre_aim_point = (_shot_aim_locked
 							if _shot_aim_locked.is_finite()
 							else _shot_aim_point(snapshot, self_pos))
+					_shot_press_point = _carrier.shot_press_point
 				State.PASS_PRESSED:
 					_locked_pre_aim_point = _pass_aim_point(snapshot, self_pos)
 					_lock_pass_hold()
@@ -1733,12 +1738,14 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 	# from wherever the puck sits: the press waits (or times out) only until the
 	# puck carries the share of pace it was priced at.
 	if _intended_action != State.CARRY:
-		if _load_ready(snapshot, self_pos, self_state) \
+		if (_load_ready(snapshot, self_pos, self_state)
+				and _press_point_reached(self_pos, self_state)) \
 				or _intent_wait_ticks >= _intent_max_wait_ticks:
 			_set_state(_intended_action)
 			_intended_action = State.CARRY
 			_intent_wait_ticks = 0
 			_locked_pre_aim_point = Vector3.INF
+			_shot_press_point = Vector3.INF
 			# Or the carrier re-fires the same action on re-entering CARRY.
 			_carrier.clear_intent()
 		else:
@@ -1780,6 +1787,18 @@ func _load_ready(snapshot: WorldSnapshot, self_pos: Vector3,
 			else _pass_hold_share
 	return _share_as_is(snapshot, self_pos, self_state, _locked_pre_aim_point) \
 			>= priced - AIShotHolds.LOAD_READY_SHARE_SLACK
+
+
+# True once a latched shot's press point is nearer than the next dispatch would
+# carry the body past it (or there is none): the press lands within half a
+# dispatch's skate of the planned release.
+func _press_point_reached(self_pos: Vector3, self_state: SkaterNetworkState) -> bool:
+	if _intended_action != State.SHOOT_PRESSED or not _shot_press_point.is_finite() \
+			or self_state == null:
+		return true
+	var vel := Vector3(self_state.velocity.x, 0.0, self_state.velocity.z)
+	var dispatch_s: float = float(_dispatch_period_ticks) / float(_PhysicsConstants.PHYSICS_TICK)
+	return (_shot_press_point - self_pos).dot(vel) <= 0.5 * dispatch_s * vel.length_squared()
 
 
 # Maps the carrier's INTENT_* enum (decoupled from State for unit testing) to a

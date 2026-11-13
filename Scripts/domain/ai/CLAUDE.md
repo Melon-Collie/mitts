@@ -900,7 +900,12 @@ reaches back into what remains.
   - **Every measured carrier skated in** (`shot_odds_stager.gd`), so "set" is a
     keeper who tracked the carry, rushed back off it, and settled. A carrier who
     appears in tight with the keeper on his crease draws a committed slide,
-    which no carry the bots price ever produces.
+    which no carry the bots price ever produces. A breakaway's keeper is not
+    that one: he backs in on a carrier at pace, deeper for the same release, and
+    is never settled. DRIVE cells measure him (a carrier driving straight in at
+    breakaway pace from 25 m, charging in stride), and DRIVE_DEKE cells the same
+    drive dekeing onto the spot from a lane either side; both are carried-in
+    history.
   - **The keeper is read as a Stance** — upright, down, or sealed on the post —
     plus his offset off the square, his lateral speed, his depth, and how
     square he faces the release (`AIShotOdds.squareness`, left out when his
@@ -1345,9 +1350,23 @@ reaches back into what remains.
   the carrier would shoot from, through the same line gate
   (`AICarrierField.leaves_ahead_of_line`, a release behind it priced as no shot),
   against the keeper at the depth he takes for the pace the carry closes on him
-  at arrival. Priced from the body, or against the depth the drive's average
-  pace pushed him to, a carry promised shots the shot now refused once it got
-  there, and the carrier braked into the slot or coasted into the keeper.
+  at arrival, in the stance the release meets him in: down in tight
+  (`AIGoalieModel.down_in_tight`), which the shot now reads too
+  (`AIRoleCarrier._stance_met`). Priced from the body, or against the depth the
+  drive's average pace pushed him to, a carry promised shots the shot now
+  refused once it got there, and the carrier braked into the slot or coasted
+  into the keeper; read as he stands at the decision, a release a metre further
+  in priced the keeper the drive had not yet dropped. A drive in, the carrier's
+  own or a receiver's, is shot by the same read (`AICarrierArrivalShot.value`).
+  A move is worth its best shot on the way as well as its end
+  (`AICarrierArrivalShot.best_on_path`): the carrier plans where he releases.
+  The plan is a point on the ice, kept until a re-plan finds one better by the
+  hysteresis margin or he passes it (`AIRoleCarrier._plan_release`); the shot
+  is committed once he reaches it before the next re-plan, the press waiting
+  for the point (`shot_press_point`), and held back until then unless the shot
+  now beats the plan. Never re-pick the point every re-plan on a grid that
+  moves with him: the best read sat a step ahead each time, and a lower tier's
+  re-plan came a couple of metres past it.
   A destination across a cage is skated at the arrival clock's waypoint round it
   (`AIArrival.cage_waypoint`). A move whose path reaches a crease, or the goal
   line from in front, ends at its last sample short of it and is priced there

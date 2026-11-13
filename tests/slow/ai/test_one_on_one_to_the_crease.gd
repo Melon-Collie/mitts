@@ -29,8 +29,8 @@ const CARRIER := 1
 const DEFENDER := 2
 # Bot rushes that reach the crease untouched today, each with its issue.
 const KNOWN_UNTOUCHED: Array[String] = [
-	"v9.0/8m/c8/d3",    # #945
-	"v9.0/10m/c-8/d-3", # #945
+	"v7.5/8m/c-8/d-3",  # #945
+	"v7.5/12m/c8/d3",   # #945
 ]
 # At the crease: a stick off its paint.
 const NET_REACHED_M: float = CreaseRules.ARC_RADIUS + GameRules.DEFAULT_STICK_LENGTH_M
