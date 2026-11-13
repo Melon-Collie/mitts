@@ -37,6 +37,11 @@ const OZ_RECEIVE_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 0.7
 # survive until the carrier arrives and releases. Tactical haircut; the grounded
 # terms are inside the option itself.
 const PASS_OPTION_DISCOUNT: float = 0.8
+# Minimum forward distance (m) the PUCK must sit in front of the goal-line plane
+# for a direct shot to be scored at all — on/behind the line the mouth faces
+# away and the only play is a wrap/walk-out carry. Feel gate; a walk-out shooter
+# is well past this by release.
+const SHOT_MIN_FORWARD_OF_LINE_M: float = 0.3
 
 # Opponents, index-matched: positions, velocities, AISkaterCaps (entries may be
 # null, so the reachable-set model reads each defender's real reach), and
@@ -327,8 +332,12 @@ static func pass_origin(ctx: RoleContext, pull_s: float = 0.0,
 
 # The keeper's stance at a shot `t` s from now: the one he is in for a shot
 # before he could stand up (AIGoalieModel.GOALIE_RECOVERY_S); upright after it,
-# since when he chooses to rise is his read, not one the carrier can make.
-func keeper_stance_at(t: float) -> int:
+# since when he chooses to rise is his read, not one the carrier can make. A shot
+# decided with the puck at `puck`, at the net at `goal`, in tight finds him down
+# (AIGoalieModel.down_in_tight): he plays a carrier there down as it comes.
+func keeper_stance_at(t: float, puck: Vector3 = Vector3.INF, goal: Vector3 = Vector3.ZERO) -> int:
+	if puck.is_finite() and AIGoalieModel.down_in_tight(puck, goal):
+		return AIShotOdds.Stance.DOWN
 	return keeper_stance if t < AIGoalieModel.GOALIE_RECOVERY_S else AIShotOdds.Stance.UPRIGHT
 
 
@@ -375,7 +384,7 @@ func arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3
 	if aim.length_squared() < 0.0001:
 		aim = Vector2(0.0, -signf(ctx.attacking_goal_pos.z))
 	var facing: Vector2 = ctx.snapshot.skater_states[ctx.peer_id].facing
-	var windup: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+	var windup: float = ctx.self_shot_lookahead_s
 	holds.solve_arrival(aim.normalized(), Vector2(arrive_vel.x, arrive_vel.z), facing,
 			candidate + arrive_vel * windup, carry_s + windup,
 			opponents, opponent_vels, opponent_caps, ctx.self_pos)
@@ -412,6 +421,8 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		history: int = AIShotOdds.History.ANY) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, keeper_vel_x, keeper_pos):
 		return horizon_value(pos, arrive_s, arrive_vel)
+	if not leaves_ahead_of_line(pos, ctx.attacking_goal_pos):
+		return _regime_value(ctx, pos, from_pos, 0.0, arrive_s, arrive_vel)
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
 			stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
@@ -442,6 +453,14 @@ func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: 
 						AIPuckLane.release_point_toward(pos, ctx.attacking_goal_pos),
 						opps, opponent_caps)
 	return _regime_value(ctx, pos, from_pos, shoot_s, arrive_s, arrive_vel)
+
+
+# Whether a shot released at `release` leaves far enough in front of the goal
+# line at `goal` to be a shot at all (SHOT_MIN_FORWARD_OF_LINE_M). The one gate
+# for the shot now and the shot on a carry's arrival, so a carry is never priced
+# at a shot the carrier would refuse once he got there.
+static func leaves_ahead_of_line(release: Vector3, goal: Vector3) -> bool:
+	return (release.z - goal.z) * -signf(goal.z) > SHOT_MIN_FORWARD_OF_LINE_M
 
 
 # Hot-path skip (the same proof AIPossessionValue.threat_of_carrier runs): with the keeper HOME
@@ -513,8 +532,9 @@ func _regime_value(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 
 # The value of a man DRIVING IN from `receiver_spot`: the value he reaches by
 # carrying toward the net, up to RECEIVER_DRIVE_MAX_M and only as far as the path
-# stays clear (carry_strip_point). Value = value_at(reached) × keep × decay(time
-# to reach it) − the turnover where it is stripped, on the same reach/clearance
+# stays clear (carry_strip_point). Value = the shot on arriving there
+# (AICarrierArrivalShot, through this carrier's hands for anyone's drive) × keep ×
+# decay(time to reach it) − the turnover where it is stripped, on the same reach/clearance
 # machinery and loss pricing as the carrier's own carry,
 # so both sides of a pass are valued alike. One straight drive, no search.
 # Serves pass receivers, the carrier's own floor, and the entry continuation.
@@ -522,8 +542,8 @@ func _regime_value(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 # `start_s` > 0 prices a drive that begins that far in the future (the entry
 # continuation after a carry candidate): defenders are read where they will be
 # then, and `from_pos` names whose regime values the reached spot. `own_hands`:
-# the drive is this carrier's, so the shot at its end is held as a carry
-# candidate's is (arrival_hold_wait); a receiver's hands are not modelled.
+# the drive is this carrier's, so a loss on it starts his own recovery where it
+# happens.
 func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		receiver_caps: AISkaterCaps,
 		receiver_vel: Vector3 = Vector3.ZERO, from_pos: Vector3 = Vector3.INF,
@@ -578,16 +598,15 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# The keeper tracks the drive the whole way, so it arrives at him square and
 	# set — for the carrier's own drive and a receiver's alike.
 	var regime_from: Vector3 = from_pos if from_pos.is_finite() else ctx.self_pos
-	var hold_keep: float = 1.0
-	var wait: float = 0.0
 	var arrive_vel: Vector3 = (reached - receiver_spot) / t if t > 0.001 else receiver_vel
-	if own_hands and shot_reads(ctx, regime_from, reached):
-		wait = arrival_hold_wait(ctx, reached, arrive_vel, start_s + t)
-		hold_keep = holds.arrival_keep
-	var advanced: float = value_at(ctx, reached, regime_from, _drive_buf, Vector3.INF,
-			0.0, hold_keep, AIShotOdds.Stance.UPRIGHT, NAN, start_s + t, arrive_vel)
+	# A drive is shot as any carry's arrival is, the carrier's own or a receiver's
+	# alike: from the hands, against the keeper the drive leaves. Never at the
+	# drive's end against a set keeper: in tight that is a shot he has dropped on
+	# by the release, and it out-prices every real one.
+	var advanced: float = AICarrierArrivalShot.value(self, ctx, reached, arrive_vel,
+			start_s + t, regime_from, _drive_buf)
 	drive_in_reached = reached
-	return advanced * keep * AIActionScoring.delay_discount(t + wait) \
+	return advanced * keep * AIActionScoring.delay_discount(t) \
 			- _drive_loss_cost(ctx, reached, 1.0 - keep, own_hands)
 
 

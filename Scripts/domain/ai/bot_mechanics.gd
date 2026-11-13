@@ -62,6 +62,37 @@ const BOT_PRE_AIM_BUFFER_S: float = 0.01
 const BOT_WRISTER_LOOKAHEAD_S: float = (
 		float(BOT_WRISTER_CHARGE_TICKS) / _PhysicsConstants.PHYSICS_TICK + BOT_PRE_AIM_BUFFER_S)
 
+
+# A shot's lookahead for a shooter whose hands hold the charged release on by a
+# whole number of ticks drawn evenly from none to `timing_error_s` (the tier's
+# shot_timing_error_s, SkaterAgentStateMachine._sample_release_hold_ticks): the
+# wrister's, plus that hold's mean. Where the shot is priced from is where it
+# leaves on average — at breakaway pace an unpriced 0.12 s hold is a metre
+# further in. Shots only: a pass is never held on.
+static func shot_lookahead_s(timing_error_s: float) -> float:
+	var max_ticks: int = int(round(timing_error_s * _PhysicsConstants.PHYSICS_TICK))
+	return BOT_WRISTER_LOOKAHEAD_S + 0.5 * float(max_ticks) / _PhysicsConstants.PHYSICS_TICK
+
+
+# Where in that hold a shot is priced: the midpoints of SHOT_HOLD_SAMPLES equal
+# slices of it, whose mean is shot_lookahead_s. In tight the odds fall off a
+# cliff within a metre (the keeper down at 1.5 m, open at 2.5 m), and a hold
+# carries a breakaway further than that, so a shot is worth its odds over where
+# the hands can let it go, not at the mean's spot alone. One sample for hands
+# with no hold.
+const SHOT_HOLD_SAMPLES: int = 3
+
+
+static func shot_hold_samples(timing_error_s: float) -> int:
+	return 1 if int(round(timing_error_s * _PhysicsConstants.PHYSICS_TICK)) == 0 \
+			else SHOT_HOLD_SAMPLES
+
+
+static func shot_hold_sample_s(timing_error_s: float, j: int, samples: int) -> float:
+	var max_ticks: int = int(round(timing_error_s * _PhysicsConstants.PHYSICS_TICK))
+	return BOT_WRISTER_LOOKAHEAD_S \
+			+ (float(j) + 0.5) / float(samples) * float(max_ticks) / _PhysicsConstants.PHYSICS_TICK
+
 # Base puck-protect reach: how far a carrier holds the puck off his body while
 # handling. The blade lever scales it (a longer reach protects it further out /
 # threads a tighter seam) — callers pass the scaled value; this is the league

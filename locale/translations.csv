@@ -264,7 +264,6 @@ TAPE_FACEOFF_PCT,Faceoff %,% de saques ganados
 TAPE_HITS,Hits,Cargas
 TAPE_BLOCKED_SHOTS,Blocked shots,Tiros bloqueados
 TAPE_TAKEAWAYS,Takeaways,Robos
-TAPE_INTERCEPTIONS,Interceptions,Intercepciones
 TAPE_GIVEAWAYS,Giveaways,Pérdidas
 TAPE_ADVANCED,Advanced,Avanzadas
 TAPE_CORSI,Shot attempts (Corsi),Intentos de tiro (Corsi)
@@ -299,8 +298,6 @@ STAT_FEED_SHOT_ON_GOAL,SHOT ON GOAL,TIRO A PUERTA
 STAT_FEED_BLOCKED_SHOT,BLOCKED SHOT,TIRO BLOQUEADO
 STAT_FEED_HIT,HIT,CARGA
 STAT_FEED_TAKEAWAY,TAKEAWAY,ROBO
-STAT_FEED_INTERCEPTION,INTERCEPTION,INTERCEPCIÓN
-CAREER_INTERCEPTIONS,Interceptions,Intercepciones
 CAREER_GROUP_SPECIAL_TEAMS,Special teams,Equipos especiales
 CAREER_PP_GOALS,Power-play goals,Goles en superioridad
 CAREER_SH_GOALS,Short-handed goals,Goles en inferioridad
@@ -438,8 +435,6 @@ PUCK_POINTS,Point Producer,Productor de puntos
 PUCK_POINTS_DESC,Put up %d points.,Suma %d puntos.
 PUCK_HITS,Hitter,Pegador
 PUCK_HITS_DESC,Land %d hits.,Da %d cargas.
-PUCK_INTERCEPTIONS,Lane Reader,Lector de pases
-PUCK_INTERCEPTIONS_DESC,Intercept %d passes.,Intercepta %d pases.
 PUCK_TAKEAWAYS,Thief,Ladrón
 PUCK_TAKEAWAYS_DESC,Record %d takeaways.,Consigue %d robos.
 PUCK_SHOTS_BLOCKED,Shot Blocker,Bloqueador

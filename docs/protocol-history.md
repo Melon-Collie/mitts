@@ -570,3 +570,11 @@ here whenever you bump, in the same format.
 #      stats payload as malformed, so mixed builds must be refused.
 #      Replay FORMAT_VERSION unchanged: the bit was zero in every v22 frame,
 #      so an older file plays as it did.
+# v107: interceptions fold into takeaways, NHL-style (a turnover is one event:
+#      a pass picked off is the defender's takeaway and charges the passer
+#      nothing). PlayerStats.to_array drops `interceptions` (index 18), so it
+#      goes from 30 fields to 29 and every later field shifts down one. A v106
+#      peer would refuse every stats payload as malformed, so mixed builds
+#      must be refused. Replay FORMAT_VERSION unchanged: a replay's box score
+#      is a dictionary in its footer, and an older file's `interceptions`
+#      reads as takeaways.

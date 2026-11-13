@@ -138,6 +138,21 @@ static func goalie_reset_s() -> float:
 # than this from now still finds him in the stance he is in.
 const GOALIE_RECOVERY_S: float = 0.35
 
+# A carrier of theirs in front of his goal line with the puck this near the
+# net's centre he plays down (KeeperPositioning.TIGHT_M, kept_down and planted):
+# he leaves his feet as it comes inside, his play read carrying the puck on
+# along its motion so his read costs no ground.
+const GOALIE_DOWN_IN_TIGHT_M: float = KeeperPositioning.TIGHT_M
+
+
+# Whether he is down for a carrier of theirs with the puck at `puck`, in front
+# of the net at `attacking_goal`.
+static func down_in_tight(puck: Vector3, attacking_goal: Vector3) -> bool:
+	if (puck.z - attacking_goal.z) * -signf(attacking_goal.z) <= 0.0:
+		return false
+	return Vector2(puck.x - attacking_goal.x, puck.z - attacking_goal.z).length() \
+			<= GOALIE_DOWN_IN_TIGHT_M
+
 # The fastest a loose puck can be going for him to cover it (KeeperCover): one
 # slowing at his feet he covers, one going by he saves, and it stays live.
 const COVER_STOPS_M_S: float = KeeperCover.STOPS_M_S

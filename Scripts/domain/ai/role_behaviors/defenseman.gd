@@ -371,10 +371,21 @@ static func strong_point_vacated(ctx: RoleContext, strong_slot: int,
 	var holder: SkaterNetworkState = _slot_holder(ctx, strong_slot)
 	if holder == null:
 		return false
-	var deepest: float = _strong_stand_depth_m(ctx, strong_slot)
-	if not covering:
-		deepest += POINT_VACATED_SLACK_M
-	return _depth_inside_attacked_zone(ctx, holder.position) > deepest
+	return off_the_point(_depth_inside_attacked_zone(ctx, holder.position),
+			_strong_stand_depth_m(ctx, strong_slot), covering)
+
+
+# Is a D `depth_inside_m` inside the zone we attack past a point stand
+# `deepest_stand_m` deep, by POINT_VACATED_SLACK_M (none while `covering`)?
+static func off_the_point(depth_inside_m: float, deepest_stand_m: float,
+		covering: bool) -> bool:
+	return depth_inside_m > deepest_stand_m + (0.0 if covering else POINT_VACATED_SLACK_M)
+
+
+# Has a D carrying the puck left his point? The puck is on his stick, so his
+# point's stand is the line stand, never the sink rows of a low puck.
+static func carrier_off_the_point(depth_inside_m: float, covering: bool) -> bool:
+	return off_the_point(depth_inside_m, POINT_INSET_M, covering)
 
 
 # The deepest stand `strong_slot` takes now, metres inside the zone we attack:

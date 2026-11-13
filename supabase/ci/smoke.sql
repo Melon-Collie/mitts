@@ -46,8 +46,9 @@ begin
         raise exception 'career_totals_for(pooled) wrong: games=% goals=% points=%',
             r.games_played, r.goals, r.points;
     end if;
-    if r.interceptions <> 4 then
-        raise exception 'career_totals_for interceptions wrong: %', r.interceptions;
+    -- A row's interceptions count as takeaways (the column predates the fold).
+    if r.takeaways <> 4 then
+        raise exception 'career_totals_for takeaways wrong: %', r.takeaways;
     end if;
     if r.pim <> 4 or r.pp_points <> 2 or r.pp_pct <> 25.0 or r.pk_pct <> 50.0 then
         raise exception 'career_totals_for special teams wrong: pim=% ppp=% pp=% pk=%',

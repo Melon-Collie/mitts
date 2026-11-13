@@ -191,6 +191,58 @@ func test_d_carrier_vacated_point_is_covered_by_a_forward() -> void:
 			"a forward cross-fills the vacated point, got peer %d" % filler)
 
 
+func test_a_d_carrying_on_his_point_holds_it() -> void:
+	# LD has the puck on the strong point, a stride inside the line. He IS that
+	# point: the RD takes the other, and no forward is pulled up to the line — the
+	# third one is a low FINISHER (#942: four high, one low).
+	var skaters: Array = [
+		[1, 0, Vector3(0, 0, -17)],
+		[2, 0, Vector3(-8, 0, -20)],
+		[3, 0, Vector3(8, 0, -22)],
+		[4, 0, Vector3(6, 0, -9)],     # LD, carrying on the strong point
+		[5, 0, Vector3(-3, 0, -9)],    # RD, weak point
+	]
+	var a: Dictionary = _assign(skaters, AIPossessionState.State.OZONE, 4)
+	assert_eq(a[4], AIRoleSlots.Slot.CARRIER)
+	assert_eq(a[5], AIRoleSlots.Slot.POINT_WEAK, "the RD takes the point the carrier is not on")
+	assert_eq(_slot_of(a, AIRoleSlots.Slot.POINT_STRONG), -1,
+			"the carrier's own point is not handed out; got %s" % str(a))
+	var f_slots: Array[int] = [a[1], a[2], a[3]]
+	f_slots.sort()
+	var want: Array[int] = [AIRoleSlots.Slot.FINISHER, AIRoleSlots.Slot.NET_FRONT,
+			AIRoleSlots.Slot.HIGH_SLOT]
+	want.sort()
+	assert_eq(f_slots, want, "the forwards play net front, high slot and a low finisher")
+
+
+func test_a_covered_point_stays_covered_until_the_d_is_back_on_it() -> void:
+	# LD carrying 3 m inside the line: short of the slack past his stand, so fresh
+	# he still holds it; but once a forward covers it, he must be back on the stand.
+	var skaters: Array = [
+		[1, 0, Vector3(0, 0, -17)],
+		[2, 0, Vector3(-8, 0, -20)],
+		[3, 0, Vector3(5, 0, -11)],
+		[4, 0, Vector3(6, 0, -10.8)],  # LD, 3.0 m inside the line
+		[5, 0, Vector3(-3, 0, -9)],
+	]
+	var fresh: Dictionary = _assign(skaters, AIPossessionState.State.OZONE, 4)
+	assert_false(_forward_on_a_point(fresh),
+			"inside the slack he still holds his point; got %s" % str(fresh))
+	var prev: Dictionary = {4: AIRoleSlots.Slot.CARRIER, 5: AIRoleSlots.Slot.POINT_WEAK,
+			3: AIRoleSlots.Slot.POINT_STRONG, 1: AIRoleSlots.Slot.HIGH_SLOT,
+			2: AIRoleSlots.Slot.NET_FRONT}
+	var held: Dictionary = _assign(skaters, AIPossessionState.State.OZONE, 4, 0.0, 0.0, prev)
+	assert_true(_forward_on_a_point(held),
+			"a forward already covering keeps a point; got %s" % str(held))
+
+
+func _forward_on_a_point(a: Dictionary) -> bool:
+	for pid: int in [1, 2, 3]:
+		if a.get(pid, -1) in [AIRoleSlots.Slot.POINT_STRONG, AIRoleSlots.Slot.POINT_WEAK]:
+			return true
+	return false
+
+
 func test_trans_do_trailer_is_the_activating_d_when_a_forward_carries() -> void:
 	# C carries the rush: wingers take the wide lanes, one D is the safety
 	# valve, and the OTHER D joins as the trailer — the activating fourth man.
@@ -462,17 +514,28 @@ func test_our_pass_in_flight_leaves_a_spare_body() -> void:
 	var carried: Dictionary = _assign(lineup, AIPossessionState.State.OZONE, 1)
 	assert_eq(_slot_of(carried, AIRoleSlots.Slot.CARRIER), 1,
 			"while we carry, the puck holder is CARRIER")
-	assert_eq(_slot_of(carried, AIRoleSlots.Slot.SUPPORT), -1,
+	assert_eq(_slot_of(carried, AIRoleSlots.Slot.FINISHER), -1,
 			"…and nobody is spare")
 
-	# Same bodies, puck in flight between them.
+	# Same bodies, puck in flight between them: the spare is a third low
+	# forward, not SUPPORT, whose O-zone post is at their line.
 	var flight: Dictionary = _assign(lineup, AIPossessionState.State.OZONE, -1,
 			-19.0, 3.0)
 	assert_eq(_slot_of(flight, AIRoleSlots.Slot.CARRIER), -1,
 			"no carrier to slot while it is in the air")
-	assert_ne(_slot_of(flight, AIRoleSlots.Slot.SUPPORT), -1,
-			"the spare body gets SUPPORT; got %s" % str(flight))
+	var spare: int = _slot_of(flight, AIRoleSlots.Slot.FINISHER)
+	assert_true(spare in [1, 2, 3], "a forward is the spare FINISHER; got %s" % str(flight))
+	assert_eq(_slot_of(flight, AIRoleSlots.Slot.SUPPORT), -1,
+			"nobody is sent up to SUPPORT's post")
 	assert_eq(flight.size(), lineup.size() - 1, "everybody still has a job")
+
+
+func test_a_transition_pass_in_flight_still_spares_support() -> void:
+	for state: int in [AIPossessionState.State.TRANS_OFFENSE,
+			AIPossessionState.State.BREAKOUT]:
+		var got: Dictionary = _assign(_ozone_lineup(), state, -1, -19.0, 3.0)
+		assert_eq(_slot_of(got, AIRoleSlots.Slot.FINISHER), -1,
+				"state %d: no FINISHER outside the zone: %s" % [state, str(got)])
 
 
 func test_the_spare_body_is_never_given_a_defensive_role_while_we_attack() -> void:

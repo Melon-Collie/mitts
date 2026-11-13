@@ -272,11 +272,11 @@ func _render(events: Array[ShotEvent], totals: Array[Dictionary],
 
 
 # One team's tape aggregates, zeroed. `box` marks the counters only a box score
-# carries (hits, faceoffs, takeaways, interceptions, giveaways); a past game without one leaves
+# carries (hits, faceoffs, takeaways, giveaways); a past game without one leaves
 # it false and those rows off.
 static func _empty_totals() -> Dictionary:
 	return {"goals": 0, "sog": 0, "corsi": 0, "fenwick": 0, "xg": 0.0, "blocks": 0,
-			"box": false, "hits": 0, "faceoff_wins": 0, "takeaways": 0, "interceptions": 0,
+			"box": false, "hits": 0, "faceoff_wins": 0, "takeaways": 0,
 			"giveaways": 0}
 
 
@@ -306,8 +306,10 @@ static func history_totals(events: Array[ShotEvent], box_score: Array) -> Array[
 		out[t]["box"] = true
 		out[t]["hits"] = int(out[t]["hits"]) + int(p.get("hits", 0))
 		out[t]["faceoff_wins"] = int(out[t]["faceoff_wins"]) + int(p.get("faceoff_wins", 0))
-		out[t]["takeaways"] = int(out[t]["takeaways"]) + int(p.get("takeaways", 0))
-		out[t]["interceptions"] = int(out[t]["interceptions"]) + int(p.get("interceptions", 0))
+		# A file recorded before interceptions folded into takeaways counts its
+		# pick-offs separately.
+		out[t]["takeaways"] = int(out[t]["takeaways"]) + int(p.get("takeaways", 0)) \
+				+ int(p.get("interceptions", 0))
 		out[t]["giveaways"] = int(out[t]["giveaways"]) + int(p.get("giveaways", 0))
 	return out
 
@@ -339,7 +341,6 @@ func _team_totals() -> Array[Dictionary]:
 		out[t]["hits"] = int(out[t]["hits"]) + s.hits
 		out[t]["faceoff_wins"] = int(out[t]["faceoff_wins"]) + s.faceoff_wins
 		out[t]["takeaways"] = int(out[t]["takeaways"]) + s.takeaways
-		out[t]["interceptions"] = int(out[t]["interceptions"]) + s.interceptions
 		out[t]["giveaways"] = int(out[t]["giveaways"]) + s.giveaways
 		out[t]["icings"] = int(out[t]["icings"]) + s.icings
 		out[t]["pim"] = int(out[t]["pim"]) + s.pim
@@ -367,7 +368,6 @@ func _build_tape_rows(totals: Array[Dictionary]) -> void:
 	_add_count_row(_tape, &"TAPE_BLOCKED_SHOTS", home["blocks"], away["blocks"])
 	if has_box:
 		_add_count_row(_tape, &"TAPE_TAKEAWAYS", home["takeaways"], away["takeaways"])
-		_add_count_row(_tape, &"TAPE_INTERCEPTIONS", home["interceptions"], away["interceptions"])
 		_add_count_row(_tape, &"TAPE_GIVEAWAYS", home["giveaways"], away["giveaways"], false)
 	# Live game only (no stored record carries icings or penalties), and only
 	# where they are called.

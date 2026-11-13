@@ -69,6 +69,12 @@ const WRAP_BEHIND_M: float = 1.6
 # feeds' paces; a lane through the cage is no pass.
 const PASS_OUT_MAX_FWD_M: float = 6.0
 const PASS_OUT_X_M: float = 2.5
+# Drives: spots this close in, a carrier skating straight in at a breakaway's
+# pace (Stager.stage_drive). Further out the keeper he meets is the SET's.
+const DRIVE_MAX_FWD_M: float = 9.5
+# A drive's deke onto the spot from a lane this far to either side
+# (Stager.stage_drive_deke).
+const DRIVE_DEKE_ACROSS_M: Array[float] = [-2.0, -1.0, 1.0, 2.0]
 
 var _s: RefCounted = null
 var _body_radius: float = 0.0
@@ -88,10 +94,13 @@ func before_each() -> void:
 
 
 # Every cell, in a fixed order: [spot_x, spot_fwd, kind, mode, passer_x,
-# feed_speed]. kind is SET / DEKE / FEED / DECOY / WRAP / PASSOUT; mode C (charged), O
-# (one-timer) or K (caught, then charged); passer_x is the deke's start for a
-# deke and the decoy's or the wrap carrier's x for those, whose metres out ride
-# in feed_speed's column (a wrap's negative: behind the goal line).
+# feed_speed]. kind is SET / DEKE / FEED / DECOY / WRAP / PASSOUT / DRIVE /
+# DRIVE_DEKE; mode C
+# (charged), O (one-timer), K (caught, then charged) or D (charged in stride);
+# passer_x is the deke's start for a deke, the decoy's or the wrap carrier's x
+# for those, whose metres out ride in feed_speed's column (a wrap's negative:
+# behind the goal line), and a drive's lane, whose pace rides there. A spot's
+# cells are consecutive: AIShotOdds reads each spot as one run of rows.
 func _cells() -> Array:
 	var out: Array = []
 	for fwd: float in SPOT_FWD:
@@ -130,6 +139,12 @@ func _cells() -> Array:
 					for speed: float in FEED_SPEEDS_M_S:
 						for mode: String in ["O", "K"]:
 							out.append([x, fwd, "PASSOUT", mode, passer.x, speed])
+			if fwd <= DRIVE_MAX_FWD_M:
+				out.append([x, fwd, "DRIVE", "D", x, Stager.DRIVE_M_S])
+				for across: float in DRIVE_DEKE_ACROSS_M:
+					var from: float = x - across
+					if _on_ice(from, fwd + Stager.DEKE_FORWARD_M_S * Stager.DEKE_S):
+						out.append([x, fwd, "DRIVE_DEKE", "C", from, Stager.DRIVE_M_S])
 	return out
 
 
@@ -160,6 +175,11 @@ func _stage_for(cell: Array) -> Callable:
 			var from := Vector3(cell[4], 0.0, GOAL_Z + AIShotOdds.PASS_OUT_PASSER_FWD_M)
 			var pace: float = cell[5]
 			return func() -> Vector3: return _s.stage_pass_out(spot, from, pace)
+		"DRIVE":
+			return func() -> Vector3: return _s.stage_drive(spot)
+		"DRIVE_DEKE":
+			var across: float = spot.x - float(cell[4])
+			return func() -> Vector3: return _s.stage_drive_deke(spot, across)
 	return func() -> Vector3: return _s.stage_set(spot)
 
 
@@ -171,7 +191,8 @@ func _row(index: int, cell: Array) -> String:
 			else decision
 	var pre_fields: String = Stager.read_fields(pre)
 	var decision_fields: String = Stager.read_fields(decision)
-	var patterns: PackedStringArray = _s.open_set(stage, cell[3] == "O", cell[3] == "K")
+	var patterns: PackedStringArray = _s.open_set(stage, cell[3] == "O", cell[3] == "K",
+			cell[3] == "D")
 	return "%d\t%.2f\t%.2f\t%s\t%s\t%.2f\t%.2f\t%.3f\t%.3f\t%s\t%s\t%s" % [
 			index, cell[0], cell[1], cell[2], cell[3], cell[4], cell[5],
 			release.x, release.z - GOAL_Z, pre_fields, decision_fields, "\t".join(patterns)]

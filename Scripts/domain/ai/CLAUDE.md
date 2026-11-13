@@ -97,6 +97,15 @@ current rate.
 Shot scatter (`shot_aim_error_rad`) acts on execution only: the compete prices a
 spot through the value seam, which is a property of the chance rather than the
 shooter, so a wobblier tier takes the same shots and misses more of them (#699).
+The release timing (`shot_timing_error_s`) is the other way round: the hands'
+hold moves WHERE the shot leaves, not its odds from there, so the compete prices
+every shot over the hold it can be let go in (`AIBotMechanics.shot_hold_sample_s`,
+whose samples average to `shot_lookahead_s`), a release that cannot leave in front
+of the goal line counting as no shot. Left out, a lower tier at breakaway pace
+decided to shoot from the spot it would have liked and released a metre or more
+further in, on the keeper (#943). Never price it at the mean's spot alone: in
+tight the odds fall off within a metre, and a hold carries a breakaway further
+than that.
 
 Tuning order, when a tier is wrong: if it plays like a pushover, raise the
 precision knobs back toward Hard and let the pace knobs keep it beatable; if it
@@ -301,9 +310,14 @@ drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
   ladder's gap, his partner a stick off it on his own side, each skated
   straight to rather than through `depth_first`. Once the ladder steps up on a
   stalled carrier, one D steps up and the partner goes back to his own job: two
-  stepping up together leave the men still at speed behind them. The depth the
-  pair holds is still sized from the carrier alone, so a stalled carrier with
-  a winger at speed on the stepping D's outside beats the step-up (#930). That is the coached 3-on-2 —
+  stepping up together leave the men still at speed behind them. The stand is
+  sized from the carrier alone, so the route is bounded by the men still at
+  speed beside him (`AIBackLineRunners.hold_depth`): while an attacker coming
+  at pace whom no teammate is goal-side of would gain all the depth the D holds
+  on him, were the D to settle to the pace his stand rides at, the route
+  commands at least that runner's pace toward our net, down to the house gate.
+  A carrier who slows at our line otherwise brakes his D flat while the winger
+  takes the pass at speed behind him. That is the coached 3-on-2 —
   make him pick a side, no seam between the D — and it replaces the one-man
   cross to the middle, which gave up the crossing D's depth on the wingers and
   his lane to the pass (`test_five_on_five_set_shape.gd`). Crossing
@@ -355,7 +369,7 @@ Three verbs exist as shared code; the roles compose them.
 | verb | seam | callers |
 |---|---|---|
 | **cover a threat** — take the ice between him and our net, in the feed lane, riding him | `AIDefensiveVerbs.cover_threat` | MARK, the 5v5 zone soft-lock, BACK_MID, BACK_WEAK, NZ_MID |
-| **close the carrier** — read his approach, hold the ladder's gap, angle him off the middle | `read_carrier_approach` + `carrier_stand` | PRESSURE, BACK_STRONG, NZ_F1's steer, and the read alone for NZ_F1's backcheck |
+| **close the carrier** — read his approach, hold the ladder's gap, angle him off the middle | `read_carrier_approach` + `carrier_stand` | PRESSURE, BACK_STRONG, NZ_F1's steer, MARK's spare marker a rung deeper, and the read alone for NZ_F1's backcheck |
 | **go get the puck** — race it, or hold the pre-contain stand when somebody else has won it | `AIDefensiveVerbs.chase_puck` | CHASE |
 
 `AICarrierApproach` is the carrier half's subject: his position and velocity, the
@@ -729,9 +743,15 @@ putting the cursor down the route). Draped or stepping up, he faces the man.
 The race is priced down the carrier's line to the net, so it only governs a
 route that is mostly that retreat: a route to a stand more across the ice than
 goal-side stays square to the man, so a cut back reverses his crossover instead
-of a turn he has to undo (`test_role_rush_d.gd`). What a cut back still beats is
-a defender who has matched a wide carrier's drift (`test_nz_turnover_recovery`'s
-header; #799).
+of a turn he has to undo (`test_role_rush_d.gd`).
+
+**A ridden stand is not a turn to carve.** The stance carve
+(`AISteering.stance_carves_to`) is for a turn the upright edges cannot make
+before the body reaches its anchor, and a stand that rides a man is reached at
+the speed the body closes on it, not the speed it skates at. Timed by his ice
+speed, a stand a metre off a defender riding the rush at 7 m/s read as a turn
+no edge makes on almost every tick, and he skated his whole retreat in the
+stance, at its cost in stride and top speed (`test_nz_turnover_recovery.gd`).
 
 The turn's cost is what keeps it honest: from a stand a turn costs more ground
 than backpedalling, so a standing defender backpedals first and turns once he
@@ -824,12 +844,26 @@ a D retrieving behind his own goal line, so the two
 carrier-owning roles agree at the TRANS_DEFENSE → DZONE handoff exactly as they
 do on the ladder itself.
 
+### A marker with no man is the carrier's next layer
+
+More markers than receivers leaves a marker with nobody to cover, and in our
+zone he is named the carrier: the closing verb's stand one ladder rung deeper
+than the man on the puck holds, riding the carrier, so a carrier who beats the
+first man meets the second (`AIRoleMark._layer_carrier`). Further spare markers
+stack a rung deeper each, nearest the second layer first, and the stack ends at
+the net front. He publishes no lock — the carrier is the pressurer's to play —
+and his route takes BACK_STRONG's retreat floor. Sent to recover to "the most
+dangerous ice" instead, he was priced standing still against a carrier at
+speed: with two back against one rusher the spare D walked up the ice above
+him, and with three back the third stood on his own feet in the slot while the
+carrier went by (`test_advantage_scenarios.gd`, `test_role_mark.gd`).
+
 ### Hold a post — the open question
 
-The per-role fallbacks and their anchor constants are still unfactored. Whether
-"hold a post" should be a verb at all is open: if the assigner always names a
-man, the carrier, or the puck, there is no fourth state and the constants go
-with it.
+The remaining per-role fallbacks (a loose puck, a carrier still up the ice) and
+their anchor constants are still unfactored. Whether "hold a post" should be a
+verb at all is open: if the assigner always names a man, the carrier, or the
+puck, there is no fourth state and the constants go with it.
 
 ## Determinism
 
@@ -863,7 +897,9 @@ he gets there); his positioning is the same on every tier.
 
 **The skater AI's goalie model is a MIRROR, not a second tier.** What the bots
 predict of him outside the shot field — his leg read, his push, the depth he
-takes, the post he holds, his rise — lives on `AIGoalieModel`, read from his own
+takes, the post he holds, his rise, his going down for a carrier in tight
+(`down_in_tight`, which a carry's shot on arrival reads his stance by) — lives
+on `AIGoalieModel`, read from his own
 code (`KeeperPositioning`, `KeeperFootwork`, `KeeperDrop`, his gear), with the
 leg read synced from the match's profile by `set_goalie_profile`.
 `test_ai_goalie_model_mirrors.gd` holds each one against him. The shot field
@@ -929,7 +965,12 @@ reaches back into what remains.
   - **Every measured carrier skated in** (`shot_odds_stager.gd`), so "set" is a
     keeper who tracked the carry, rushed back off it, and settled. A carrier who
     appears in tight with the keeper on his crease draws a committed slide,
-    which no carry the bots price ever produces.
+    which no carry the bots price ever produces. A breakaway's keeper is not
+    that one: he backs in on a carrier at pace, deeper for the same release, and
+    is never settled. DRIVE cells measure him (a carrier driving straight in at
+    breakaway pace from 25 m, charging in stride), and DRIVE_DEKE cells the same
+    drive dekeing onto the spot from a lane either side; both are carried-in
+    history.
   - **The keeper is read as a Stance** — upright, down, or sealed on the post —
     plus his offset off the square, his lateral speed, his depth, and how
     square he faces the release (`AIShotOdds.squareness`, left out when his
@@ -1153,7 +1194,11 @@ reaches back into what remains.
     against the puck's own time to the crossing point, so it self-narrows with
     puck speed and stays "extend the stick", never a second chaser. It overrides
     the one-timer camp and the race-lost decline, and yields only to a **dead**
-    puck (the `-1` election) or a **teammate already first to it**.
+    puck (the `-1` election), a **teammate already first to it**, or a teammate
+    whose own band the puck's path reaches sooner
+    (`teammate_band_meets_first`): a slow feed crawling through our slot crosses
+    four bands, and one man breaks off his job for it, not four, who each
+    dropped the man he was covering.
 
 - **Teammates don't stab at each other's puck**
   (`AILoosePuckChase.teammate_first_to_puck`). The contested-pickup rule is
@@ -1370,6 +1415,27 @@ reaches back into what remains.
   cost. The chosen input is the carrier's stick until the next re-eval: what is
   priced is what is skated. Never price a near move by a straight line and a
   closed-form clock — that is what let a carrier plan spots it could not reach.
+  The shot on its arrival is the shot now's, from there: released from the hold
+  the carrier would shoot from, through the same line gate
+  (`AICarrierField.leaves_ahead_of_line`, a release behind it priced as no shot),
+  against the keeper at the depth he takes for the pace the carry closes on him
+  at arrival, in the stance the release meets him in: down in tight
+  (`AIGoalieModel.down_in_tight`), which the shot now reads too
+  (`AIRoleCarrier._stance_met`). Priced from the body, or against the depth the
+  drive's average pace pushed him to, a carry promised shots the shot now
+  refused once it got there, and the carrier braked into the slot or coasted
+  into the keeper; read as he stands at the decision, a release a metre further
+  in priced the keeper the drive had not yet dropped. A drive in, the carrier's
+  own or a receiver's, is shot by the same read (`AICarrierArrivalShot.value`).
+  A move is worth its best shot on the way as well as its end
+  (`AICarrierArrivalShot.best_on_path`): the carrier plans where he releases.
+  The plan is a point on the ice, kept until a re-plan finds one better by the
+  hysteresis margin or he passes it (`AIRoleCarrier._plan_release`); the shot
+  is committed once he reaches it before the next re-plan, the press waiting
+  for the point (`shot_press_point`), and held back until then unless the shot
+  now beats the plan. Never re-pick the point every re-plan on a grid that
+  moves with him: the best read sat a step ahead each time, and a lower tier's
+  re-plan came a couple of metres past it.
   A destination across a cage is skated at the arrival clock's waypoint round it
   (`AIArrival.cage_waypoint`). A move whose path reaches a crease, or the goal
   line from in front, ends at its last sample short of it and is priced there

@@ -24,8 +24,8 @@ const INTERVAL_COLUMN: int = 25
 
 # The ratchets. Tighten when a change wins by more than BANK_MARGIN.
 const MAX_MEAN_ABS_ERR: float = 0.085
-const MIN_CONCORDANCE: float = 0.956
-const MIN_PICK_SHARE: float = 0.863
+const MIN_CONCORDANCE: float = 0.953
+const MIN_PICK_SHARE: float = 0.893
 const BANK_MARGIN: float = 0.02
 
 

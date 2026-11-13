@@ -54,64 +54,21 @@ extends GutTest
 #   double-locked        9% / 0% / 0%       15% / 49% / 23%
 #   covered per tick     2.70 / 2.43 / 2.90 2.62 / 1.44 / 2.05
 #
-# The covered-per-tick row is kept for context only — it is the retired metric,
-# and the argmax column CANNOT be re-derived under the unattended-men count
-# (that model is gone from the tree, and its own in-zone attacker counts went
-# with it). So the unattended ceiling is calibrated differently, against
-# measured readings on these three fixtures:
+# Both rows were measured with the defenders seated by list order, which put
+# the D at the points; seated as they stand (DEFENDER_SEATS) the matching reads
+# 0% / 2% / 0%.
 #
-#   unattended/tick   1.74 / 1.71 / 1.87   when the matching landed
-#                     1.59 / 1.79 / 2.28   with the reception rendezvous
-#                     1.59 / 1.57 / 2.00   with the gap-ladder / pinch fixes
-#                     1.69 / 1.92 / 2.54   with the stick-aware chase intercept
-#
-# That last row is the first one the shared ceiling could not hold, which is
-# why the crossing cutter took its own pin. Two things about it are worth
-# keeping, because neither is visible in the number:
-#   - It is not a graded response. Shrinking the reach credit (1.80 m ->
-#     1.60 m) moved the cutter only 2.54 -> 2.52 while breaking BOTH
-#     point-holds-the-line fixtures, so these sims are landing in a DIFFERENT
-#     rollout rather than defending the same one better or worse — this
-#     fixture's D-zone window moved 340 -> 320 ticks, and low cycle's
-#     300 -> 460. Do not tune the chase against this table; it does not
-#     measure what a tuner would think it measures.
-#   - The danger readings moved in OPPOSITE directions, which is why the row
-#     above cannot be read as a coverage regression on its own: the cutter's
-#     open danger halved (mean 0.109 -> 0.052, worst 0.997 -> 0.308) while low
-#     cycle's rose (0.039 -> 0.145, worst 0.370 -> 0.782). Low cycle still
-#     clears OPEN_DANGER_CEILING with room, but it is the closest it has been,
-#     and nobody has explained it. If that number moves again, explain it
-#     before pinning it.
-#
-# The point-shot and crossing-cutter fixtures' attacks are now SCRIPTED (see the
-# tests), so their readings are not rollouts of the bot attack and no longer
-# belong to the table above; each carries its own pin, below. Only low cycle
-# still runs the bot attack.
-#
-# Low cycle then read 2.02 unattended and 0.027 open danger, and moved to 2.21 and
-# 0.180 when the duel harness started holding the blade at the shot origin
-# through a wrister charge (as the controller does). Explained, not a coverage
-# change: no defensive code moved in that step. The rollout splits at its first
-# loose puck — a feed misses behind the net, and where the old harness let an
-# attacker win that race and shoot, now a defender collects it after ~1.5 s
-# loose. A loose puck counts every attacker in the zone as a man to cover, so a
-# longer loose window reads as more men unattended and a dearer worst one.
-#
-# A regression to the argmaxes still breaks the double-lock ceiling, which is
-# the guard that separated the two models sharply in the first place.
-#
-# Those three rows are also the argument for counting unattended men rather than
-# covered ones, because the two middle changes moved the fixtures in opposite
-# directions and only one metric read both honestly. The reception rendezvous
-# cost the crossing cutter real coverage (1.87 -> 2.28) while breadth there
-# stayed clear of its floor; the gap-ladder work then took the puck away from
-# the attack in the point-shot fixture, which shrank its D-zone window from 360
-# ticks to 260 and dragged BREADTH down through the same floor for a strictly
-# better outcome — a hole the covered-per-tick metric could only be talked out
-# of with a per-fixture exemption. Counting the men nobody has needs no
-# exemption: it read the first as the regression it was and the second as the
-# improvement it was (1.79 -> 1.57), because it never divides by how many
-# attackers happen to be standing in the zone.
+# The unattended ceilings are each fixture's own measured reading plus one
+# margin (~0.28), pinned beside the constants below. Two things to know before
+# reading a move in them:
+#   - A loose puck counts every attacker in the zone as a man to cover, so a
+#     longer loose window reads as more men unattended with the coverage
+#     untouched. Low cycle is the one fixture still running the bot attack, so
+#     its window is whatever that attack does; the other two are SCRIPTED (see
+#     the tests) and measure the same possession every run.
+#   - Do not tune the chase against these numbers. A change to who goes for a
+#     loose puck lands the bot-attack fixture in a different rollout rather
+#     than defending the same one better or worse.
 #
 # The margins are deliberately modest; when one fails the question is "did the
 # behaviour change on purpose", not "which bound do I loosen". Open danger is a
@@ -144,37 +101,30 @@ const ZONE_SLOTS: Array[int] = [
 ]
 
 # Attackers in the zone that no defender has, per tick, in the low cycle
-# (measured 1.12; the ceiling is the ~0.28 margin the scripted fixtures use over
-# an earlier 1.24). A loose puck counts every attacker as a man to cover, so the
-# bot attack's own feeds move this (185 of its 285 D-zone ticks loose: a rim
-# behind the net that dribbles up the far wall); the coverage itself is the
-# phase with an attacker on the puck, pinned on its own below. While it is
-# loose the teammate elected to race it is the one on it, and the area that
-# holds it covers a man (AIZoneCoverage.chased_by_another).
-const UNCOVERED_CEILING: float = 1.52
+# (measured 1.06). The carrier rims it up the strong wall at 1.6 s, before the
+# strong D reaches him, and the attack works it point to wall and back: 168 of
+# its 360 ticks are a loose puck, which carry the count.
+const UNCOVERED_CEILING: float = 1.34
 # The same count over the low cycle's ticks with an attacker on the puck
-# (measured 0.94), at the same margin.
-const UNCOVERED_CARRIED_CEILING: float = 1.22
-# The scripted crossing cutter (measured 1.00), pinned at the same ~0.28 margin.
-# It is the weak-side point, a man the shot model prices at nothing: with the
-# cutter low in the strong D's area, the weak winger sags onto him. The cutter
-# himself — the man this fixture is about — is pinned on his own below.
-const UNCOVERED_CEILING_CROSSING_CUTTER: float = 1.28
-# Share of the D-zone ticks the cutter may go unattended (measured 0 of 480).
+# (measured 0.43 over 192: each feed taken starts a handoff).
+const UNCOVERED_CARRIED_CEILING: float = 0.71
+# The scripted crossing cutter (measured 0.00). The cutter himself — the man
+# this fixture is about — is pinned on his own below.
+const UNCOVERED_CEILING_CROSSING_CUTTER: float = 0.28
+# Share of the D-zone ticks the cutter may go unattended (measured 0 of 360).
 const CUTTER_DROPPED_CEILING: float = 0.05
-# The scripted point shot (measured 0.91), pinned at the same ~0.28 margin. Half
-# its D-zone ticks are a loose puck: the point man is knocked off it at tick 127
-# and a defender gathers it at 135, and every attacker counts as a man to cover
-# while it is loose. It read 0.82 until the carry's floor
-# (SkaterController.carry_reach_min_m) held that defender's blade out to 0.8 m for
-# the two ticks he had it, and the puck squirted off along another line —
-# another rollout, not a coverage change: the floor moves nothing else here.
-const UNCOVERED_CEILING_POINT_SHOT: float = 1.19
+# The scripted point shot (measured 0.48): the weak-wall man, whom the shot
+# model prices at nothing, on 172 of its 360 ticks.
+const UNCOVERED_CEILING_POINT_SHOT: float = 0.76
 # The man nobody has should not routinely be a prime scoring threat. A loose
 # guard — it separated the two models weakly — against a collapse.
 const OPEN_DANGER_CEILING: float = 0.25
 # Ceiling on the share of ticks with a man double-covered. See the table above.
 const DOUBLE_LOCK_SHARE_CEILING: float = 0.12
+# The seat (PlayerRules position) of each defender a fixture lists: low pair,
+# slot, points. The zone slots are group-scoped, so the D take the low posts
+# and the wingers the points only when the bodies spawned there hold those seats.
+const DEFENDER_SEATS: Array[int] = [3, 4, 0, 1, 2]
 # Fixture sanity: the sim has to actually spend time in D-zone coverage for any
 # of the above to mean anything.
 const MIN_DZONE_TICKS: int = 120
@@ -211,7 +161,7 @@ func _run(attackers: Array, defenders: Array, carrier: int) -> Result:
 		duel.positions[1 + i] = i
 	for i: int in defenders.size():
 		duel.add_skater(50 + i, 1, defenders[i], BotSkillProfile.hard())
-		duel.positions[50 + i] = i
+		duel.positions[50 + i] = DEFENDER_SEATS[i]
 	duel.start(carrier)
 
 	var r := Result.new()
@@ -271,10 +221,11 @@ func _run(attackers: Array, defenders: Array, carrier: int) -> Result:
 
 func _report(label: String, r: Result) -> void:
 	var n: float = float(maxi(r.dzone_ticks, 1))
-	gut.p("      %-22s dzone %4d | double-locked %3d (%2d%%) | in zone/tick %.2f | covered %.2f | UNCOVERED %.2f | open danger mean %.4f worst %.4f"
+	gut.p("      %-22s dzone %4d | double-locked %3d (%2d%%) | in zone/tick %.2f | covered %.2f | UNCOVERED %.2f (carried %.2f over %d) | open danger mean %.4f worst %.4f"
 			% [label, r.dzone_ticks, r.double_locked_ticks,
 			roundi(100.0 * r.double_locked_ticks / n), r.in_zone_sum / n,
 			r.covered_sum / n, r.uncovered_sum / n,
+			r.uncovered_carried_sum / float(maxi(r.carried_ticks, 1)), r.carried_ticks,
 			r.open_danger_sum / n, r.open_danger_worst])
 
 

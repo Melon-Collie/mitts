@@ -23,7 +23,6 @@ static func game_dict(stats: PlayerStats) -> Dictionary:
 		"shots_blocked": stats.shots_blocked,
 		"hits_taken": stats.hits_taken,
 		"takeaways": stats.takeaways,
-		"interceptions": stats.interceptions,
 		"giveaways": stats.giveaways,
 		"faceoff_wins": stats.faceoff_wins,
 		"one_timer_goals": stats.one_timer_goals,

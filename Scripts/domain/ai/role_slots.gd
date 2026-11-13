@@ -41,7 +41,7 @@ enum Slot {
 	# ── 5v5-only slots (assigned by AIRoleSlots5; never in the 3v3 sets) ─────
 	# OZONE: 3 F low / 2 D at the points.
 	NET_FRONT,      # F: crease-edge screen / backdoor man (finisher job).
-	HIGH_SLOT,      # F: F3 — the soft ice between the dots, above the puck.
+	HIGH_SLOT,      # F: F3 — the soft ice between the dots, above a low puck.
 	POINT_STRONG,   # D: strong-side point, sinks down his wall with the cycle.
 	POINT_WEAK,     # D: weak-side point, holds the line shaded central.
 	# FORECHECK: the 1-2-2 (F1_PRESSURE and F2_NET shared with 3v3).

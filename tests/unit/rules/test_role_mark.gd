@@ -390,3 +390,98 @@ func test_mark_fallback_snapshot() -> void:
 		snap.record("%s, target x" % key, target.x)
 		snap.record("%s, target z" % key, target.z)
 	snap.verify(self)
+
+
+# ── No man and their carrier in our zone: the carrier's next layer ───────────
+
+class Markers extends TeamStrategyView:
+	var threats: Dictionary = {}
+
+	func get_slot(peer_id: int) -> int:
+		return AIRoleSlots.Slot.MARK if threats.has(peer_id) else AIRoleSlots.Slot.NONE
+
+	func assigned_threat(peer_id: int) -> int:
+		return threats.get(peer_id, -1)
+
+
+const WALL_CARRIER := Vector3(-9, 0, 14)
+const WALL_CARRIER_VEL := Vector3(-1, 0, 6)
+
+
+# Marker 1 at `self_pos` and marker 2 at `mate_pos`, each covering `threats[pid]`
+# (-1: no man), against carrier 200 on the left wall in our zone.
+func _layer_ctx(self_pos: Vector3, mate_pos: Vector3, threats: Dictionary,
+		carrier_pos: Vector3 = WALL_CARRIER) -> RoleContext:
+	var ctx: RoleContext = _make_ctx(self_pos, [[1, TEAM_ID, self_pos],
+			[2, TEAM_ID, mate_pos], [200, 1 - TEAM_ID, carrier_pos]], 200)
+	ctx.snapshot.skater_states[200].velocity = WALL_CARRIER_VEL
+	var brain := Markers.new()
+	brain.threats = threats
+	ctx.team_brain = brain
+	return ctx
+
+
+func _down_his_line(target: Vector3, carrier_pos: Vector3 = WALL_CARRIER) -> float:
+	var net := Vector3(0.0, 0.0, OUR_NET_Z)
+	return (target - carrier_pos).dot((net - carrier_pos).normalized())
+
+
+func test_a_spare_marker_is_the_carriers_next_layer() -> void:
+	var ctx: RoleContext = _layer_ctx(Vector3(-3, 0, 20), Vector3(4, 0, 22), {1: -1, 2: 300})
+	var d: RoleDecision = AIRoleMark.decide(ctx)
+	var first: float = AIRoleRushD.ladder_gap_m(WALL_CARRIER, 1.0, ctx.self_blade_reach,
+			AIRoleRushD.ramp_cushion_m(ctx, ctx.scratch_carrier_approach, 200))
+	assert_gt(_down_his_line(d.target_position), first,
+			"goal-side of where the man on the carrier stands, down his line to our net")
+	assert_lt(absf(d.target_position.x), absf(WALL_CARRIER.x), "and inside him")
+	assert_eq(d.target_velocity, WALL_CARRIER_VEL, "riding him")
+	assert_eq(d.locked_man_pid, -1, "the carrier is not a man to tie up")
+
+
+func test_two_spare_markers_stack_a_rung_apart() -> void:
+	var near := Vector3(-5, 0, 19)
+	var far := Vector3(3, 0, 23)
+	var threats: Dictionary = {1: -1, 2: -1}
+	var ctx: RoleContext = _layer_ctx(near, far, threats)
+	var second: RoleDecision = AIRoleMark.decide(ctx)
+	var third: RoleDecision = AIRoleMark.decide(_layer_ctx(far, near, threats))
+	assert_almost_eq(
+			_down_his_line(third.target_position) - _down_his_line(second.target_position),
+			AIRoleRushD.GAP_RUNG_STICKS * AIRoleRushD.stick_m(ctx), 0.01,
+			"the marker farther from the second layer takes the one a rung behind it")
+	assert_eq(third.target_velocity, WALL_CARRIER_VEL, "and rides him too")
+
+
+func test_the_stack_ends_at_the_net_front() -> void:
+	var low_carrier := Vector3(-4, 0, OUR_NET_Z - 4.0)
+	var ctx: RoleContext = _layer_ctx(Vector3(0, 0, OUR_NET_Z - 3.0), Vector3(4, 0, 22),
+			{1: -1, 2: 300}, low_carrier)
+	var d: RoleDecision = AIRoleMark.decide(ctx)
+	var net := Vector3(0.0, 0.0, OUR_NET_Z)
+	assert_gte(AIRoleReads.xz_distance(d.target_position, net) + 0.01,
+			AIRoleRushD.RETREAT_FINISH_M - AIDefensiveVerbs.ANGLE_INSIDE_M,
+			"no deeper than the net front")
+	assert_almost_eq(_down_his_line(d.target_position, low_carrier),
+			AIRoleReads.xz_distance(low_carrier, net) - AIRoleRushD.RETREAT_FINISH_M, 0.01,
+			"on his line, where a ridden retreat ends")
+	assert_gt(d.target_velocity.length(), 0.0, "still moving with him")
+	assert_lt(d.target_velocity.length(), WALL_CARRIER_VEL.length(),
+			"but a stand held at the net front does not ride at his whole pace")
+
+
+func test_a_marker_with_a_man_still_covers_him() -> void:
+	var ctx: RoleContext = _layer_ctx(Vector3(-3, 0, 20), Vector3(4, 0, 22), {1: 300, 2: -1})
+	var man := SkaterNetworkState.new()
+	man.position = Vector3(2, 0, 21)
+	ctx.snapshot.skater_states[300] = man
+	ctx.team_id_by_peer[300] = 1 - TEAM_ID
+	ctx.assigned_threat_peer = 300
+	assert_eq(AIRoleMark.decide(ctx).locked_man_pid, 300)
+
+
+func test_a_carrier_still_up_the_ice_gets_the_recovery_fallback() -> void:
+	var up_ice := Vector3(-9, 0, -4)
+	var with_brain: RoleContext = _layer_ctx(Vector3(-3, 0, 12), Vector3(4, 0, 14),
+			{1: -1, 2: 300}, up_ice)
+	var d: RoleDecision = AIRoleMark.decide(with_brain)
+	assert_eq(d.target_velocity, Vector3.ZERO, "not a layer riding a man outside our ice")
