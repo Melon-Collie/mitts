@@ -442,10 +442,14 @@ func test_two_spare_markers_stack_a_rung_apart() -> void:
 	var near := Vector3(-5, 0, 19)
 	var far := Vector3(3, 0, 23)
 	var threats: Dictionary = {1: -1, 2: -1}
-	var second: RoleDecision = AIRoleMark.decide(_layer_ctx(near, far, threats))
+	var ctx: RoleContext = _layer_ctx(near, far, threats)
+	var second: RoleDecision = AIRoleMark.decide(ctx)
 	var third: RoleDecision = AIRoleMark.decide(_layer_ctx(far, near, threats))
-	assert_gt(_down_his_line(third.target_position), _down_his_line(second.target_position),
-			"the marker farther from the second layer takes the one behind it")
+	assert_almost_eq(
+			_down_his_line(third.target_position) - _down_his_line(second.target_position),
+			AIRoleRushD.GAP_RUNG_STICKS * AIRoleRushD.stick_m(ctx), 0.01,
+			"the marker farther from the second layer takes the one a rung behind it")
+	assert_eq(third.target_velocity, WALL_CARRIER_VEL, "and rides him too")
 
 
 func test_the_stack_ends_at_the_net_front() -> void:
@@ -457,8 +461,12 @@ func test_the_stack_ends_at_the_net_front() -> void:
 	assert_gte(AIRoleReads.xz_distance(d.target_position, net) + 0.01,
 			AIRoleRushD.RETREAT_FINISH_M - AIDefensiveVerbs.ANGLE_INSIDE_M,
 			"no deeper than the net front")
+	assert_almost_eq(_down_his_line(d.target_position, low_carrier),
+			AIRoleReads.xz_distance(low_carrier, net) - AIRoleRushD.RETREAT_FINISH_M, 0.01,
+			"on his line, where a ridden retreat ends")
+	assert_gt(d.target_velocity.length(), 0.0, "still moving with him")
 	assert_lt(d.target_velocity.length(), WALL_CARRIER_VEL.length(),
-			"a stand held at the net front does not ride at his whole pace")
+			"but a stand held at the net front does not ride at his whole pace")
 
 
 func test_a_marker_with_a_man_still_covers_him() -> void:
