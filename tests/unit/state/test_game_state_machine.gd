@@ -984,17 +984,7 @@ func test_apply_remote_faceoff_prep_does_not_regress_from_faceoff() -> void:
 	assert_false(changed)
 	assert_eq(sm.current_phase, GamePhase.Phase.FACEOFF)
 
-# ── Faceoff positions ───────────────────────────────────────────────────────
-
-func test_faceoff_positions_per_player_slot() -> void:
-	var host_assignment: Dictionary = sm.register_host(1)
-	var peer_assignment: Dictionary = sm.on_player_connected(100)
-	var positions: Dictionary = sm.get_faceoff_positions()
-	assert_eq(positions.size(), 2)
-	assert_eq(positions[1],
-			PlayerRules.faceoff_position(host_assignment.team_id, host_assignment.team_slot))
-	assert_eq(positions[100],
-			PlayerRules.faceoff_position(peer_assignment.team_id, peer_assignment.team_slot))
+# ── The faceoff dot ──────────────────────────────────────────────────────────
 
 func test_active_faceoff_dot_defaults_to_center() -> void:
 	assert_eq(sm.active_faceoff_dot, GameRules.CENTER_ICE_DOT)
@@ -1016,15 +1006,6 @@ func test_period_advance_resets_dot_to_center() -> void:
 	sm.tick(GameRules.PERIOD_DURATION + 0.01)        # → END_OF_PERIOD
 	sm.tick(GameRules.INTERMISSION_DURATION + 0.01)  # → FACEOFF_PREP
 	assert_eq(sm.active_faceoff_dot, GameRules.CENTER_ICE_DOT)
-
-func test_get_faceoff_positions_uses_active_dot() -> void:
-	sm.register_host(1)
-	var dot := Vector2(6.5, 22.1)
-	sm.begin_faceoff_prep(dot)
-	var positions: Dictionary = sm.get_faceoff_positions()
-	var slot: Dictionary = sm.players[1]
-	assert_eq(positions[1],
-			PlayerRules.faceoff_position(slot.team_id, slot.team_slot, dot))
 
 # ── Penalties ────────────────────────────────────────────────────────────────
 

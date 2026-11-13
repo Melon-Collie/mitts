@@ -12,6 +12,13 @@ const SIZE: int = 5
 const PERIOD_S: float = 240.0
 const INTO_WALL := Vector3(1.0, 0.0, 0.0)
 
+class _TeleportSpy extends SkaterController:
+	var teleported_to: Array = []
+
+	func teleport_to(pos: Vector3, _facing: Vector2 = Vector2.ZERO) -> void:
+		teleported_to.append(pos)
+
+
 var _registry: PlayerRegistry = null
 var _tracker: PenaltyTracker = null
 var _teams: Array[Team] = []
@@ -181,6 +188,31 @@ func test_a_power_play_goal_releases_him() -> void:
 	_tracker.on_goal(1, SIZE)
 	assert_false(_skater(HITTER).in_box)
 	assert_eq(_released, [HITTER] as Array[int])
+
+
+# ── A skater who arrives late ────────────────────────────────────────────────
+
+func test_a_skater_who_arrives_during_a_penalty_shot_is_held_at_his_bench() -> void:
+	_tracker.ledger.call_foul(HITTER, 0, PenaltyRules.Foul.INTERFERENCE, VICTIM)
+	_tracker.assess_pending(PERIOD_S, 3)
+	var late: PlayerRecord = _add_player(9, 0)
+	late.team_slot = 1
+	var controller := _TeleportSpy.new()
+	autofree(controller)
+	late.controller = controller
+	_tracker.seat_late_arrival(late)
+	assert_true(late.skater.sidelined)
+	assert_eq(controller.teleported_to, [PlayerRules.bench_start_position(0, 1)])
+
+
+func test_a_skater_who_arrives_in_open_play_is_left_where_he_spawned() -> void:
+	var late: PlayerRecord = _add_player(9, 0)
+	var controller := _TeleportSpy.new()
+	autofree(controller)
+	late.controller = controller
+	_tracker.seat_late_arrival(late)
+	assert_false(late.skater.sidelined)
+	assert_eq(controller.teleported_to, [])
 
 
 # ── What it costs, for the stat sheet ────────────────────────────────────────

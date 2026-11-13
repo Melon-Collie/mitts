@@ -34,6 +34,13 @@ func note_strength(short_handed_team_id: int, began: bool) -> void:
 			record.stats.pp_opportunities += 1
 
 
+# A player who rejoins comes back under a new peer id, and is not counted a
+# second time for the power play he dropped out of.
+func rebind(old_peer_id: int, new_peer_id: int) -> void:
+	if _counted.erase(old_peer_id):
+		_counted[new_peer_id] = true
+
+
 # A goal against the shorter team, before the goal lets anyone out of the box.
 func note_power_play_goal(short_handed_team_id: int) -> void:
 	# A skater who joined the match since the box last changed is counted now.

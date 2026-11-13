@@ -64,10 +64,12 @@ func clear() -> void:
 # ── Host: the call ───────────────────────────────────────────────────────────
 
 # HitTracker.opposing_contact. Sustained contact re-fires this every tick, so
-# the gates PenaltyRules.judge would fail anyway come first.
+# the gates PenaltyRules.judge would fail anyway come first. `puck_in_play` is
+# false in the celebration after a goal.
 func on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
 		hit_dir: Vector3, attacker_has_puck: bool, victim_is_carrier: bool,
-		seconds_since_victim_lost_puck: float, attacker_committed: bool) -> void:
+		seconds_since_victim_lost_puck: float, attacker_committed: bool,
+		puck_in_play: bool = true) -> void:
 	if not attacker_committed or attacker_has_puck \
 			or force < HitRules.FULL_CHECK_IMPULSE:
 		return
@@ -79,7 +81,7 @@ func on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
 		return
 	var victim_pos: Vector3 = victim.skater.global_position
 	var puck: Puck = _puck_getter.call() as Puck
-	var puck_loose: bool = puck != null and puck.carrier == null
+	var puck_loose: bool = puck_in_play and puck != null and puck.carrier == null
 	var puck_dist: float = INF
 	if puck != null:
 		puck_dist = Vector2(puck.global_position.x - victim_pos.x,
@@ -165,7 +167,6 @@ func _stage_shot() -> void:
 		return
 	var attack_dir_z: float = -PlayerRules.own_goal_dir(shooter.team.team_id)
 	_shot.max_wait_s = _SHOT_COLLECT_S
-	_shot.ends_when_shot_dies = true
 	_shot.begin(attack_dir_z, attack_dir_z * GameRules.GOAL_LINE_Z, GameRules.NET_HALF_WIDTH)
 	_shot_saved = false
 	penalty_assessed.emit(ledger.shot_offender_peer_id())
@@ -264,6 +265,19 @@ func apply_box_state() -> void:
 		shot_over.emit()
 	else:
 		shot_staged.emit(shooter)
+
+
+# A skater spawned since the ledger last changed takes the flags it gives him.
+# One who arrives during a penalty shot is put at his bench, where the shot's
+# placement skated everyone else.
+func seat_late_arrival(record: PlayerRecord) -> void:
+	apply_box_state()
+	if record.skater == null or not record.skater.sidelined \
+			or record.controller == null or record.team == null:
+		return
+	record.controller.teleport_to(
+			PlayerRules.bench_start_position(record.team.team_id, record.team_slot),
+			PlayerRules.bench_facing())
 
 
 # Hides a boxed skater once he has reached his door, or once play is back on.

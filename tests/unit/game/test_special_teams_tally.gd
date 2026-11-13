@@ -90,6 +90,16 @@ func test_a_skater_who_arrived_mid_power_play_is_counted_before_its_goal() -> vo
 			"never a goal against without the kill it came on")
 
 
+func test_a_player_who_rejoins_is_not_counted_twice_for_one_power_play() -> void:
+	_tally.note_strength(SHORT, true)
+	var stats: PlayerStats = _stats(KILLER)
+	_registry._players.erase(KILLER)
+	_add_player(77, 1).stats = stats
+	_tally.rebind(KILLER, 77)
+	_tally.note_strength(SHORT, false)
+	assert_eq(stats.pk_opportunities, 1)
+
+
 func test_a_new_power_play_counts_everyone_again() -> void:
 	_tally.note_strength(SHORT, true)
 	_tally.note_strength(-1, false)

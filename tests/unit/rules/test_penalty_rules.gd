@@ -114,6 +114,33 @@ func test_a_man_playing_a_loose_puck_may_be_hit() -> void:
 
 # ── Boarding's geometry ──────────────────────────────────────────────────────
 
+func test_nobody_is_playing_a_puck_that_is_not_in_play() -> void:
+	assert_false(PenaltyRules.is_eligible_to_be_hit(false, INF, false, 0.5))
+
+
+func test_contact_is_judged_while_the_puck_is_in_play() -> void:
+	assert_true(PenaltyRules.judges_contact(GamePhase.Phase.PLAYING, 0.0))
+	assert_true(PenaltyRules.judges_contact(GamePhase.Phase.FACEOFF, 0.0),
+			"the puck is dropped: a check away from it is interference")
+
+
+func test_a_check_already_under_way_at_a_goal_is_let_go() -> void:
+	assert_false(PenaltyRules.judges_contact(GamePhase.Phase.GOAL_CELEBRATION, 0.0))
+	assert_false(PenaltyRules.judges_contact(GamePhase.Phase.GOAL_CELEBRATION,
+			PenaltyRules.WHISTLE_GRACE_S - 0.01))
+
+
+func test_a_check_thrown_in_the_celebration_is_judged() -> void:
+	assert_true(PenaltyRules.judges_contact(GamePhase.Phase.GOAL_CELEBRATION,
+			PenaltyRules.WHISTLE_GRACE_S))
+
+
+func test_no_contact_is_judged_in_a_stoppage_that_holds_the_skaters() -> void:
+	for phase: int in [GamePhase.Phase.FACEOFF_PREP, GamePhase.Phase.GOAL_SCORED,
+			GamePhase.Phase.END_OF_PERIOD, GamePhase.Phase.GAME_OVER, GamePhase.Phase.FIGHT]:
+		assert_false(PenaltyRules.judges_contact(phase, 10.0), GamePhase.Phase.keys()[phase])
+
+
 func test_a_hit_drives_into_the_boards_within_45_degrees_of_square() -> void:
 	assert_true(PenaltyRules.is_driven_into_boards(INTO_WALL, WALL_OUT))
 	assert_true(PenaltyRules.is_driven_into_boards(Vector2(1.0, 0.9).normalized(), WALL_OUT))

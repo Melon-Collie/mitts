@@ -1225,13 +1225,13 @@ func last_penalty_facts() -> String:
 func _on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
 		hit_dir: Vector3, attacker_has_puck: bool, victim_is_carrier: bool,
 		seconds_since_victim_lost_puck: float, attacker_committed: bool) -> void:
-	if not NetworkManager.is_host or _state_machine == null \
-			or _state_machine.current_phase != GamePhase.Phase.PLAYING \
-			or not _fouls_called():
+	if not NetworkManager.is_host or _state_machine == null or not _fouls_called() \
+			or not PenaltyRules.judges_contact(_state_machine.current_phase,
+					_state_machine.seconds_in_phase()):
 		return
 	_penalties.on_opposing_contact(hitter_peer_id, victim_peer_id, force, hit_dir,
 			attacker_has_puck, victim_is_carrier, seconds_since_victim_lost_puck,
-			attacker_committed)
+			attacker_committed, PhaseRules.is_puck_live_phase(_state_machine.current_phase))
 
 
 func _on_penalty_foul_called(peer_id: int, foul: int) -> void:
@@ -1814,6 +1814,7 @@ func _restore_reserved_player(peer_id: int, steam_id: int, config: Dictionary) -
 	var rec: PlayerRecord = _registry.get_record(peer_id)
 	if rec != null:
 		rec.stats = res.stats
+	_special_teams.rebind(res.peer_id, peer_id)
 	# A player who dropped mid-penalty comes back into the box.
 	if _penalties != null and _penalties.ledger.is_boxed(res.peer_id):
 		_penalties.ledger.rebind(res.peer_id, peer_id)
@@ -3547,6 +3548,8 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 	var snd := SkaterSoundController.new()
 	record.skater.add_child(snd)
 	snd.setup(record.skater, record.controller)
+	if _penalties != null:
+		_penalties.seat_late_arrival(record)
 
 
 func _on_registry_player_added(record: PlayerRecord) -> void:
@@ -3574,6 +3577,8 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 	snap.loose_puck_released_by = _loose_puck_released_by \
 			if puck != null and puck.get_carrier() == null else -1
 	snap.fouls_called = _state_machine != null and _fouls_called()
+	snap.puck_in_play = _state_machine == null \
+			or PhaseRules.is_puck_live_phase(_state_machine.current_phase)
 	snap.short_handed_team_id = _state_machine.short_handed_team_id \
 			if _state_machine != null else -1
 	for pid: int in _tag_up_peers:

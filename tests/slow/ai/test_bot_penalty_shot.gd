@@ -21,7 +21,6 @@ func _take_a_shot(profile: BotSkillProfile) -> Dictionary:
 	var attack_dir_z: float = -PlayerRules.own_goal_dir(TEAM)
 	var attempt := PenaltyShotAttempt.new()
 	attempt.max_wait_s = GameRules.FACEOFF_TIMEOUT
-	attempt.ends_when_shot_dies = true
 	attempt.begin(attack_dir_z, attack_dir_z * GameRules.GOAL_LINE_Z, GameRules.NET_HALF_WIDTH)
 	var outcome: PenaltyShotRules.Outcome = LIVE
 	var collected_at: float = -1.0

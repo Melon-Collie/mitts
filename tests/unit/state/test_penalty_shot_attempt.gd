@@ -86,26 +86,17 @@ func test_a_puck_across_the_line_wide_is_a_miss() -> void:
 	assert_eq(_in_flight(0.1, GOAL_LINE - 0.5, -20.0, GameRules.NET_HALF_WIDTH + 1.0), MISS)
 
 
-func test_the_drill_lets_a_saved_shot_play_on() -> void:
-	_carry(1.5, 6.0)
-	assert_eq(_in_flight(3.0, GOAL_LINE + 1.0, 4.0), LIVE,
-			"kicked back out, and the drill waits for it")
-
-
-func test_a_matchs_shot_is_over_once_it_is_kicked_back_out() -> void:
-	_attempt.ends_when_shot_dies = true
+func test_a_shot_is_over_once_it_is_kicked_back_out() -> void:
 	_carry(1.5, 6.0)
 	assert_eq(_in_flight(1.0, GOAL_LINE + 1.0, 4.0), MISS)
 
 
-func test_a_matchs_shot_still_going_at_the_net_is_live() -> void:
-	_attempt.ends_when_shot_dies = true
+func test_a_shot_still_going_at_the_net_is_live() -> void:
 	_carry(1.5, 6.0)
 	assert_eq(_in_flight(0.5, GOAL_LINE + 6.0, -15.0), LIVE)
 
 
 func test_a_shot_off_the_goalie_and_in_still_counts() -> void:
-	_attempt.ends_when_shot_dies = true
 	_carry(1.5, 6.0)
 	_in_flight(0.3, GOAL_LINE + 1.0, -2.0)
 	assert_eq(_in_flight(0.1, GOAL_LINE - 0.5, -2.0), GOAL, "trickling in is still going in")

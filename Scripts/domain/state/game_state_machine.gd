@@ -760,6 +760,10 @@ func apply_remote_faceoff_prep() -> bool:
 
 # ── Queries ──────────────────────────────────────────────────────────────────
 
+func seconds_in_phase() -> float:
+	return _phase_timer
+
+
 func is_movement_locked() -> bool:
 	return PhaseRules.is_movement_locked(current_phase)
 
@@ -784,17 +788,6 @@ func set_faceoff_prep_extra(extra: float) -> void:
 	if current_phase != GamePhase.Phase.FACEOFF_PREP:
 		return
 	_prep_extra_time = maxf(extra, 0.0)
-
-# Returns { peer_id: Vector3 } — each player's faceoff position derived from
-# their slot/team around the active dot. PlayerRules.faceoff_position is the
-# single source of truth; we hold no cached positions ourselves.
-func get_faceoff_positions() -> Dictionary:
-	var result: Dictionary = {}
-	for peer_id in players:
-		var p: Dictionary = players[peer_id]
-		result[peer_id] = PlayerRules.faceoff_position(
-				p.team_id, p.team_slot, active_faceoff_dot, -1.0, team_size)
-	return result
 
 
 # ── Internal ─────────────────────────────────────────────────────────────────

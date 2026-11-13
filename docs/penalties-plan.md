@@ -240,12 +240,12 @@ does on a phase change had to learn a new phase.
   team called twice in one delay gives up one shot, to the man fouled first.
   If the man fouled has left the match, no shot is taken.
 - **The attempt** is `PenaltyShotAttempt`, the running numbers
-  `PenaltyShotRules.classify` reads, which the drill now steps too. In a match
-  it also ends the shot when the shooter never collects the puck
-  (`FACEOFF_TIMEOUT`), when the goalie covers it, and when the puck has left
-  the blade and is no longer going at the net (`PenaltyShotRules.shot_is_dead`:
-  a save, a post, a puck lost wide). There are no rebounds. The drill keeps
-  its old behaviour and lets a saved puck play on.
+  `PenaltyShotRules.classify` reads, which the drill steps too. A shot is
+  over once the puck has left the blade and is no longer going at the net
+  (`PenaltyShotRules.shot_is_dead`: a save, a post, a puck lost wide), in the
+  drill as in a match: there are no rebounds. A match also ends it when the
+  shooter never collects the puck (`FACEOFF_TIMEOUT`) and when the goalie
+  covers it.
 - **A goal** is the goal line's to call, through the ordinary goal pipeline:
   the shooter is credited, there are no assists (the stoppage cleared the
   chain), and the celebration, the replay and the centre-ice faceoff follow.
@@ -258,8 +258,9 @@ does on a phase change had to learn a new phase.
   rules, and shoots from in close (*slow* `test_bot_penalty_shot.gd`). The harness's
   goalie is the static one, so its scoring rate says nothing.
 
-Known gaps: a player who joins while a shot is on is not sidelined until the
-next ledger change; and the shot's banner stays up over the play.
+A skater who joins while a shot is on is sidelined as he spawns and put at
+his bench (`PenaltyTracker.seat_late_arrival`). Known gap: the shot's banner
+stays up over the play.
 
 ## 6. Fights (Phase 4, as built)
 
@@ -390,8 +391,14 @@ Known gaps, each small enough to leave for the playtest to rank:
   it puts `in_box` in the snapshot (the body-state byte has two spare bits).
 - **The box camera's seat is unseen.** Its position is derived from the rink's
   numbers and has not been rendered or played.
-- **A foul after the whistle** is not judged, and neither is contact in the
-  goal celebration.
+- **Contact is judged wherever skaters are free to make it**
+  (`PenaltyRules.judges_contact`): in live play, at a dropped faceoff before
+  the first touch, and in the celebration after a goal. With the play dead
+  nobody is playing the puck, so there any full check is interference; a
+  check already on its way when the goal went in has `WHISTLE_GRACE_S` to
+  land. The call is assessed at the faceoff after the goal, which stays at
+  centre. Every other stoppage holds the skaters. Bots read the same thing
+  off `WorldSnapshot.puck_in_play`.
 - **The replay records no event for a call.**
 
 ## Phase 6 as built

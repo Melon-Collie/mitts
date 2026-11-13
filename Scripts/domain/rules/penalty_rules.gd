@@ -18,6 +18,10 @@ const BOARDING_TURN_GRACE_S: float = 0.3
 # A man this close to a loose puck is playing it, and may be hit.
 const INTERFERENCE_PUCK_REACH_M: float = 2.0
 
+# A check already on its way when a goal stops the play is let go: the same
+# beat a finished check gets on a man who has just moved the puck.
+const WHISTLE_GRACE_S: float = HitRules.JUST_RELEASED_GRACE_S
+
 # A minor is the share of a period two minutes is of twenty.
 const MINOR_PERIOD_SHARE: float = 0.1
 const MINOR_MIN_S: float = 15.0
@@ -30,6 +34,15 @@ const MINOR_PIM: int = 2
 # Fouls are called under NHL rules.
 static func calls_fouls(rule_set: int, practice: bool) -> bool:
 	return rule_set == GameRules.RuleSet.NHL and not practice
+
+
+# Whether a contact is the referee's to judge: while the puck is in play (a
+# dropped faceoff included), and in the celebration after a goal once
+# WHISTLE_GRACE_S of it has gone. Every other stoppage holds the skaters.
+static func judges_contact(phase: int, seconds_in_phase: float) -> bool:
+	if PhaseRules.is_puck_live_phase(phase):
+		return true
+	return phase == GamePhase.Phase.GOAL_CELEBRATION and seconds_in_phase >= WHISTLE_GRACE_S
 
 
 # A fight costs each fighter a minor where a foul is a minor. In 3v3 it costs
@@ -73,7 +86,8 @@ static func is_hit_from_behind(victim_facing: Vector2, hit_dir: Vector2) -> bool
 
 
 # A man may be checked while he has the puck, just after he lost or released
-# it, and while he is playing a loose one.
+# it, and while he is playing a loose one. `puck_is_loose` is false with the
+# play dead: nobody is playing a puck that is not in play.
 static func is_eligible_to_be_hit(victim_is_carrier: bool,
 		seconds_since_victim_lost_possession: float,
 		puck_is_loose: bool, victim_to_puck_m: float) -> bool:

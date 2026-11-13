@@ -56,7 +56,8 @@ func apply(input: InputState, snapshot: WorldSnapshot) -> void:
 				if pid == _lost_puck_pid else INF
 		if AIFoulRead.would_foul(me.position, me.velocity, weight, man,
 				man_caps.body_radius if man_caps != null else _LEAGUE_BODY_RADIUS_M,
-				pid == carrier_pid, since_lost, carrier_pid == -1,
+				pid == carrier_pid, since_lost,
+				carrier_pid == -1 and snapshot.puck_in_play,
 				snapshot.puck_state.position):
 			input.hit_held = false
 			return

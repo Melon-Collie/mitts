@@ -15,9 +15,6 @@ var cfg := PenaltyShotRules.Config.new()
 var max_live_s: float = 20.0
 # How long the shooter has to collect the puck; INF waits for him.
 var max_wait_s: float = INF
-# Whether a shot is over once the puck is off the blade and no longer going at
-# the net (PenaltyShotRules.shot_is_dead): a save, a post, a puck lost wide.
-var ends_when_shot_dies: bool = false
 
 var _attack_dir_z: float = -1.0
 var _goal_line_z: float = 0.0
@@ -96,7 +93,7 @@ func step(delta: float, shooter_z: float, shooter_has_puck: bool,
 			_attack_dir_z, _goal_line_z, _half_width, cfg)
 	if outcome != PenaltyShotRules.Outcome.LIVE:
 		return outcome
-	if _released and ends_when_shot_dies:
+	if _released:
 		_released_time += delta
 		if PenaltyShotRules.shot_is_dead(puck_vel_z, _attack_dir_z, _released_time):
 			return PenaltyShotRules.Outcome.MISS
