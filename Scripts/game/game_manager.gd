@@ -2227,6 +2227,9 @@ func _wire_subsystems() -> void:
 	# shot's flight.
 	_turnover_tracker = TurnoverTracker.new()
 	_turnover_tracker.setup(_registry)
+	# The faceoff placement's draw-taker, which a boxed centre never is.
+	_turnover_tracker.set_draw_taker_check(func(r: PlayerRecord) -> bool:
+		return r.skater != null and r.skater.is_faceoff_center)
 	_feat_tracker = FeatTracker.new()
 	_feat_tracker.setup(_registry)
 	_turnover_tracker.possession_won.connect(_feat_tracker.on_possession_won)
@@ -3322,7 +3325,6 @@ func _build_replay_footer() -> Dictionary:
 				"shots_blocked": r.stats.shots_blocked,
 				"hits_taken": r.stats.hits_taken,
 				"takeaways": r.stats.takeaways,
-				"interceptions": r.stats.interceptions,
 				"giveaways": r.stats.giveaways,
 				"faceoff_wins": r.stats.faceoff_wins,
 				"faceoff_losses": r.stats.faceoff_losses,

@@ -478,7 +478,6 @@ func _on_totals_received(totals: Dictionary) -> void:
 	_add_stat_group("Two-way", [
 		["+/-", "%+d" % _safe_int(totals.get("plus_minus", 0))],
 		["Takeaways", str(_safe_int(totals.get("takeaways", 0)))],
-		[tr(&"CAREER_INTERCEPTIONS"), str(_safe_int(totals.get("interceptions", 0)))],
 		["Giveaways", str(_safe_int(totals.get("giveaways", 0)))],
 		["Faceoff %", "%.1f%%" % _safe_float(totals.get("faceoff_pct", 0.0))
 				if faceoff_taken > 0 else "—"],
