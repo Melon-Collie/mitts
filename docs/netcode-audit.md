@@ -58,11 +58,13 @@ are addressable incrementally.
 - **Addressed — B3:** `STATE_RATE` is 45, and snapshots go as XOR deltas
   against each client's newest ack, zstd-packed (`SnapshotDelta`,
   `WirePacking`, #912). (a) is unexplored.
-- **Fixed since:** F9 (the reconcile replay decides whether the host's shot
+- **Fixed since:** A1 (the client's probes are unreliable like the host's; warm-up
+  holds its cadence until the clock is ready, and the host's own probe answers
+  refresh liveness, so a lost probe never costs a sample or a kick); F9 (the reconcile replay decides whether the host's shot
   state is only late, `ShotStateAuthority.server_applies`); F10 is now
   load-bearing rather than tuning — 1.0 is what puts remote skaters on the one
   render clock (`Scripts/networking/CLAUDE.md`).
-- **Open:** A1–A4 (clock foundation; per-tick stamps moved to `sim_time()`, but
+- **Open:** A2–A4 (clock foundation; per-tick stamps moved to `sim_time()`, but
   the offset, the probes and render time are as described), B1–B2 (channels /
   replay-event packing), E1 (encode; the per-packet decode allocations were
   declined in #909), E2 (per-tick `PredictedState`; the host's batch sort now

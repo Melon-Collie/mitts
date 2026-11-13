@@ -328,7 +328,10 @@ var _pending_handshake: Dictionary[int, float] = {}
 const _HANDSHAKE_TIMEOUT_S: float = 10.0
 const _KICK_FLUSH_DELAY_S: float = 0.5
 # Host: last time (local_time()) each connected peer sent us anything — input
-# batches (~input rate) or clock-sync pings (every 2s). Swept in _process; a peer
+# batches (~input rate), its clock-sync pings and its answers to the host's own
+# (each every 2 s). In the lobby and for a spectator the two probe streams are
+# all there is, and both are unreliable, so a peer is dropped only when both lose
+# every packet for the whole timeout, never on one lost probe. Swept in _process; a peer
 # silent past _PEER_LIVENESS_TIMEOUT_S is force-disconnected. ENet's per-peer
 # timeout used to cover this; Steam's relay keepalive does eventually, but ~2x
 # slower, so a hard-crashed or network-yanked peer's skater lingers frozen on
@@ -1516,8 +1519,7 @@ func receive_input_batch(data: PackedByteArray) -> void:
 		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	# Liveness: stamp actual receipt time (before any NetworkSimManager delay).
-	if _peer_last_seen.has(sender_id):
-		_peer_last_seen[sender_id] = maxf(_peer_last_seen[sender_id], local_time())
+	_note_peer_alive(sender_id)
 	if not _rate_ok(sender_id, _INPUT_BATCH_RATE_CAP_PER_S,
 			_input_rate_window_start, _input_rate_count):
 		return
@@ -1661,19 +1663,21 @@ func _apply_world_state(packed: PackedByteArray) -> void:
 	world_state_received.emit(s)
 
 # ── Clock Sync ────────────────────────────────────────────────────────────────
-@rpc("any_peer", "reliable")
+# Unreliable, both ways: a probe that waits on a retransmit, or queues behind
+# other reliable traffic, comes back with that wait in its round trip and skews
+# the offset by half of it. A lost probe only skips a sample.
+@rpc("any_peer", "unreliable")
 func send_ping(client_send_time: float) -> void:
 	if not is_host:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
-	if _peer_last_seen.has(peer_id):
-		_peer_last_seen[peer_id] = maxf(_peer_last_seen[peer_id], local_time())
+	_note_peer_alive(peer_id)
 	NetworkSimManager.send(
 		func(cst: float, pid: int) -> void:
 			receive_pong.rpc_id(pid, cst, local_time()),
-		[client_send_time, peer_id], true)
+		[client_send_time, peer_id], false)
 
-@rpc("authority", "reliable")
+@rpc("authority", "unreliable")
 func receive_pong(client_send_time: float, host_time: float) -> void:
 	if is_host or _clock_sync == null:
 		return
@@ -1683,7 +1687,7 @@ func receive_pong(client_send_time: float, host_time: float) -> void:
 			_clock_sync.record_pong(cst, ht, local_time())
 			if not was_ready and _clock_sync.is_ready:
 				clock_ready.emit(),
-		[client_send_time, host_time], true)
+		[client_send_time, host_time], false)
 
 # ── Host-measured peer RTT ────────────────────────────────────────────────────
 # The host times a round trip to each peer ITSELF so lag-comp claim validation
@@ -1714,6 +1718,7 @@ func host_pong(host_send_time: float) -> void:
 		return
 	# Capture the sender before the sim defers the callable (it loses RPC context).
 	var peer_id: int = multiplayer.get_remote_sender_id()
+	_note_peer_alive(peer_id)
 	NetworkSimManager.send(
 		func(pid: int, sent: float) -> void:
 			_record_host_measured_rtt(pid, (local_time() - sent) * 1000.0),
@@ -2649,6 +2654,11 @@ func notify_game_start(p_num_periods: int, p_period_duration: float,
 func sync_lobby_roster(roster: Array) -> void:
 	pending_lobby_roster = roster
 	lobby_roster_synced.emit(roster)
+
+func _note_peer_alive(peer_id: int) -> void:
+	if _peer_last_seen.has(peer_id):
+		_peer_last_seen[peer_id] = maxf(_peer_last_seen[peer_id], local_time())
+
 
 func _grant_load_grace(peer_id: int) -> void:
 	if _peer_last_seen.has(peer_id):

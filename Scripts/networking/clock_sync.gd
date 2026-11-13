@@ -69,19 +69,20 @@ var last_correction_ms: float = 0.0
 var _offset: float = 0.0
 var _last_estimated_time: float = 0.0
 var _samples: Array = []  # Array of {rtt: float, offset: float}
-var _pings_sent: int = 0
 var _timer: float = 0.0
 var _session_start_ms: int = 0
 
 func init_session(ms: int) -> void:
 	_session_start_ms = ms
 
+# Warm-up keeps the quick cadence until enough pongs have LANDED, not until
+# enough pings were sent: the probes are unreliable, and one lost in warm-up
+# would otherwise hold the clock unready for a whole ongoing interval.
 func tick(delta: float) -> bool:
 	_timer -= delta
 	if _timer > 0.0:
 		return false
-	_timer = INITIAL_PING_INTERVAL if _pings_sent < INITIAL_PING_COUNT else ONGOING_PING_INTERVAL
-	_pings_sent += 1
+	_timer = ONGOING_PING_INTERVAL if is_ready else INITIAL_PING_INTERVAL
 	return true
 
 func record_pong(client_send_time: float, host_time: float, recv_time: float) -> void:

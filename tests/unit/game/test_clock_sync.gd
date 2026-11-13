@@ -170,3 +170,52 @@ func test_lead_never_touches_the_ntp_offset() -> void:
 	var lead_gap: float = cs.estimated_input_stamp_time() - cs.estimated_host_time()
 	assert_almost_eq(lead_gap, cs.current_input_lead_s(), 2e-3,
 			"stamp lead is the lead, with no offset drift folded in")
+
+
+# ── Probe cadence ────────────────────────────────────────────────────────────
+
+func _ticks_until_ping(cs: RefCounted, step: float) -> float:
+	var waited: float = 0.0
+	while not cs.tick(step):
+		waited += step
+	return waited + step
+
+
+func test_lost_warmup_probes_cost_only_warmup_intervals() -> void:
+	var cs := _make()
+	var step: float = 0.01
+	assert_true(cs.tick(step), "the first probe goes at once")
+	# Four probes go out and two are lost: two pongs land.
+	for i in range(3):
+		_ticks_until_ping(cs, step)
+		if i > 0:
+			cs.record_pong(0.0, 0.05, 0.1)
+	assert_false(cs.is_ready, "the control: two samples are not a clock")
+	var wait: float = _ticks_until_ping(cs, step)
+	assert_almost_eq(wait, cs.INITIAL_PING_INTERVAL, step * 1.5,
+			"the next probe follows at the warm-up interval, not the ongoing one")
+
+
+func test_a_ready_clock_probes_at_the_ongoing_interval() -> void:
+	var cs := _make()
+	var step: float = 0.01
+	cs.tick(step)
+	for _i in range(3):
+		cs.record_pong(0.0, 0.05, 0.1)
+	assert_true(cs.is_ready)
+	_ticks_until_ping(cs, step)  # the one already scheduled at the warm-up interval
+	var wait: float = _ticks_until_ping(cs, step)
+	assert_almost_eq(wait, cs.ONGOING_PING_INTERVAL, step * 1.5)
+
+
+# A probe that waits on a retransmit, or behind other reliable traffic, carries
+# that wait in its round trip and skews the offset by half of it.
+func test_every_timing_probe_is_unreliable() -> void:
+	var src: String = FileAccess.get_file_as_string("res://Scripts/networking/network_manager.gd")
+	for probe: String in ["send_ping", "receive_pong", "host_ping", "host_pong"]:
+		var at: int = src.find("\nfunc %s(" % probe)
+		assert_gt(at, -1, "%s exists" % probe)
+		var rpc_at: int = src.rfind("@rpc(", at)
+		var annotation: String = src.substr(rpc_at, src.find("\n", rpc_at) - rpc_at)
+		assert_true(annotation.contains("\"unreliable\""),
+				"%s is %s" % [probe, annotation])
