@@ -1,8 +1,10 @@
 extends RefCounted
 
-const INITIAL_PING_COUNT: int = 3
-const INITIAL_PING_INTERVAL: float = 0.5
-const ONGOING_PING_INTERVAL: float = 2.0
+# Warm-up probes densely and starts the clock on the mean of the best four of
+# six round trips (OUTLIER_DROP), at about half a second plus a round trip.
+const INITIAL_PING_COUNT: int = 6
+const INITIAL_PING_INTERVAL: float = 0.1
+const ONGOING_PING_INTERVAL: float = 1.0
 const SAMPLE_WINDOW: int = 8
 const OUTLIER_DROP: int = 2
 const OFFSET_EMA_ALPHA: float = 0.3  # after is_ready; ~3 pings to reach 66% of a new target

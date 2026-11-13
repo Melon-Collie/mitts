@@ -62,15 +62,17 @@ are addressable incrementally.
   holds its cadence until the clock is ready, and the host's own probe answers
   refresh liveness, so a lost probe never costs a sample or a kick); A3 (the
   session clock reads `get_ticks_usec`); A4 (the clock reads an applied offset
-  slewed toward the NTP estimate at 5 ms/s, snapping only past 100 ms); F9 (the reconcile replay decides whether the host's shot
+  slewed toward the NTP estimate at 5 ms/s, snapping only past 100 ms); A2's
+  cadence (warm-up probes every 0.1 s and starts on the best four of six round
+  trips, then a probe a second); E3 (a gap past a second is a designed pause on
+  both ends, `NetworkManager.is_cadence_gap`); F9 (the reconcile replay decides whether the host's shot
   state is only late, `ShotStateAuthority.server_applies`); F10 is now
   load-bearing rather than tuning — 1.0 is what puts remote skaters on the one
   render clock (`Scripts/networking/CLAUDE.md`).
-- **Open:** A2 (probe cadence, and steering the offset from the snapshot
-  stream), B1–B2 (channels /
+- **Open:** A2's servo (steering the offset from the snapshot stream), B1–B2 (channels /
   replay-event packing), E1 (encode; the per-packet decode allocations were
   declined in #909), E2 (per-tick `PredictedState`; the host's batch sort now
-  runs only on an out-of-order batch), E3, F6, F11.
+  runs only on an out-of-order batch), F6, F11.
 
 ## What clears the AAA bar (calibration — don't touch these)
 

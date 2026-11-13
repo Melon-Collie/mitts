@@ -15,22 +15,21 @@ func _make() -> RefCounted:
 
 func test_not_ready_before_initial_ping_count() -> void:
 	var cs := _make()
-	cs.record_pong(0.0, 0.05, 0.1)
-	cs.record_pong(0.0, 0.05, 0.1)
+	for _i in range(cs.INITIAL_PING_COUNT - 1):
+		cs.record_pong(0.0, 0.05, 0.1)
 	assert_false(cs.is_ready)
 
 
 func test_ready_after_initial_ping_count() -> void:
 	var cs := _make()
-	cs.record_pong(0.0, 0.05, 0.1)
-	cs.record_pong(0.0, 0.05, 0.1)
-	cs.record_pong(0.0, 0.05, 0.1)
+	for _i in range(cs.INITIAL_PING_COUNT):
+		cs.record_pong(0.0, 0.05, 0.1)
 	assert_true(cs.is_ready)
 
 
 func test_ready_stays_true_after_more_samples() -> void:
 	var cs := _make()
-	for i: int in 6:
+	for i: int in cs.INITIAL_PING_COUNT + 3:
 		cs.record_pong(0.0, 0.05, 0.1)
 	assert_true(cs.is_ready)
 
@@ -77,7 +76,7 @@ func test_zero_offset_when_clocks_are_in_sync() -> void:
 	# If host_time == midpoint of the round trip, offset should be ~0.
 	# send=0, recv=0.1, host_time=0.05 → rtt=0.1, offset=(0.05+0.05)-0.1=0
 	var cs := _make()
-	for i: int in 3:
+	for i: int in cs.INITIAL_PING_COUNT:
 		cs.record_pong(0.0, 0.05, 0.1)
 	# estimated_host_time ≈ local_time + 0 ≈ local_time
 	var now: float = Time.get_ticks_msec() / 1000.0
@@ -88,7 +87,7 @@ func test_positive_offset_when_host_is_ahead() -> void:
 	# host is 10 s ahead of client; mid-trip host_time should be ~(local+10+rtt/2)
 	# send=0, recv=0.1, host_time=10.05 → offset=(10.05+0.05)-0.1=10.0
 	var cs := _make()
-	for i: int in 3:
+	for i: int in cs.INITIAL_PING_COUNT:
 		cs.record_pong(0.0, 10.05, 0.1)
 	var now: float = Time.get_ticks_msec() / 1000.0
 	assert_almost_eq(cs.estimated_host_time(), now + 10.0, 0.05)
@@ -98,9 +97,8 @@ func test_positive_offset_when_host_is_ahead() -> void:
 
 func _ready_clock() -> RefCounted:
 	var cs := _make()
-	cs.record_pong(0.0, 0.05, 0.1)
-	cs.record_pong(0.0, 0.05, 0.1)
-	cs.record_pong(0.0, 0.05, 0.1)
+	for _i in range(cs.INITIAL_PING_COUNT):
+		cs.record_pong(0.0, 0.05, 0.1)
 	return cs
 
 
@@ -200,7 +198,7 @@ func test_a_ready_clock_probes_at_the_ongoing_interval() -> void:
 	var cs := _make()
 	var step: float = 0.01
 	cs.tick(step)
-	for _i in range(3):
+	for _i in range(cs.INITIAL_PING_COUNT):
 		cs.record_pong(0.0, 0.05, 0.1)
 	assert_true(cs.is_ready)
 	_ticks_until_ping(cs, step)  # the one already scheduled at the warm-up interval
@@ -296,3 +294,17 @@ func test_the_clock_resolves_under_a_millisecond() -> void:
 	while b == a and Time.get_ticks_usec() - start < 5000:
 		b = cs.estimated_host_time()
 	assert_lt(b - a, 0.0009, "consecutive distinct readings are under a millisecond apart")
+
+
+# Each round trip's offset carries its own error. The clock starts on the mean
+# of the best round trips of the warm-up, so errors that cancel, cancel; started
+# on the single best, it kept that sample's whole error for the first seconds.
+func test_the_clock_starts_on_several_round_trips() -> void:
+	var cs := _make()
+	var errors: Array[float] = [0.004, -0.004, 0.002, -0.002, 0.009, -0.009]
+	assert_eq(errors.size(), cs.INITIAL_PING_COUNT)
+	for i in range(errors.size()):
+		var rtt: float = 0.05 + 0.01 * float(i)  # the last two are the outliers dropped
+		cs.record_pong(0.0, rtt / 2.0 + errors[i], rtt)
+	assert_true(cs.is_ready)
+	assert_almost_eq(cs._offset, 0.0, 1e-9)

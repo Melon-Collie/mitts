@@ -328,8 +328,8 @@ var _pending_handshake: Dictionary[int, float] = {}
 const _HANDSHAKE_TIMEOUT_S: float = 10.0
 const _KICK_FLUSH_DELAY_S: float = 0.5
 # Host: last time (local_time()) each connected peer sent us anything — input
-# batches (~input rate), its clock-sync pings and its answers to the host's own
-# (each every 2 s). In the lobby and for a spectator the two probe streams are
+# batches (~input rate), its clock-sync pings (every second) and its answers to
+# the host's own (every 2 s). In the lobby and for a spectator the two probe streams are
 # all there is, and both are unreliable, so a peer is dropped only when both lose
 # every packet for the whole timeout, never on one lost probe. Swept in _process; a peer
 # silent past _PEER_LIVENESS_TIMEOUT_S is force-disconnected. ENet's per-peer
@@ -1177,6 +1177,14 @@ func is_broadcast_due() -> bool:
 # after StateBufferManager.capture(). The cadence counter advances in
 # `_physics_process` whether or not this runs, so a host stall's physics catch-up
 # still emits one broadcast per eligible tick.
+# Whether a gap between snapshots measures the send cadence. One past a second
+# is a designed pause — a goal replay or an intermission stops the broadcast —
+# and recorded it read as seconds of jitter: the host's interval p95 saturated,
+# and a client's jitter window and arrival histogram after every pause.
+static func is_cadence_gap(gap_s: float) -> bool:
+	return gap_s < 1.0
+
+
 func try_broadcast() -> void:
 	if not is_host:
 		return
@@ -1186,10 +1194,7 @@ func try_broadcast() -> void:
 	var now_us: int = Time.get_ticks_usec()
 	if _last_broadcast_us != 0:
 		var gap_us: int = now_us - _last_broadcast_us
-		# Gaps > 1 s are designed pauses (goal replay / intermission stop the
-		# broadcast entirely), not send-cadence sag — recording them saturated
-		# broadcast_interval_p95 at seconds and buried the real cadence signal.
-		if gap_us < 1_000_000:
+		if is_cadence_gap(gap_us / 1000000.0):
 			NetworkTelemetry.record_broadcast_interval_us(gap_us)
 	_last_broadcast_us = now_us
 	_broadcast_state()
@@ -1619,7 +1624,7 @@ func _apply_world_state(packed: PackedByteArray) -> void:
 	var keepers: PackedByteArray = s.slice(keepers_at.x, keepers_at.y)
 	s = KeeperWireTail.without(s, keepers_at)
 	var now: float = local_time()
-	if _last_ws_arrival_time > 0.0:
+	if _last_ws_arrival_time > 0.0 and is_cadence_gap(now - _last_ws_arrival_time):
 		var expected_interval: float = 1.0 / Constants.STATE_RATE
 		var gap: float = now - _last_ws_arrival_time
 		var jitter: float = absf(gap - expected_interval)
