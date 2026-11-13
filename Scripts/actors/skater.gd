@@ -1199,7 +1199,7 @@ func _physics_process(delta: float) -> void:
 	global_position += velocity * delta
 	# Capture velocity BEFORE the analytic skater-vs-skater resolution so the delta
 	# below isolates the body-check impulse (the resolver's self velocity change) for
-	# the reconcile replay recording.
+	# the hit feedback.
 	var vel_pre_body_check: Vector3 = velocity
 	_resolve_player_collisions()
 	var body_check_delta: Vector3 = velocity - vel_pre_body_check
@@ -1314,16 +1314,13 @@ func _resolve_player_collisions() -> void:
 			continue
 		# Self: separation + inelastic decel / drive-through, applied
 		# unconditionally (this machine simulates self wherever the resolver runs).
-		# Recorded for reconcile replay via the body_check_delta capture in
-		# _physics_process (velocity - vel_pre_body_check).
 		global_position += _collision_result.sep_a
 		my_pos = global_position
 		var self_delta: Vector3 = _collision_result.dvel_a
 		velocity += self_delta
 		# Both bodies take their own outcome (body_check_received) where this
 		# machine owns them: the host owns all, a client only its local predicted
-		# skater. The other's emit also records his incoming impulse for HIS
-		# reconcile replay; ours is captured by the body_check_delta above.
+		# skater.
 		if (is_host_machine or is_local_skater) and self_delta.length_squared() > 0.0001:
 			body_check_received.emit(self_delta,
 					_backstopped(self, other, self_delta, -n, transfer,
