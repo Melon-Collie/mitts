@@ -25,8 +25,8 @@ class_name TurnoverTracker extends RefCounted
 ## nothing until someone actually comes out of the pile with the puck.
 ##
 ## Faceoff wins follow the NHL definition: the draw is won by the team that
-## FIRST ESTABLISHES possession after the drop (credited to that team's
-## centre), not by the first blade to graze it. The win pends from the
+## FIRST ESTABLISHES possession after the drop (credited to whoever took the
+## draw for that team), not by the first blade to graze it. The win pends from the
 ## faceoff pickup until an establishment; resolve_pending_faceoff() is the
 ## terminal fallback (goal / whistle before anyone establishes) so every
 ## draw still gets a winner. While a draw is pending, no turnover is
@@ -55,6 +55,9 @@ const PASS_WINDOW_S: float = TurnoverRules.RECEIVER_MAX_DIST_M / AIPuckLane.SOFT
 var _registry: PlayerRegistry = null
 # () -> float seconds; wall clock unless a test injects one.
 var _clock: Callable = Callable()
+# (PlayerRecord) -> bool: whether he took the last draw for his team. Unset, no
+# one did, and a draw credits nobody.
+var _took_draw: Callable = Callable()
 # Last ESTABLISHED possession — the "previous owner" a new gain classifies
 # against. Unestablished touches never advance this.
 var _last_established_peer: int = -1
@@ -95,6 +98,10 @@ func setup(registry: PlayerRegistry) -> void:
 
 func set_clock(clock: Callable) -> void:
 	_clock = clock
+
+
+func set_draw_taker_check(took_draw: Callable) -> void:
+	_took_draw = took_draw
 
 
 # Possession gained by `peer_id`. `was_faceoff` = this pickup ended a faceoff
@@ -288,13 +295,16 @@ func _clear_candidate() -> void:
 
 
 func _credit_faceoff_win(winning_team: int) -> bool:
-	# The centre (team_slot 0) takes the draw, so the win/loss is theirs
-	# regardless of which linemate actually corralled the loose puck. The
-	# opposing centre is charged a loss so faceoff % has a real denominator.
+	# The win or loss is the draw-taker's, whichever linemate corralled the loose
+	# puck: never a centre who sat the draw out in the box, and nobody's at all
+	# when the "draw" was a penalty shot's pickup. The opposing draw-taker is
+	# charged a loss so faceoff % has a real denominator.
 	var credited: bool = false
+	if not _took_draw.is_valid():
+		return false
 	for pid: int in _registry.all():
 		var r: PlayerRecord = _registry.get_record(pid)
-		if r == null or r.team == null or r.team_slot != 0 or r.stats == null:
+		if r == null or r.team == null or r.stats == null or not bool(_took_draw.call(r)):
 			continue
 		if r.team.team_id == winning_team:
 			r.stats.faceoff_wins += 1

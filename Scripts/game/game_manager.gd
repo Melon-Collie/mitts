@@ -2227,6 +2227,9 @@ func _wire_subsystems() -> void:
 	# shot's flight.
 	_turnover_tracker = TurnoverTracker.new()
 	_turnover_tracker.setup(_registry)
+	# The faceoff placement's draw-taker, which a boxed centre never is.
+	_turnover_tracker.set_draw_taker_check(func(r: PlayerRecord) -> bool:
+		return r.skater != null and r.skater.is_faceoff_center)
 	_feat_tracker = FeatTracker.new()
 	_feat_tracker.setup(_registry)
 	_turnover_tracker.possession_won.connect(_feat_tracker.on_possession_won)
