@@ -1169,7 +1169,11 @@ reaches back into what remains.
     against the puck's own time to the crossing point, so it self-narrows with
     puck speed and stays "extend the stick", never a second chaser. It overrides
     the one-timer camp and the race-lost decline, and yields only to a **dead**
-    puck (the `-1` election) or a **teammate already first to it**.
+    puck (the `-1` election), a **teammate already first to it**, or a teammate
+    whose own band the puck's path reaches sooner
+    (`teammate_band_meets_first`): a slow feed crawling through our slot crosses
+    four bands, and one man breaks off his job for it, not four, who each
+    dropped the man he was covering.
 
 - **Teammates don't stab at each other's puck**
   (`AILoosePuckChase.teammate_first_to_puck`). The contested-pickup rule is

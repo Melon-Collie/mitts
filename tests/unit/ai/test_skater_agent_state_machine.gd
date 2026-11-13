@@ -136,6 +136,24 @@ func test_should_chase_a_puck_inside_our_reach_even_when_teammate_is_nearer() ->
 	assert_true(sm._should_chase_loose_puck(s, Vector3(4, 0, 0)))
 
 
+# A 4 m/s puck sliding along +X a metre off both teammates' skates, the
+# election naming the teammate: is it this bot's to chase from `self_x`?
+func _chases_a_slow_feed_from(self_x: float, teammate_x: float) -> bool:
+	var s := _loose_puck_snap(Vector3(-6, 0, 0))
+	s.puck_state.velocity = Vector3(4, 0, 0)
+	_add_skater(s, SELF_ID, Vector3(self_x, 0, 1))
+	_add_skater(s, TEAMMATE_ID, Vector3(teammate_x, 0, 1))
+	s.teammate_ids_by_team = {0: [SELF_ID, TEAMMATE_ID]}
+	s.closest_to_puck_by_team = {0: TEAMMATE_ID}
+	return sm._should_chase_loose_puck(s, Vector3(self_x, 0, 1))
+
+
+func test_a_puck_crossing_two_reach_bands_is_chased_by_the_man_it_reaches_first() -> void:
+	assert_true(_chases_a_slow_feed_from(-3.0, 0.0), "it comes to this bot first")
+	assert_false(_chases_a_slow_feed_from(0.0, -3.0),
+			"it reaches the teammate first: this bot keeps his job")
+
+
 # ── _is_closest_teammate_to_puck_at: cache vs. live scan ─────────────────────
 
 func test_closest_cache_overrides_geometry() -> void:
