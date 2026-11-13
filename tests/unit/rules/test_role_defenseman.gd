@@ -73,6 +73,14 @@ func _make_ctx(self_pos: Vector3, skaters: Array = [],
 
 # ── OZONE points ─────────────────────────────────────────────────────────────
 
+func test_a_point_on_his_stand_is_a_receiver_the_carrier_may_feed() -> void:
+	# The pass search drops a receiver whose lead is not past the reception
+	# buffer, which left the low-to-high to the point off for half the cycle.
+	assert_gt(AIRoleDefenseman.POINT_INSET_M,
+			AICarrierField.OZ_RECEIVE_LINE_BUFFER_M + GameRules.DEFAULT_BLADE_LENGTH_M - 0.001,
+			"the point stands a blade past the carrier's reception buffer")
+
+
 func test_point_holds_just_inside_the_offensive_blue_line() -> void:
 	# Own carrier cycling low, no opponents: the strong point stands at the
 	# line on the strong side.

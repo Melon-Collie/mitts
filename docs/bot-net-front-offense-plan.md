@@ -294,6 +294,38 @@ So moving the off-puck bodies has not changed what the carrier makes of the
 possession. Whether that is because he does not use the new options (about
 one pass a possession either way) is the next thing to read.
 
+### Why the carrier does not use the ice (the trace)
+
+`MITTS_OZ_TRACE=1` logs the carrier's compete every 0.1 s, and each receiver's
+feed as the pass search priced it (`AICarrierPassTrace`). Over a J=11 sweep
+(about 9,900 samples, step-1 code):
+
+| receiver | feed worth > 0 | lane closed | led out of the zone | median spot worth |
+|---|---|---|---|---|
+| NET_FRONT | 12% | 82% | 0% | 0.165 |
+| HIGH_SLOT | 10% | 81% | 4% | 0.050 |
+| POINT_STRONG | 8% | 42% | 48% | 0 |
+| POINT_WEAK | 7% | 46% | 46% | 0 |
+
+- **The carry leads the compete on two samples in three.** Any pass is worth
+  anything on under half of them, and the carry still out-values it on two in
+  three of those (median margin 0.03).
+- **The points were never receivers at their own stand.** The pass search
+  keeps a feed's lead `OZ_RECEIVE_LINE_BUFFER_M` (2.1 m) inside the line; the
+  points stood `POINT_INSET_M` (2.0 m) inside it. So the low-to-high was off
+  whenever a D held his stand, and the pass-option cache never counted the
+  points. `POINT_INSET_M` is now 2.4 m (the buffer plus a blade), and
+  `test_role_defenseman.gd` holds the order. After it, the points' worth is
+  0.04 and POINT_WEAK's out-of-zone gate is 27%. POINT_STRONG's stays at 41%:
+  a D skating back up from his sink is led out of the zone.
+- **The slot's lanes are shut four ticks in five.** That is the sturdy slot
+  defence the user described, and it is what the cycle has to move.
+
+Outcomes with the inset fix (576 possessions): shot 0.293 ± 0.019, slot shot
+0.102 ± 0.013, picked 0.366 ± 0.020, stripped 0.306, set read 0.036 ± 0.005.
+That is within noise of the code before step 1, with one pass more in every
+ten possessions.
+
 **Also seen:** the finisher's rush depth gate (`stage_dist`, 5 m in a set
 cycle) leaves its weak-dot and high-slot stations unreachable, so NET_FRONT
 never rotates up. It is left alone until step 4 prices the screen that would

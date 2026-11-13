@@ -23,10 +23,12 @@ class_name AIRoleDefenseman
 # role. Only one D is ever off the line: each leaves it only with his partner on
 # it and a forward able to take his point.
 
-# How far inside the offensive zone the points stand: a full puck-handling
-# radius, so a reception's give or a backswing never drags the puck back across
-# the line.
-const POINT_INSET_M: float = 2.0
+# How far inside the offensive zone the points stand: past the reception
+# buffer an in-zone carrier keeps a feed's lead inside the line by
+# (AICarrierField.OZ_RECEIVE_LINE_BUFFER_M, a reception's give and backswing),
+# by a blade, so a feed to a point jockeying on his stand is one the carrier
+# makes. test_role_defenseman holds the order.
+const POINT_INSET_M: float = 2.4
 # The strong point's sink rows down his wall while the puck is within
 # POINT_SINK_PUCK_DEPTH_M of their goal line.
 const POINT_SINK_M: float = 3.5
