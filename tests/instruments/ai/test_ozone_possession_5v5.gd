@@ -9,6 +9,14 @@ extends GutTest
 # sweep, in 5v5, with the compete's two sides logged.
 # Team 0 attacks -Z. Not modelled: offside, rebounds (a possession ends at its
 # first shot), board pins (the harness's).
+#
+# The 48 base runs are 24 starts and their mirrors, too few to tell a few shots
+# from noise. MITTS_OZ_JITTER=J adds J copies of each with every spawn nudged
+# up to JITTER_M, from a seed per run, so a comparison is repeatable;
+# MITTS_OZ_SHARD=i MITTS_OZ_SHARDS=n runs every n-th of them from i. Every run
+# prints an OZRUN line (index | end | shot kind | the shot's set read | passes |
+# seconds) for merging shards, and the summary gives each rate with its
+# standard error.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const SECS: float = 12.0
@@ -19,6 +27,9 @@ const SLOT_HALF_WIDTH_M: float = 4.5
 const POINT_OUT_M: float = 15.0
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const KEEPER_SETTLE_S: float = 1.5
+const JITTER_M: float = 1.0
+# A jittered spawn behind the goal line keeps this far outside the post.
+const JITTER_NET_CLEAR_M: float = GameRules.NET_HALF_WIDTH + 0.6
 const OURS: Array[int] = [101, 102, 103, 104, 105]
 const THEIRS: Array[int] = [201, 202, 203, 204, 205]
 
@@ -183,7 +194,8 @@ func _run(duel: Object) -> Dictionary:
 # Our carrier low (`carrier`, skating at `vel`), two forwards at `fa` and `fb`,
 # both D on the points; their five in zone coverage, tight (the strong D already
 # on the carrier) or home.
-func _setup(carrier: Vector3, vel: Vector3, fa: Vector3, fb: Vector3, tight: bool) -> Object:
+func _setup(carrier: Vector3, vel: Vector3, fa: Vector3, fb: Vector3, tight: bool,
+		rng: RandomNumberGenerator = null) -> Object:
 	var duel: Object = Duel.new()
 	duel.team_size = 5
 	for k: int in 5:
@@ -192,20 +204,21 @@ func _setup(carrier: Vector3, vel: Vector3, fa: Vector3, fb: Vector3, tight: boo
 	var side: float = signf(carrier.x) if absf(carrier.x) > 0.5 else 1.0
 	var point_z: float = -(GameRules.BLUE_LINE_Z + 2.0)
 	var hard: BotSkillProfile = BotSkillProfile.hard()
+	carrier = _jit(carrier, rng)
 	duel.add_skater(OURS[0], 0, carrier, hard, vel)
-	duel.add_skater(OURS[1], 0, fa, hard)
-	duel.add_skater(OURS[2], 0, fb, hard)
-	duel.add_skater(OURS[3], 0, Vector3(side * 6.5, 0, point_z), hard)
-	duel.add_skater(OURS[4], 0, Vector3(-side * 6.0, 0, point_z), hard)
+	duel.add_skater(OURS[1], 0, _jit(fa, rng), hard)
+	duel.add_skater(OURS[2], 0, _jit(fb, rng), hard)
+	duel.add_skater(OURS[3], 0, _jit(Vector3(side * 6.5, 0, point_z), rng), hard)
+	duel.add_skater(OURS[4], 0, _jit(Vector3(-side * 6.0, 0, point_z), rng), hard)
 	# Their F1-F3 then their D pair.
 	var strong_d := Vector3(side * 5.5, 0, -21.5)
 	if tight:
 		strong_d = carrier + (Vector3(0, 0, -21.0) - carrier).normalized() * 2.0
-	duel.add_skater(THEIRS[0], 1, Vector3(side * 1.5, 0, -19.5), hard)
-	duel.add_skater(THEIRS[1], 1, Vector3(side * 7.0, 0, -12.5), hard)
-	duel.add_skater(THEIRS[2], 1, Vector3(-side * 5.0, 0, -13.5), hard)
-	duel.add_skater(THEIRS[3], 1, strong_d, hard)
-	duel.add_skater(THEIRS[4], 1, Vector3(-side * 1.0, 0, -24.0), hard)
+	duel.add_skater(THEIRS[0], 1, _jit(Vector3(side * 1.5, 0, -19.5), rng), hard)
+	duel.add_skater(THEIRS[1], 1, _jit(Vector3(side * 7.0, 0, -12.5), rng), hard)
+	duel.add_skater(THEIRS[2], 1, _jit(Vector3(-side * 5.0, 0, -13.5), rng), hard)
+	duel.add_skater(THEIRS[3], 1, _jit(strong_d, rng), hard)
+	duel.add_skater(THEIRS[4], 1, _jit(Vector3(-side * 1.0, 0, -24.0), rng), hard)
 	duel.start(OURS[0])
 	_ctrl.reset_to_crease()
 	_shooter.global_position = carrier
@@ -223,6 +236,24 @@ func _setup(carrier: Vector3, vel: Vector3, fa: Vector3, fb: Vector3, tight: boo
 		_ctrl.fill_state(_keeper_state)
 		return _keeper_state if _full_keeper else _goalie.global_position
 	return duel
+
+
+# `p` nudged up to JITTER_M in a random direction (as given with no `rng`),
+# kept outside the post behind the goal line.
+static func _jit(p: Vector3, rng: RandomNumberGenerator) -> Vector3:
+	if rng == null:
+		return p
+	var a: float = rng.randf() * TAU
+	var r: float = JITTER_M * sqrt(rng.randf())
+	var q := Vector3(p.x + r * cos(a), 0.0, p.z + r * sin(a))
+	if absf(q.z) > GameRules.GOAL_LINE_Z and absf(q.x) < JITTER_NET_CLEAR_M:
+		q.x = signf(q.x if q.x != 0.0 else 1.0) * JITTER_NET_CLEAR_M
+	return q
+
+
+static func _env_int(key: String, fallback: int) -> int:
+	var v: String = OS.get_environment(key)
+	return int(v) if v.is_valid_int() else fallback
 
 
 # Starts (carrier, forward a, forward b, carrier velocities), each run as given
@@ -253,14 +284,36 @@ func _sweep(label: String) -> void:
 	var picks: Array[String] = []
 	var pass_log: Array = []
 	var row: String = "   "
+	var jitter: int = _env_int("MITTS_OZ_JITTER", 0)
+	var shards: int = maxi(_env_int("MITTS_OZ_SHARDS", 1), 1)
+	var shard: int = _env_int("MITTS_OZ_SHARD", 0)
+	var set_sum: float = 0.0
+	var set_sq: float = 0.0
+	var g: int = -1
 	for start: Array in _starts():
 		var vels: Array = [Vector3.ZERO] + start[3]
-		for combo: int in 2 * vels.size() * 2:
-			var m := Vector3(1.0 if combo % 2 == 0 else -1.0, 1.0, 1.0)
-			var vel: Vector3 = vels[(combo >> 1) % vels.size()] * m
-			var tight: bool = combo >= 2 * vels.size()
-			var r: Dictionary = _run(_setup(start[0] * m, vel, start[1] * m, start[2] * m, tight))
+		for combo: int in 2 * vels.size() * 2 * (jitter + 1):
+			g += 1
+			if g % shards != shard:
+				continue
+			var copy: int = combo / (2 * vels.size() * 2)
+			var base: int = combo % (2 * vels.size() * 2)
+			var m := Vector3(1.0 if base % 2 == 0 else -1.0, 1.0, 1.0)
+			var vel: Vector3 = vels[(base >> 1) % vels.size()] * m
+			var tight: bool = base >= 2 * vels.size()
+			var rng: RandomNumberGenerator = null
+			if copy > 0:
+				rng = RandomNumberGenerator.new()
+				rng.seed = 7919 * g + 17
+			var r: Dictionary = _run(_setup(start[0] * m, vel, start[1] * m, start[2] * m,
+					tight, rng))
 			runs += 1
+			var shot_set: float = float(r["shot"]["set"]) if r["end"] == "shot" else 0.0
+			set_sum += shot_set
+			set_sq += shot_set * shot_set
+			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f" % [g, r["end"],
+					r["shot"]["kind"] if r["end"] == "shot" else "-", shot_set,
+					r["passes"], r["t"]])
 			row += " %s@%.1f/p%d" % [str(r["end"]).left(4), r["t"], r["passes"]]
 			ends[r["end"]] = int(ends.get(r["end"], 0)) + 1
 			passes += r["passes"]
@@ -278,6 +331,11 @@ func _sweep(label: String) -> void:
 	gut.p("%s | ends %s | shots %s, mean %.1f s in | possession %.1f s | passes %d over %d runs | below the dots %.1f s" % [
 			label, str(ends), str(kinds), t_shot / maxf(shots.size(), 1), t_all / runs,
 			passes, runs, low_s / runs])
+	var n: float = maxf(runs, 1)
+	var set_mean: float = set_sum / n
+	gut.p("    per possession: shot %s | slot shot %s | set read of its shot %.4f ± %.4f" % [
+			_rate(shots.size(), n), _rate(int(kinds.get("slot", 0)), n), set_mean,
+			sqrt(maxf(set_sq / n - set_mean * set_mean, 0.0) / n)])
 	gut.p("    shot (x, out)      kind   priced   set    pass  carry  pass-to (x, out)")
 	var over: float = 0.0
 	var pass_near: int = 0
@@ -307,6 +365,12 @@ func _sweep(label: String) -> void:
 	gut.p("    passes picked off:")
 	for line: String in picks:
 		gut.p("        " + line)
+
+
+# `k` of `n` as a share with its binomial standard error.
+static func _rate(k: int, n: float) -> String:
+	var p: float = k / n
+	return "%.3f ± %.3f" % [p, sqrt(p * (1.0 - p) / n)]
 
 
 func test_ozone_possession_5v5() -> void:
