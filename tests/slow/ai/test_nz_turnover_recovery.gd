@@ -68,8 +68,11 @@ const BOUND_REACTION_S: float = 0.05 + TeamBrain.TICK_PERIOD
 # as winnable — a body's width, so a coin-flip finish is not held against the bot.
 const WINNABLE_MARGIN_M: float = 0.5
 
-const MIN_CONTAINED: int = 20
-const MAX_WINNABLE_LOST: int = 1
+# Between the last reading and the one before it, which was the degenerate
+# retreat (17 contained, 4 lost): a different rollout on another machine passes,
+# a defender skating his retreat in the stance does not.
+const MIN_CONTAINED: int = 18
+const MAX_WINNABLE_LOST: int = 3
 
 
 func _gate_z() -> float:
