@@ -50,7 +50,7 @@ var loose_puck_released_by: int = -1
 # AI-only, host-filled like the field above.
 var fouls_called: bool = false
 # Whether the puck can be played (PhaseRules.is_puck_live_phase): false in the
-# celebration after a goal, where any check is a foul. AI-only, host-filled.
+# celebration after a goal, where any check is roughing. AI-only, host-filled.
 var puck_in_play: bool = true
 # The team a man short for a penalty, -1 at even strength
 # (GameStateMachine.short_handed_team_id). AI-only, host-filled.

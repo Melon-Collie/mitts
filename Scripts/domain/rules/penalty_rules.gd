@@ -5,7 +5,7 @@ class_name PenaltyRules
 # before he committed: who had the puck, where the boards were, which way his
 # man was facing.
 
-enum Foul { NONE, BOARDING, INTERFERENCE, FIGHTING }
+enum Foul { NONE, BOARDING, INTERFERENCE, FIGHTING, ROUGHING }
 
 # How far off the boards a man can be thrown into them (body edge to board).
 const BOARDING_ZONE_M: float = 1.5
@@ -86,8 +86,7 @@ static func is_hit_from_behind(victim_facing: Vector2, hit_dir: Vector2) -> bool
 
 
 # A man may be checked while he has the puck, just after he lost or released
-# it, and while he is playing a loose one. `puck_is_loose` is false with the
-# play dead: nobody is playing a puck that is not in play.
+# it, and while he is playing a loose one.
 static func is_eligible_to_be_hit(victim_is_carrier: bool,
 		seconds_since_victim_lost_possession: float,
 		puck_is_loose: bool, victim_to_puck_m: float) -> bool:
@@ -99,15 +98,19 @@ static func is_eligible_to_be_hit(victim_is_carrier: bool,
 
 
 # The foul one contact is, if any. Only a delivered check at full-check
-# strength is judged: a bump, a lean and the press never reach it. Boarding
-# outranks interference.
+# strength is judged: a bump, a lean and the press never reach it. With the
+# play dead (`puck_in_play` false) any such check is roughing, wherever and on
+# whomever it lands. In play, boarding outranks interference.
 static func judge(impulse_magnitude: float, attacker_committed: bool,
 		attacker_has_puck: bool, victim_eligible: bool,
-		driven_into_boards: bool, hit_from_behind: bool) -> Foul:
+		driven_into_boards: bool, hit_from_behind: bool,
+		puck_in_play: bool = true) -> Foul:
 	if not attacker_committed or attacker_has_puck:
 		return Foul.NONE
 	if impulse_magnitude < HitRules.FULL_CHECK_IMPULSE:
 		return Foul.NONE
+	if not puck_in_play:
+		return Foul.ROUGHING
 	if driven_into_boards and hit_from_behind:
 		return Foul.BOARDING
 	if not victim_eligible:
@@ -140,4 +143,6 @@ static func name_key(foul: int) -> String:
 			return "PENALTY_INTERFERENCE"
 		Foul.FIGHTING:
 			return "PENALTY_FIGHTING"
+		Foul.ROUGHING:
+			return "PENALTY_ROUGHING"
 	return ""

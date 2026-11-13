@@ -85,12 +85,12 @@ func test_a_carrier_with_his_back_turned_at_the_boards_is_not_hit() -> void:
 	assert_false(_held_after(_snap(_by_the_boards(), Vector2(1.0, 0.0), MAN_ID)))
 
 
-func test_a_man_by_the_puck_is_not_hit_once_the_play_is_dead() -> void:
+func test_nobody_is_hit_once_the_play_is_dead() -> void:
 	var snapshot: WorldSnapshot = _snap(Vector3.ZERO, Vector2(-1.0, 0.0), -1)
 	snapshot.puck_state.position = Vector3(0.5, 0.0, 0.0)
 	assert_true(_held_after(snapshot), "playing a loose puck, he may be hit")
 	snapshot.puck_in_play = false
-	assert_false(_held_after(snapshot), "after a goal nobody is playing it")
+	assert_false(_held_after(snapshot), "after the whistle it is roughing")
 
 
 # ── Finishing a check ────────────────────────────────────────────────────────

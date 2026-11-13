@@ -114,8 +114,23 @@ func test_a_man_playing_a_loose_puck_may_be_hit() -> void:
 
 # ── Boarding's geometry ──────────────────────────────────────────────────────
 
-func test_nobody_is_playing_a_puck_that_is_not_in_play() -> void:
-	assert_false(PenaltyRules.is_eligible_to_be_hit(false, INF, false, 0.5))
+func test_a_full_check_after_the_whistle_is_roughing_whoever_it_lands_on() -> void:
+	for eligible: bool in [true, false]:
+		for into_boards_from_behind: bool in [true, false]:
+			assert_eq(PenaltyRules.judge(FULL, true, false, eligible,
+					into_boards_from_behind, into_boards_from_behind, false),
+					PenaltyRules.Foul.ROUGHING)
+
+
+func test_a_bump_after_the_whistle_is_nothing() -> void:
+	assert_eq(PenaltyRules.judge(FULL * 0.5, true, false, false, false, false, false),
+			PenaltyRules.Foul.NONE)
+	assert_eq(PenaltyRules.judge(FULL, false, false, false, false, false, false),
+			PenaltyRules.Foul.NONE, "nor a body he never threw")
+
+
+func test_a_goal_against_the_shorter_team_ends_a_roughing_minor() -> void:
+	assert_true(PenaltyRules.ends_on_a_goal(PenaltyRules.Foul.ROUGHING))
 
 
 func test_contact_is_judged_while_the_puck_is_in_play() -> void:

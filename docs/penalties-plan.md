@@ -18,7 +18,7 @@ out" line of `docs/defensive-play-plan.md`, and the rule-set paragraph of
 | 5v5 | **A minor puts the team a man short** for its length. |
 | 3v3 | **A penalty shot, not a power play.** A 3-on-2 is close to an automatic goal. Manpower never changes for a foul. |
 | Fights | **Coincidental minors in 5v5.** Both sit for a minor's length and the teams play 4-on-4. There is one length of penalty; nothing is called a major. **A fight in 3v3 is not penalized**, so 3v3 never uses the box. |
-| First calls | **Boarding and interference.** |
+| First calls | **Boarding and interference**, and **roughing** for a hit after the whistle. |
 | Not called | **Delay of game** (the puck cannot leave the rink) and **charging**. |
 | Stick fouls | **Deferred.** Tripping, hooking, slashing and high-sticking need a stick that can foul a body, which no verb does today. |
 | The referee | **Deterministic.** A foul is a rule a player can learn and read before he commits; nothing is missed and nothing is rolled. |
@@ -61,8 +61,9 @@ by `HitClaimResolver`), so a hosted and a remote hitter meet one rule and the
 pair's cooldown dedupes the call as it dedupes the hit.
 
 **Common gates.** The hitter delivered a check (committed, not carrying), the
-two are opponents, neither is ghosted or in the box, and play is live
-(`PLAYING`). Contact after a whistle is not judged in the first version.
+two are opponents, neither is ghosted or in the box, and the skaters are free
+to make contact (`PenaltyRules.judges_contact`: live play, a dropped faceoff,
+the celebration after a goal).
 
 **Boarding** — all of:
 
@@ -87,8 +88,14 @@ turns his back as the hit arrives does not draw the call.
   loose-puck battle (the puck loose and within `INTERFERENCE_PUCK_REACH_M` of
   him, proposed 2.0 m).
 
-Boarding outranks interference when one hit is both. A carrier is never called
-(he delivers no check), and a fighter is never called for the fight's punches.
+**Roughing** is a check at full-check strength or more after the whistle, on
+anyone: in the celebration after a goal, once `WHISTLE_GRACE_S` of it has gone
+(a check already on its way is let go). Where he stands and which way he
+faces do not enter it.
+
+Boarding outranks interference when one hit is both, and after the whistle
+every such hit is roughing. A carrier is never called (he delivers no check),
+and a fighter is never called for the fight's punches.
 
 **The thresholds are set by playtest.** Each call writes its facts to the F3
 overlay (the check's strength, the victim's distance from the wall, the angle he
@@ -408,10 +415,9 @@ Known gaps, each small enough to leave for the playtest to rank:
   the band it holds for everyone else.
 - **Contact is judged wherever skaters are free to make it**
   (`PenaltyRules.judges_contact`): in live play, at a dropped faceoff before
-  the first touch, and in the celebration after a goal. With the play dead
-  nobody is playing the puck, so there any full check is interference; a
-  check already on its way when the goal went in has `WHISTLE_GRACE_S` to
-  land. The call is assessed at the faceoff after the goal, which stays at
+  the first touch, and in the celebration after a goal, where any full
+  check is roughing; a check already on its way when the goal went in has
+  `WHISTLE_GRACE_S` to land. The call is assessed at the faceoff after the goal, which stays at
   centre. Every other stoppage holds the skaters. Bots read the same thing
   off `WorldSnapshot.puck_in_play`.
 - **The replay records no event for a call.**

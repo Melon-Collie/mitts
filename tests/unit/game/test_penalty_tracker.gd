@@ -113,6 +113,11 @@ func test_finishing_a_check_on_a_man_who_just_passed_is_clean() -> void:
 	assert_eq(_called, [])
 
 
+func test_a_check_in_the_celebration_after_a_goal_is_called_roughing() -> void:
+	_tracker.on_opposing_contact(HITTER, VICTIM, FULL, INTO_WALL, false, false, INF, true, false)
+	assert_eq(_called, [[HITTER, PenaltyRules.Foul.ROUGHING]])
+
+
 func test_sustained_contact_calls_one_foul() -> void:
 	_put_victim_by_the_boards(Vector2(1.0, 0.0))
 	_check()

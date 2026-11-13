@@ -81,7 +81,7 @@ func on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
 		return
 	var victim_pos: Vector3 = victim.skater.global_position
 	var puck: Puck = _puck_getter.call() as Puck
-	var puck_loose: bool = puck_in_play and puck != null and puck.carrier == null
+	var puck_loose: bool = puck != null and puck.carrier == null
 	var puck_dist: float = INF
 	if puck != null:
 		puck_dist = Vector2(puck.global_position.x - victim_pos.x,
@@ -95,7 +95,7 @@ func on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
 	var into_boards: bool = PenaltyRules.is_driven_into_boards(drive, wall_out)
 	var from_behind: bool = PenaltyRules.is_hit_from_behind(facing_before, drive)
 	var foul: PenaltyRules.Foul = PenaltyRules.judge(force, attacker_committed,
-			attacker_has_puck, eligible, into_boards, from_behind)
+			attacker_has_puck, eligible, into_boards, from_behind, puck_in_play)
 	if foul == PenaltyRules.Foul.NONE:
 		return
 	if not ledger.call_foul(hitter_peer_id, hitter.team.team_id, foul, victim_peer_id):

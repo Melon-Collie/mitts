@@ -11,10 +11,12 @@ const CONTACT_HORIZON_S: float = 0.5
 
 # `seconds_since_man_lost_puck` is how long ago the bot saw `man` stop being
 # the carrier (INF if it never has); the read adds the time until contact,
-# since that is when the referee measures it.
+# since that is when the referee measures it. `puck_in_play` is false after
+# the whistle, where the check is roughing on anyone.
 static func would_foul(me_pos: Vector3, me_vel: Vector3, me_weight: float,
 		man: SkaterNetworkState, man_radius: float, man_is_carrier: bool,
-		seconds_since_man_lost_puck: float, puck_loose: bool, puck_pos: Vector3) -> bool:
+		seconds_since_man_lost_puck: float, puck_loose: bool, puck_pos: Vector3,
+		puck_in_play: bool = true) -> bool:
 	var time_to_contact: float = AIPinThreatRead.time_to_contact(
 			me_pos, me_vel, man.position, man.velocity)
 	if time_to_contact > CONTACT_HORIZON_S:
@@ -33,4 +35,5 @@ static func would_foul(me_pos: Vector3, me_vel: Vector3, me_weight: float,
 			PenaltyRules.BOARDING_ZONE_M)
 	return PenaltyRules.judge(impulse, true, false, eligible,
 			PenaltyRules.is_driven_into_boards(drive, wall_out),
-			PenaltyRules.is_hit_from_behind(man.facing, drive)) != PenaltyRules.Foul.NONE
+			PenaltyRules.is_hit_from_behind(man.facing, drive),
+			puck_in_play) != PenaltyRules.Foul.NONE
