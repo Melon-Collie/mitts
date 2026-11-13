@@ -70,6 +70,7 @@ var clear := KeeperClear.new()
 
 var _keeper: Keeper = null
 var _keeper_pose := KeeperPose.new()
+var _seat_boxes: Array[Transform3D] = _part_boxes()
 var _net := Transform3D.IDENTITY
 var _ticks: int = 0
 var _last_velocity := Vector3.ZERO
@@ -141,6 +142,13 @@ func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: f
 	for part: int in KeeperGear.PART_COUNT:
 		goalie.add_save_box(KeeperGear.save_part(part), _glove_side(part), KeeperGear.half_extents(part))
 	_place_in_crease()
+
+
+# Scratch for every save box, filled before it is read (_seat).
+static func _part_boxes() -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	out.resize(KeeperGear.PART_COUNT)
+	return out
 
 
 static func _glove_side(part: int) -> bool:
@@ -688,10 +696,14 @@ func _in_his_space(at: Vector3) -> Vector3:
 func _seat(p: KeeperPose) -> void:
 	if not _keeper.apply_pose(p):
 		return
+	if seat_places_only:
+		for part: int in KeeperGear.PART_COUNT:
+			if goalie.places_save_box(part):
+				goalie.seat_save_box(part, KeeperGear.box(_keeper.skeleton, part))
+		return
+	KeeperGear.boxes(_keeper.skeleton, _seat_boxes)
 	for part: int in KeeperGear.PART_COUNT:
-		if seat_places_only and not goalie.places_save_box(part):
-			continue
-		goalie.seat_save_box(part, KeeperGear.box(_keeper.skeleton, part))
+		goalie.seat_save_box(part, _seat_boxes[part])
 
 
 # On a client, the snapshots' poses blended as their roots are
