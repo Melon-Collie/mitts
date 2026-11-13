@@ -448,6 +448,10 @@ const DEFAULT_RULE_SET: int = RuleSet.ARCADE
 const RULE_SET_NAMES: Array[String] = ["Off", "Arcade", "NHL"]
 
 
+static func is_rule_set(value: int) -> bool:
+	return value >= 0 and value < RULE_SET_NAMES.size()
+
+
 # A goalie's cover is a puck nobody can play: whistled wherever there are faceoffs, once the
 # referee has seen it frozen (the catch or cover seen made); in OFF he plays it out himself.
 const COVER_WHISTLE_DELAY_S: float = 1.0
@@ -671,6 +675,17 @@ const FACEOFF_MAX_ABS_Z: float = GOAL_LINE_Z - 1.0
 # the layer all three can see, rather than being restated in each.
 const BENCH_CENTER_Z: float  = 4.4
 const BENCH_HALF_LEN: float  = 3.0
+
+# ── Penalty boxes ─────────────────────────────────────────────────────────────
+# The two boxes on the -X boards, across the ice from the benches: each team's
+# is the one on its own bench's side of centre. ArenaRinksideLayout derives the
+# furniture from the first two numbers, as it does the benches.
+const PENALTY_BOX_CENTER_Z: float = 2.9
+const PENALTY_BOX_HALF_LEN: float = 1.7
+# Where a penalized skater stands on the ice at his box's door: the gate the
+# boards leave at the outer end of the box (HockeyRink), which
+# test_rink_geometry_mirrors.gd holds this against.
+const PENALTY_BOX_DOOR_Z: float = 4.0
 
 # ── Bench start points (pre-game intro skate-in) ──────────────────────────────
 # Where each skater begins the opening/rematch intro before skating out to its

@@ -562,6 +562,7 @@ var _blocks_shots: bool = true
 var _shot_block := SkaterAgentShotBlock.new()
 var _board_play := SkaterAgentBoardPlay.new()
 var _stand_up := SkaterAgentStandUp.new()
+var _discipline := SkaterAgentDiscipline.new()
 var _press := SkaterAgentPress.new()
 var _stick_play := SkaterAgentStickPlay.new()
 var _steering := SkaterAgentSteering.new()
@@ -708,6 +709,7 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_shot_block.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_board_play.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_stand_up.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
+	_discipline.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_press.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_stick_play.setup(peer_id, team_id, team_id_by_peer)
 	_steering.setup(peer_id, team_id, team_id_by_peer)
@@ -2747,6 +2749,12 @@ func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 # play, which holds a man it has leaned on at the wall.
 func apply_stand_up(input: InputState, snapshot: WorldSnapshot) -> void:
 	_stand_up.apply(input, snapshot, _check_aggression)
+
+
+# Letting up on a check that would be a foul (SkaterAgentDiscipline), after
+# every pass that presses the Hit button.
+func apply_discipline(input: InputState, snapshot: WorldSnapshot) -> void:
+	_discipline.apply(input, snapshot)
 
 
 # The boards, every physics tick after dispatch (SkaterAgentBoardPlay).

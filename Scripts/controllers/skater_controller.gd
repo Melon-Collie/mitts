@@ -1213,6 +1213,19 @@ func is_faceoff_ready() -> bool:
 			and Vector2(skater.velocity.x, skater.velocity.z).length() < FACEOFF_SET_MAX_SPEED
 
 
+# Whether this skater is held still: a dead-puck phase, his own penalty, or a
+# penalty shot he is not the one taking.
+func _movement_locked() -> bool:
+	return skater.in_box or skater.sidelined or _game_state.is_movement_locked()
+
+
+# The stick stays live through a faceoff's countdown, but not in the box or on
+# the sideline.
+func _blade_aim_allowed_in_lock() -> bool:
+	return not skater.in_box and not skater.sidelined \
+			and _game_state.allows_blade_aim_during_lock()
+
+
 # `lead` seconds pass before the window opens; nothing is posed through them.
 func start_celebration(duration: float, lead: float = 0.0) -> void:
 	_celebration_total = maxf(duration, 0.001)
@@ -2431,6 +2444,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.fight_rattle = skater.fight_rattle
 	state.diving = skater.is_diving
 	state.stumbling = skater.is_stumbling
+	state.boxed = skater.in_box and not skater.visible
 	state.slapshot_pinned = skater.is_slapshot_pinning()
 	# Host-only shaft segment for stick-lift claim resolution (paired with
 	# blade_contact_world). World-space grip point — the wire top_hand_position
@@ -2571,6 +2585,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# The replay poses the recorded body; a live celebration's knee bounce and
 	# fist pump are read off this controller, and its timer is frozen here.
 	end_celebration()
+	skater.visible = not state.boxed
 	skater.global_position = state.position
 	skater.visual_offset = Vector3.ZERO
 	skater.velocity = state.velocity
@@ -2976,9 +2991,10 @@ func tick_faceoff_approach(delta: float) -> bool:
 		return false
 	var in_prep: bool = _game_state_has_faceoff_prep and _game_state.is_faceoff_prep()
 	var in_break: bool = _game_state_has_period_break and _game_state.is_period_break()
-	if not (in_prep or in_break):
+	if not (in_prep or in_break or skater.in_box):
 		# Left the approach phase (the drop, or an abandoned prep) with an
 		# approach still set — drop it so it can't leak into a later locked phase.
+		# A penalized skater finishes his glide to the box whatever the phase.
 		clear_approach()
 		return false
 	return apply_approach(delta)

@@ -31,6 +31,9 @@ signal faceoff_positions_ready(positions: Array, preroll: float)
 # HUD listens to this for the countdown so the banner appears together with
 # the teleport, instead of racing the unreliable phase broadcast.
 signal faceoff_prep_announced
+# Host: a faceoff is about to be placed. Whoever is to sit it out (a penalty
+# assessed at this stoppage) has to be boxed by the time this returns.
+signal faceoff_placement_starting
 signal goal_broadcast_needed(
 		scoring_team_id: int, score0: int, score1: int,
 		scorer_name: String, assist1_name: String, assist2_name: String)
@@ -41,8 +44,15 @@ signal replay_stopped
 # (camera wide hold) get the break length so their treatment spans the window.
 signal period_break_started(duration: float)
 
+# A placed skater in the faceoff-positions payload: peer id, then x, y, z.
+const _POSITION_STRIDE: int = 4
+# How long a sidelined skater's blade is kept off the puck: longer than a
+# penalty shot can last, and the next faceoff's puck reset clears it anyway.
+const _SIDELINE_PUCK_COOLDOWN_S: float = 60.0
+
 var _state_machine: GameStateMachine = null
 var _registry: PlayerRegistry = null
+var _placement: FaceoffPlacement = null
 var _teams: Array[Team] = []
 var _puck_getter: Callable = Callable()
 var _goalie_controllers_getter: Callable = Callable()
@@ -56,10 +66,6 @@ var _is_pregame_intro_getter: Callable = Callable()
 var _shot_tracker: ShotOnGoalTracker = null
 # Drops a carried puck (host-only). Returns carrier peer_id or -1.
 var _puck_drop_requester: Callable = Callable()
-# Tells the host that a player has a pending shot (shot → timer arm).
-# Used for the shot-on-goal tracker's `on_shot_started` event from inside the
-# goal path; we pass it as a Callable rather than a direct tracker call so
-# the caller stays in control of the "is this actually a shot" logic.
 
 # Goal-replay cinematic. GameManager owns the Node lifecycle (add_child /
 # queue_free); PhaseCoordinator drives start/stop and wires the signals.
@@ -149,6 +155,7 @@ func setup(
 		is_pregame_intro_getter: Callable = Callable()) -> void:
 	_state_machine = state_machine
 	_registry = registry
+	_placement = FaceoffPlacement.new(registry)
 	_teams = teams
 	_puck_getter = puck_getter
 	_goalie_controllers_getter = goalie_controllers_getter
@@ -243,24 +250,42 @@ func _enter_faceoff_prep(puck: Puck) -> void:
 	last_prep_was_period_intro = period_intro
 	var last_arrival: float = 0.0
 	var positions: Array = []
-	for peer_id: int in _registry.all():
+	faceoff_placement_starting.emit()
+	if _placement.penalty_shooter() != null:
+		_place_penalty_shot(puck)
+		return
+	var placed: Array[int] = []
+	placed.assign(_registry.all().keys())
+	var casts: Array[PackedInt32Array] = _placement.casts(placed)
+	for peer_id: int in placed:
 		var record: PlayerRecord = _registry.get_record(peer_id)
-		# Centers spawn at their own reach-derived distance from the dot — Size
-		# scales stick + arms, so a fixed offset puts the puck out of a small
-		# build's reach. Wingers ignore the argument.
+		if _placement.is_boxed(record):
+			var door: Vector3 = PlayerRules.penalty_box_position(record.team.team_id)
+			var door_glide: float = _skate_in_duration(record.skater.global_position, door)
+			last_arrival = maxf(last_arrival, door_glide)
+			record.skater.is_faceoff_center = false
+			record.controller.begin_approach(record.skater.global_position, door,
+					PlayerRules.penalty_box_facing(), door_glide, record.skater.velocity)
+			positions.append_array([peer_id, door.x, door.y, door.z])
+			continue
+		var spot: int = _placement.spot(casts, record)
+		var takes_draw: bool = spot == FaceoffFormation.CENTER_SPOT
+		# The draw-taker stands at his own reach-derived distance from the dot —
+		# Size scales stick + arms, so a fixed offset puts the puck out of a
+		# small build's reach. The other spots ignore the argument.
 		var reach: float = -1.0
 		if record.skater != null:
-			record.skater.is_faceoff_center = record.team_slot == 0
-		if record.team_slot == 0 and record.controller != null:
+			record.skater.is_faceoff_center = takes_draw
+		if takes_draw and record.controller != null:
 			reach = record.controller.faceoff_center_distance()
-			# Arm the center's swipe capture for the draw (host-only). A swing
-			# during the countdown pre-rolls in; the crest feeds the contest.
+			# Arm his swipe capture for the draw (host-only). A swing during
+			# the countdown pre-rolls in; the crest feeds the contest.
 			if record.skater != null:
 				record.skater.begin_draw_tracking(
 						record.controller.faceoff_draw_peak_decay,
 						record.controller.faceoff_draw_window)
 		var pos: Vector3 = PlayerRules.faceoff_position(
-				record.team.team_id, record.team_slot, dot, reach,
+				record.team.team_id, spot, dot, reach,
 				_state_machine.team_size)
 		var facing: Vector2 = PlayerRules.faceoff_facing(record.team.team_id)
 		var start: Vector3 = _approach_start_for(record, pos, dot, from_bench, staged)
@@ -278,6 +303,12 @@ func _enter_faceoff_prep(puck: Puck) -> void:
 		_state_machine.set_faceoff_prep_extra(last_prep_preroll)
 	faceoff_positions_ready.emit(positions, last_prep_preroll)
 	faceoff_prep_announced.emit()
+
+
+# Host: sets the faceoff up again, countdown and all, from where everyone stands.
+func reset_faceoff() -> void:
+	if _state_machine.restart_faceoff_prep():
+		_enter_faceoff_prep(_get_puck())
 
 
 # Host, every frame after the phase tick: throws the held puck down once the
@@ -304,15 +335,15 @@ func _enter_faceoff(puck: Puck) -> void:
 	# A frame hitch can carry the prep past the throw; the puck still drops.
 	_throw_held_puck(puck, 0.0)
 	puck.pickup_locked = false
-	# The drop: stamp it on the centers so the draw's timing bonus is measured from
-	# here (see FaceoffDrawRules.timing_weight). The stamp is the shared host clock
-	# (== local_time on the host) so a remote center's crest, timed by its own
-	# host_timestamp, is judged against the drop in the same base — ping-neutral.
+	# The drop: stamp it on the draw-takers so the draw's timing bonus is measured
+	# from here (see FaceoffDrawRules.timing_weight). The stamp is the shared host
+	# clock (== local_time on the host) so a remote draw-taker's crest, timed by its
+	# own host_timestamp, is judged against the drop in the same base — ping-neutral.
 	# The puck is now live and contests resolve within a few hundred ms.
 	var drop_host_time: float = NetworkManager.estimated_host_time()
 	for peer_id: int in _registry.all():
 		var record: PlayerRecord = _registry.get_record(peer_id)
-		if record.team_slot == 0 and record.skater != null:
+		if record.skater != null and record.skater.is_faceoff_center:
 			record.skater.mark_draw_drop(drop_host_time)
 
 
@@ -335,6 +366,8 @@ func on_period_break_entered() -> void:
 			continue
 		if not _is_host and not record.is_local:
 			continue
+		if _placement.is_boxed(record):
+			continue  # he sits the break out where he is
 		var start: Vector3 = record.skater.global_position
 		var target: Vector3 = PlayerRules.bench_start_position(
 				record.team.team_id, record.team_slot)
@@ -392,10 +425,15 @@ func on_goal_scored_into(defending_team: Team) -> void:
 			# Overtime winner: any non-own goal in sudden-death OT wins the game.
 			if not is_own_goal and _state_machine.is_overtime():
 				record.stats.ot_goals += 1
+			var situation: int = PenaltyRules.goal_situation(scoring_team_id,
+					_state_machine.short_handed_team_id,
+					record.skater != null and record.skater.takes_penalty_shot)
+			record.stats.credit_goal_situation(situation)
 			# Tag one-timer / tip goal flavor BEFORE clear_pending() below wipes
 			# the shot-tracker state these reads depend on.
 			_tag_goal_flavor(record, scorer_id, carrier_peer_id, is_own_goal)
-			var assist_names: Array[String] = _shot_tracker.credit_assists(scorer_id)
+			var assist_names: Array[String] = _shot_tracker.credit_assists(scorer_id,
+					situation == PenaltyRules.GoalSituation.POWER_PLAY)
 			assist1_name = assist_names[0] if assist_names.size() > 0 else ""
 			assist2_name = assist_names[1] if assist_names.size() > 1 else ""
 			var line_z: float = defending_team.defended_goal.goal_line_z() \
@@ -547,18 +585,24 @@ func on_faceoff_positions(positions: Array, preroll: float) -> void:
 	var skate_in: bool = not from_bench and not staged
 	last_prep_preroll = preroll
 	last_prep_was_period_intro = period_intro
+	var placed_peers: Array[int] = []
+	for at: int in range(0, positions.size(), _POSITION_STRIDE):
+		placed_peers.append(int(positions[at]))
+	var casts: Array[PackedInt32Array] = _placement.casts(placed_peers)
 	var i: int = 0
 	while i < positions.size():
 		var peer_id: int = positions[i]
 		var pos := Vector3(positions[i + 1], positions[i + 2], positions[i + 3])
-		i += 4
+		i += _POSITION_STRIDE
 		# Draw-taker flag for EVERY skater, not just the local one — it drives the
-		# centre's crouch, which has to look the same on every screen. Derived
-		# from the slot rather than replicated: the wire payload names every peer
-		# and the client already knows each one's slot (see Skater.is_faceoff_center).
+		# draw-taker's crouch, which has to look the same on every screen. Derived
+		# rather than replicated: the wire payload names every peer the host
+		# placed, the client knows each one's seat, and the cast follows from both.
 		var placed: PlayerRecord = _registry.get_record(peer_id) if _registry.has(peer_id) else null
 		if placed != null and placed.skater != null:
-			placed.skater.is_faceoff_center = placed.team_slot == 0
+			placed.skater.is_faceoff_center = not _placement.is_boxed(placed) \
+					and not _placement.in_penalty_shot(placed) \
+					and _placement.spot(casts, placed) == FaceoffFormation.CENTER_SPOT
 		if peer_id == local_peer_id and _registry.has(peer_id):
 			# Wire format stays position-only; clients derive facing locally
 			# from the record's current team_id. Slot-swap RPCs land before
@@ -572,6 +616,12 @@ func on_faceoff_positions(positions: Array, preroll: float) -> void:
 					record, pos, GameRules.CENTER_ICE_DOT, from_bench, staged)
 			var duration: float = _faceoff_approach_duration(
 					peer_id, start, pos, from_bench, skate_in, staged)
+			if _placement.is_boxed(record) or _placement.in_penalty_shot(record):
+				# To the box door, the bench or the shooter's mark from wherever
+				# he stands, as the host skates him.
+				facing = _placement.held_out_facing(record)
+				start = record.skater.global_position
+				duration = _skate_in_duration(start, pos)
 			if preroll > 0.0:
 				# Our own start is the predicted body, a little off the one the
 				# host measured from; never let it arrive after the countdown.
@@ -588,6 +638,36 @@ func on_faceoff_positions(positions: Array, preroll: float) -> void:
 
 
 # ── Internal ──────────────────────────────────────────────────────────────────
+
+# Host: sets a penalty shot up where the faceoff would have been. The shooter
+# glides to centre with the puck laid a stride ahead of him, everyone else to
+# his own bench, and the prep's countdown is the shot's: at its end the puck
+# unlocks and the FACEOFF phase waits for him to collect it.
+func _place_penalty_shot(puck: Puck) -> void:
+	var last_arrival: float = 0.0
+	var positions: Array = []
+	if puck != null:
+		# First: the reset clears every cooldown, and the sidelined get one below.
+		puck.reset(PlayerRules.penalty_shot_puck_spot(_placement.penalty_shooter().team.team_id))
+		puck.pickup_locked = true
+	for peer_id: int in _registry.all():
+		var record: PlayerRecord = _registry.get_record(peer_id)
+		if record == null or record.skater == null or record.controller == null:
+			continue
+		record.skater.is_faceoff_center = false
+		var pos: Vector3 = _placement.penalty_shot_spot(record)
+		var glide: float = _skate_in_duration(record.skater.global_position, pos)
+		last_arrival = maxf(last_arrival, glide)
+		record.controller.begin_approach(record.skater.global_position, pos,
+				_placement.held_out_facing(record), glide, record.skater.velocity)
+		positions.append_array([peer_id, pos.x, pos.y, pos.z])
+		if record.skater.sidelined and puck != null:
+			puck.set_skater_cooldown(record.skater, _SIDELINE_PUCK_COOLDOWN_S)
+	last_prep_preroll = last_arrival + GameRules.FACEOFF_SET_BEAT
+	_state_machine.set_faceoff_prep_extra(last_prep_preroll)
+	faceoff_positions_ready.emit(positions, last_prep_preroll)
+	faceoff_prep_announced.emit()
+
 
 # True when the faceoff being placed is the opening/rematch intro — the only
 # one skaters skate out from their benches for.

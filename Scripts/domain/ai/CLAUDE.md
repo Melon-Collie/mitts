@@ -547,6 +547,46 @@ F3_WALL takes the vacated point. So it fires however he got deep (pinch, chase,
 battle), and releases when he is back. The D slots race the lateral trip
 (`SlotSpec.lateral_race`) precisely so a pinching D keeps his job while it runs.
 
+### A man down, the shape is a wedge and one
+
+A team with fewer skaters on the ice than the other (`TeamBrain.man_down`,
+counted off the snapshot, so a held seat counts as a penalty does) cannot tile
+its zone, and the coverage stops trying to. `AIZoneCoverage` answers its three
+questions differently and nothing else changes: the roles, the election, the
+matching and the pressure behaviour are the 5v5 coverage's.
+
+- **Areas.** `ZONE_D_STRONG` and `ZONE_D_WEAK` are the base, each the low
+  house on its side; `ZONE_C` is the tip, the house above them; and
+  `ZONE_W_STRONG` is the one, whose area is everything the house is not. No
+  wedge man's area reaches outside the house, which is the whole of "the wedge
+  stays home".
+- **Anchors.** The base either side of the crease, the tip in the high slot
+  rising as the puck goes to the point.
+- **The puck's owner.** The wedge man whose third it is in, or the one for any
+  puck outside the house: the corners, behind the net, the walls, the points.
+
+One rule of the full coverage is deliberately switched off. There the puck
+owner's area is every defender's while he is on the puck, so a man in it is
+never in nobody's. A man down, with the one on the puck, his area is the
+perimeter the kill has given up, and handing it to the wedge would walk all
+three out of the house for men who cannot score from where they stand
+(`TeamBrain._one_owns`). With two in the box no body is elected the one, the
+perimeter has no owner, and the three hold the wedge alone.
+
+**Up the ice a man down is a 1-3, and it never forechecks.** "Forecheck or set
+up" has one answer for it: set up (`TeamBrain`, before the read is even asked).
+A forecheck sends two forwards into their end, and a team already a body short
+has none to send. The set shape it falls into is the 1-1-3 with one post
+unfilled, and which post matters: `AIRoleSlots5` elects `NZ_F1` ahead of
+`NZ_MID` when it has fewer bodies than posts, so the three hold our line and
+the one is the forward who steers the carrier, with the middle layer the post
+given up. Left in list order the high man was the one dropped, and the carrier
+came through the neutral zone unsteered. A man down, NZ_F1's stand goes no
+deeper than their blue line (`AIRoleNeutralZone.their_line_depth_m`), where at
+even strength it follows the carrier to their circle tops.
+
+A man UP changes nothing: the offense is the ordinary one.
+
 ## Covering a man is one behavior, and the role only chooses WHO
 
 `AIDefensiveVerbs.cover_threat` is the whole of it: take the ice between him and

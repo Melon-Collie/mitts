@@ -76,6 +76,26 @@ func test_perimeter_collision_inner_face_is_the_inner_boundary() -> void:
 #     runs at the same speed to the same dots; two of the five just step onto
 #     the ice beside a bench that isn't theirs.
 
+func test_a_penalized_skater_stands_at_his_boxs_door() -> void:
+	var rink: HockeyRink = autofree(HockeyRink.new())
+	var half_w: float = float(_RINK.get_property_default_value("rink_width")) / 2.0
+	var doors: int = 0
+	for gate: Vector2 in rink._gate_targets():
+		if not is_equal_approx(gate.x, -half_w):
+			continue  # the boxes are on the -X boards
+		doors += 1
+		assert_almost_eq(absf(gate.y), GameRules.PENALTY_BOX_DOOR_Z, 1e-6,
+				"PENALTY_BOX_DOOR_Z has drifted off the gate at %v" % gate)
+	assert_eq(doors, 2, "one door per box")
+	for team_id: int in [0, 1]:
+		var door: Vector3 = PlayerRules.penalty_box_position(team_id)
+		var bench: Vector3 = PlayerRules.bench_start_position(team_id, 0)
+		assert_eq(signf(door.z), signf(bench.z), "a team's box is on its own bench's side")
+		assert_lt(door.x, 0.0, "across the ice from the benches")
+		assert_eq(GameRules.clamp_to_rink_inner(Vector2(door.x, door.z), 0.35),
+				Vector2(door.x, door.z), "and he stands wholly on the sheet")
+
+
 func test_every_gate_opens_onto_the_furniture_it_serves() -> void:
 	# A door is for something. The penalty door has always been derived from its
 	# box; the bench door was a literal, and drifted off the end of the bench.

@@ -49,6 +49,11 @@ func pressure_slot_override() -> int:
 func get_team_size() -> int:
 	return GameRules.DEFAULT_TEAM_SIZE
 
+# Whether we have fewer skaters on the ice than they do: the D-zone coverage is
+# then the wedge and one (AIZoneCoverage).
+func man_down() -> bool:
+	return false
+
 # Whether the match calls icing (the NHL rule set).
 func icing_enforced() -> bool:
 	return false

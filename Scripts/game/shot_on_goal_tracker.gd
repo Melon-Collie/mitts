@@ -475,7 +475,7 @@ func on_goal_confirmed(scorer_peer_id: int, origin: Vector3 = Vector3.ZERO) -> v
 # defender the front entry is that defender, and the scorer (find_scorer_on_team)
 # sits behind it. The scorer's own entries neither assist nor end the chain, so a
 # give-and-go credits the return pass and the feed before it.
-func credit_assists(scorer_peer_id: int) -> Array[String]:
+func credit_assists(scorer_peer_id: int, on_the_power_play: bool = false) -> Array[String]:
 	var names: Array[String] = []
 	var credited: Array[int] = []
 	_last_assist_ids = credited
@@ -496,6 +496,8 @@ func credit_assists(scorer_peer_id: int) -> Array[String]:
 		if pid in credited:
 			continue  # already credited: a teammate touching twice earns one assist
 		record.stats.assists += 1
+		if on_the_power_play:
+			record.stats.pp_assists += 1
 		credited.append(pid)
 		names.append(record.display_name())
 		if names.size() >= MAX_ASSISTS:

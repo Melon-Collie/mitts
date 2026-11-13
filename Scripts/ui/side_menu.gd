@@ -34,6 +34,10 @@ var _player_card_callout: Label = null
 var _player_card_callout_tween: Tween = null
 var _player_popup: PlayerSettingsPopup = null
 var _play_popup: PlayPopup = null
+var _tournament_setup: TournamentSetupPopup = null
+var _tournament_replace_confirm: ConfirmDialog = null
+# The setup popup's draft, held while the replace confirm is up.
+var _pending_tournament: TournamentState = null
 var _career_screen: CareerStatsScreen = null
 var _trophy_case: TrophyCaseScreen = null
 var _options_container: Control = null
@@ -87,7 +91,7 @@ func _wire_focus_wall() -> void:
 
 func _modal_layers() -> Array[Control]:
 	return [_options_container, _exit_container, _tutorial_container, _drills_container,
-			_player_popup, _play_popup, _career_screen, _trophy_case]
+			_player_popup, _play_popup, _tournament_setup, _career_screen, _trophy_case]
 
 
 func _sync_nav_focus_wall() -> void:
@@ -149,6 +153,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	elif _play_popup != null and _play_popup.visible:
 		# PlayPopup handles its own ui_cancel — let it through.
+		return
+	elif _tournament_setup != null and _tournament_setup.visible:
+		# TournamentSetupPopup handles its own ui_cancel — let it through.
 		return
 	elif _career_screen != null and _career_screen.visible:
 		# CareerStatsScreen handles its own ui_cancel — let it through.
@@ -557,7 +564,17 @@ func _build_popups() -> void:
 	_play_popup = PlayPopup.new()
 	_play_popup.start_pressed.connect(_on_start_game_pressed)
 	_play_popup.join_pressed.connect(_on_join_pressed)
+	_play_popup.tournament_continue_pressed.connect(_on_tournament_continue_pressed)
+	_play_popup.tournament_new_pressed.connect(_on_tournament_new_pressed)
 	add_child(_play_popup)
+
+	_tournament_setup = TournamentSetupPopup.new()
+	_tournament_setup.start_pressed.connect(_on_tournament_setup_confirmed)
+	add_child(_tournament_setup)
+	_tournament_replace_confirm = ConfirmDialog.new()
+	_tournament_replace_confirm.confirmed.connect(_start_pending_tournament)
+	_tournament_replace_confirm.cancelled.connect(func() -> void: _pending_tournament = null)
+	add_child(_tournament_replace_confirm)
 
 	# Steam overlay "Join Game" / accepted invite (and `+connect_lobby` launch)
 	# routes straight into the join flow.
@@ -861,10 +878,46 @@ func _on_start_game_pressed() -> void:
 	# and we hand off to Lobby. The lobby starts offline (instant, no Steam
 	# needed); its visibility selector attaches the Steam transport when the
 	# host opens the game to friends or the public.
+	_enter_offline_lobby()
+	get_tree().change_scene_to_file(Constants.SCENE_LOBBY)
+
+
+# Ends the current session and arms a fresh offline host for the lobby scene.
+func _enter_offline_lobby() -> void:
 	GameManager.on_scene_exit()
 	NetworkSimManager.clear_pending()
 	NetworkManager.reset()
 	NetworkManager.start_offline()
+
+
+func _on_tournament_continue_pressed() -> void:
+	# With nothing to resume this opens an ordinary lobby.
+	_enter_offline_lobby()
+	GameManager.tournament.resume()
+	get_tree().change_scene_to_file(Constants.SCENE_LOBBY)
+
+
+func _on_tournament_new_pressed() -> void:
+	_tournament_setup.open()
+
+
+# A new tournament replaces the save, so one in progress is asked about first.
+func _on_tournament_setup_confirmed(draft: TournamentState) -> void:
+	_pending_tournament = draft
+	var saved: TournamentState = GameManager.tournament.saved()
+	if saved != null and TournamentRules.status(saved) == TournamentRules.Status.IN_PROGRESS:
+		_tournament_replace_confirm.open(tr(&"TOURNAMENT_REPLACE_CONFIRM"))
+		return
+	_start_pending_tournament()
+
+
+func _start_pending_tournament() -> void:
+	var draft: TournamentState = _pending_tournament
+	_pending_tournament = null
+	if draft == null:
+		return
+	_enter_offline_lobby()
+	GameManager.tournament.begin_new(draft, randi(), TeamColorRegistry.get_all_slots())
 	get_tree().change_scene_to_file(Constants.SCENE_LOBBY)
 
 

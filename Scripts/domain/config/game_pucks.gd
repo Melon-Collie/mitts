@@ -34,6 +34,7 @@ class_name GamePucks
 const FREIGHT_TRAIN := "freight_train"
 const STUDENT := "student"
 const CUSTOM_BUILD := "custom_build"
+const CUP_WINNER := "cup_winner"
 const PLAY_WITH_BUUKIE := "play_with_buukie"
 const COMBO := "combo"
 
@@ -89,6 +90,9 @@ const ALL: Array[Dictionary] = [
 	{"id": "dropped_gloves", "cond": {"kind": "game", "mins": {"fights": 1}}},
 	{"id": "won_fight", "cond": {"kind": "game", "mins": {"fight_wins": 1}}},
 	{"id": "gordie_howe", "cond": {"kind": "game", "mins": {"goals": 1, "assists": 1, "fights": 1}}},
+	{"id": "power_play_goal", "cond": {"kind": "game", "mins": {"pp_goals": 1}}},
+	{"id": "shorty", "cond": {"kind": "game", "mins": {"sh_goals": 1}}},
+	{"id": "penalty_shot_goal", "cond": {"kind": "game", "mins": {"penalty_shot_goals": 1}}},
 	{"id": "shutout", "steam": "ACH_SHUTOUT",
 		"cond": {"kind": "special", "key": "shutout"}},
 	{"id": "first_win", "steam": "ACH_FIRST_WIN",
@@ -103,6 +107,7 @@ const ALL: Array[Dictionary] = [
 		"cond": {"kind": "event", "key": "tutorials_done"}},
 	{"id": CUSTOM_BUILD, "steam": "ACH_CUSTOM_BUILD",
 		"cond": {"kind": "event", "key": "build_edited"}},
+	{"id": CUP_WINNER, "cond": {"kind": "event", "key": "cup_won"}},
 	# ── Plays (FeatRules) ────────────────────────────────────────────────────
 	{"id": "snipe", "cond": {"kind": "feat"}},
 	{"id": "backhand_shelf", "cond": {"kind": "feat"}},

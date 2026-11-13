@@ -254,6 +254,9 @@ ICING_RACE_DEFEND,Reach the faceoff dots first for the whistle,Llega primero a l
 ICING_RACE_WATCH,Race to the end-zone faceoff dots,Carrera a los puntos de saque de la zona
 ICING_WAVED_OFF,ICING WAVED OFF,DESPEJE PROHIBIDO ANULADO
 TAPE_ICINGS,Icings,Despejes prohibidos
+TAPE_PIM,Penalty minutes,Minutos de penalización
+TAPE_POWER_PLAYS,Power plays,Superioridades
+TAPE_PP_GOALS,Power-play goals,Goles en superioridad
 TAPE_TITLE,Tale of the tape,Cara a cara
 TAPE_GOALS,Goals,Goles
 TAPE_SHOTS_ON_GOAL,Shots on goal,Tiros a puerta
@@ -298,6 +301,13 @@ STAT_FEED_HIT,HIT,CARGA
 STAT_FEED_TAKEAWAY,TAKEAWAY,ROBO
 STAT_FEED_INTERCEPTION,INTERCEPTION,INTERCEPCIÓN
 CAREER_INTERCEPTIONS,Interceptions,Intercepciones
+CAREER_GROUP_SPECIAL_TEAMS,Special teams,Equipos especiales
+CAREER_PP_GOALS,Power-play goals,Goles en superioridad
+CAREER_SH_GOALS,Short-handed goals,Goles en inferioridad
+CAREER_PP_POINTS,Power-play points,Puntos en superioridad
+CAREER_PP_PCT,Power play %,% en superioridad
+CAREER_PK_PCT,Penalty kill %,% en inferioridad
+CAREER_PIM,Penalty minutes,Minutos de penalización
 STAT_FEED_FACEOFF_WIN,FACEOFF WON,SAQUE GANADO
 CONFIRM_RETURN_FREE_PLAY,Return to free play?,¿Volver al juego libre?
 CONFIRM_RETURN_FREE_PLAY_HOST,Return to free play? This ends the match for everyone.,¿Volver al juego libre? Esto termina el partido para todos.
@@ -349,6 +359,23 @@ CONTROLS_FIGHT,Fight,Pelear
 LOBBY_FIGHTING,Fighting,Peleas
 CONTROLS_DEFLECT,Deflect,Desviar
 TOAST_PUCK_FROZEN,PUCK FROZEN ON THE BOARDS,DISCO CONGELADO EN LA BANDA
+TOAST_PENALTY_CALLED,"DELAYED PENALTY · %s, %s","PENALIZACIÓN RETARDADA · %s, %s"
+TOAST_PENALTY,PENALTY,PENALIZACIÓN
+PENALTY_BOARDING,BOARDING,CARGA CONTRA LA BANDA
+PENALTY_INTERFERENCE,INTERFERENCE,INTERFERENCIA
+PENALTY_ROUGHING,ROUGHING,RUDEZA
+PENALTY_FIGHTING,FIGHTING,PELEA
+TOAST_PENALTY_ASSESSED,"PENALTY · %s, %s","PENALIZACIÓN · %s, %s"
+PENALTY_STRENGTH,%d ON %d,%d CONTRA %d
+PENALTY_BOX_TITLE,PENALTY BOX,BANQUILLO DE CASTIGO
+PENALTY_BOX_LINE,%s · %s,%s · %s
+PENALTY_DELAYED_TITLE,DELAYED PENALTY,PENALIZACIÓN RETARDADA
+PENALTY_DELAYED_OFFENDING,Play stops when your team has the puck,El juego se detiene cuando tu equipo tenga el disco
+PENALTY_DELAYED_FOULED,Play on: the whistle waits until they have the puck,Sigue jugando: el silbato espera a que ellos tengan el disco
+PENALTY_SHOT_TITLE,PENALTY SHOT,TIRO PENAL
+PENALTY_SHOT_IN_N,PENALTY SHOT IN %d,TIRO PENAL EN %d
+PHASE_GO,GO!,¡YA!
+TOAST_PENALTY_SHOT_NO_GOAL,NO GOAL,NO ES GOL
 OPTIONS_PLAYER_SHADOWS,Player Shadows,Sombras de jugadores
 OPTIONS_ARENA_ADS,Arena Ads,Publicidad en la pista
 OPTIONS_ANIMATION_DETAIL,Animation Detail,Detalle de animación
@@ -500,6 +527,12 @@ PUCK_WON_FIGHT,Won the Fight,Pelea ganada
 PUCK_WON_FIGHT_DESC,Win a fight: stay on your feet when your opponent goes down.,Gana una pelea: sigue en pie cuando tu rival caiga.
 PUCK_GORDIE_HOWE,Gordie Howe Hat Trick,Hat trick Gordie Howe
 PUCK_GORDIE_HOWE_DESC,"Score a goal, record an assist and fight in a single game.","Marca un gol, da una asistencia y pelea en un mismo partido."
+PUCK_POWER_PLAY_GOAL,Man Advantage,Superioridad numérica
+PUCK_POWER_PLAY_GOAL_DESC,Score with your team a man up.,Marca con tu equipo en superioridad.
+PUCK_SHORTY,Shorty,En inferioridad
+PUCK_SHORTY_DESC,Score with your team a man down.,Marca con tu equipo en inferioridad.
+PUCK_PENALTY_SHOT_GOAL,Ice in the Veins,Sangre fría
+PUCK_PENALTY_SHOT_GOAL_DESC,Score on a penalty shot.,Marca en un tiro penal.
 PUCK_FIGHT_WINS,Heavyweight,Peso pesado
 PUCK_FIGHT_WINS_DESC,Win %d fights.,Gana %d peleas.
 PUCK_ENFORCER,Enforcer,Matón
@@ -534,3 +567,30 @@ STICK_ZONE_BAND1,Band,Franja
 STICK_ZONE_BAND2,Second band,Segunda franja
 STICK_ZONE_WORDMARK,Wordmark,Logotipo
 STICK_ZONE_BLADE,Blade,Pala
+TOURNAMENT_TITLE,Tournament,Torneo
+TOURNAMENT_CONTINUE,Continue Tournament,Continuar torneo
+TOURNAMENT_NEW,New Tournament,Nuevo torneo
+TOURNAMENT_ROUND_QF,Quarterfinal,Cuartos de final
+TOURNAMENT_ROUND_SF,Semifinal,Semifinal
+TOURNAMENT_ROUND_FINAL,Final,Final
+TOURNAMENT_NEXT_GAME,%s vs %s,%s contra %s
+TOURNAMENT_WON,%s won the cup,%s ganó la copa
+TOURNAMENT_LOST,%s eliminated (%s),%s eliminado (%s)
+TOURNAMENT_ADVANCE,Advance to the %s,Pasas a: %s
+TOURNAMENT_ELIMINATED,Eliminated,Eliminado
+TOURNAMENT_CHAMPIONS,Champions,Campeones
+TOURNAMENT_CHAMPION,Champion,Campeón
+TOURNAMENT_BRACKET,Bracket,Cuadro
+TOURNAMENT_SCORE_OT,%d OT,%d PR
+TOURNAMENT_LOBBY_TITLE,Tournament: %s,Torneo: %s
+TOURNAMENT_MATCHUP,MATCHUP,PARTIDO
+TOURNAMENT_FINISH,Finish,Terminar
+TOURNAMENT_SETUP_CLUB,YOUR CLUB,TU CLUB
+TOURNAMENT_SETUP_SETTINGS,MATCH SETTINGS,AJUSTES DEL PARTIDO
+TOURNAMENT_SETUP_START,Start Tournament,Empezar torneo
+TOURNAMENT_SETUP_NOTE,"Eight clubs, single elimination. Win three games to take the cup.","Ocho clubes, eliminación directa. Gana tres partidos para llevarte la copa."
+TOURNAMENT_REPLACE_CONFIRM,Start a new tournament? The one in progress will be lost.,¿Empezar un torneo nuevo? Se perderá el que está en curso.
+GAME_OVER_CONTINUE,Continue,Continuar
+PUCK_CUP_WINNER,Cup Winner,Ganador de la copa
+PUCK_CUP_WINNER_DESC,Win a tournament.,Gana un torneo.
+TOURNAMENT_INTRO_TITLE,TOURNAMENT · %s,TORNEO · %s

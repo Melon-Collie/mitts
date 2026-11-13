@@ -63,6 +63,22 @@ const BREATHE_HIGH_DEPTH_M: float = HOUSE_TOP_DEPTH_M
 const SHOT_LANE_STEP_M: float = 3.0
 const POINT_THREAT_DEPTH_M: float = 10.7   # puck deeper than this = "at the point"
 
+# ── A man down: the wedge and one (docs/penalties-plan.md) ──────────────────
+# Outnumbered, the coverage stops tiling the zone and protects the house. Three
+# men hold a triangle in it, two at the base either side of the crease and one
+# at its tip in the high slot, and each plays the puck and picks a man up only
+# on his own third of the house. The fourth is the one: the whole perimeter is
+# his to pressure, corner to point, and nobody else leaves the house for it.
+# With three men there is no one, and the perimeter is given up. The roles are
+# the 5v5 coverage's (ZONE_D_STRONG / ZONE_D_WEAK the base, ZONE_C the tip,
+# ZONE_W_STRONG the one), so the election, the matching and the behaviour are
+# unchanged: only the areas, the anchors and who owns the puck differ.
+const WEDGE_BASE_U_M: float = D_STRONG_REST_U_M       # the base, either side
+const WEDGE_BASE_DEPTH_M: float = D_STRONG_REST_DEPTH_M
+const WEDGE_TIP_U_M: float = C_REST_U_M               # the tip shades to the puck
+const WEDGE_TIP_DEPTH_LOW_M: float = C_REST_DEPTH_HIGH_M  # puck below the goal line
+const WEDGE_TIP_DEPTH_HIGH_M: float = SLOT_TOP_DEPTH_M - 1.0  # puck at the point
+
 # ── Defensive home posts (plan §5) ───────────────────────────────────────────
 const D_HOME_U_M: float = 5.0              # a D's home post: dot lane at his blue line
 const F_HOME_DEPTH_INTO_NZ_M: float = 4.0  # a forward's home post: high F3 ice
@@ -77,11 +93,13 @@ static func depth_of(own_goal_z: float, pos: Vector3) -> float:
 # Which zone role owns PRESSURE on a puck at `puck_pos` — exactly one owner
 # per position, so the area split never double-commits (or zero-commits)
 # on the carrier. Priority: the low battle beats the net-front box beats
-# the slot beats the high halves.
+# the slot beats the high halves. `man_down`: the wedge's split instead.
 static func pressure_owner(strong_x: float, own_goal_z: float,
-		puck_pos: Vector3) -> int:
+		puck_pos: Vector3, man_down: bool = false) -> int:
 	var d: float = depth_of(own_goal_z, puck_pos)
 	var u: float = strong_x * puck_pos.x
+	if man_down:
+		return _wedge_owner(d, u, puck_pos.x)
 	# The box starts AT the goal line: behind the net is the battle D's ice.
 	if d >= 0.0 and d < NET_FRONT_DEPTH_M \
 			and absf(puck_pos.x) <= NET_FRONT_HALF_WIDTH_M:
@@ -114,7 +132,8 @@ static func pressure_slot(view: TeamStrategyView, strong_x: float, own_goal_z: f
 			else AIRoleSlots.Slot.NONE
 	if owner != AIRoleSlots.Slot.NONE:
 		return owner
-	return pressure_owner(strong_x, own_goal_z, puck_pos)
+	return pressure_owner(strong_x, own_goal_z, puck_pos,
+			view != null and view.man_down())
 
 
 # Whether the puck is loose and a teammate of `team_id` other than `peer_id` is
@@ -132,10 +151,13 @@ static func chased_by_another(snapshot: WorldSnapshot, team_id: int, peer_id: in
 # metres (pass AREA_RELEASE_MARGIN_M for the incumbent-man hysteresis).
 # Areas deliberately overlap a little at the seams — a man on a boundary is
 # briefly double-covered while he's passed off, which is the real handshake.
+# `man_down`: the wedge's areas instead.
 static func in_area(slot: int, strong_x: float, own_goal_z: float,
-		pos: Vector3, margin: float = 0.0) -> bool:
+		pos: Vector3, margin: float = 0.0, man_down: bool = false) -> bool:
 	var d: float = depth_of(own_goal_z, pos)
 	var u: float = strong_x * pos.x
+	if man_down:
+		return _in_wedge_area(slot, d, u, pos.x, margin)
 	match slot:
 		AIRoleSlots.Slot.ZONE_D_STRONG:
 			# The whole low perimeter — corners, boards, behind the net, on
@@ -166,11 +188,24 @@ static func in_area(slot: int, strong_x: float, own_goal_z: float,
 # extended pose (puck at the point) on the puck's depth, so the structure
 # slides continuously instead of teleporting between stances.
 static func anchor_of(slot: int, strong_x: float, own_goal_z: float,
-		puck_pos: Vector3) -> Vector3:
+		puck_pos: Vector3, man_down: bool = false) -> Vector3:
 	var d_p: float = depth_of(own_goal_z, puck_pos)
 	# 0 = fully collapsed (puck at/below the goal line), 1 = fully extended.
 	var t: float = clampf((d_p - BREATHE_LOW_DEPTH_M)
 			/ (BREATHE_HIGH_DEPTH_M - BREATHE_LOW_DEPTH_M), 0.0, 1.0)
+	if man_down:
+		match slot:
+			AIRoleSlots.Slot.ZONE_D_STRONG:
+				return _at(strong_x, own_goal_z, WEDGE_BASE_U_M, WEDGE_BASE_DEPTH_M)
+			AIRoleSlots.Slot.ZONE_D_WEAK:
+				return _at(strong_x, own_goal_z, -WEDGE_BASE_U_M, WEDGE_BASE_DEPTH_M)
+			AIRoleSlots.Slot.ZONE_C:
+				return _at(strong_x, own_goal_z, WEDGE_TIP_U_M,
+						lerpf(WEDGE_TIP_DEPTH_LOW_M, WEDGE_TIP_DEPTH_HIGH_M, t))
+			AIRoleSlots.Slot.ZONE_W_STRONG:
+				# With the puck in the house he has nothing to chase: the top
+				# of it, on the puck's side.
+				return _at(strong_x, own_goal_z, W_STRONG_SINK_U_M, W_STRONG_SINK_DEPTH_M)
 	match slot:
 		AIRoleSlots.Slot.ZONE_D_STRONG:
 			return _at(strong_x, own_goal_z, D_STRONG_REST_U_M, D_STRONG_REST_DEPTH_M)
@@ -211,6 +246,39 @@ static func defensive_anchor(is_defense: bool, side_sign: float,
 		return Vector3(side_sign * D_HOME_U_M, 0.0, own_dir * GameRules.BLUE_LINE_Z)
 	return Vector3(side_sign * D_HOME_U_M, 0.0,
 			own_dir * (GameRules.BLUE_LINE_Z - F_HOME_DEPTH_INTO_NZ_M))
+
+
+# Whether depth `d` and world x are inside the house the wedge protects: in
+# front of the goal line, under the slot's top, between the circles.
+static func _in_house(d: float, x: float, margin: float) -> bool:
+	return d >= -margin and d < SLOT_TOP_DEPTH_M + margin \
+			and absf(x) <= SLOT_HALF_WIDTH_M + margin
+
+
+# The wedge's owner of a puck at depth `d`, strong-signed lateral `u`, world
+# `x`: the base man on its side low in the house, the tip above them, and the
+# one everywhere outside it.
+static func _wedge_owner(d: float, u: float, x: float) -> int:
+	if not _in_house(d, x, 0.0):
+		return AIRoleSlots.Slot.ZONE_W_STRONG
+	if d >= NET_FRONT_DEPTH_M:
+		return AIRoleSlots.Slot.ZONE_C
+	return AIRoleSlots.Slot.ZONE_D_STRONG if u >= 0.0 else AIRoleSlots.Slot.ZONE_D_WEAK
+
+
+static func _in_wedge_area(slot: int, d: float, u: float, x: float, margin: float) -> bool:
+	match slot:
+		AIRoleSlots.Slot.ZONE_D_STRONG:
+			return _in_house(d, x, margin) and d < NET_FRONT_DEPTH_M + margin and u >= -margin
+		AIRoleSlots.Slot.ZONE_D_WEAK:
+			return _in_house(d, x, margin) and d < NET_FRONT_DEPTH_M + margin and u <= margin
+		AIRoleSlots.Slot.ZONE_C:
+			return _in_house(d, x, margin) and d >= NET_FRONT_DEPTH_M - margin
+		AIRoleSlots.Slot.ZONE_W_STRONG:
+			# Everything the house is not, and its rim: the handshake ice.
+			return not _in_house(d, x, -margin)
+		_:
+			return false
 
 
 # World point at lateral u (strong-signed) and depth d in the defended zone.

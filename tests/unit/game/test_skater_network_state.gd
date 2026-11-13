@@ -79,9 +79,9 @@ func test_array_length_sentinel() -> void:
 	# torso_lean, posture_lean, recoil_dir, stick_check_phase,
 	# stick_check_elapsed, stick_tied, diving, slapshot_pinned, check_drive_phase,
 	# check_drive_elapsed, stumbling, fight_role, fight_grip, fight_punch_side,
-	# fight_rattle.
+	# fight_rattle, boxed.
 	var s := SkaterNetworkState.new()
-	assert_eq(s.to_array().size(), 38)
+	assert_eq(s.to_array().size(), 39)
 
 
 func test_blade_up_back_compat_defaults_false() -> void:

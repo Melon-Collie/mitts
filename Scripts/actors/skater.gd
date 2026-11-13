@@ -575,13 +575,23 @@ var latched_committed: bool = false
 var latched_stagger: float = 0.0
 var latched_shot_state: int = 0
 # True while this skater is one of the two players taking the draw, set by
-# PhaseCoordinator at every faceoff placement from the record's team slot (C).
-# Cosmetic-only: it deepens the gait's ready stance into the crouch a centre
-# actually holds over the dot (see SkaterSkatingCoordinator's faceoff branch),
-# and it is only read while the prep phase is up, so nothing has to clear it.
-# Derived identically on host and client rather than replicated — every peer
-# already knows every player's slot.
+# PhaseCoordinator at every faceoff placement from his team's cast
+# (FaceoffFormation: the centre, or whoever stands in for him). It deepens the
+# gait's ready stance into the crouch held over the dot (see
+# SkaterSkatingCoordinator's faceoff branch) and, on the host, names whose
+# swipe the drop is stamped on; nothing reads it outside a faceoff, so nothing
+# has to clear it. Derived identically on host and client rather than
+# replicated — every peer knows every player's seat and who was placed.
 var is_faceoff_center: bool = false
+# True while this skater sits in the penalty box (PenaltyTracker, from the
+# ledger on every peer): his controller holds him as it does in a dead-puck
+# phase, and the host ghosts him so nothing on the ice touches him.
+var in_box: bool = false
+# A penalty shot is on (PenaltyTracker, from the ledger on every peer). The
+# shooter is the one skater in it; everyone else is sidelined, held at his
+# bench as a boxed skater is held in the box, but in plain sight.
+var takes_penalty_shot: bool = false
+var sidelined: bool = false
 # Predicted world-space shot velocity (direction * speed) if the carrier
 # released the shot they're currently charging RIGHT NOW. Published each tick by
 # SkaterController during a live charge (WRISTER via _update_wrister_charge, SLAPPER

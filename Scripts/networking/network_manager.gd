@@ -39,6 +39,8 @@ func is_real_peer(peer_id: int) -> bool:
 # _ready and executes the corresponding orchestration work. Keeps the upward
 # call discipline — infrastructure never calls into application directly.
 signal host_ready
+# Emitted at the end of reset(): the session that was running is gone.
+signal session_reset
 # Host: the Steam lobby is up and the SteamMultiplayerPeer is assigned — the
 # menu waits on this before changing to the Lobby scene (Steam lobby creation
 # is async, unlike ENet's instant create_server). Failure path mirrors it.
@@ -78,6 +80,9 @@ signal goalie_freeze_called_received
 signal fight_challenge_received(challenger_peer_id: int, target_peer_id: int)
 signal fight_challenge_lapsed_received(challenger_peer_id: int)
 signal fight_called_received(a_peer_id: int, b_peer_id: int)
+signal penalty_called_received(peer_id: int, foul: int)
+signal penalty_whistled_received(shot_missed: bool)
+signal penalty_ledger_received(wire: Array)
 signal punch_landed_received(victim_peer_id: int, intensity: float, dir_x: float, dir_z: float)
 signal puck_frozen_called_received
 signal offside_called_received
@@ -94,6 +99,9 @@ signal slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int)
 signal slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int, new_team_id: int, new_slot: int, jersey: Color, helmet: Color, pants: Color)
 signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
+# Client: the host's tournament as TournamentState.to_dict() wrote it, or an
+# empty dictionary when the session is not (or is no longer) one.
+signal tournament_synced(data: Dictionary)
 signal color_vote_changed(peer_id: int, color_slot: int)
 signal color_votes_synced(votes: Dictionary)
 signal team_colors_changed(home_slot: int, away_slot: int)
@@ -500,11 +508,12 @@ func start_offline() -> void:
 	is_host = true
 	game_initiated = true
 	is_offline_mode = true
-	# Seed the hosted lobby's mode from the saved preference (the last mode
-	# picked while hosting). Free play / tutorial / drills also pass through
-	# here but never read pending_team_size — their configs below carry the
-	# team size directly — so the seed only reaches the unified lobby.
+	# Seed the hosted lobby's mode and rule set from the saved preferences (the
+	# last ones picked while hosting). Free play / tutorial / drills also pass
+	# through here but never read either pending value — their configs below
+	# carry both directly — so the seed only reaches the unified lobby.
 	pending_team_size = PlayerPrefs.preferred_team_size
+	pending_rule_set = PlayerPrefs.preferred_rule_set
 	_peer_handedness[1] = local_is_left_handed
 	_peer_names[1] = local_player_name
 	_peer_numbers[1] = local_jersey_number
@@ -1003,6 +1012,7 @@ func reset() -> void:
 	_delta_receiver.reset()
 	_peer_snapshot_acks.clear()
 	NetworkSimManager.clear_pending()
+	session_reset.emit()
 
 # ── Process ───────────────────────────────────────────────────────────────────
 func _notification(what: int) -> void:
@@ -2338,6 +2348,41 @@ func notify_fight_challenge_lapsed(challenger_peer_id: int) -> void:
 		func(c: int) -> void: fight_challenge_lapsed_received.emit(c),
 		[challenger_peer_id], true)
 
+# The referee's delayed call going up against `peer_id` (PenaltyRules.Foul).
+func notify_penalty_called_to_all(peer_id: int, foul: int) -> void:
+	for to_peer: int in connected_peer_ids():
+		notify_penalty_called.rpc_id(to_peer, peer_id, foul)
+
+@rpc("authority", "reliable")
+func notify_penalty_called(peer_id: int, foul: int) -> void:
+	NetworkSimManager.send(
+		func(p: int, f: int) -> void: penalty_called_received.emit(p, f),
+		[peer_id, foul], true)
+
+# The whistle for a penalty: the delayed call coming due, or (`shot_missed`) a
+# penalty shot ending without a goal.
+func notify_penalty_whistled_to_all(shot_missed: bool) -> void:
+	for to_peer: int in connected_peer_ids():
+		notify_penalty_whistled.rpc_id(to_peer, shot_missed)
+
+@rpc("authority", "reliable")
+func notify_penalty_whistled(shot_missed: bool) -> void:
+	NetworkSimManager.send(
+		func(m: bool) -> void: penalty_whistled_received.emit(m), [shot_missed], true)
+
+# The whole PenaltyLedger (to_wire), sent whenever it changes and to a joiner.
+func send_penalty_ledger_to_all(wire: Array) -> void:
+	for to_peer: int in connected_peer_ids():
+		notify_penalty_ledger.rpc_id(to_peer, wire)
+
+func send_penalty_ledger(to_peer: int, wire: Array) -> void:
+	notify_penalty_ledger.rpc_id(to_peer, wire)
+
+@rpc("authority", "reliable")
+func notify_penalty_ledger(wire: Array) -> void:
+	NetworkSimManager.send(
+		func(w: Array) -> void: penalty_ledger_received.emit(w), [wire], true)
+
 func notify_fight_called_to_all(a_peer_id: int, b_peer_id: int) -> void:
 	for peer_id: int in connected_peer_ids():
 		notify_fight_called.rpc_id(peer_id, a_peer_id, b_peer_id)
@@ -2779,6 +2824,17 @@ func send_lobby_settings_to(peer_id: int, num_periods: int, period_duration: flo
 		fighting: bool) -> void:
 	notify_lobby_settings.rpc_id(peer_id, num_periods, period_duration, ot_enabled, rule_set,
 			team_size, bot_difficulty, goalie_difficulty, fighting)
+
+@rpc("authority", "reliable")
+func sync_tournament(data: Dictionary) -> void:
+	tournament_synced.emit(data)
+
+func send_tournament_to(peer_id: int, data: Dictionary) -> void:
+	sync_tournament.rpc_id(peer_id, data)
+
+func send_tournament_to_all(data: Dictionary) -> void:
+	for peer_id: int in connected_peer_ids():
+		sync_tournament.rpc_id(peer_id, data)
 
 @rpc("authority", "reliable")
 func notify_return_to_lobby(roster: Array) -> void:

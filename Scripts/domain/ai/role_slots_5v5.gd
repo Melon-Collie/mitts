@@ -165,6 +165,12 @@ static func assign(
 	# Pass 1 — group-scoped elections in priority order. A slot whose group
 	# has no free peer left is deferred to the cross-fill pass.
 	var deferred: Array[SlotSpec] = []
+	# Fewer bodies than posts (a man in the penalty box, a seat nobody holds):
+	# pass 2 has no spare to hand out, so a D-zone post whose group is empty
+	# would be the one left open, and the lower posts would be full.
+	var short_handed: bool = teammates.size() < specs.size()
+	if short_handed and state == AIPossessionState.State.TRANS_DEFENSE:
+		_keep_the_high_man(specs)
 	var carrier_depth_z: float = NAN
 	if carrier_pid != -1 and snapshot.skater_states.has(carrier_pid):
 		carrier_depth_z = snapshot.skater_states[carrier_pid].position.z
@@ -194,6 +200,12 @@ static func assign(
 			if pid == -1:
 				pid = _pick_soonest(snapshot, teammates, assigned,
 						prev_assignments, spec, caps_by_peer, position_by_peer, false)
+		if pid == -1 and short_handed and is_zone_slot(spec.slot):
+			# The posts are in order of importance, so this one takes a body
+			# from any group now: with a defenseman off, a forward fronts the
+			# net and it is the weak-side winger's ice that goes uncovered.
+			pid = _pick_soonest(snapshot, teammates, assigned,
+					prev_assignments, spec, caps_by_peer, position_by_peer, false)
 		if pid == -1:
 			deferred.append(spec)
 			continue
@@ -385,6 +397,23 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 
 	var empty: Array[SlotSpec] = []
 	return empty
+
+
+# The set shape a man short is a 1-3, and its one is the high man who steers
+# the carrier, not the middle layer in front of the line: NZ_F1 elects ahead of
+# NZ_MID, so the middle is the post that goes unfilled.
+static func _keep_the_high_man(specs: Array[SlotSpec]) -> void:
+	var mid: int = -1
+	var high: int = -1
+	for i: int in specs.size():
+		if specs[i].slot == AIRoleSlots.Slot.NZ_MID:
+			mid = i
+		elif specs[i].slot == AIRoleSlots.Slot.NZ_F1:
+			high = i
+	if mid != -1 and high > mid:
+		var middle: SlotSpec = specs[mid]
+		specs[mid] = specs[high]
+		specs[high] = middle
 
 
 # Sets each back-line post's deadline: the carrier's arrival there less the

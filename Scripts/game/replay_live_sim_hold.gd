@@ -56,6 +56,10 @@ func release() -> void:
 			node.physics_interpolation_mode = _saved_interpolation[i]
 			# Its last tick pose predates the replay.
 			node.reset_physics_interpolation()
+			# The clip drew each skater in or out of the box as it was recorded.
+			var skater: Skater = node as Skater
+			if skater != null:
+				skater.visible = not skater.in_box
 	_posed.clear()
 	_saved_interpolation.clear()
 	_puck = null

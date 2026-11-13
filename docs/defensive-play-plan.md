@@ -719,8 +719,9 @@ The defenseman's 2-on-1 play: down on the ice across the pass lane, stick out.
 ### Further candidates, not committed
 - **Net-front box-out.** The pin's sustained-contact model in open ice, moving a
   screener out of the goalie's sightline. It would feed the goalie's screen read.
-- **Deliberately out:** hooking, holding and interference. Without a penalty system
-  they cost nothing, and the game has none.
+- **Deliberately out:** hooking and holding. They need a stick that can foul a
+  body, which no verb does. Interference on a body check is called since
+  `docs/penalties-plan.md`.
 
 ## Wire summary
 

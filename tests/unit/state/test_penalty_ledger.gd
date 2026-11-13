@@ -1,0 +1,235 @@
+extends GutTest
+
+# PenaltyLedger — calls, minors, the queue and the release on a goal.
+
+const BOARDING: int = PenaltyRules.Foul.BOARDING
+const MINOR: float = 24.0
+const SIZE: int = 5
+const MAX_SERVING: int = 2
+
+var ledger: PenaltyLedger
+
+
+func before_each() -> void:
+	ledger = PenaltyLedger.new()
+
+
+func _box(peer_id: int, team_id: int) -> void:
+	ledger.call_foul(peer_id, team_id, BOARDING)
+	ledger.assess(MINOR, MAX_SERVING)
+
+
+# ── The call ─────────────────────────────────────────────────────────────────
+
+func test_a_called_foul_is_pending_and_boxes_nobody() -> void:
+	assert_true(ledger.call_foul(10, 0, BOARDING))
+	assert_true(ledger.has_pending())
+	assert_true(ledger.has_pending_against(0))
+	assert_false(ledger.has_pending_against(1))
+	assert_false(ledger.is_boxed(10))
+	assert_eq(ledger.strength(0, SIZE), SIZE, "play goes on at full strength")
+
+
+func test_a_man_already_called_is_not_called_again() -> void:
+	ledger.call_foul(10, 0, BOARDING)
+	assert_false(ledger.call_foul(10, 0, PenaltyRules.Foul.INTERFERENCE))
+	assert_eq(ledger.entries.size(), 1)
+
+
+func test_a_goal_by_the_fouled_team_washes_out_the_oldest_call() -> void:
+	ledger.call_foul(10, 0, BOARDING)
+	ledger.call_foul(11, 0, BOARDING)
+	assert_eq(ledger.waive_one_against(0), 10)
+	assert_eq(ledger.waive_one_against(1), -1)
+	assert_eq(ledger.assess(MINOR, MAX_SERVING), [11] as Array[int])
+
+
+# ── Serving ──────────────────────────────────────────────────────────────────
+
+func test_an_assessed_minor_puts_the_team_a_man_short() -> void:
+	ledger.call_foul(10, 0, BOARDING)
+	assert_eq(ledger.assess(MINOR, MAX_SERVING), [10] as Array[int])
+	assert_false(ledger.has_pending())
+	assert_true(ledger.is_boxed(10))
+	assert_eq(ledger.strength(0, SIZE), SIZE - 1)
+	assert_eq(ledger.strength(1, SIZE), SIZE)
+	assert_almost_eq(ledger.soonest_remaining(0), MINOR, 0.0001)
+	assert_eq(ledger.soonest_remaining(1), -1.0)
+
+
+func test_a_minor_runs_out_and_releases_its_man() -> void:
+	_box(10, 0)
+	assert_eq(ledger.tick(MINOR - 0.1, MAX_SERVING).size(), 0)
+	assert_eq(ledger.tick(0.2, MAX_SERVING), [10] as Array[int])
+	assert_false(ledger.is_boxed(10))
+	assert_eq(ledger.strength(0, SIZE), SIZE)
+
+
+func test_a_third_minor_waits_for_the_first_to_end() -> void:
+	_box(10, 0)
+	ledger.tick(10.0, MAX_SERVING)
+	_box(11, 0)
+	_box(12, 0)
+	assert_eq(ledger.strength(0, SIZE), PenaltyRules.MIN_SKATERS, "never below three")
+	assert_true(ledger.is_boxed(12), "he sits while he waits")
+	assert_almost_eq(ledger.remaining_for(12), MINOR, 0.0001)
+	ledger.tick(5.0, MAX_SERVING)
+	assert_almost_eq(ledger.remaining_for(12), MINOR, 0.0001, "his clock has not started")
+	assert_eq(ledger.tick(MINOR - 15.0 + 0.1, MAX_SERVING), [10] as Array[int])
+	assert_eq(ledger.strength(0, SIZE), PenaltyRules.MIN_SKATERS, "the queued minor took its place")
+	ledger.tick(1.0, MAX_SERVING)
+	assert_almost_eq(ledger.remaining_for(12), MINOR - 1.0, 0.0001)
+
+
+# ── A goal ───────────────────────────────────────────────────────────────────
+
+func test_a_power_play_goal_ends_the_minor_nearest_its_end() -> void:
+	_box(10, 0)
+	ledger.tick(10.0, MAX_SERVING)
+	_box(11, 0)
+	assert_eq(ledger.release_for_goal(1, SIZE, MAX_SERVING), 10)
+	assert_true(ledger.is_boxed(11))
+	assert_eq(ledger.strength(0, SIZE), SIZE - 1)
+
+
+func test_a_short_handed_goal_releases_nobody() -> void:
+	_box(10, 0)
+	assert_eq(ledger.release_for_goal(0, SIZE, MAX_SERVING), -1)
+	assert_true(ledger.is_boxed(10))
+
+
+func test_a_goal_at_even_strength_releases_nobody() -> void:
+	_box(10, 0)
+	_box(20, 1)
+	assert_eq(ledger.strength(0, SIZE), ledger.strength(1, SIZE), "four on four")
+	assert_eq(ledger.release_for_goal(1, SIZE, MAX_SERVING), -1)
+	assert_eq(ledger.release_for_goal(0, SIZE, MAX_SERVING), -1)
+
+
+func test_a_power_play_goal_starts_the_queued_minor() -> void:
+	_box(10, 0)
+	_box(11, 0)
+	_box(12, 0)
+	assert_ne(ledger.release_for_goal(1, SIZE, MAX_SERVING), -1)
+	assert_eq(ledger.strength(0, SIZE), PenaltyRules.MIN_SKATERS)
+	ledger.tick(1.0, MAX_SERVING)
+	assert_almost_eq(ledger.remaining_for(12), MINOR - 1.0, 0.0001)
+
+
+# ── Mirrors and rejoins ──────────────────────────────────────────────────────
+
+func test_the_wire_round_trips_the_ledger() -> void:
+	_box(10, 0)
+	ledger.tick(3.25, MAX_SERVING)
+	ledger.call_foul(20, 1, PenaltyRules.Foul.INTERFERENCE)
+	var mirror := PenaltyLedger.new()
+	mirror.from_wire(ledger.to_wire())
+	assert_true(mirror.is_boxed(10))
+	assert_almost_eq(mirror.remaining_for(10), MINOR - 3.25, 0.001)
+	assert_true(mirror.has_pending_against(1))
+	assert_eq(mirror.foul_of(20), PenaltyRules.Foul.INTERFERENCE)
+	assert_eq(mirror.to_wire(), ledger.to_wire())
+
+
+func test_a_mirror_runs_the_clock_down_but_releases_nobody() -> void:
+	_box(10, 0)
+	ledger.tick_mirror(MINOR + 5.0)
+	assert_eq(ledger.remaining_for(10), 0.0)
+	assert_true(ledger.is_boxed(10), "the host says who comes out")
+
+
+func test_a_rejoining_player_takes_his_penalty_with_him() -> void:
+	_box(10, 0)
+	ledger.rebind(10, 77)
+	assert_false(ledger.is_boxed(10))
+	assert_true(ledger.is_boxed(77))
+
+
+# ── A penalty shot ───────────────────────────────────────────────────────────
+
+func test_a_pending_call_becomes_a_shot_for_the_man_fouled() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	assert_eq(ledger.stage_shot(), 20)
+	assert_eq(ledger.shooter_peer_id(), 20)
+	assert_eq(ledger.shot_defending_team_id(), 0, "the team that fouled defends it")
+	assert_false(ledger.has_pending())
+	assert_false(ledger.is_boxed(10), "nobody sits for a penalty shot")
+
+
+func test_a_team_called_twice_gives_up_one_shot_to_the_man_fouled_first() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	ledger.call_foul(11, 0, BOARDING, 21)
+	assert_eq(ledger.stage_shot(), 20)
+	assert_eq(ledger.entries.size(), 1)
+
+
+func test_a_call_against_each_team_washes_out() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	ledger.call_foul(21, 1, BOARDING, 11)
+	assert_eq(ledger.stage_shot(), -1)
+	assert_true(ledger.is_empty())
+
+
+func test_no_call_means_no_shot() -> void:
+	assert_eq(ledger.stage_shot(), -1)
+	assert_eq(ledger.shooter_peer_id(), -1)
+	assert_eq(ledger.shot_defending_team_id(), -1)
+
+
+func test_a_shot_that_is_over_leaves_the_ledger() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	ledger.stage_shot()
+	ledger.end_shot()
+	assert_true(ledger.is_empty())
+
+
+func test_the_wire_carries_who_takes_the_shot() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	ledger.stage_shot()
+	var mirror := PenaltyLedger.new()
+	mirror.from_wire(ledger.to_wire())
+	assert_eq(mirror.shooter_peer_id(), 20)
+	assert_eq(mirror.shot_defending_team_id(), 0)
+
+
+# ── A fight's minors ─────────────────────────────────────────────────────────
+
+func _box_the_fighters(home_peer: int, away_peer: int) -> void:
+	ledger.call_foul(home_peer, 0, PenaltyRules.Foul.FIGHTING)
+	ledger.call_foul(away_peer, 1, PenaltyRules.Foul.FIGHTING)
+	ledger.assess(MINOR, MAX_SERVING)
+
+
+func test_a_fight_sits_a_man_from_each_team() -> void:
+	_box_the_fighters(10, 20)
+	assert_true(ledger.is_boxed(10))
+	assert_true(ledger.is_boxed(20))
+	assert_eq(ledger.strength(0, SIZE), SIZE - 1)
+	assert_eq(ledger.strength(1, SIZE), SIZE - 1, "four on four")
+
+
+func test_a_goal_never_ends_a_fights_minor() -> void:
+	_box_the_fighters(10, 20)
+	_box(11, 0)
+	assert_eq(ledger.strength(0, SIZE), SIZE - 2, "four on three")
+	ledger.tick(20.0, MAX_SERVING)
+	assert_eq(ledger.release_for_goal(1, SIZE, MAX_SERVING), 11,
+			"the foul's minor ends, though the fighter's has less time left")
+	assert_true(ledger.is_boxed(10))
+	assert_eq(ledger.release_for_goal(1, SIZE, MAX_SERVING), -1, "back to four on four")
+
+
+func test_a_team_short_only_for_a_fight_gets_nobody_back_on_a_goal() -> void:
+	_box_the_fighters(10, 20)
+	ledger.tick(MINOR - 1.0, MAX_SERVING)
+	_box(21, 1)
+	ledger.tick(0.5, MAX_SERVING)
+	assert_eq(ledger.release_for_goal(0, SIZE, MAX_SERVING), 21)
+	assert_true(ledger.is_boxed(20), "his fighting minor runs its course")
+
+
+func test_the_shot_remembers_whose_foul_it_is_for() -> void:
+	ledger.call_foul(10, 0, BOARDING, 20)
+	assert_eq(ledger.shot_offender_peer_id(), -1, "no shot is on yet")
+	ledger.stage_shot()
+	assert_eq(ledger.shot_offender_peer_id(), 10)

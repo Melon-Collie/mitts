@@ -13,6 +13,8 @@ const _STAGE_BOOT: String = "boot"
 const _STAGE_FREE_PLAY: String = "free_play"
 const _STAGE_TUTORIAL: String = "tutorial"
 const _STAGE_LOBBY: String = "lobby"
+const _STAGE_TOURNAMENT: String = "tournament"
+const _STAGE_TOURNAMENT_FINAL: String = "tournament_final"
 const _STAGE_MATCH: String = "match"
 
 const _SHOTS: Array[Dictionary] = [
@@ -33,6 +35,7 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "side_player_head", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.HEAD},
 	{"name": "side_player_stick", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.STICK},
 	{"name": "side_player_skates", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.SKATES},
+	{"name": "side_tournament_setup", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_tournament_new_pressed"},
 	{"name": "side_career", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_career_pressed"},
 	{"name": "side_trophy_case", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_trophy_case_pressed"},
 	{"name": "side_tutorials", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_tutorial_pressed"},
@@ -40,9 +43,22 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "side_options", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_options_pressed"},
 	{"name": "side_exit", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_exit_pressed"},
 	{"name": "hud_free_play", "stage": _STAGE_FREE_PLAY, "open": "_close_side_menu"},
+	{"name": "hud_penalty_delayed", "stage": _STAGE_FREE_PLAY, "open": "_show_penalty_hud", "arg": false},
+	{"name": "hud_penalty_box", "stage": _STAGE_FREE_PLAY, "open": "_show_penalty_hud", "arg": true},
+	{"name": "penalty_box_view_home", "stage": _STAGE_FREE_PLAY, "open": "_show_penalty_box_view", "arg": 0},
+	{"name": "penalty_box_view_away", "stage": _STAGE_FREE_PLAY, "open": "_show_penalty_box_view", "arg": 1},
 	{"name": "post_game_analytics", "stage": _STAGE_FREE_PLAY, "open": "_open_post_game_analytics"},
 	{"name": "hud_tutorial", "stage": _STAGE_TUTORIAL, "open": "_open_nothing"},
 	{"name": "lobby", "stage": _STAGE_LOBBY, "open": "_open_nothing"},
+	# A tournament lobby opens on its bracket; these run in bracket order, each
+	# playing the tournament on from where the last left it.
+	{"name": "tournament_draw", "stage": _STAGE_TOURNAMENT, "open": "_open_nothing"},
+	{"name": "tournament_lobby", "stage": _STAGE_TOURNAMENT, "open": "_close_tournament_bracket"},
+	{"name": "tournament_after_a_win", "stage": _STAGE_TOURNAMENT, "open": "_open_tournament_bracket_after", "arg": 1},
+	{"name": "tournament_won", "stage": _STAGE_TOURNAMENT, "open": "_open_tournament_bracket_after", "arg": 2},
+	# A tournament's final, from its matchup intro to the screen that wins the cup.
+	{"name": "tournament_intro", "stage": _STAGE_TOURNAMENT_FINAL, "open": "_open_nothing"},
+	{"name": "tournament_champion", "stage": _STAGE_TOURNAMENT_FINAL, "open": "_open_tournament_champion"},
 	{"name": "hud_match", "stage": _STAGE_MATCH, "open": "_open_nothing"},
 ]
 
@@ -65,7 +81,10 @@ const _MATCH_START_TIMEOUT_FRAMES: int = 600
 # Deepest overlay stack a shot opens (player settings over the side menu), plus
 # slack.
 const _MAX_DISMISS_PRESSES: int = 6
+# The tournament stage's draw, fixed so its shots repeat.
+const _TOURNAMENT_SEED: int = 7
 
+var _box_seat: PenaltyBoxCamera = null
 var _out_dir: String = ""
 var _stage: String = ""
 var _shot_ok: bool = true
@@ -145,12 +164,24 @@ func _enter_stage(stage: String) -> void:
 		_STAGE_LOBBY, _STAGE_MATCH:
 			NetworkManager.start_offline()
 			path = Constants.SCENE_LOBBY
+		_STAGE_TOURNAMENT, _STAGE_TOURNAMENT_FINAL:
+			NetworkManager.start_offline()
+			var draft := TournamentState.new()
+			draft.player_club = TeamColorRegistry.DEFAULT_HOME_SLOT
+			if not GameManager.tournament.begin_new(draft, _TOURNAMENT_SEED,
+					TeamColorRegistry.get_all_slots()):
+				_fail("could not draw the preview tournament")
+			if stage == _STAGE_TOURNAMENT_FINAL:
+				_win_tournament_games(2)
+			path = Constants.SCENE_LOBBY
 	_stage = stage
 	tree.change_scene_to_file(path)
 	while tree.current_scene == null or tree.current_scene.scene_file_path != path:
 		await tree.process_frame
 	if stage == _STAGE_MATCH:
 		await _start_match()
+	elif stage == _STAGE_TOURNAMENT_FINAL:
+		await _start_tournament_final()
 	# Bottom centre is below every menu column and dialog, so no shot catches a
 	# button in its hover state.
 	var view: Vector2 = get_viewport().get_visible_rect().size
@@ -181,6 +212,42 @@ func _start_match() -> void:
 	while Engine.get_physics_frames() < target:
 		await tree.process_frame
 	Engine.max_physics_steps_per_frame = default_steps
+
+
+# From the final's lobby to its matchup intro on the ice.
+func _start_tournament_final() -> void:
+	var tree: SceneTree = get_tree()
+	_invoke(_find(tree.current_scene, LobbyManager), "_on_start_pressed")
+	var waited: int = 0
+	while tree.current_scene == null \
+			or tree.current_scene.scene_file_path != Constants.SCENE_HOCKEY \
+			or not _matchup_intro_showing():
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the final never showed its matchup intro")
+			return
+
+
+func _matchup_intro_showing() -> bool:
+	var intro: MatchupIntroOverlay = _find(get_tree().current_scene,
+			MatchupIntroOverlay) as MatchupIntroOverlay
+	return intro != null and intro.visible
+
+
+# Records `wins` games for the player's club, whichever side it is on.
+func _win_tournament_games(wins: int) -> void:
+	var coordinator: TournamentCoordinator = GameManager.tournament
+	for i: int in wins:
+		var state: TournamentState = coordinator.active
+		var at_home: bool = TournamentRules.home_club(state,
+				TournamentRules.player_game(state)) == state.player_club
+		coordinator.begin_match()
+		var recorded: bool = coordinator.record_result(3, 2, i == 0) if at_home \
+				else coordinator.record_result(2, 3, i == 0)
+		if not recorded:
+			_fail("the preview tournament had no game to win")
+			return
 
 
 func _settle(frames: int, seconds: float) -> void:
@@ -232,6 +299,10 @@ func _overlay_open() -> bool:
 					PostGameAnalytics) as PostGameAnalytics
 			return (side != null and side.visible) \
 					or (analytics != null and analytics.visible)
+		_STAGE_TOURNAMENT:
+			var bracket: BracketOverlay = _find(get_tree().current_scene,
+					BracketOverlay) as BracketOverlay
+			return bracket != null and bracket.visible
 	return false
 
 
@@ -315,6 +386,65 @@ func _open_video_performance() -> void:
 	await _settle(2, ProjectSettings.get_setting("gui/timers/tooltip_delay_sec", 0.5) + 0.3)
 
 
+func _close_tournament_bracket() -> void:
+	var bracket: BracketOverlay = _find(get_tree().current_scene, BracketOverlay) as BracketOverlay
+	if bracket == null:
+		_fail("the tournament lobby has no BracketOverlay")
+		return
+	bracket.close()
+
+
+# The bracket after the player's club has won `wins` more games.
+func _open_tournament_bracket_after(wins: int) -> void:
+	_win_tournament_games(wins)
+	var mode: LobbyTournamentMode = _find(get_tree().current_scene,
+			LobbyTournamentMode) as LobbyTournamentMode
+	if mode == null:
+		_fail("the lobby is not in tournament mode")
+		return
+	mode.open_bracket(null)
+
+
+# The screen that wins the cup, without playing the final to get there: the
+# result is recorded as the host records one, the score put on the scorebug as
+# a goal would put it, and the HUD's own presenter called. Playing it out costs
+# the software renderer many minutes, and stepping the match faster through its
+# movement-locked phases breaks the bots' stick aim and the skater rig.
+func _open_tournament_champion() -> void:
+	var tree: SceneTree = get_tree()
+	var hud: HUD = _find(tree.current_scene, HUD) as HUD
+	var side: int = GameManager.tournament.roster_side
+	var home_score: int = 3 if side == 0 else 2
+	var away_score: int = 5 - home_score
+	if hud == null or not GameManager.tournament.record_result(home_score, away_score, false):
+		_fail("the final had no HUD, or no result to record")
+		return
+	GameManager.score_changed.emit(home_score, away_score)
+	# The shot is staged during the matchup intro, which a played final would
+	# have long since dismissed.
+	_invoke(hud, "_hide_matchup_overlay")
+	await _settle(_SHOT_SETTLE_FRAMES, _SHOT_SETTLE_SEC)
+	var result_key: StringName = &"RESULT_HOME_WINS" if side == 0 else &"RESULT_AWAY_WINS"
+	if not hud.has_method("_present_game_over_screen"):
+		_fail("HUD no longer has _present_game_over_screen")
+		return
+	hud.call("_present_game_over_screen", tr(result_key), HudChrome.team_ink(side))
+	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
+	# The reveal runs on game time, which crawls here: wait for it by its tweens.
+	var waited: int = 0
+	while _tween_running(popup, "_present_tween") or _tween_running(popup, "_cup_tween"):
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the game-over screen's reveal never finished")
+			return
+
+
+func _tween_running(holder: Object, field: String) -> bool:
+	var tween: Tween = holder.get(field) as Tween
+	return tween != null and tween.is_running()
+
+
 func _open_side_menu(handler: String) -> void:
 	var side: SideMenu = _find(get_tree().current_scene, SideMenu) as SideMenu
 	if side == null:
@@ -345,8 +475,43 @@ func _open_player_region(region: int) -> void:
 
 # A past game's analytics, as the career screen opens a local replay: a fixed
 # made-up game, so the picture changes only when the screen does.
+# Free play calls no fouls, so the match's ledger is written by hand and the
+# HUD told it changed: a delayed call against the local player's team, or
+# (`boxed`) him sitting out a minor beside a strip that reads five on four.
+func _show_penalty_hud(boxed: bool) -> void:
+	_close_side_menu()
+	var ledger: PenaltyLedger = GameManager.get_penalty_ledger()
+	if ledger == null:
+		_fail("free play has no penalty ledger")
+		return
+	ledger.clear()
+	ledger.call_foul(NetworkManager.local_peer_id(), 0, PenaltyRules.Foul.BOARDING)
+	if boxed:
+		ledger.assess(PenaltyRules.minor_seconds(GameRules.PERIOD_DURATION), 2)
+	GameManager.penalties_changed.emit()
+
+
+# The seat's own view, which the box HUD shot does not mount: looking at
+# centre ice from `team_id`'s box.
+func _show_penalty_box_view(team_id: int) -> void:
+	_show_penalty_hud(true)
+	_leave_the_box_seat()
+	_box_seat = PenaltyBoxCamera.new()
+	get_tree().current_scene.add_child(_box_seat)
+	_box_seat.setup(team_id, func() -> Vector3: return Vector3.ZERO)
+	_box_seat.activate()
+
+
+func _leave_the_box_seat() -> void:
+	if _box_seat != null:
+		_box_seat.deactivate()
+		_box_seat.queue_free()
+		_box_seat = null
+
+
 func _open_post_game_analytics() -> void:
 	_close_side_menu()
+	_leave_the_box_seat()
 	var screen: PostGameAnalytics = _find(get_tree().current_scene, PostGameAnalytics) \
 			as PostGameAnalytics
 	if screen == null:
