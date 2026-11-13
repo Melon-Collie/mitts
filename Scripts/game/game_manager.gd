@@ -321,6 +321,9 @@ var _stick_ties: StickTieTracker = null
 var _fights: FightTracker = null
 var _penalties: PenaltyTracker = null
 var _special_teams := SpecialTeamsTally.new()
+# Host: the faceoff being set up has already been reset once for a seat swap.
+# Every placement clears it, the reset's own included.
+var _faceoff_reset_for_a_swap: bool = false
 # The local player's view from the penalty box; built the first time he sits.
 var _box_camera: PenaltyBoxCamera = null
 # The local player's view of a penalty shot he is not taking.
@@ -1254,6 +1257,7 @@ func _on_penalty_possession_whistle(offending_team_id: int) -> void:
 # Host: pending calls become minors as the next faceoff is placed, so the men
 # they box are skated to their doors by that placement.
 func _on_faceoff_placement_starting() -> void:
+	_faceoff_reset_for_a_swap = false
 	if not NetworkManager.is_host or _penalties == null:
 		return
 	# A faceoff while a penalty shot is on (the puck out of play, stuck on the
@@ -4744,6 +4748,9 @@ func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> v
 		_promote_spectator_to_player(peer_id, new_team_id, new_slot)
 		return
 	var carrier: Skater = puck.carrier if puck != null else null
+	var resets_faceoff: bool = _swap_lands_in_a_faceoff_set_up()
+	if not _may_change_seats(peer_id, resets_faceoff):
+		return
 	var confirmation: Dictionary = _swap_coord.request_swap(peer_id, new_team_id, new_slot, carrier)
 	if confirmation.is_empty():
 		return
@@ -4751,6 +4758,25 @@ func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> v
 			confirmation.old_team_id, confirmation.old_slot,
 			confirmation.new_team_id, confirmation.new_slot,
 			confirmation.jersey, confirmation.helmet, confirmation.pants)
+	if resets_faceoff:
+		# Everyone is already cast into the spots for the seats as they were.
+		_phase_coord.reset_faceoff()
+		_faceoff_reset_for_a_swap = true
+
+
+# Host: a faceoff is being set up from the ice (not a bench intro, whose hold
+# is the intro's own length), so a seat that changes now changes the cast.
+func _swap_lands_in_a_faceoff_set_up() -> bool:
+	return _state_machine.current_phase == GamePhase.Phase.FACEOFF_PREP \
+			and _phase_coord != null and _phase_coord.last_prep_preroll > 0.0
+
+
+# Host: a set-up is reset for one swap only, so swapping cannot hold the puck
+# drop off.
+func _may_change_seats(peer_id: int, resets_faceoff: bool) -> bool:
+	if resets_faceoff and _faceoff_reset_for_a_swap:
+		return false
+	return _penalties == null or not _penalties.holds_in_seat(peer_id)
 
 
 func _on_slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int,

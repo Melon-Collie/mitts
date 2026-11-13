@@ -214,6 +214,11 @@ func soonest_remaining(team_id: int) -> float:
 	return soonest
 
 
+# Whether a call, a minor or a penalty shot is held against him.
+func names(peer_id: int) -> bool:
+	return _find(peer_id) != null
+
+
 func remaining_for(peer_id: int) -> float:
 	var entry: Entry = _find(peer_id)
 	return entry.remaining if entry != null else 0.0

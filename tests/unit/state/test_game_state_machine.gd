@@ -986,6 +986,17 @@ func test_apply_remote_faceoff_prep_does_not_regress_from_faceoff() -> void:
 
 # ── The faceoff dot ──────────────────────────────────────────────────────────
 
+func test_a_set_up_can_start_over() -> void:
+	sm.begin_faceoff_prep(Vector2(6.5, -22.1), 2.0)
+	sm.tick(1.5)
+	assert_true(sm.restart_faceoff_prep())
+	assert_almost_eq(sm.faceoff_prep_time_until_drop(), GameRules.FACEOFF_PREP_DURATION, 0.0001)
+	assert_eq(sm.active_faceoff_dot, Vector2(6.5, -22.1), "at the same dot")
+
+func test_nothing_starts_over_outside_a_set_up() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	assert_false(sm.restart_faceoff_prep())
+
 func test_active_faceoff_dot_defaults_to_center() -> void:
 	assert_eq(sm.active_faceoff_dot, GameRules.CENTER_ICE_DOT)
 

@@ -319,6 +319,34 @@ func test_client_skate_in_never_outlasts_the_hosts_hold() -> void:
 
 # ── A team short at the faceoff (FaceoffFormation) ───────────────────────────
 
+func test_resetting_the_faceoff_places_everyone_by_the_seats_as_they_are_now() -> void:
+	var centre: PlayerRecord = _add_seated_player(10, 0, 0)
+	var winger: PlayerRecord = _add_seated_player(11, 0, 1)
+	_add_seated_player(12, 1, 0)
+	var dot := Vector2(6.5, -22.1)
+	sm.begin_faceoff_prep(dot)
+	coord.handle_phase_entered()
+	sm.tick(1.0)
+	# The centre takes the other wing: the winger is now the lowest seat on
+	# the ice, and the draw is his.
+	centre.team_slot = 2
+	coord.reset_faceoff()
+	var winger_controller: StubController = winger.controller as StubController
+	assert_eq(winger_controller.targets.size(), 2, "placed, and placed again")
+	assert_eq(winger_controller.targets[1],
+			PlayerRules.faceoff_position(0, FaceoffFormation.CENTER_SPOT, dot, 1.0, sm.team_size))
+	assert_almost_eq(sm.faceoff_prep_time_until_drop(),
+			coord.last_prep_preroll + GameRules.FACEOFF_PREP_DURATION, 0.0001,
+			"and the countdown starts over")
+	assert_signal_emit_count(coord, "faceoff_positions_ready", 2)
+
+
+func test_resetting_does_nothing_once_the_puck_is_down() -> void:
+	_add_seated_player(10, 0, 0)
+	sm.current_phase = GamePhase.Phase.PLAYING
+	coord.reset_faceoff()
+	assert_signal_not_emitted(coord, "faceoff_positions_ready")
+
 func _add_seated_player(peer_id: int, team_id: int, team_slot: int) -> PlayerRecord:
 	var record: PlayerRecord = _add_player(peer_id, team_id)
 	record.team_slot = team_slot

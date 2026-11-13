@@ -779,6 +779,15 @@ func faceoff_prep_time_until_drop() -> float:
 	return maxf(GameRules.FACEOFF_PREP_DURATION + _prep_extra_time - _phase_timer, 0.0)
 
 
+# Host: the set-up running now starts over. False outside FACEOFF_PREP.
+func restart_faceoff_prep() -> bool:
+	if current_phase != GamePhase.Phase.FACEOFF_PREP:
+		return false
+	_phase_timer = 0.0
+	_prep_extra_time = 0.0
+	return true
+
+
 # Extends the CURRENT prep's window (host-side) so a distance-based skate-in has
 # time to finish before the drop. Unlike begin_faceoff_prep's extra_prep_time
 # (set at entry), this is applied by PhaseCoordinator._enter_faceoff_prep after

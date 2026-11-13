@@ -66,10 +66,6 @@ var _is_pregame_intro_getter: Callable = Callable()
 var _shot_tracker: ShotOnGoalTracker = null
 # Drops a carried puck (host-only). Returns carrier peer_id or -1.
 var _puck_drop_requester: Callable = Callable()
-# Tells the host that a player has a pending shot (shot → timer arm).
-# Used for the shot-on-goal tracker's `on_shot_started` event from inside the
-# goal path; we pass it as a Callable rather than a direct tracker call so
-# the caller stays in control of the "is this actually a shot" logic.
 
 # Goal-replay cinematic. GameManager owns the Node lifecycle (add_child /
 # queue_free); PhaseCoordinator drives start/stop and wires the signals.
@@ -307,6 +303,12 @@ func _enter_faceoff_prep(puck: Puck) -> void:
 		_state_machine.set_faceoff_prep_extra(last_prep_preroll)
 	faceoff_positions_ready.emit(positions, last_prep_preroll)
 	faceoff_prep_announced.emit()
+
+
+# Host: sets the faceoff up again, countdown and all, from where everyone stands.
+func reset_faceoff() -> void:
+	if _state_machine.restart_faceoff_prep():
+		_enter_faceoff_prep(_get_puck())
 
 
 # Host, every frame after the phase tick: throws the held puck down once the

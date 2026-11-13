@@ -215,6 +215,26 @@ func test_a_skater_who_arrives_in_open_play_is_left_where_he_spawned() -> void:
 	assert_eq(controller.teleported_to, [])
 
 
+# ── Changing seats ───────────────────────────────────────────────────────────
+
+func test_a_man_with_a_call_or_a_minor_against_him_keeps_his_seat() -> void:
+	assert_false(_tracker.holds_in_seat(HITTER))
+	_tracker.ledger.call_foul(HITTER, 0, PenaltyRules.Foul.BOARDING, VICTIM)
+	assert_true(_tracker.holds_in_seat(HITTER), "the call is pending against his team")
+	assert_false(_tracker.holds_in_seat(VICTIM))
+	_tracker.assess_pending(PERIOD_S, SIZE)
+	assert_true(_tracker.holds_in_seat(HITTER), "he is in the box")
+
+
+func test_nobody_changes_seats_during_a_penalty_shot() -> void:
+	_add_player(9, 0)
+	_tracker.ledger.call_foul(HITTER, 0, PenaltyRules.Foul.INTERFERENCE, VICTIM)
+	_tracker.assess_pending(PERIOD_S, 3)
+	assert_true(_tracker.holds_in_seat(9))
+	_tracker.end_shot()
+	assert_false(_tracker.holds_in_seat(9))
+
+
 # ── What it costs, for the stat sheet ────────────────────────────────────────
 
 func test_a_minor_and_a_penalty_shot_are_each_a_penalty_to_the_man_who_fouled() -> void:

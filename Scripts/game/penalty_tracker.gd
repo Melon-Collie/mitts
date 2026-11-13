@@ -267,6 +267,12 @@ func apply_box_state() -> void:
 		shot_staged.emit(shooter)
 
 
+# Host: whether he keeps the seat he has. A man the ledger names does (his
+# penalty is his team's), and so does everyone while a penalty shot is on.
+func holds_in_seat(peer_id: int) -> bool:
+	return is_shot_on() or ledger.names(peer_id)
+
+
 # A skater spawned since the ledger last changed takes the flags it gives him.
 # One who arrives during a penalty shot is put at his bench, where the shot's
 # placement skated everyone else.

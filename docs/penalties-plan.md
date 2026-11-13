@@ -200,8 +200,18 @@ Casting, the same on every machine:
   names every skater the host placed, and a client knows each one's seat, so it
   runs the same cast to find the draw-taker. Phase 2 keeps a boxed skater out of
   that payload, which keeps him out of the cast.
-- **Not touched:** a mid-match seat swap still teleports the swapped player to
-  his new seat's own spot (`SlotSwapCoordinator`).
+- **A seat swap during a faceoff's set-up resets the faceoff.** The swap
+  itself still teleports the player to his new seat's centre-ice spot
+  (`SlotSwapCoordinator`), as it does in live play. Everyone was already cast
+  for the seats as they were, so the host then sets the faceoff up again from
+  where everyone stands (`PhaseCoordinator.reset_faceoff`): the cast is
+  redone, the countdown starts over, and clients get the positions through
+  the ordinary payload. One reset a set-up; a second swap in the same one is
+  refused, so swapping cannot hold the drop off. A bench intro (the opening
+  faceoff, a period start) is not reset: its hold is the intro's own length.
+- **A man the ledger names keeps his seat** (a call pending, a minor, a shot
+  his foul gave up: `PenaltyTracker.holds_in_seat`), since his penalty is his
+  team's, and nobody changes seats while a penalty shot is on.
 
 Tests: `test_faceoff_formation.gd` holds the cast over every combination of
 seats (one man per spot, the lowest seat on the dot, the wings filled first);
