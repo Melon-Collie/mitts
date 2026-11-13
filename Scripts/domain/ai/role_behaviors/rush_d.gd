@@ -156,6 +156,7 @@ static func _decide_d1(ctx: RoleContext, bracket: float = 0.0,
 	d.target_position = _clamp_to_house(ctx, stand)
 	set_retreat_floor(ctx, ap, d)
 	set_advance_cap(ctx, ap, d, gap, not gapping_up and not holding_line)
+	AIBackLineRunners.hold_depth(ctx, d)
 	# The arrival brake only matters with no man to ride (a moving stand stands it
 	# down). A retreat is paced rather than braked; a step-up wants the brake,
 	# since the approach bound placed that stand as its trigger; the gap-up drives
@@ -427,16 +428,18 @@ static func _self_movement(ctx: RoleContext) -> SkaterMovementRules.MovementConf
 # The ground the threat gains on each of a defender's two retreats (head_start_on_me):
 # x backpedalling facing the play, y turned and skating down the ice. Each first
 # turns his body from where it points now, at his facing turn rate.
+# `self_v_along` overrides the pace down the line he starts from (NAN: his own).
 static func retreat_gains(ctx: RoleContext, dir_net: Vector3, threat_vel: Vector3,
-		net_dist: float, threat_peer: int, finish_m: float) -> Vector2:
+		net_dist: float, threat_peer: int, finish_m: float,
+		self_v_along: float = NAN) -> Vector2:
 	var facing: Vector2 = _self_facing(ctx, -dir_net)
 	return Vector2(
 			_threat_gain(ctx, dir_net, threat_vel, net_dist, threat_peer, finish_m,
 					retreat_max_speed(ctx, false), retreat_max_accel(ctx, false),
-					_turn_s(ctx, facing, -dir_net)),
+					_turn_s(ctx, facing, -dir_net), self_v_along),
 			_threat_gain(ctx, dir_net, threat_vel, net_dist, threat_peer, finish_m,
 					retreat_max_speed(ctx, true), retreat_max_accel(ctx, true),
-					_turn_s(ctx, facing, dir_net)))
+					_turn_s(ctx, facing, dir_net), self_v_along))
 
 
 # Where this bot's body points; `fallback` when it cannot be read.
@@ -546,6 +549,14 @@ static func _head_start_from(lead_v: float, caps: AISkaterCaps, self_v: float,
 # build to his pace — "behind me" as a race, since a man level with a standing
 # station at speed is past it by the time it moves.
 static func race_depth_to_net(ctx: RoleContext, pid: int) -> float:
+	return race_depth_on(ctx, pid, ctx.self_velocity, ctx.self_max_speed, ctx.self_max_accel)
+
+
+# race_depth_to_net against any body of ours: one moving at `body_vel` with
+# `body_vmax` and `body_accel`, the race finishing `finish_m` off our net.
+static func race_depth_on(ctx: RoleContext, pid: int, body_vel: Vector3,
+		body_vmax: float, body_accel: float,
+		finish_m: float = AIZoneCoverage.HOUSE_TOP_DEPTH_M) -> float:
 	var s: SkaterNetworkState = ctx.snapshot.skater_states.get(pid)
 	if s == null:
 		return INF
@@ -555,8 +566,8 @@ static func race_depth_to_net(ctx: RoleContext, pid: int) -> float:
 		return 0.0
 	var dir_net := Vector3((our_net.x - s.position.x) / d, 0.0,
 			(our_net.z - s.position.z) / d)
-	return maxf(d - head_start_on_me(ctx, dir_net, s.velocity, d,
-			pid), 0.0)
+	return maxf(d - _threat_gain(ctx, dir_net, s.velocity, d, pid, finish_m, body_vmax,
+			body_accel, 0.0, body_vel.x * dir_net.x + body_vel.z * dir_net.z), 0.0)
 
 
 # The gap ladder plus its modifiers, in metres. The modifiers run BOTH ways and

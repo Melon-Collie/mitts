@@ -310,9 +310,14 @@ drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
   ladder's gap, his partner a stick off it on his own side, each skated
   straight to rather than through `depth_first`. Once the ladder steps up on a
   stalled carrier, one D steps up and the partner goes back to his own job: two
-  stepping up together leave the men still at speed behind them. The depth the
-  pair holds is still sized from the carrier alone, so a stalled carrier with
-  a winger at speed on the stepping D's outside beats the step-up (#930). That is the coached 3-on-2 —
+  stepping up together leave the men still at speed behind them. The stand is
+  sized from the carrier alone, so the route is bounded by the men still at
+  speed beside him (`AIBackLineRunners.hold_depth`): while an attacker coming
+  at pace whom no teammate is goal-side of would gain all the depth the D holds
+  on him, were the D to settle to the pace his stand rides at, the route
+  commands at least that runner's pace toward our net, down to the house gate.
+  A carrier who slows at our line otherwise brakes his D flat while the winger
+  takes the pass at speed behind him. That is the coached 3-on-2 —
   make him pick a side, no seam between the D — and it replaces the one-man
   cross to the middle, which gave up the crossing D's depth on the wingers and
   his lane to the pass (`test_five_on_five_set_shape.gd`). Crossing

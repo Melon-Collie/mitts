@@ -210,3 +210,6 @@ var scratch_opp_receivers: Array[Vector3] = []
 var scratch_option_bases: Array[float] = []
 # AIDefensiveVerbs.read_carrier_approach's output.
 var scratch_carrier_approach := AICarrierApproach.new()
+# AIBackLineRunners: the attackers coming at pace, and those a teammate holds.
+var scratch_runners: Array[int] = []
+var scratch_held_runners: Array[int] = []
