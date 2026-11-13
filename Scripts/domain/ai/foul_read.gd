@@ -26,14 +26,16 @@ static func would_foul(me_pos: Vector3, me_vel: Vector3, me_weight: float,
 		return false
 	var drive: Vector2 = to_man.normalized()
 	var closing: float = Vector2(me_vel.x - man.velocity.x, me_vel.z - man.velocity.z).dot(drive)
-	var impulse: float = closing * me_weight
+	# Our velocity now is the run-up the referee will read at the contact.
+	var thrown: float = PenaltyRules.thrown_strength(closing * me_weight, me_weight,
+			Vector2(me_vel.x, me_vel.z).dot(drive))
 	var puck_dist: float = Vector2(puck_pos.x - man.position.x,
 			puck_pos.z - man.position.z).length()
 	var eligible: bool = PenaltyRules.is_eligible_to_be_hit(man_is_carrier,
 			seconds_since_man_lost_puck + time_to_contact, puck_loose, puck_dist)
 	var wall_out: Vector2 = BoardWallRules.wall_normal(man.position, man_radius,
 			PenaltyRules.BOARDING_ZONE_M)
-	return PenaltyRules.judge(impulse, true, false, eligible,
+	return PenaltyRules.judge(thrown, true, false, eligible,
 			PenaltyRules.is_driven_into_boards(drive, wall_out),
 			PenaltyRules.is_hit_from_behind(man.facing, drive),
 			puck_in_play) != PenaltyRules.Foul.NONE

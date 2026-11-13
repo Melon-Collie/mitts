@@ -17,9 +17,16 @@ const BOARDING_REAR_COS: float = 0.7071
 const BOARDING_TURN_GRACE_S: float = 0.3
 # A man this close to a loose puck is playing it, and may be hit.
 const INTERFERENCE_PUCK_REACH_M: float = 2.0
+# How long after he loses or releases the puck a man may still be hit: the
+# referee's allowance for finishing a check, wider than the beat the hit stat
+# credits one in (HitRules.JUST_RELEASED_GRACE_S).
+const FINISH_CHECK_GRACE_S: float = 1.0
+# The hitter's run-up is read this long before the contact, about a stride:
+# the speed he skated in with, before the contact or any other body changed it.
+const RUN_UP_S: float = 0.25
 
-# A check already on its way when a goal stops the play is let go: the same
-# beat a finished check gets on a man who has just moved the puck.
+# A check already on its way when a goal stops the play is let go: the beat
+# the hit stat gives a check finished through a pass.
 const WHISTLE_GRACE_S: float = HitRules.JUST_RELEASED_GRACE_S
 
 # A minor is the share of a period two minutes is of twenty.
@@ -92,22 +99,32 @@ static func is_eligible_to_be_hit(victim_is_carrier: bool,
 		puck_is_loose: bool, victim_to_puck_m: float) -> bool:
 	if victim_is_carrier:
 		return true
-	if seconds_since_victim_lost_possession <= HitRules.JUST_RELEASED_GRACE_S:
+	if seconds_since_victim_lost_possession <= FINISH_CHECK_GRACE_S:
 		return true
 	return puck_is_loose and victim_to_puck_m <= INTERFERENCE_PUCK_REACH_M
 
 
-# The foul one contact is, if any. Only a delivered check at full-check
-# strength is judged: a bump, a lean and the press never reach it. With the
-# play dead (`puck_in_play` false) any such check is roughing, wherever and on
-# whomever it lands. In play, boarding outranks interference.
-static func judge(impulse_magnitude: float, attacker_committed: bool,
+# How hard a check the hitter threw: the contact's strength (weight × closing
+# speed), but no more than his own run-up into the man carries at his weight.
+# `run_up_speed` is his velocity along the hit, m/s, RUN_UP_S before it. A man
+# skated into while he stands or leans threw nothing, and one who catches a
+# man skating away from him lands only their closing.
+static func thrown_strength(contact_impulse: float, hitter_weight: float,
+		run_up_speed: float) -> float:
+	return minf(contact_impulse, hitter_weight * maxf(run_up_speed, 0.0))
+
+
+# The foul one contact is, if any. Only a check thrown at full-check strength
+# (`thrown`, thrown_strength) is judged, so banging around the net never reaches
+# it. With the play dead (`puck_in_play` false) any such check is roughing,
+# wherever and on whomever it lands. In play, boarding outranks interference.
+static func judge(thrown: float, attacker_committed: bool,
 		attacker_has_puck: bool, victim_eligible: bool,
 		driven_into_boards: bool, hit_from_behind: bool,
 		puck_in_play: bool = true) -> Foul:
 	if not attacker_committed or attacker_has_puck:
 		return Foul.NONE
-	if impulse_magnitude < HitRules.FULL_CHECK_IMPULSE:
+	if thrown < HitRules.FULL_CHECK_IMPULSE:
 		return Foul.NONE
 	if not puck_in_play:
 		return Foul.ROUGHING
