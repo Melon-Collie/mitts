@@ -118,12 +118,12 @@ func test_same_team_recovery_after_strip_is_nothing() -> void:
 
 # ── Giveaways ────────────────────────────────────────────────────────────────
 
-func test_intercepted_pass_charges_giveaway_at_establishment() -> void:
+func test_lost_puck_charges_giveaway_at_establishment() -> void:
 	var passer := _add_player(10, 0)
 	_add_player(20, 1)
 	_gain_and_establish(10)
-	tracker.on_carrier_gained(20, false)  # no strip, no shot — a fumble/pick
-	assert_eq(passer.stats.giveaways, 0, "waits for the interceptor to establish")
+	tracker.on_carrier_gained(20, false)  # no strip, no shot, no pass — a fumble
+	assert_eq(passer.stats.giveaways, 0, "waits for the recoverer to establish")
 	assert_true(tracker.on_possession_established(20))
 	assert_eq(passer.stats.giveaways, 1)
 
@@ -179,7 +179,6 @@ func test_dump_recovery_is_neither_giveaway_nor_takeaway() -> void:
 	tracker.on_possession_established(20)
 	assert_eq(dumper.stats.giveaways, 0, "a dump is never a giveaway")
 	assert_eq(recoverer.stats.takeaways, 0, "retrieving a dump is not a takeaway")
-	assert_eq(recoverer.stats.interceptions, 0, "nor an interception")
 
 
 func test_decayed_strip_still_credits_a_takeaway_not_a_giveaway() -> void:
@@ -254,22 +253,23 @@ func test_clean_interception_after_an_own_retouch_is_still_a_giveaway() -> void:
 	assert_eq(owner_player.stats.giveaways, 1, "an own re-touch is not a contest")
 
 
-# ── Interceptions ────────────────────────────────────────────────────────────
+# ── Passes picked off ────────────────────────────────────────────────────────
 
-func test_picked_off_pass_credits_the_interceptor() -> void:
+func test_picked_off_pass_is_the_interceptors_takeaway_alone() -> void:
+	# One turnover, one event, as the NHL scores it: the defender's takeaway,
+	# and no giveaway for the passer.
 	var passer := _add_player(10, 0)
 	var picker := _add_player(20, 1)
 	_gain_and_establish(10)
 	tracker.note_pass(10)
 	tracker.on_carrier_gained(20, false)
-	assert_eq(picker.stats.interceptions, 0, "waits for the establishment")
+	assert_eq(picker.stats.takeaways, 0, "waits for the establishment")
 	assert_true(tracker.on_possession_established(20))
-	assert_eq(passer.stats.giveaways, 1)
-	assert_eq(picker.stats.interceptions, 1)
-	assert_eq(picker.stats.takeaways, 0, "a pick-off is not a strip")
+	assert_eq(picker.stats.takeaways, 1)
+	assert_eq(passer.stats.giveaways, 0)
 
 
-func test_interception_credits_the_first_opponent_touch() -> void:
+func test_pick_off_credits_the_first_opponent_touch() -> void:
 	# 20 gets a blade on the pass and it squirts to linemate 21, who establishes.
 	_add_player(10, 0)
 	var picker := _add_player(20, 1)
@@ -279,11 +279,11 @@ func test_interception_credits_the_first_opponent_touch() -> void:
 	tracker.on_carrier_gained(20, false)
 	tracker.on_carrier_gained(21, false)
 	assert_true(tracker.on_possession_established(21))
-	assert_eq(picker.stats.interceptions, 1)
-	assert_eq(linemate.stats.interceptions, 0)
+	assert_eq(picker.stats.takeaways, 1)
+	assert_eq(linemate.stats.takeaways, 0)
 
 
-func test_a_pass_that_reached_a_teammate_was_not_intercepted() -> void:
+func test_a_pass_that_reached_a_teammate_was_not_picked_off() -> void:
 	# The receiver touched it before the opponent got it: a completion and then
 	# a loss, so the giveaway stands but nobody picked a pass off.
 	var passer := _add_player(10, 0)
@@ -295,13 +295,13 @@ func test_a_pass_that_reached_a_teammate_was_not_intercepted() -> void:
 	tracker.on_carrier_gained(20, false)
 	assert_true(tracker.on_possession_established(20))
 	assert_eq(passer.stats.giveaways, 1)
-	assert_eq(opp.stats.interceptions, 0)
+	assert_eq(opp.stats.takeaways, 0)
 
 
-func test_a_contested_pick_credits_no_interception() -> void:
-	# The passing side fought the loose puck back before losing it: no giveaway,
-	# so no interception either.
-	_add_player(10, 0)
+func test_a_pick_off_fought_over_stays_the_pickers_takeaway() -> void:
+	# The passing side touches the loose puck back before the picker's side
+	# establishes: the pick-off is a strip, and a strip survives the scramble.
+	var passer := _add_player(10, 0)
 	_add_player(11, 0)
 	var picker := _add_player(20, 1)
 	_gain_and_establish(10)
@@ -309,11 +309,12 @@ func test_a_contested_pick_credits_no_interception() -> void:
 	tracker.on_carrier_gained(20, false)
 	tracker.on_carrier_gained(11, false)
 	tracker.on_carrier_gained(20, false)
-	assert_false(tracker.on_possession_established(20))
-	assert_eq(picker.stats.interceptions, 0)
+	assert_true(tracker.on_possession_established(20))
+	assert_eq(picker.stats.takeaways, 1)
+	assert_eq(passer.stats.giveaways, 0)
 
 
-func test_a_stray_pass_recovered_late_is_not_an_interception() -> void:
+func test_a_stray_pass_recovered_late_is_not_a_pick_off() -> void:
 	var passer := _add_player(10, 0)
 	var recoverer := _add_player(20, 1)
 	_gain_and_establish(10)
@@ -321,8 +322,8 @@ func test_a_stray_pass_recovered_late_is_not_an_interception() -> void:
 	now_s += TurnoverTracker.PASS_WINDOW_S + 0.1
 	tracker.on_carrier_gained(20, false)
 	assert_true(tracker.on_possession_established(20))
-	assert_eq(passer.stats.giveaways, 1, "still a giveaway")
-	assert_eq(recoverer.stats.interceptions, 0, "a loose-puck recovery, not a pick-off")
+	assert_eq(passer.stats.giveaways, 1, "a giveaway")
+	assert_eq(recoverer.stats.takeaways, 0, "a loose-puck recovery, not a pick-off")
 
 
 func test_a_pass_after_a_rebound_is_judged_as_a_pass() -> void:
@@ -337,8 +338,8 @@ func test_a_pass_after_a_rebound_is_judged_as_a_pass() -> void:
 	tracker.note_pass(11)
 	tracker.on_carrier_gained(20, false)
 	assert_true(tracker.on_possession_established(20))
-	assert_eq(passer.stats.giveaways, 1)
-	assert_eq(picker.stats.interceptions, 1)
+	assert_eq(passer.stats.giveaways, 0)
+	assert_eq(picker.stats.takeaways, 1)
 
 
 func test_no_stats_before_any_established_owner() -> void:
@@ -442,7 +443,7 @@ func test_reset_clears_owner_and_pending_draw() -> void:
 
 # ── Won possessions (the goal feats' memory) ─────────────────────────────────
 
-func test_a_landed_takeaway_or_interception_reports_who_won_the_puck() -> void:
+func test_a_landed_takeaway_reports_who_won_the_puck_and_how() -> void:
 	_add_player(10, 0)
 	_add_player(20, 1)
 	_add_player(21, 1)

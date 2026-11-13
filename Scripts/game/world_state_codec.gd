@@ -91,7 +91,7 @@ const PUCK_BLOCK_SIZE: int = 13    # 12B pos+vel + 1B carrier_idx
 const GOALIE_BLOCK_SIZE: int = 12 + KeeperPoseCodec.SIZE  # root + the keeper's pose
 const GAME_STATE_BLOCK_SIZE: int = 6  # 4×u8 + u16 time_remaining
 const _STATS_TEAM_FIELDS: int = 6
-const STATS_PLAYER_RECORD_SIZE: int = 31  # peer_id + PlayerStats.to_array() (30)
+const STATS_PLAYER_RECORD_SIZE: int = 30  # peer_id + PlayerStats.to_array() (29)
 
 var _ws_sequence: int = 0
 var _last_period: int = -1

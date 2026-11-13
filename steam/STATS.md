@@ -40,16 +40,18 @@ values via read-modify-write, not increments) — then **publish**.
 | `STAT_WINS`            | INT  | games won                       |
 | `STAT_GAMES_PLAYED`    | INT  | games played                    |
 | `STAT_HITS_TAKEN`      | INT  | body checks absorbed            |
-| `STAT_TAKEAWAYS`       | INT  | pucks stripped from opponents   |
+| `STAT_TAKEAWAYS`       | INT  | pucks won off opponents         |
 | `STAT_GIVEAWAYS`       | INT  | self-inflicted turnovers        |
 | `STAT_FACEOFF_WINS`    | INT  | faceoffs won (as centre)        |
-| `STAT_INTERCEPTIONS`   | INT  | passes picked off               |
+| `STAT_INTERCEPTIONS`   | INT  | retired: never written; read as takeaways |
 | `STAT_FIGHT_WINS`      | INT  | fights won (opponent put down)  |
 | `STAT_PIM`             | INT  | penalty minutes (2 a penalty)   |
 | `STAT_PP_GOALS`        | INT  | power-play goals                |
 | `STAT_PP_POINTS`       | INT  | power-play goals and assists    |
 
-These names must match `SteamStats.ALL` exactly. The GUT test
+These names must match `SteamStats.ALL` exactly, but for the retired
+`STAT_INTERCEPTIONS` (`SteamStats.LEGACY_INTERCEPTIONS`), which stays defined so
+the pick-offs it already holds keep counting. The GUT test
 `test_every_ladder_has_a_backing_stat` fails the build if a Game Puck ladder ever
 counts a field with no stat here, so the two registries can't silently drift.
 

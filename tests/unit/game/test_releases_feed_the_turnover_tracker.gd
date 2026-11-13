@@ -64,34 +64,34 @@ func _pick_off(peer_id: int) -> void:
 	turnovers.on_possession_established(peer_id)
 
 
-func test_a_pass_picked_off_is_an_interception_though_it_armed_a_shot() -> void:
+func test_a_pass_picked_off_is_a_takeaway_though_it_armed_a_shot() -> void:
 	_release(10, false, Vector2(0.5, 10.0))
 	assert_true(shots.has_pending_shot(), "the pass armed the pending shot")
 	_pick_off(20)
-	assert_eq(picker.stats.interceptions, 1)
-	assert_eq(passer.stats.giveaways, 1)
+	assert_eq(picker.stats.takeaways, 1)
+	assert_eq(passer.stats.giveaways, 0)
 
 
 func test_a_dump_recovered_is_a_concession() -> void:
 	_release(10, false, Vector2(8.0, 10.0))
 	_pick_off(20)
-	assert_eq(picker.stats.interceptions, 0)
+	assert_eq(picker.stats.takeaways, 0)
 	assert_eq(passer.stats.giveaways, 0)
 
 
-func test_a_pass_button_feed_through_the_mouth_picked_off_is_an_interception() -> void:
+func test_a_pass_button_feed_through_the_mouth_picked_off_is_a_takeaway() -> void:
 	_release(10, true, Vector2(0.5, 10.0), false)
 	_pick_off(20)
-	assert_eq(picker.stats.interceptions, 1)
+	assert_eq(picker.stats.takeaways, 1)
 	assert_eq(picker.stats.shots_blocked, 0, "a pass is not a blocked shot")
-	assert_eq(passer.stats.giveaways, 1)
+	assert_eq(passer.stats.giveaways, 0)
 
 
-func test_a_shot_picked_off_is_a_block_and_no_interception() -> void:
+func test_a_shot_picked_off_is_a_block_and_no_takeaway() -> void:
 	_release(10, true, Vector2(0.5, 10.0))
 	_pick_off(20)
 	assert_eq(picker.stats.shots_blocked, 1)
-	assert_eq(picker.stats.interceptions, 0)
+	assert_eq(picker.stats.takeaways, 0)
 	assert_eq(passer.stats.giveaways, 0)
 
 

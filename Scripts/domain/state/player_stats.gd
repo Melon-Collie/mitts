@@ -9,18 +9,18 @@ var shots_blocked: int = 0
 # above). NHL-derived definitions, made deterministic for Mitts (see
 # GameManager stat detection):
 #   hits_taken   — body checks absorbed (mirror of `hits`).
-#   takeaways    — puck actively stripped from an opponent (poke / stick-lift).
+#   takeaways    — puck won off an opponent: stripped (poke / stick-lift /
+#                  check) or a pass picked off (TurnoverTracker).
 #   giveaways    — self-inflicted turnover: lost the puck to the other team in
-#                  open play WITHOUT being stripped/hit (fumble / bad pass).
+#                  open play WITHOUT a defender making the play (a fumble, a
+#                  pass gone astray). One turnover is one or the other, never
+#                  both, as the NHL scores them.
 #   faceoff_wins   — credited to a team's centre (slot 0) when that team wins
 #                    the draw (first to recover the puck off the drop).
 #   faceoff_losses — credited to the OPPOSING centre on the same draw, so
 #                    faceoff win % has a real denominator.
 var hits_taken: int = 0
 var takeaways: int = 0
-# A pass picked off: credited to the opponent whose pickup first ended its flight,
-# when the passer's giveaway lands (TurnoverTracker). Takeaways stay strips only.
-var interceptions: int = 0
 var giveaways: int = 0
 var faceoff_wins: int = 0
 var faceoff_losses: int = 0
@@ -106,12 +106,12 @@ var toi_seconds: float = 0.0
 
 # Wire order is append-only: new fields go at the END so an index never shifts.
 # STATS_PLAYER_RECORD_SIZE (WorldStateCodec) = 1 (peer_id) + this array's size,
-# and PROTOCOL_VERSION is bumped whenever this grows.
+# and PROTOCOL_VERSION is bumped whenever this changes.
 func to_array() -> Array:
 	return [goals, assists, shots_on_goal, hits, shots_blocked,
 			hits_taken, takeaways, giveaways, faceoff_wins, faceoff_losses,
 			game_winning_goals, one_timer_goals, tip_goals, ot_goals,
-			shot_attempts, shot_attempts_blocked, xg_for, icings, interceptions,
+			shot_attempts, shot_attempts_blocked, xg_for, icings,
 			fights, fight_wins, pim, pp_goals, sh_goals, penalty_shot_goals, pp_assists,
 			pp_opportunities, pp_on_ice_goals, pk_opportunities, pk_on_ice_goals_against]
 
@@ -144,18 +144,17 @@ func update_from_array(a: Array) -> void:
 	shot_attempts_blocked = a[15]
 	xg_for = a[16]
 	icings = a[17]
-	interceptions = a[18]
-	fights = a[19]
-	fight_wins = a[20]
-	pim = a[21]
-	pp_goals = a[22]
-	sh_goals = a[23]
-	penalty_shot_goals = a[24]
-	pp_assists = a[25]
-	pp_opportunities = a[26]
-	pp_on_ice_goals = a[27]
-	pk_opportunities = a[28]
-	pk_on_ice_goals_against = a[29]
+	fights = a[18]
+	fight_wins = a[19]
+	pim = a[20]
+	pp_goals = a[21]
+	sh_goals = a[22]
+	penalty_shot_goals = a[23]
+	pp_assists = a[24]
+	pp_opportunities = a[25]
+	pp_on_ice_goals = a[26]
+	pk_opportunities = a[27]
+	pk_on_ice_goals_against = a[28]
 
 
 # Power-play points: goals and assists with his team a man up.
@@ -182,7 +181,6 @@ func to_dict() -> Dictionary:
 		"shots_blocked": shots_blocked,
 		"hits_taken": hits_taken,
 		"takeaways": takeaways,
-		"interceptions": interceptions,
 		"giveaways": giveaways,
 		"faceoff_wins": faceoff_wins,
 		"faceoff_losses": faceoff_losses,

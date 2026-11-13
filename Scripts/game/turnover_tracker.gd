@@ -1,5 +1,5 @@
 class_name TurnoverTracker extends RefCounted
-## Host-only attribution of takeaways / giveaways / interceptions / faceoff
+## Host-only attribution of takeaways / giveaways / faceoff
 ## wins from possession changes. GameManager feeds it the authoritative hooks —
 ## a possession gain (puck picked up), an ESTABLISHED possession (see
 ## PossessionTracker), a strip (puck_stripped_from, carrying the defender who
@@ -8,14 +8,13 @@ class_name TurnoverTracker extends RefCounted
 ## PlayerStats. The pure decision
 ## lives in TurnoverRules; this holds the short-lived context (last established
 ## owner + recent strip/shot/pass/dump) needed to classify each gain. A takeaway
-## credits the STRIPPER (the defender who caused the loss), not whoever recovers
-## the loose puck; recovering a shot (saved or missed) is neither a takeaway nor
-## a giveaway.
+## credits the defender who caused the loss, not whoever recovers the loose
+## puck; recovering a shot (saved or missed) is neither a takeaway nor a giveaway.
 ##
-## An interception is the other side of a giveaway on a pass: the opponent whose
-## pickup FIRST ended the pass's flight is credited when the giveaway lands, as
-## the stripper is when a takeaway lands. Takeaways stay strips only — picking
-## off a pass is its own stat, not a takeaway.
+## Each turnover is one event, as the NHL scores it: a takeaway or a giveaway,
+## never both. A pass picked off is a takeaway for the opponent whose pickup
+## FIRST ended its flight — it opens a strip with them as the stripper — and the
+## passer is charged nothing.
 ##
 ## Crediting is deferred to ESTABLISHMENT: a pickup computes the candidate
 ## classification (against the last ESTABLISHED owner, with the open strip and
@@ -36,8 +35,8 @@ class_name TurnoverTracker extends RefCounted
 ## Only ever constructed/called on the host (like HitTracker), so the stats
 ## it writes are authoritative and ride the normal stats broadcast.
 
-# A takeaway or interception just landed for `peer_id` (`kind` is
-# FeatRules.WON_TAKEAWAY or WON_INTERCEPTION): the possession their team now
+# A takeaway just landed for `peer_id` (`kind` is FeatRules.WON_TAKEAWAY for a
+# strip, WON_INTERCEPTION for a pass picked off): the possession their team now
 # holds is one they won.
 signal possession_won(peer_id: int, kind: String)
 
@@ -62,18 +61,17 @@ var _last_established_peer: int = -1
 var _last_established_team: int = -1
 var _strip_open: bool = false
 var _strip_victim_team: int = -1
-# The defender who made the strip (poke / stick-lift / body-check). A takeaway
-# is credited to THEM, not whoever recovers the loose puck. -1 for a goalie
-# strip (no player takeaway).
+# The defender who made the strip (poke / stick-lift / body-check, or the pickup
+# that picked off a pass). A takeaway is credited to THEM, not whoever recovers
+# the loose puck. -1 for a goalie strip (no player takeaway).
 var _strip_stripper_peer: int = -1
+# FeatRules.WON_TAKEAWAY or WON_INTERCEPTION: which play the open strip was.
+var _strip_kind: String = FeatRules.WON_TAKEAWAY
 # The window the last release opened: what it was read as, when, and whose. One
 # release, one window, so a pass thrown after a rebound is judged as a pass.
 var _release_kind: TurnoverRules.Release = TurnoverRules.Release.NONE
 var _release_time: float = -INF
 var _release_team: int = -1
-# The opponent whose pickup first ended the last pass's flight, credited an
-# interception if the giveaway it caused lands. -1 when none is pending.
-var _interceptor_peer: int = -1
 # Contested-loss veto: while a loose puck is unowned, we track whether the
 # opponent of the last-established team has touched it, and — only after such an
 # opponent touch — whether the last-established (losing) team has fought it back
@@ -116,7 +114,6 @@ func on_carrier_gained(peer_id: int, was_faceoff: bool) -> void:
 		_clear_candidate()
 		_strip_open = false
 		_release_kind = TurnoverRules.Release.NONE
-		_interceptor_peer = -1
 		return
 	if _faceoff_pending:
 		# Draw scramble — no turnovers until the draw resolves.
@@ -133,10 +130,10 @@ func on_carrier_gained(peer_id: int, was_faceoff: bool) -> void:
 	var recent_shot: bool = _release_is_live(TurnoverRules.Release.SHOT, SHOT_WINDOW_S)
 	var recent_dump: bool = _release_is_live(TurnoverRules.Release.DUMP, DUMP_WINDOW_S)
 	# The pass's flight ends at its first pickup: a teammate's is a completion,
-	# an opponent's is the interception.
+	# an opponent's picks it off, which strips the passer's team.
 	if _release_is_live(TurnoverRules.Release.PASS, PASS_WINDOW_S):
 		if new_team != _release_team:
-			_interceptor_peer = peer_id
+			_open_strip(_release_team, peer_id, FeatRules.WON_INTERCEPTION)
 		_release_kind = TurnoverRules.Release.NONE
 	var recent_strip: bool = _strip_open \
 			and _strip_victim_team == _last_established_team
@@ -175,17 +172,15 @@ func on_possession_established(peer_id: int) -> bool:
 				if taker != null and taker.stats != null:
 					taker.stats.takeaways += 1
 					credited = true
-					possession_won.emit(_candidate_credit_peer, FeatRules.WON_TAKEAWAY)
+					possession_won.emit(_candidate_credit_peer, _strip_kind)
 			TurnoverRules.GIVEAWAY:
 				# Veto a giveaway the losing team fought back for and still lost —
 				# a contested board battle is not a clean cough-up (see the flag
-				# docs). A clean interception/fumble (no recontact) still charges it.
+				# docs). A clean fumble (no recontact) still charges it.
 				if not _loser_recontacted:
 					var prev: PlayerRecord = _registry.get_record(_candidate_credit_peer)
 					if prev != null and prev.stats != null:
 						prev.stats.giveaways += 1
-						credited = true
-					if _credit_interception(rec.team.team_id):
 						credited = true
 	_clear_candidate()
 	# Establishment resolves the loose-puck phase: consume the strip so the wide
@@ -194,7 +189,6 @@ func on_possession_established(peer_id: int) -> bool:
 	_strip_open = false
 	_strip_stripper_peer = -1
 	_strip_victim_team = -1
-	_interceptor_peer = -1
 	_loose_touched_by_opponent = false
 	_loser_recontacted = false
 	_last_established_peer = peer_id
@@ -224,9 +218,7 @@ func has_pending_faceoff() -> bool:
 # credits THEM, not whoever recovers the loose puck. -1 (goalie strip) = no
 # player takeaway.
 func note_strip(victim_peer_id: int, stripper_peer_id: int) -> void:
-	_strip_open = true
-	_strip_victim_team = _team_of(victim_peer_id)
-	_strip_stripper_peer = stripper_peer_id
+	_open_strip(_team_of(victim_peer_id), stripper_peer_id, FeatRules.WON_TAKEAWAY)
 
 
 # `shooter_peer_id` put the puck at the net (any shot attempt — saved, missed,
@@ -248,7 +240,7 @@ func note_dump(dumper_peer_id: int) -> void:
 
 # `passer_peer_id` released the puck at a teammate (a release
 # TurnoverRules.release_kind reads as a pass). Opens the window in which an
-# opponent's first pickup is an interception.
+# opponent's first pickup picks it off, a takeaway.
 func note_pass(passer_peer_id: int) -> void:
 	_open_release(TurnoverRules.Release.PASS, passer_peer_id)
 
@@ -263,11 +255,17 @@ func reset() -> void:
 	_release_kind = TurnoverRules.Release.NONE
 	_release_time = -INF
 	_release_team = -1
-	_interceptor_peer = -1
 	_loose_touched_by_opponent = false
 	_loser_recontacted = false
 	_clear_candidate()
 	_faceoff_pending = false
+
+
+func _open_strip(victim_team: int, stripper_peer_id: int, kind: String) -> void:
+	_strip_open = true
+	_strip_victim_team = victim_team
+	_strip_stripper_peer = stripper_peer_id
+	_strip_kind = kind
 
 
 func _open_release(kind: TurnoverRules.Release, peer_id: int) -> void:
@@ -287,17 +285,6 @@ func _clear_candidate() -> void:
 	_candidate_type = TurnoverRules.NONE
 	_candidate_carrier_peer = -1
 	_candidate_credit_peer = -1
-
-
-# The pending interceptor, if the giveaway just landed for their team.
-func _credit_interception(establishing_team: int) -> bool:
-	var interceptor: PlayerRecord = _registry.get_record(_interceptor_peer)
-	if interceptor == null or interceptor.stats == null or interceptor.team == null \
-			or interceptor.team.team_id != establishing_team:
-		return false
-	interceptor.stats.interceptions += 1
-	possession_won.emit(_interceptor_peer, FeatRules.WON_INTERCEPTION)
-	return true
 
 
 func _credit_faceoff_win(winning_team: int) -> bool:

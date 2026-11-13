@@ -3322,7 +3322,6 @@ func _build_replay_footer() -> Dictionary:
 				"shots_blocked": r.stats.shots_blocked,
 				"hits_taken": r.stats.hits_taken,
 				"takeaways": r.stats.takeaways,
-				"interceptions": r.stats.interceptions,
 				"giveaways": r.stats.giveaways,
 				"faceoff_wins": r.stats.faceoff_wins,
 				"faceoff_losses": r.stats.faceoff_losses,

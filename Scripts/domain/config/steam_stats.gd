@@ -39,11 +39,14 @@ const HITS_TAKEN := "STAT_HITS_TAKEN"
 const TAKEAWAYS := "STAT_TAKEAWAYS"
 const GIVEAWAYS := "STAT_GIVEAWAYS"
 const FACEOFF_WINS := "STAT_FACEOFF_WINS"
-const INTERCEPTIONS := "STAT_INTERCEPTIONS"
 const FIGHT_WINS := "STAT_FIGHT_WINS"
 const PIM := "STAT_PIM"
 const PP_GOALS := "STAT_PP_GOALS"
 const PP_POINTS := "STAT_PP_POINTS"
+# Retired: pass pick-offs, counted apart from takeaways until they folded in.
+# Never written again; what it holds still counts toward "takeaways"
+# (SteamStatRecorder.totals). Published, so it stays defined on Steamworks.
+const LEGACY_INTERCEPTIONS := "STAT_INTERCEPTIONS"
 
 # `key` is the career-totals column name these map to — the SAME names a Game
 # Puck ladder's `field` reads, so the goals ladder is backed by the stat whose
@@ -60,7 +63,6 @@ const ALL: Array[Dictionary] = [
 	{"id": TAKEAWAYS, "key": "takeaways", "inc": {"kind": "stat", "field": "takeaways"}},
 	{"id": GIVEAWAYS, "key": "giveaways", "inc": {"kind": "stat", "field": "giveaways"}},
 	{"id": FACEOFF_WINS, "key": "faceoff_wins", "inc": {"kind": "stat", "field": "faceoff_wins"}},
-	{"id": INTERCEPTIONS, "key": "interceptions", "inc": {"kind": "stat", "field": "interceptions"}},
 	{"id": FIGHT_WINS, "key": "fight_wins", "inc": {"kind": "stat", "field": "fight_wins"}},
 	{"id": PIM, "key": "pim", "inc": {"kind": "stat", "field": "pim"}},
 	{"id": PP_GOALS, "key": "pp_goals", "inc": {"kind": "stat", "field": "pp_goals"}},

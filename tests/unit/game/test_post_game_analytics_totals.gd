@@ -50,6 +50,13 @@ func test_box_score_sums_per_team() -> void:
 	assert_eq(int(totals[1]["faceoff_wins"]), 7)
 
 
+func test_an_older_box_scores_interceptions_count_as_takeaways() -> void:
+	var box: Array = [{"team_id": 0, "takeaways": 1, "interceptions": 2}]
+	var totals: Array[Dictionary] = PostGameAnalytics.history_totals([], box)
+	assert_eq(int(totals[0]["takeaways"]), 3)
+	assert_false(totals[0].has("interceptions"))
+
+
 func test_no_box_score_leaves_the_box_rows_off() -> void:
 	var totals: Array[Dictionary] = PostGameAnalytics.history_totals(
 			[_shot(0, ShotEvent.Outcome.SAVED, 0.1)], [])
