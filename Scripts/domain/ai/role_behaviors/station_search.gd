@@ -93,6 +93,44 @@ static func too_close_to_teammate(c: Vector3,
 	return false
 
 
+# ── What a spot adds to the attack ───────────────────────────────────────────
+# Two attackers closer than this are one option to the defence: a defender
+# standing between them gets his stick to a feed to either.
+const ONE_DEFENDER_SPAN_M: float = 2.0 * AIBotMechanics.BLADE_REACH_M
+
+# Off-puck teammates' feed values, refilled by fill_feed_values (one worker).
+static var _mate_values: Array[float] = []
+
+
+# The one-timer off our carrier's feed at each of `teammates` (0 for the
+# carrier himself), into this file's scratch for shared_cover.
+static func fill_feed_values(ctx: RoleContext, carrier_pos: Vector3,
+		goalie_pos: Vector3, opp_positions: Array[Vector3],
+		teammates: Array[Vector3]) -> void:
+	_mate_values.clear()
+	for t: Vector3 in teammates:
+		if Vector2(t.x - carrier_pos.x, t.z - carrier_pos.z).length() < 0.5:
+			_mate_values.append(0.0)
+			continue
+		_mate_values.append(AIActionScoring.score_pass_value(carrier_pos, t,
+				ctx.attacking_goal_pos, goalie_pos, opp_positions,
+				AIPuckLane.expected_pass_speed(carrier_pos, t), ctx.scratch_opp_caps, true))
+
+
+# The best feed value (fill_feed_values) of a teammate within ONE_DEFENDER_SPAN_M
+# of `c`: what the carrier already has in the option a spot at `c` would share
+# with him. A spot is worth its own value less this. 0 with nobody in reach.
+static func shared_cover(c: Vector3, teammates: Array[Vector3]) -> float:
+	var r2: float = ONE_DEFENDER_SPAN_M * ONE_DEFENDER_SPAN_M
+	var best: float = 0.0
+	for i: int in mini(teammates.size(), _mate_values.size()):
+		var dx: float = c.x - teammates[i].x
+		var dz: float = c.z - teammates[i].z
+		if dx * dx + dz * dz < r2:
+			best = maxf(best, _mate_values[i])
+	return best
+
+
 # ── Target switch-hysteresis ─────────────────────────────────────────────────
 #
 # Along an argmax's tie ridge two spots trade the lead on noise, and the off-puck

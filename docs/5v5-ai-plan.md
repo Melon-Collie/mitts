@@ -148,7 +148,8 @@ Per-state specs (behavior module in parentheses; **bold = new code**, others reu
 
 - **OZONE** — the standard even-strength 3-low/2-high. NET_FRONT (reuses `AIRoleFinisher`)
   is the crease-edge screen/backdoor man — FINISHER's argmax already lives in that space.
-  HIGH_SLOT (**new decide in `AIRoleHighSlot`**, thin) is F3: floats the soft ice between
+  HIGH_SLOT (**new decide in `AIRoleHighSlot`**, thin; since re-priced, see
+  `docs/bot-net-front-offense-plan.md` step 1) is F3: floats the soft ice between
   the dots at depth ~8–10.7, stays **above the puck** (own-goal-side of it) while the
   puck is no higher than that band (with it at the points he keeps the band, below it), is the
   one-timer seam option, and is the designated first man back — the same

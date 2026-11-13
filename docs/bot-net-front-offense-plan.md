@@ -241,6 +241,55 @@ What the table shows:
 All three are the "slot-protecting defence never has to spread" picture the
 user described.
 
+### Status: first pass built, measured worse, not for playtest
+
+Decided with the user: value decides the shape (no fixed 3-2 or 2-3), and the
+rotation is general, not only the pinch's.
+
+**Built.**
+
+- HIGH_SLOT's grid is priced at the one-timer (above), with no above-the-puck
+  filter.
+- **Either vacated point is filled.** `rotate_up_to_point` reads both, and
+  `point_vacated` counts a D as gone only while he is deeper than his stands
+  and not skating back to his point ahead of the filler. This fixes a
+  clumping path: on a strong-side flip, the sunk strong D was relabelled the
+  "vacated" weak point, and F3 ran up to the line beside him.
+- **The partner** holds the middle of the line whichever D is off it.
+- **The weak D's flank activation** (`_flank_activation`), covered as the
+  pinch is.
+- **A spot shares its value with a teammate inside one defender's span**
+  (`AIStationSearch.shared_cover`, 2 × `BLADE_REACH_M`). This applies to
+  HIGH_SLOT, the flank and the finisher's stations.
+
+**Measured** (`test_ozone_possession_5v5.gd`, 48 Hard possessions):
+
+| | shots | slot | picked | stripped |
+|---|---|---|---|---|
+| before | 18 | 7 | 15 | 13 |
+| all of it | 11 | 1 | 18 | 18 |
+| without the new HIGH_SLOT pricing | 17 | 4 | 15 | 13 |
+| without the flank activation | 17 | 5 | 14 | 17 |
+| without the finisher's shared cover | 11 | 1 | 18 | 18 |
+
+The attack's own spacing (off-puck nearest teammate, `test_ozone_spacing.gd`)
+went from 5.5 / 7.4 / 7.1 / 7.2 m to 5.3 / 5.0 / 7.4 / 6.4 m. The forwards
+settle just outside the one-defender span, where the old fixed staging spread
+them further.
+
+**Next.**
+
+1. **Enlarge the sweep before judging anything.** Its 48 runs are 24 starts
+   and their mirrors, so a few shots either way is noise. Add more starts and
+   jitter, for a few hundred possessions.
+2. **Then measure the HIGH_SLOT pricing and the flank activation one at a
+   time,** and find why the two together lose the slot.
+
+**Also seen:** the finisher's rush depth gate (`stage_dist`, 5 m in a set
+cycle) leaves its weak-dot and high-slot stations unreachable, so NET_FRONT
+never rotates up. It is left alone until step 4 prices the screen that would
+keep the net front manned.
+
 ---
 
 ## Step 2 — Measure the net front (instruments only, no behaviour change)

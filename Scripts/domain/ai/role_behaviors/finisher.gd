@@ -232,6 +232,8 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	var carrier_release: Vector3 = AIPuckLane.release_point_toward(
 			carrier_pos, ctx.attacking_goal_pos)
 	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
+	AIStationSearch.fill_feed_values(ctx, carrier_pos, goalie_pos, opp_positions,
+			teammate_positions)
 
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
@@ -261,8 +263,10 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 				opp_positions,
 				carrier_shot_speed, ctx.scratch_opp_caps, self_caps)
 		# The better of the one-timer feed and the tip — max(), not sum: one puck,
-		# one outcome.
-		var score: float = maxf(feed, tip) + AIStationSearch.incumbent_bonus(ctx, c)
+		# one outcome — less what a teammate a defender could cover with this spot
+		# already offers.
+		var score: float = maxf(feed, tip) - AIStationSearch.shared_cover(c, teammate_positions) \
+				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
 			best_pos = c

@@ -529,7 +529,8 @@ func test_the_weak_d_never_pinches() -> void:
 func test_f3_wall_fills_the_point_while_the_strong_d_is_down_the_wall() -> void:
 	# The forecheck half of the rotation, read from the forward's side.
 	var ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -11.0), [
-		[2, TEAM_ID, Vector3(11.0, 0.0, -14.0)],         # strong D, pinched
+		# Strong D, pinched: still driving down the wall onto the carrier.
+		[2, TEAM_ID, Vector3(11.0, 0.0, -14.0), Vector3(1.0, 0.0, -4.0)],
 		[3, TEAM_ID, Vector3(-5.0, 0.0, -8.29)],
 		[10, 1, Vector3(11.8, 0.0, -14.5)],
 	], 10)
@@ -571,6 +572,51 @@ func test_high_slot_fills_the_point_while_the_strong_d_battles_low() -> void:
 			"F3 rotates up to the strong point; got %s" % d.target_position)
 
 
+# The O-zone rotation with our carrier low on the strong side: me (peer 1) on
+# HIGH_SLOT in the slot, the strong D on his point, and the weak D at `weak_d`
+# skating at `weak_vel`.
+func _weak_rotation_ctx(weak_d: Vector3, weak_vel: Vector3 = Vector3.ZERO) -> RoleContext:
+	var ctx: RoleContext = _make_ctx(Vector3(1.0, 0.0, -18.0), [
+		[2, TEAM_ID, Vector3(6.0, 0.0, -9.5)],           # strong D, on the line
+		[3, TEAM_ID, weak_d, weak_vel],                   # weak D
+		[5, TEAM_ID, Vector3(10.0, 0.0, -23.0)],         # our carrier, low
+	], 5)
+	ctx.self_is_defense = false
+	var strategy := StubStrategy.new()
+	strategy.slots = {1: AIRoleSlots.Slot.HIGH_SLOT, 2: AIRoleSlots.Slot.POINT_STRONG,
+			3: AIRoleSlots.Slot.POINT_WEAK, 5: AIRoleSlots.Slot.CARRIER}
+	ctx.team_brain = strategy
+	return ctx
+
+
+func test_high_slot_fills_the_weak_point_while_its_d_is_down_the_flank() -> void:
+	# The weak D sneaked down to his dot and is still there: F3 takes his point.
+	var ctx: RoleContext = _weak_rotation_ctx(Vector3(-6.5, 0.0, -21.0))
+	var d: RoleDecision = AIRoleHighSlot.decide(ctx)
+	assert_lt(d.target_position.distance_to(AIRoleDefenseman.weak_point_stand(ctx)), 1.0,
+			"F3 rotates up to the weak point; got %s" % d.target_position)
+	# And the strong D slides to the middle of the line.
+	ctx.self_pos = Vector3(6.0, 0.0, -9.5)
+	ctx.self_is_defense = true
+	ctx.peer_id = 2
+	var s: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.POINT_STRONG)
+	assert_lt(absf(s.target_position.x), 2.0,
+			"the strong D holds the middle of the line; got %s" % s.target_position)
+	assert_gt(-s.target_position.z, GameRules.BLUE_LINE_Z + 1.0,
+			"...on the line, never sinking with his partner down; got %s" % s.target_position)
+
+
+func test_high_slot_leaves_a_point_its_d_is_skating_back_to() -> void:
+	# The same weak D just as deep, but already skating back up to his line at
+	# pace (a strong-side flip relabels a sunk strong D this way): he gets there
+	# before F3 could, so F3 keeps his own ice.
+	var ctx: RoleContext = _weak_rotation_ctx(Vector3(-6.0, 0.0, -14.5),
+			Vector3(0.0, 0.0, 6.0))
+	var d: RoleDecision = AIRoleHighSlot.decide(ctx)
+	assert_gt(d.target_position.distance_to(AIRoleDefenseman.weak_point_stand(ctx)), 3.0,
+			"F3 stays off the point; got %s" % d.target_position)
+
+
 func test_high_slot_floats_below_a_puck_at_the_point() -> void:
 	# Our D has it on the line: above-the-puck has no ice in the band, and F3 keeps
 	# the band — the seam below the point — instead of standing on the line with
@@ -587,7 +633,7 @@ func test_high_slot_floats_below_a_puck_at_the_point() -> void:
 	ctx.team_brain = strategy
 	var d: RoleDecision = AIRoleHighSlot.decide(ctx)
 	var depth: float = d.target_position.z + GameRules.GOAL_LINE_Z
-	assert_lte(depth, AIRoleHighSlot.BAND_DEPTHS_M[AIRoleHighSlot.BAND_DEPTHS_M.size() - 1],
+	assert_lte(depth, AIRoleHighSlot.GRID_DEPTHS_M[AIRoleHighSlot.GRID_DEPTHS_M.size() - 1],
 			"F3 floats the high slot; got %s" % d.target_position)
 
 

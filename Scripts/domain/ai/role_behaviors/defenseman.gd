@@ -16,10 +16,12 @@ class_name AIRoleDefenseman
 # Every stand goes through the shared station read
 # (AILastManDiscipline.offensive_station_target / neutral_station_target).
 #
-# THE ROTATION. While the strong-side D is deeper than any stand his slot takes,
-# the weak D slides to the middle of the line and a forward takes the vacated
-# strong point — HIGH_SLOT in the O-zone, F3_WALL on the forecheck, via
-# rotate_up_to_point from his own role.
+# THE ROTATION. While either D is deeper than any stand his slot takes (a pinch,
+# a battle, the weak D down his flank), his partner slides to the middle of the
+# line and a forward takes the vacated point: HIGH_SLOT in the O-zone, F3_WALL
+# on the forecheck (the strong point only), via rotate_up_to_point from his own
+# role. Only one D is ever off the line: each leaves it only with his partner on
+# it and a forward able to take his point.
 
 # How far inside the offensive zone the points stand: a full puck-handling
 # radius, so a reception's give or a backswing never drags the puck back across
@@ -62,9 +64,14 @@ const POINT_VACATED_SLACK_M: float = \
 # A filler whose last target sat this close to the vacated stand is already
 # covering it — generous, because the leash and numbers bound move the target.
 const ROTATION_HELD_M: float = 3.0
-# The weak D's lanes while his partner is down the wall (weak-signed u, so the
-# negative entry is the strong side of centre): the middle of the line.
-const POINT_WEAK_COVER_LANES_U: Array[float] = [1.5, 0.0, -1.5]
+# Either D's lanes while his partner is off the line (signed toward his own
+# side, so the negative entry is across centre): the middle of the line.
+const POINT_COVER_LANES_U: Array[float] = [1.5, 0.0, -1.5]
+# The weak D's activation down his flank (docs/bot-net-front-offense-plan.md
+# step 1): weak-signed lateral and depth off the attacked goal line of each
+# spot he may sneak to, from the weak dot up to the inside of his circle top.
+const FLANK_WEAK_U_M: Array[float] = [GameRules.END_ZONE_FACEOFF_DOT_X, 5.0, 3.5]
+const FLANK_DEPTH_M: Array[float] = [6.1, 8.5, 10.5]
 # How far down his wall the strong D may pinch, off their blue line: to
 # F3_WALL's post (AIRoleForecheck.F3_WALL_DEPTH_OFF_GOAL_M), which owns the
 # wall below. test_role_defenseman holds the two together.
@@ -115,11 +122,16 @@ static func _decide_point(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 	if ctx.snapshot != null and ctx.snapshot.puck_state != null:
 		puck_depth = AIZoneCoverage.depth_of(
 				opp_net.z, ctx.snapshot.puck_state.position)
-	var allow_sink: bool = is_strong and puck_depth < POINT_SINK_PUCK_DEPTH_M
+	# The rotation's partner half: my partner off the line → I hold its middle,
+	# on the line.
+	var partner_off: bool = _partner_vacated(ctx, AIRoleSlots.Slot.POINT_WEAK \
+			if is_strong else AIRoleSlots.Slot.POINT_STRONG)
+	var allow_sink: bool = is_strong and not partner_off \
+			and puck_depth < POINT_SINK_PUCK_DEPTH_M
 	if is_strong:
 		var pinch: RoleDecision = _wall_pinch(ctx, side,
 				strong_point_stand(ctx, AIRoleSlots.Slot.POINT_STRONG),
-				_strong_stand_depth_m(ctx, AIRoleSlots.Slot.POINT_STRONG),
+				_stand_depth_m(ctx, AIRoleSlots.Slot.POINT_STRONG),
 				AIRoleSlots.Slot.POINT_WEAK, POINT_INSET_M, AIRoleSlots.Slot.HIGH_SLOT)
 		if pinch != null:
 			return pinch
@@ -131,9 +143,8 @@ static func _decide_point(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 	AIRoleReads.collect_teammates_excluding_self(ctx, teammates)
 
 	var lanes: Array[float] = POINT_STRONG_LANES_U if is_strong else POINT_WEAK_LANES_U
-	# The rotation's weak-D half: partner down the wall → hold the middle.
-	if not is_strong and _partner_vacated(ctx, AIRoleSlots.Slot.POINT_STRONG):
-		lanes = POINT_WEAK_COVER_LANES_U
+	if partner_off:
+		lanes = POINT_COVER_LANES_U
 	var shot_speed: float = ctx.self_wrister_shot_speed
 	var base_stand := Vector3(side * lanes[0], 0.0, line_z)
 	var best_pos: Vector3 = base_stand
@@ -156,10 +167,74 @@ static func _decide_point(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 				best_pos = c
 	if best_score == -INF:
 		best_pos = base_stand
+	if not is_strong and not partner_off:
+		var flank: Vector3 = _flank_activation(ctx, best_pos, opp_positions, teammates)
+		if flank.is_finite():
+			best_pos = flank
 	d.target_position = AILastManDiscipline.offensive_station_target(
 			ctx, best_pos, ctx.prev_held_forward_stand)
 	d.held_forward_stand = d.target_position.distance_to(best_pos) < 0.5
 	return d
+
+
+# The weak D's activation: the flank spot down his side where the one-timer off
+# our carrier's feed adds more than at his spot on the line (both
+# score_pass_value less AIStationSearch.shared_cover, the switch hysteresis on
+# whichever he holds), or
+# Vector3.INF to stay on the line. He leaves it as the pinch does: the numbers
+# read lets him, nobody of theirs is behind his stand, his partner is on the
+# line, and HIGH_SLOT can take his point in time. Once down, he stays while his
+# partner holds the line.
+static func _flank_activation(ctx: RoleContext, line_spot: Vector3,
+		opp_positions: Array[Vector3], teammates: Array[Vector3]) -> Vector3:
+	var carrier_pos: Vector3 = AIRoleReads.resolve_teammate_carrier_pos(ctx)
+	if not carrier_pos.is_finite():
+		return Vector3.INF
+	var goalie_pos: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
+	AIStationSearch.fill_feed_values(ctx, carrier_pos, goalie_pos, opp_positions, teammates)
+	var opp_net: Vector3 = ctx.attacking_goal_pos
+	var weak: float = -ctx.strong_x
+	var best: Vector3 = Vector3.INF
+	var best_score: float = _feed_value(ctx, line_spot, carrier_pos, goalie_pos,
+			opp_positions) - AIStationSearch.shared_cover(line_spot, teammates) \
+			+ AIStationSearch.incumbent_bonus(ctx, line_spot)
+	for i: int in FLANK_DEPTH_M.size():
+		var c := Vector3(weak * FLANK_WEAK_U_M[i], 0.0,
+				opp_net.z + ctx.own_goal_dir * FLANK_DEPTH_M[i])
+		if not AIStationSearch.is_legal_position(c) \
+				or AIStationSearch.too_close_to_teammate(c, teammates):
+			continue
+		var s: float = _feed_value(ctx, c, carrier_pos, goalie_pos, opp_positions) \
+				- AIStationSearch.shared_cover(c, teammates) \
+				+ AIStationSearch.incumbent_bonus(ctx, c)
+		if s > best_score:
+			best_score = s
+			best = c
+	if not best.is_finite():
+		return Vector3.INF
+	var down: bool = ctx.prev_role_target.is_finite() \
+			and _depth_inside_attacked_zone(ctx, ctx.prev_role_target) \
+					> POINT_INSET_M + POINT_VACATED_SLACK_M
+	if down:
+		return Vector3.INF if point_vacated(ctx, AIRoleSlots.Slot.POINT_STRONG, false) \
+				else best
+	if not AILastManDiscipline.may_hold_forward_stand(
+			ctx, ctx.prev_held_forward_stand, line_spot):
+		return Vector3.INF
+	var t_me: float = AIArrival.time_to_arrive(ctx.self_pos, best, ctx.self_velocity,
+			ctx.self_max_speed, ctx.self_max_accel, ctx.self_lateral_grip)
+	if not _pinch_is_covered(ctx, weak_point_stand(ctx), t_me,
+			AIRoleSlots.Slot.POINT_STRONG,
+			_stand_depth_m(ctx, AIRoleSlots.Slot.POINT_STRONG), AIRoleSlots.Slot.HIGH_SLOT):
+		return Vector3.INF
+	return best
+
+
+static func _feed_value(ctx: RoleContext, c: Vector3, carrier_pos: Vector3,
+		goalie_pos: Vector3, opp_positions: Array[Vector3]) -> float:
+	return AIActionScoring.score_pass_value(carrier_pos, c, ctx.attacking_goal_pos,
+			goalie_pos, opp_positions, AIPuckLane.expected_pass_speed(carrier_pos, c),
+			ctx.scratch_opp_caps, true)
 
 
 # The keep-in stand for a fired loose puck whose PREDICTED path (the chase
@@ -338,19 +413,35 @@ static func _pinch_is_covered(ctx: RoleContext, line_stand: Vector3,
 
 # ── The rotation ─────────────────────────────────────────────────────────────
 
-# The forward's half of the rotation: the strong point's stand, held as a back
-# layer, while the D who owns it is down the wall — or null when he is not.
+# The forward's half of the rotation: a vacated point's stand, held as a back
+# layer, or null when both D are on the line. `strong_slot` names the shape:
+# on the forecheck (DP_STRONG) only the strong D ever leaves; in the O-zone
+# (POINT_STRONG) either may, the strong point read first.
 static func rotate_up_to_point(ctx: RoleContext, strong_slot: int) -> RoleDecision:
-	var stand: Vector3 = strong_point_stand(ctx, strong_slot)
+	var fill: RoleDecision = _fill_if_vacated(ctx, strong_slot,
+			strong_point_stand(ctx, strong_slot))
+	if fill == null and strong_slot == AIRoleSlots.Slot.POINT_STRONG:
+		fill = _fill_if_vacated(ctx, AIRoleSlots.Slot.POINT_WEAK, weak_point_stand(ctx))
+	return fill
+
+
+static func _fill_if_vacated(ctx: RoleContext, slot: int, stand: Vector3) -> RoleDecision:
 	var covering: bool = ctx.prev_role_target.is_finite() \
 			and AIRoleReads.xz_distance(ctx.prev_role_target, stand) < ROTATION_HELD_M
-	if not strong_point_vacated(ctx, strong_slot, covering):
+	if not point_vacated(ctx, slot, covering):
 		return null
 	var d := RoleDecision.new()
 	d.target_position = AILastManDiscipline.offensive_station_target(
 			ctx, stand, ctx.prev_held_forward_stand, true)
 	d.held_forward_stand = d.target_position.distance_to(stand) < 0.5
 	return d
+
+
+# The weak O-zone point a forward takes while its D is off the line: the strong
+# point's mirror.
+static func weak_point_stand(ctx: RoleContext) -> Vector3:
+	return Vector3(-ctx.strong_x * GameRules.END_ZONE_FACEOFF_DOT_X, 0.0,
+			-ctx.own_goal_dir * (GameRules.BLUE_LINE_Z + POINT_INSET_M))
 
 
 static func strong_point_stand(ctx: RoleContext, strong_slot: int) -> Vector3:
@@ -362,17 +453,54 @@ static func strong_point_stand(ctx: RoleContext, strong_slot: int) -> Vector3:
 			-own_dir * (GameRules.BLUE_LINE_Z + POINT_INSET_M))
 
 
-# Has the teammate holding `strong_slot` gone deeper into the zone we attack than
-# any stand that slot takes now, by POINT_VACATED_SLACK_M? `covering` drops the
-# slack, so a rotation already made holds until he is back. False when nobody
-# holds the slot or no brain is wired.
-static func strong_point_vacated(ctx: RoleContext, strong_slot: int,
-		covering: bool) -> bool:
-	var holder: SkaterNetworkState = _slot_holder(ctx, strong_slot)
+# Has the teammate holding `slot` left his point: deeper into the zone we attack
+# than any stand that slot takes now, by POINT_VACATED_SLACK_M, and not skating
+# back to it sooner than the forward who would fill it (HIGH_SLOT, or F3_WALL on
+# the forecheck), each on his momentum-honest arrival? A D not skating toward
+# his stand is engaged elsewhere (a pinch, a battle, his flank) and is not
+# coming. A D skating back keeps it, so a slot relabel when the strong side
+# flips does not leave the forward on a point its D is retaking. `covering`
+# drops the slack, so a rotation already made holds while he stays down. False
+# when nobody holds the slot or no brain is wired.
+static func point_vacated(ctx: RoleContext, slot: int, covering: bool) -> bool:
+	var holder: SkaterNetworkState = _slot_holder(ctx, slot)
 	if holder == null:
 		return false
-	return off_the_point(_depth_inside_attacked_zone(ctx, holder.position),
-			_strong_stand_depth_m(ctx, strong_slot), covering)
+	if not off_the_point(_depth_inside_attacked_zone(ctx, holder.position),
+			_stand_depth_m(ctx, slot), covering):
+		return false
+	var stand: Vector3 = _point_stand_of(ctx, slot)
+	var to_stand: Vector3 = stand - holder.position
+	to_stand.y = 0.0
+	if holder.velocity.dot(to_stand) <= 0.0:
+		return true
+	var filler_slot: int = AIRoleSlots.Slot.F3_WALL \
+			if slot == AIRoleSlots.Slot.DP_STRONG or slot == AIRoleSlots.Slot.DP_WEAK \
+			else AIRoleSlots.Slot.HIGH_SLOT
+	var filler_pos: Vector3
+	var filler_vel: Vector3
+	if ctx.team_brain.get_slot(ctx.peer_id) == filler_slot:
+		filler_pos = ctx.self_pos
+		filler_vel = ctx.self_velocity
+	else:
+		var filler: SkaterNetworkState = _slot_holder(ctx, filler_slot)
+		if filler == null:
+			return true
+		filler_pos = filler.position
+		filler_vel = filler.velocity
+	return AIArrival.time_to_arrive(filler_pos, stand, filler_vel) \
+			< AIArrival.time_to_arrive(holder.position, stand, holder.velocity)
+
+
+static func _point_stand_of(ctx: RoleContext, slot: int) -> Vector3:
+	match slot:
+		AIRoleSlots.Slot.POINT_WEAK:
+			return weak_point_stand(ctx)
+		AIRoleSlots.Slot.DP_WEAK:
+			var s: Vector3 = strong_point_stand(ctx, AIRoleSlots.Slot.DP_STRONG)
+			return Vector3(-ctx.strong_x * DP_WEAK_LANE_X_M, 0.0, s.z)
+		_:
+			return strong_point_stand(ctx, slot)
 
 
 # Is a D `depth_inside_m` inside the zone we attack past a point stand
@@ -388,23 +516,26 @@ static func carrier_off_the_point(depth_inside_m: float, covering: bool) -> bool
 	return off_the_point(depth_inside_m, POINT_INSET_M, covering)
 
 
-# The deepest stand `strong_slot` takes now, metres inside the zone we attack:
-# the forecheck line, or the point with its sink rows while the puck is low.
-static func _strong_stand_depth_m(ctx: RoleContext, strong_slot: int) -> float:
-	if strong_slot == AIRoleSlots.Slot.DP_STRONG:
+# The deepest stand `slot` takes now, metres inside the zone we attack: the
+# forecheck line, the weak point's line, or the strong point with its sink rows
+# while the puck is low.
+static func _stand_depth_m(ctx: RoleContext, slot: int) -> float:
+	if slot == AIRoleSlots.Slot.DP_STRONG or slot == AIRoleSlots.Slot.DP_WEAK:
 		return DP_LINE_INSET_M
-	if ctx.snapshot != null and ctx.snapshot.puck_state != null \
+	if slot == AIRoleSlots.Slot.POINT_STRONG and ctx.snapshot != null \
+			and ctx.snapshot.puck_state != null \
 			and AIZoneCoverage.depth_of(ctx.attacking_goal_pos.z,
 					ctx.snapshot.puck_state.position) < POINT_SINK_PUCK_DEPTH_M:
 		return POINT_INSET_M + POINT_SINK_M * float(POINT_SINK_ROWS)
 	return POINT_INSET_M
 
 
-# The weak D's read: his "already covering" is standing in the middle lanes.
-static func _partner_vacated(ctx: RoleContext, strong_slot: int) -> bool:
+# A D's read of his partner (`partner_slot`) off the line: his "already
+# covering" is standing in the middle lanes.
+static func _partner_vacated(ctx: RoleContext, partner_slot: int) -> bool:
 	var covering: bool = ctx.prev_role_target.is_finite() \
-			and absf(ctx.prev_role_target.x) < POINT_WEAK_COVER_LANES_U[0] + 0.5
-	return strong_point_vacated(ctx, strong_slot, covering)
+			and absf(ctx.prev_role_target.x) < POINT_COVER_LANES_U[0] + 0.5
+	return point_vacated(ctx, partner_slot, covering)
 
 
 # The teammate (not me) the brain has in `slot`, or null.
