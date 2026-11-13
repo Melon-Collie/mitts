@@ -76,6 +76,28 @@ func test_the_bots_put_him_at_his_own_depth_against_a_carrier() -> void:
 						"his depth for a carrier at (%.1f, %.1f) closing at %.0f m/s" % [x, out, closing])
 
 
+func test_the_bots_know_when_he_plays_a_carrier_in_tight_down() -> void:
+	# A carrier of theirs in front, the keeper set on the spot his brain skates
+	# him to (as tracking the carry has him): down, kept down or planted, exactly
+	# where the bots' arrival read takes him down.
+	for x: float in [0.0, 0.6, 1.2, 2.0]:
+		for out: float in [0.5, 1.5, 2.2, 2.6, 3.0, 4.0, 6.0]:
+			var puck := Vector3(x, 0.0, GOAL.z + out)
+			var at: Vector2 = _in_net(puck)
+			var brain := KeeperPositioning.new()
+			var play := KeeperPlayRead.new()
+			play.theirs = true
+			play.loose = false
+			brain.play = play
+			var motor := KeeperMotor.new()
+			brain.decide(at, Vector2.ZERO, motor)
+			motor.x = motor.route.spot.x
+			motor.z = motor.route.spot.y
+			brain.decide(at, Vector2.ZERO, motor)
+			assert_eq(AIGoalieModel.down_in_tight(puck, GOAL), brain.kept_down or brain.planted,
+					"down for a carrier at (%.1f, %.1f) as his brain plays him" % [x, out])
+
+
 func test_the_bots_measure_his_stance_on_his_gear() -> void:
 	var pose := KeeperPose.new()
 	KeeperPoses.ready(pose)

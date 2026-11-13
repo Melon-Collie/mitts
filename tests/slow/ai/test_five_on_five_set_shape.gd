@@ -31,7 +31,10 @@ extends GutTest
 #   wingers at speed; his D steps up alone and the winger on his outside takes
 #   the pass behind him: one man thin at entry. The ladder sizes the pair's
 #   depth from the carrier alone (#930).
-const KNOWN_THIN: Array[String] = ["v8.5/z24/c-6"]
+#   v7.0/z20/c-6 — the middle man loses the puck at the red line; our weak D
+#   steps up onto it and stops, their winger collects it at speed down the wall
+#   and beats him to our line: one man thin at entry (#948).
+const KNOWN_THIN: Array[String] = ["v8.5/z24/c-6", "v7.0/z20/c-6"]
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")

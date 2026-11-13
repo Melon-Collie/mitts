@@ -5,8 +5,9 @@ class_name AIRoleHighSlot
 # docs/5v5-ai-plan.md §2 and the appendix's F3 rules.
 #
 # A small argmax over the band, scoring the one-timer look (feed lane × shot
-# lane), with above-the-puck as a hard filter and the shared station read
-# (offensive_station_target) bounding the result.
+# lane), with above-the-puck as a hard filter while the puck is no higher than
+# the band, and the shared station read (offensive_station_target) bounding the
+# result.
 
 # The float band: depths off the attacked goal line and lateral samples
 # (weak-side shaded — the seam is usually back across the grain).
@@ -49,13 +50,18 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 
 	var pass_speed_ref: float = AIPuckLane.expected_pass_speed(
 			carrier_pos, opp_net)
+	# A puck up past the band (at the points) leaves F3 the band itself, below it:
+	# the seam and shooting option off the point, the D behind him as the back
+	# layer. Held above it there, he stood on the line with them.
+	var stay_above: bool = own_dir * (carrier_pos.z - opp_net.z) \
+			<= BAND_DEPTHS_M[BAND_DEPTHS_M.size() - 1]
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	for depth: float in BAND_DEPTHS_M:
 		var z: float = opp_net.z + own_dir * depth
 		for x: float in BAND_LATERAL_M:
 			var c := Vector3(x, 0.0, z)
-			if own_dir * c.z < own_dir * carrier_pos.z + ABOVE_PUCK_MARGIN_M:
+			if stay_above and own_dir * c.z < own_dir * carrier_pos.z + ABOVE_PUCK_MARGIN_M:
 				continue
 			if not AIStationSearch.is_legal_position(c):
 				continue
@@ -73,8 +79,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 				best_score = score
 				best_pos = c
 	if best_score == -INF:
-		# Whole band filtered (carrier above it, or crowded): 1 m inside the
-		# opp blue line.
+		# Whole band filtered (carrier just above it, or crowded): 1 m inside
+		# the opp blue line.
 		best_pos = Vector3(0.0, 0.0,
 				opp_net.z + own_dir * (GameRules.GOAL_LINE_Z - GameRules.BLUE_LINE_Z - 1.0))
 	d.target_position = AILastManDiscipline.offensive_station_target(

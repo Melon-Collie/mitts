@@ -571,6 +571,26 @@ func test_high_slot_fills_the_point_while_the_strong_d_battles_low() -> void:
 			"F3 rotates up to the strong point; got %s" % d.target_position)
 
 
+func test_high_slot_floats_below_a_puck_at_the_point() -> void:
+	# Our D has it on the line: above-the-puck has no ice in the band, and F3 keeps
+	# the band — the seam below the point — instead of standing on the line with
+	# the D (#942).
+	var ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -16.0), [
+		[2, TEAM_ID, Vector3(6.0, 0.0, -9.0)],           # D carrying on the point
+		[3, TEAM_ID, Vector3(-3.0, 0.0, -9.0)],
+		[5, TEAM_ID, Vector3(-1.0, 0.0, -24.5)],
+	], 2)
+	ctx.self_is_defense = false
+	var strategy := StubStrategy.new()
+	strategy.slots = {1: AIRoleSlots.Slot.HIGH_SLOT, 2: AIRoleSlots.Slot.CARRIER,
+			3: AIRoleSlots.Slot.POINT_WEAK, 5: AIRoleSlots.Slot.NET_FRONT}
+	ctx.team_brain = strategy
+	var d: RoleDecision = AIRoleHighSlot.decide(ctx)
+	var depth: float = d.target_position.z + GameRules.GOAL_LINE_Z
+	assert_lte(depth, AIRoleHighSlot.BAND_DEPTHS_M[AIRoleHighSlot.BAND_DEPTHS_M.size() - 1],
+			"F3 floats the high slot; got %s" % d.target_position)
+
+
 func test_high_slot_stays_home_while_the_strong_point_only_sinks() -> void:
 	# The staggered pair's normal wall slide is not a vacated point.
 	var ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -16.0), [

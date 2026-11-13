@@ -75,12 +75,12 @@ enum History { ANY, CARRIED, FED, WRAPPED, FED_ACROSS, FED_SAME }
 # Each cell's kind (_kind) and each History's kinds as a mask over them. A feed
 # or a decoy crosses the royal road when its passer (the decoy carrier) and the
 # release are on different sides of it (crosses_royal_road).
-enum CellKind { SET, DEKE, FEED_ACROSS, FEED_SAME, DECOY_ACROSS, DECOY_SAME, WRAP }
+enum CellKind { SET, DEKE, FEED_ACROSS, FEED_SAME, DECOY_ACROSS, DECOY_SAME, WRAP, DRIVE }
 const _ACROSS: int = (1 << CellKind.FEED_ACROSS) | (1 << CellKind.DECOY_ACROSS)
 const _SAME_SIDE: int = (1 << CellKind.FEED_SAME) | (1 << CellKind.DECOY_SAME)
 const _HISTORY_KINDS: Array[int] = [
-	0b1111111,
-	(1 << CellKind.SET) | (1 << CellKind.DEKE),
+	0b11111111,
+	(1 << CellKind.SET) | (1 << CellKind.DEKE) | (1 << CellKind.DRIVE),
 	_ACROSS | _SAME_SIDE,
 	1 << CellKind.WRAP,
 	_ACROSS,
@@ -303,10 +303,12 @@ static func _cell_kind(kind: String, from_x: float, spot_x: float) -> int:
 		"DECOY":
 			return CellKind.DECOY_ACROSS if crosses_royal_road(from_x, spot_x) \
 					else CellKind.DECOY_SAME
-		"DEKE":
+		"DEKE", "DRIVE_DEKE":
 			return CellKind.DEKE
 		"WRAP":
 			return CellKind.WRAP
+		"DRIVE":
+			return CellKind.DRIVE
 	return CellKind.SET
 
 

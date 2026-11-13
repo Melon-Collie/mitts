@@ -29,6 +29,13 @@ const WRAP_FROM_X_M: float = 5.0
 const WRAP_CORNER_X_M: float = 1.6
 const WRAP_CORNER_OUT_M: float = 0.6
 const WRAP_CARRY_M_S: float = 4.0
+# A drive: a carrier skating straight down the ice at a breakaway's pace (the
+# breakaway fixtures skate in at 8.4–9.2 m/s) from this far out, the keeper
+# tracking him the whole way, who charges his wrister in stride over the last
+# CHARGE_M and releases at the spot.
+const DRIVE_FROM_M: float = 25.0
+const DRIVE_M_S: float = 9.0
+const CHARGE_M: float = DRIVE_M_S * float(CHARGE_TICKS) * DT
 
 var goal := Vector3(0.0, 0.0, GOAL_Z)
 # The keeper as he stood square on the passer, just before the last feed left.
@@ -137,6 +144,26 @@ func stage_deke(spot: Vector3, across: float) -> Vector3:
 	return _h.deke_across(spot.x, DEKE_S, DEKE_FORWARD_M_S)
 
 
+# The keeper tracking a carrier driving straight in at DRIVE_M_S to a charge's
+# skate short of `spot`; release(driven) skates the charge. Returns the release
+# point.
+func stage_drive(spot: Vector3) -> Vector3:
+	var fwd: float = spot.z - GOAL_Z
+	_h.settle_ready(Vector3(spot.x, 0.0, GOAL_Z + DRIVE_FROM_M))
+	_h.drive_in(spot.x, DRIVE_FROM_M, fwd + CHARGE_M, DRIVE_M_S)
+	return spot
+
+
+# The keeper tracking a carrier driving straight in at DRIVE_M_S in the lane
+# `across` metres to the side of `spot`, who then dekes across onto it as
+# stage_deke's does. Returns where the puck ends up, the release point.
+func stage_drive_deke(spot: Vector3, across: float) -> Vector3:
+	var start := Vector3(spot.x - across, 0.0, spot.z + DEKE_FORWARD_M_S * DEKE_S)
+	_h.settle_ready(Vector3(start.x, 0.0, GOAL_Z + DRIVE_FROM_M))
+	_h.drive_in(start.x, DRIVE_FROM_M, start.z - GOAL_Z, DRIVE_M_S)
+	return _h.deke_across(spot.x, DEKE_S, DEKE_FORWARD_M_S)
+
+
 # The keeper set on a carrier who skated in to `at` straight from up the ice.
 func _settle_on(at: Vector3) -> void:
 	_h.approach_and_settle(at, at - Vector3(0.0, 0.0, signf(GOAL_Z) * APPROACH_M), APPROACH_M_S)
@@ -144,14 +171,19 @@ func _settle_on(at: Vector3) -> void:
 
 # The bot's release from the staged state: a one-timer leaves cold; everything
 # else charges the wrister first, publishing its aim as it does. `caught`: the
-# puck arrived loose and the receiver takes it before charging.
+# puck arrived loose and the receiver takes it before charging. `driven`: the
+# charge is skated, the last CHARGE_M of a drive (stage_drive).
 func release(release_pos: Vector3, one_timer: bool, caught: bool, aim: Vector3,
-		loft: int) -> int:
+		loft: int, driven: bool = false) -> int:
 	if one_timer:
 		return _h.fire_at(release_pos, aim, loft, SHOT_SPEED, 0.0)
 	if caught:
 		_puck.set_carrier(_shooter)
-	_h.hold_windup_at(release_pos, aim, loft, SHOT_SPEED, CHARGE_TICKS)
+	if driven:
+		var fwd: float = release_pos.z - GOAL_Z
+		_h.drive_in(release_pos.x, fwd + CHARGE_M, fwd, DRIVE_M_S, aim, loft, SHOT_SPEED)
+	else:
+		_h.hold_windup_at(release_pos, aim, loft, SHOT_SPEED, CHARGE_TICKS)
 	return _h.fire_release_at(release_pos, aim, loft, SHOT_SPEED, 0.0)
 
 
@@ -159,13 +191,15 @@ func release(release_pos: Vector3, one_timer: bool, caught: bool, aim: Vector3,
 # outcome characters post to post, then the same three lofts' goal intervals
 # with their edges bisected (open_set_edges.gd, encoded). `stage` re-stages the
 # keeper and returns the release point; it runs before every shot.
-func open_set(stage: Callable, one_timer: bool, caught: bool) -> PackedStringArray:
+func open_set(stage: Callable, one_timer: bool, caught: bool,
+		driven: bool = false) -> PackedStringArray:
 	var sweeps: PackedStringArray = []
 	var intervals: PackedStringArray = []
 	for loft: int in LOFTS:
 		var shoot: Callable = func(aim: float) -> String:
 			var at: Vector3 = stage.call()
-			return OUTCOME_CHARS[release(at, one_timer, caught, Vector3(aim, 0.0, GOAL_Z), loft)]
+			return OUTCOME_CHARS[release(at, one_timer, caught, Vector3(aim, 0.0, GOAL_Z), loft,
+					driven)]
 		var p: String = ""
 		for i: int in AIM_POINTS:
 			p += shoot.call(aim_x(i))

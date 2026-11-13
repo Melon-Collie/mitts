@@ -1807,6 +1807,66 @@ func test_shot_entry_samples_release_hold_inside_timing_budget() -> void:
 	sm._set_state(Agent.State.OFF_PUCK)
 
 
+func test_a_shot_is_priced_where_it_leaves_on_average() -> void:
+	# The carrier prices a shot AIBotMechanics.shot_lookahead_s ahead: the
+	# wrister's lookahead plus the mean hold the hands add. Held against the
+	# holds the press really samples, on every tier (#943).
+	for profile: BotSkillProfile in [BotSkillProfile.hard(), BotSkillProfile.normal(),
+			BotSkillProfile.easy()]:
+		sm.apply_profile(profile)
+		var sum: int = 0
+		var n: int = 4000
+		for i: int in n:
+			sum += sm._sample_release_hold_ticks()
+		var sampled_s: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S \
+				+ float(sum) / n * Agent.MOUSE_TICK_DELTA
+		assert_almost_eq(AIBotMechanics.shot_lookahead_s(profile.shot_timing_error_s),
+				sampled_s, 0.004,
+				"the priced lookahead is the sampled hold's mean (error %.2f s)"
+				% profile.shot_timing_error_s)
+
+
+func test_a_shot_is_priced_over_the_hold_it_can_be_let_go_in() -> void:
+	# The samples a shot is priced at span the hold the press draws from and
+	# average to the priced lookahead; hands with no hold price one.
+	assert_eq(AIBotMechanics.shot_hold_samples(0.0), 1, "no hold, one sample")
+	assert_almost_eq(AIBotMechanics.shot_hold_sample_s(0.0, 0, 1),
+			AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, 1e-9, "at the wrister's lookahead")
+	for profile: BotSkillProfile in [BotSkillProfile.hard(), BotSkillProfile.normal(),
+			BotSkillProfile.easy()]:
+		var err: float = profile.shot_timing_error_s
+		var n: int = AIBotMechanics.shot_hold_samples(err)
+		var sum: float = 0.0
+		var max_ticks: int = int(round(err / Agent.MOUSE_TICK_DELTA))
+		for j: int in n:
+			var s: float = AIBotMechanics.shot_hold_sample_s(err, j, n)
+			assert_between(s, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
+					AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + max_ticks * Agent.MOUSE_TICK_DELTA,
+					"a sample lies inside the hold (error %.2f s)" % err)
+			sum += s
+		assert_almost_eq(sum / n, AIBotMechanics.shot_lookahead_s(err), 1e-6,
+				"the samples average to the priced lookahead (error %.2f s)" % err)
+
+
+func test_a_planned_shot_presses_at_its_point() -> void:
+	# A shot committed ahead of its planned release waits for the body to reach
+	# it: within half a dispatch's skate, so the press lands nearest the point.
+	var st := SkaterNetworkState.new()
+	st.velocity = Vector3(0.0, 0.0, -9.0)
+	sm._dispatch_period_ticks = 6
+	sm._intended_action = SkaterAgentStateMachine.State.SHOOT_PRESSED
+	var half_dispatch_m: float = 0.5 * 9.0 * 6.0 / float(Agent._PhysicsConstants.PHYSICS_TICK)
+	sm._shot_press_point = Vector3(0.0, 0.0, -20.0)
+	assert_false(sm._press_point_reached(Vector3(0.0, 0.0, -20.0 + 2.0 * half_dispatch_m), st),
+			"two half-dispatches short: the next dispatch lands nearer it")
+	assert_true(sm._press_point_reached(Vector3(0.0, 0.0, -20.0 + 0.9 * half_dispatch_m), st),
+			"inside half a dispatch: press now")
+	assert_true(sm._press_point_reached(Vector3(0.0, 0.0, -21.0), st), "past it: press now")
+	sm._shot_press_point = Vector3.INF
+	assert_true(sm._press_point_reached(Vector3(0.0, 0.0, -10.0), st),
+			"no planned point: the press waits for nothing")
+
+
 # ── Cognition gates (difficulty-tiered hockey IQ) ────────────────────────────
 
 func test_apply_profile_sets_cognition_gates() -> void:

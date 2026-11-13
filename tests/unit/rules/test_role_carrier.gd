@@ -2786,7 +2786,8 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 	# shoot-now read after a carry (History.CARRIED) sees him there. Read with
 	# his facing unknown, the field blends in keepers turned to a decoy or a feed,
 	# and in tight a carry to the crease promised odds the shot on arrival never
-	# had. The arrival is the better of that shot and keeping the puck there.
+	# had. The arrival is the better of that shot, from the hold the carrier would
+	# shoot it from, and keeping the puck there.
 	for spot: Vector3 in [Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 2.5),
 			Vector3(-1.2, 0.0, -GameRules.GOAL_LINE_Z + 2.2)]:
 		var ctx := _standstill_ctx(2.5)
@@ -2800,10 +2801,19 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 		c._field.holds.configure_from(ctx)
 		var arrival: float = c._carry._arrival_value(ctx, spot, Vector3.ZERO, 0.0)
 		var keeper := Vector3(g.position_x, 0.0, g.position_z)
-		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(spot,
-				ctx.attacking_goal_pos, keeper, 0.0, AIShotOdds.Stance.UPRIGHT, g.rotation_y,
-				AIShotOdds.History.CARRIED))
-		var kept: float = c._field.continuation_at(spot)
+		var hold: Vector2 = c._field.holds.arrival_offset
+		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
+				spot + Vector3(hold.x, 0.0, hold.y), ctx.attacking_goal_pos, keeper)
+		# In tight he is down for it, as he plays a carrier there (AIGoalieModel
+		# .down_in_tight, held to his brain in test_ai_goalie_model_mirrors.gd).
+		var stance: int = AIShotOdds.Stance.DOWN \
+				if AIGoalieModel.down_in_tight(spot + Vector3(hold.x, 0.0, hold.y),
+						ctx.attacking_goal_pos) else AIShotOdds.Stance.UPRIGHT
+		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(release,
+				ctx.attacking_goal_pos, keeper, 0.0, stance,
+				atan2(keeper.x - release.x, keeper.z - release.z),
+				AIShotOdds.History.CARRIED)) * c._field.holds.arrival_keep
+		var kept: float = c._field.continuation_at(release)
 		assert_almost_eq(arrival, maxf(shot_there, kept), 1e-4,
 				"arriving at rest at %s prices the shot the keeper facing it gives" % spot)
 

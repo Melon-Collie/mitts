@@ -26,6 +26,17 @@ var destination: Vector3 = Vector3.INF
 # is rollout.stick / brake / cursor at that index, and `anchor` is where it ends.
 var move: int = -1
 var rollout := AICarryRollout.new()
+# Where the winning move plans to release, its best shot on the way being what
+# it is worth, and that shot's worth now; INF / 0 when it is worth more carried
+# on than shot.
+var plan_release_pos: Vector3 = Vector3.INF
+var plan_release_value: float = 0.0
+# Each first move's planned release and its worth, index-matched by
+# AICarryRollout.Move.
+var _move_path_pos: Array[Vector3] = []
+var _move_path_value: Array[float] = []
+# The best shot on the way along a move (_path.best_on_path).
+var _path := AICarrierArrivalShot.new()
 # The move this search keeps unless a challenger beats it by
 # ACTION_HYSTERESIS_MARGIN_FRAC: last search's, while the destination holds.
 # Every move is priced as held for a horizon and re-planned a fraction of one
@@ -134,6 +145,8 @@ func _init(field: AICarrierField) -> void:
 	_field = field
 	_wheel = AICarrierWheel.new(field)
 	_move_reach.resize(AICarryRollout.MOVE_COUNT)
+	_move_path_pos.resize(AICarryRollout.MOVE_COUNT)
+	_move_path_value.resize(AICarryRollout.MOVE_COUNT)
 
 
 # Searches the best carry into the result fields. `value` is floored at 0, the
@@ -147,6 +160,7 @@ func _init(field: AICarrierField) -> void:
 # `shoot_now_score` is the top-level SHOOT eval (pre-ping, pre-hysteresis):
 # stand-still's shot branch shares it verbatim — see the stand-still block.
 func search(ctx: RoleContext, shoot_now_score: float) -> void:
+	_path.begin_search()
 	var self_pos: Vector3 = ctx.self_pos
 	_field.holds.configure_from(ctx)
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
@@ -299,6 +313,8 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	anchor = best_pos
 	raw_value = best_score
 	move = best_move
+	plan_release_pos = _move_path_pos[best_move] if best_move >= 0 else Vector3.INF
+	plan_release_value = _move_path_value[best_move] if best_move >= 0 else 0.0
 
 
 # A new possession: the destination is chosen afresh.
@@ -354,9 +370,11 @@ func _score_destination(ctx: RoleContext, i: int, our_goalie: Vector3, behind_ne
 func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool,
 		caps: AISkaterCaps, dest_arrival: float) -> void:
 	_move_reach[m] = 0
+	_move_path_pos[m] = Vector3.INF
+	_move_path_value[m] = 0.0
 	if not _move_legal(ctx, rollout, m, ctx.self_pos):
 		return
-	var reach: int = _priced_reach(rollout, m, ctx.self_pos, behind_net)
+	var reach: int = rollout.reach_short_of_net(m, _max_abs_z(behind_net))
 	if reach == 0:
 		return
 	_move_reach[m] = reach
@@ -369,9 +387,16 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	var safety: float = _rolled_safety(ctx, rollout, m, ctx.self_pos, _field.opponents, reach)
 	if AICarrierField.kept_ceiling(decay, safety) <= bound:
 		return
+	var path_now: float = _path.best_on_path(_field, ctx, rollout, m, ctx.self_pos,
+			ctx.self_velocity, 0.0, reach, _scratch_opponents_path)
+	var path_shot: float = path_now / maxf(decay, 1e-6)
 	_field.project_opponents(t0, _scratch_opponents_path)
 	var worth: float = _end_worth(ctx, end, rollout.reach_vel(m, reach, ctx.self_pos), t0,
-			caps, dest_arrival)
+			caps, dest_arrival, _path_end_arrival(ctx))
+	if path_shot > worth:
+		worth = path_shot
+		_move_path_pos[m] = _path.best_pos
+		_move_path_value[m] = path_now
 	var cost: float = 0.0
 	if safety < 1.0 and _strip_point.is_finite():
 		cost = _field.turnover_cost(_strip_point, 1.0 - safety)
@@ -388,6 +413,15 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	_beam_move.append(m)
 	if total > _beam_prune_bound:
 		_beam_prune_bound = total
+
+
+# The arrival value at the end of the move the path was just read along, when
+# that read is the end worth's own: in the zone, where no entry continuation is
+# priced on top (_arrival_value). NAN otherwise.
+func _path_end_arrival(ctx: RoleContext) -> float:
+	if not AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos):
+		return NAN
+	return _path.end_value
 
 
 # The total move `m` must beat to matter against `bound`: the incumbent move
@@ -412,20 +446,6 @@ static func _max_abs_z(behind_net: bool) -> float:
 	return INF if behind_net else GameRules.GOAL_LINE_Z - AIStationSearch.GOAL_LINE_BUFFER_M
 
 
-# How many of rolled move `m`'s samples, skated from `from`, are priced: up to
-# its last one short of the net (AICarryRollout.reach_short_of_net) whose shot on
-# arrival still leaves in front of the goal line. The wind-up carries the puck on
-# at his pace, and a release behind the line is no shot.
-static func _priced_reach(roll: AICarryRollout, m: int, from: Vector3,
-		behind_net: bool) -> int:
-	var max_abs_z: float = _max_abs_z(behind_net)
-	var reach: int = roll.reach_short_of_net(m, max_abs_z)
-	while reach > 0 and absf(roll.reach_pos(m, reach).z + roll.reach_vel(m, reach, from).z
-			* AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S) > max_abs_z:
-		reach -= 1
-	return reach
-
-
 # Whether rolled move `m` of `roll`, skated from `from`, is one the carrier may
 # make: not out of the zone through the one-way valve, not into it while a
 # tag-up is owed.
@@ -448,10 +468,11 @@ func _move_legal(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector3) 
 # defence at the line is priced by the race in the end's own horizon value
 # (AICarrierField.horizon_value), not by a straight lane read beyond what the
 # search reached. Reads the defence in _scratch_opponents_path, projected to
-# `t_end`.
+# `t_end`; `arrival` is the end's arrival value when the caller has read it.
 func _end_worth(ctx: RoleContext, end: Vector3, end_vel: Vector3, t_end: float,
-		caps: AISkaterCaps, dest_arrival: float) -> float:
-	var worth: float = _arrival_value(ctx, end, end_vel, t_end)
+		caps: AISkaterCaps, dest_arrival: float, arrival: float = NAN) -> float:
+	var worth: float = arrival if not is_nan(arrival) \
+			else _arrival_value(ctx, end, end_vel, t_end)
 	var goal: Vector3 = ctx.attacking_goal_pos
 	if destination_kind >= 0 and dest_arrival > worth \
 			and (AIActionScoring.in_offensive_zone(end, goal)
@@ -489,21 +510,25 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 	if dest_i >= 0:
 		dest_arrival = _dest_arrival[dest_i]
 	var behind_net: bool = absf(start.z) > GameRules.GOAL_LINE_Z
-	var projected_reach: int = -1
 	var best: float = floor_value
 	for m: int in AICarryRollout.MOVE_COUNT:
 		if not _move_legal(ctx, _rollout2, m, start):
 			continue
-		var reach: int = _priced_reach(_rollout2, m, start, behind_net)
+		var reach: int = _rollout2.reach_short_of_net(m, _max_abs_z(behind_net))
 		if reach == 0:
 			continue
 		var t2: float = AICarryRollout.HORIZON_S * reach / AICarryRollout.SAMPLES
-		if reach != projected_reach:
-			_field.project_opponents(t1 + t2, _scratch_opponents_path)
-			projected_reach = reach
-		var worth: float = _end_worth(ctx, _rollout2.reach_pos(m, reach),
-				_rollout2.reach_vel(m, reach, start), t1 + t2, caps, dest_arrival) \
-				* AIActionScoring.delay_discount(t2)
+		# The shot on the way is the first move's carried on: a drive released
+		# in its second second. Every other second move is worth its end.
+		var path2: float = 0.0
+		if m == m1:
+			path2 = _path.best_on_path(_field, ctx, _rollout2, m, start, rollout.end_vel[m1],
+					t1, reach, _scratch_opponents_path, INF)
+		_field.project_opponents(t1 + t2, _scratch_opponents_path)
+		var worth: float = maxf(_end_worth(ctx, _rollout2.reach_pos(m, reach),
+				_rollout2.reach_vel(m, reach, start), t1 + t2, caps, dest_arrival,
+				_path_end_arrival(ctx) if m == m1 else NAN) \
+				* AIActionScoring.delay_discount(t2), path2)
 		var lost: float = _rollout2.lost_ceiling(m, start, reach, ctx.attacking_goal_pos)
 		if AICarrierField.kept_ceiling(worth, -1.0, lost) <= best:
 			continue
@@ -676,72 +701,18 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 
 # What `candidate` is worth to this carrier arriving there at `arrive_vel` after
 # `local_time`, against the defence projected to then in _scratch_opponents_path
-# (the caller fills it): the shot on arrival, or the position.
-#
-# The candidate's shot is taken ARRIVING AT PACE (carry steps are skated at
-# speed; the arrival brake skips carry waypoints), so it is the same
-# moving-release wrister the shoot-now eval prices. Two-phase keeper:
-#   1. TRACK: he follows the whole carry to the candidate's arc-square
-#      (generous to him: he never falls behind en route).
-#   2. FINAL RACE: from that square he races the wind-up + flight against a
-#      release still sliding at the arrival speed — the race a hard lateral
-#      cut in tight genuinely wins.
-# Phase 2 is what gives a STANDSTILL 1v1 a gradient toward building the
-# lateral speed that opens the window; a static release would score every
-# one-step spot against a set keeper ~0. Because he is SQUARE at every
-# candidate before the final race, a further cut never prices more than the
-# last-quarter-second window, so the cut cannot recede forever.
-#
-# The arrival UNSETTLE is read from the TRACKED keeper over the FINAL window
-# only: the carry never catches him, only the re-square the release demands
-# can. Never measure it from his CURRENT position over the whole carry — that
-# charges him for a swing his tracking already covers and makes every
-# doorstep drive a phantom caught-moving goalie.
+# (the caller fills it): the shot on arrival (AICarrierArrivalShot), or, from
+# outside the zone, the drive in from it.
 func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 		local_time: float) -> float:
-	var self_pos: Vector3 = ctx.self_pos
-	# The shot on arrival is held as the shoot-now sweep would hold it
-	# (arrival_hold_wait): at that hold's pace and keep odds, with any pull the
-	# carry is too short for waited out in the wind-up the keeper races.
-	var cand_wait: float = 0.0
-	var cand_keep: float = 1.0
-	if AICarrierField.shot_reads(ctx, self_pos,
-			candidate + arrive_vel * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S):
-		cand_wait = _field.arrival_hold_wait(ctx, candidate, arrive_vel, local_time)
-		cand_keep = _field.holds.arrival_keep
-	var cand_windup: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + cand_wait
-	# The keeper backs in as the carry closes on him (the planning depth model).
-	# Closing is the rate this carry shortens the puck's distance to the goal.
-	var carry_closing: float = (self_pos.distance_to(ctx.attacking_goal_pos)
-			- candidate.distance_to(ctx.attacking_goal_pos)) / maxf(local_time, 0.001)
-	var tracked_goalie: Vector3 = AIGoalieModel.predict_goalie_pos(
-			AICarrierField.goalie_now(ctx), ctx.attacking_goal_pos, local_time, candidate,
-			carry_closing)
-	var cand_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
-			candidate + arrive_vel * cand_windup,
-			ctx.attacking_goal_pos, tracked_goalie)
-	# The shot is decided on ARRIVAL, against the keeper as he is then: a carry
-	# that outran him leaves him still pushing toward his square, at the share of
-	# the push he has left (goalie_unsettled). The field prices what he does over
-	# the wind-up and flight itself. A goalie-motion-blind tier reads him still.
-	var lag: float = AIGoalieModel.goalie_arc_match_x(
-			tracked_goalie, ctx.attacking_goal_pos, cand_release) - tracked_goalie.x
-	var keeper_vel_x: float = signf(lag) * AIGoalieModel.GOALIE_MAX_LATERAL_SPEED_MPS \
-			* AICarrierField.goalie_unsettled_at(ctx, local_time, candidate, carry_closing)
-	# Having tracked the carry he faces the shot, as the shoot-now read will see
-	# him there. Left unread, the field blends in keepers turned to a decoy or a
-	# feed, which in tight promise odds the shot on arrival never has.
-	var dest_score: float = _field.value_at(ctx, cand_release, self_pos,
-			_scratch_opponents_path, tracked_goalie, keeper_vel_x, cand_keep,
-			_field.keeper_stance_at(local_time + cand_windup),
-			atan2(tracked_goalie.x - cand_release.x, tracked_goalie.z - cand_release.z),
-			local_time, arrive_vel, AIShotOdds.History.CARRIED)
+	var dest_score: float = AICarrierArrivalShot.value(_field, ctx, candidate, arrive_vel,
+			local_time, ctx.self_pos, _scratch_opponents_path)
 	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
 	# a carrier there does next — the drive-in from it, priced in the in-zone
 	# regime and starting when we arrive — which its own shot xG badly
 	# understates just inside the line.
 	if AIActionScoring.in_offensive_zone(candidate, ctx.attacking_goal_pos) \
-			and not AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos):
+			and not AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos):
 		dest_score = maxf(dest_score, _field.receiver_drive_in_value(
 				ctx, candidate, ctx.caps_by_peer.get(ctx.peer_id), arrive_vel, candidate,
 				local_time, true))

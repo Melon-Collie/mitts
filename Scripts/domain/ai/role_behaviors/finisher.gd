@@ -1,9 +1,10 @@
 class_name AIRoleFinisher
 
-# FINISHER (3v3 OZONE) and NET_FRONT (5v5 OZONE). Stateless, and two-mode:
-# REACTIVE deflects an incoming shot and overrides everything while it is
-# active; POSITIONING stages for the next one. No exposure factor: crashing the
-# net is the role, and defensive recovery is SUPPORT's job.
+# FINISHER (3v3 OZONE; 5v5 OZONE's third low forward) and NET_FRONT (5v5 OZONE).
+# Stateless, and two-mode: REACTIVE deflects an incoming shot and overrides
+# everything while it is active; POSITIONING stages for the next one. No
+# exposure factor: crashing the net is the role, and defensive recovery is
+# SUPPORT's job.
 
 # Speed gate: pucks slower than this are passes / rolling, not shots. The tip
 # pricing reads the same gate.
