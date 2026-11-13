@@ -354,6 +354,34 @@ The keeper's state is what lets the second shot be priced through the
 existing seam. The shot field is kernel-weighted over the keeper's stance and
 offset, so a keeper caught down and across reads as open as he really is.
 
+**Built** (`test_generate_rebound_field.gd` via
+`.claude/hooks/generate-rebound-field.sh`; data in
+`Scripts/domain/ai/generated/rebound_field_data.gd`, held current by
+`test_rebound_field_is_current.gd`). It measures 25 spots (x ±8, ±4, 0 at 3.5,
+6, 9.5, 15 and 19.5 m out) × 3 lofts × 8 aims, a charged wrister at a keeper
+set square on the carrier. The harness is a subclass
+(`rebound_shot_harness.gd`), so the shot field's fingerprint is untouched.
+
+| shot from | goal | missed | covered | live rebound | in front of the net at 0.5 s | keeper down at 0.5 s / 1.0 s |
+|---|---|---|---|---|---|---|
+| 3.5 m | 1% | 0% | 21% | 78% | 89% | 85% / 15% |
+| 6 m | 1% | 3% | 24% | 72% | 80% | 87% / 10% |
+| 9.5 m | 0% | 17% | 17% | 66% | 80% | 90% / 1% |
+| 15 m | 0% | 32% | 16% | 53% | 77% | 97% / 2% |
+| 19.5 m | 0% | 33% | 0% | 67% | 100% | 100% / 0% |
+
+"In front of the net" is the crease, low slot or slot, within 10 m and 4.5 m
+across. Three live rebounds in four sit on the ice, slow enough for a stick,
+in front of the net within 1.5 s: half of all shots. For about half a second
+the keeper is down on nearly every one, and by a second he is up. So the
+rebound is worth its race, the window is the first second, and the
+second chance is against a keeper on his knees. The flat
+`REBOUND_RECOVER_SHARE` credit sees none of it.
+
+Not measured: a keeper caught off the shot (the field's DECOY and FEED
+keepers), tips and screens (2b, 2c), and a missed shot's path round the
+boards (a "W" row stops at the goal line).
+
 ### 2b. Screen uplift
 
 The shot field's SET cells, repeated with a screener body on the sightline at
