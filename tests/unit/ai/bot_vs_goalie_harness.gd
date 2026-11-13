@@ -68,6 +68,8 @@ var _puck: Node = null
 var _shooter: Skater = null
 var _ctrl: GoalieController = null
 var _h: RefCounted = null
+# The bot carrier's peer id, which seeds his hands' draws (the release hold).
+var carrier_peer: int = CARRIER
 
 
 func setup(goalie: Node, puck: Node, ctrl: GoalieController, shooter: Skater) -> void:
@@ -109,8 +111,8 @@ static func zone_of(release: Vector3) -> Dictionary:
 func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 		secs: float = 3.5, track_rebound: bool = true) -> Dictionary:
 	var duel := Duel.new()
-	duel.add_skater(CARRIER, 0, start, profile, vel)
-	duel.start(CARRIER)
+	duel.add_skater(carrier_peer, 0, start, profile, vel)
+	duel.start(carrier_peer)
 	# NO _ctrl.setup() here — setup() already wired it, and calling it again per
 	# rush re-connects every signal it subscribes to.
 	_shooter.global_position = start
@@ -126,8 +128,8 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 		if team_id != 1:
 			return null
 		_shooter.global_position = puck_pos
-		_shooter.velocity = duel._skater(CARRIER).vel \
-				if duel._skater(CARRIER) != null else Vector3.ZERO
+		_shooter.velocity = duel._skater(carrier_peer).vel \
+				if duel._skater(carrier_peer) != null else Vector3.ZERO
 		_puck.global_position = puck_pos
 		_publish_windup(duel)
 		_ctrl._physics_process(DT)
@@ -187,9 +189,9 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 		var before: int = duel.releases.size()
 		duel.step()
 		if duel.releases.size() <= before:
-			var s0: Object = duel._skater(CARRIER)
+			var s0: Object = duel._skater(carrier_peer)
 			var c0: Object = s0.agent._carrier if s0 != null and s0.agent != null else null
-			if duel.carrier_id == CARRIER and c0 != null:
+			if duel.carrier_id == carrier_peer and c0 != null:
 				l_intent = c0.intended_action
 				l_aim = c0.shot_aim_point
 				l_loft = c0.shot_loft_level
@@ -260,7 +262,7 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 # prearm and the stale-sample read. Without it the keeper meets every bot shot
 # cold, which is the state the existing rush sims leave him in.
 func _publish_windup(duel: RefCounted) -> void:
-	var sk: Object = duel._skater(CARRIER)
+	var sk: Object = duel._skater(carrier_peer)
 	if sk == null or sk.agent == null:
 		return
 	var car: Object = sk.agent._carrier

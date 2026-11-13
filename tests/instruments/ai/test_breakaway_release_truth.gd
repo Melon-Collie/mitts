@@ -110,7 +110,9 @@ func _row(d: float, driving: bool) -> String:
 			if _ctrl._poking:
 				poking += 1
 			if is_nan(priced):
-				priced = AIShotValue.now(at, goal, keeper, 0.0, AIShotOdds.Stance.UPRIGHT,
+				var stance: int = AIShotOdds.Stance.DOWN \
+						if AIGoalieModel.down_in_tight(at, goal) else AIShotOdds.Stance.UPRIGHT
+				priced = AIShotValue.now(at, goal, keeper, 0.0, stance,
 						atan2(keeper.x - at.x, keeper.z - at.z), AIShotOdds.History.CARRIED)
 			var scored: bool = _fire(at, aim, loft)
 			shots += 1
