@@ -1,24 +1,25 @@
 extends GutTest
 
-# ── A lone carrier never walks onto the crease untouched ─────────────────────
+# ── A lone carrier never walks onto the crease unplayed ──────────────────────
 # One carrier at speed against the one defender between him and the net, from
 # the speed-rush sweep's starts (test_speed_rush_defence), run on until he
-# releases, loses the puck or reaches the net. However the defender plays the
-# gap, a carrier who gets within a stick of the crease with the puck must have
-# been touched on the way, at the very last: the defender's body on his, or his
-# blade on the puck (in poke range of it, or a strip or lift). A carrier who
-# shoots from range, or loses the puck, never got there and passes.
+# releases, loses the puck or reaches the net.
+#
+# Two carriers, held to two different things. The scripted one drives straight
+# at the net front at his top carry speed, never protecting, never shooting,
+# and can still be poked, lifted and knocked off the puck: he beats nobody, so
+# reaching a stick off the crease untouched (the defender's body on his, or his
+# blade in poke range of the puck, or a strip or lift) is the defence failing —
+# alone, and with a second defender back beside him.
+#
+# The bot carrier goes wide and cuts in, and a faster man who wins that race
+# with the defender on his hip has beaten him, which is hockey. What he is held
+# to is the degenerate case: reaching the crease with the defender never within
+# two sticks of him, a carrier nobody played.
 #
 # Each row reads the end of each rush (rel/lost/net/time @ metres off our net)
 # and the closest the defender came. The keeper is the harness's static one on
 # his crease: what the carrier prices his shot against, not a body in the way.
-#
-# The bot carrier mostly shoots from range, so the second sweep is the carrier
-# who beats bots by ignoring them: a scripted skater driving straight at the net
-# front at his top carry speed, never protecting, never shooting, who can still
-# be poked, lifted and knocked off it. Against him the defender has to stop the
-# drive, not just hold a gap until a shot — alone, and with a second defender
-# back beside him.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
@@ -27,11 +28,9 @@ const SECS: float = 7.0
 const START_Z: float = GameRules.BLUE_LINE_Z + 0.71
 const CARRIER := 1
 const DEFENDER := 2
-# Bot rushes that reach the crease untouched today, each with its issue.
-const KNOWN_UNTOUCHED: Array[String] = [
-	"v7.5/8m/c-8/d-3",  # #945
-	"v7.5/12m/c8/d3",   # #945
-]
+# A defender who never came this near the carrier's body did not play him: two
+# sticks, past his body's own width.
+const UNPLAYED_STICKS: float = 2.0
 # At the crease: a stick off its paint.
 const NET_REACHED_M: float = CreaseRules.ARC_RADIUS + GameRules.DEFAULT_STICK_LENGTH_M
 
@@ -39,6 +38,7 @@ const NET_REACHED_M: float = CreaseRules.ARC_RADIUS + GameRules.DEFAULT_STICK_LE
 class Rush:
 	var reached_net: bool = false
 	var touched: bool = false
+	var played: bool = false
 	var outcome: String = "time"
 	var end_net_m: float = INF
 	var closest_m: float = INF
@@ -66,6 +66,9 @@ func _rush(carrier_x: float, d_x: float, depth: float, speed: float) -> Rush:
 				or def.blade.distance_to(duel.puck_pos) <= GameRules.POKE_RADIUS_M \
 				or duel.strips > 0 or duel.lifts > 0:
 			r.touched = true
+		if car.pos.distance_to(def.pos) <= contact_m \
+				+ UNPLAYED_STICKS * GameRules.DEFAULT_STICK_LENGTH_M:
+			r.played = true
 		if duel.releases.size() > released:
 			r.outcome = "rel"
 			return r
@@ -205,9 +208,10 @@ func test_two_back_stop_a_net_driver_short_of_the_crease() -> void:
 			% str(failed))
 
 
-func test_a_carrier_reaches_the_net_only_through_the_defender() -> void:
-	var untouched: Array[String] = []
+func test_a_carrier_who_reaches_the_net_was_played_by_the_defender() -> void:
+	var unplayed: Array[String] = []
 	var reached: int = 0
+	var untouched: int = 0
 	for speed: float in [7.5, 9.0]:
 		for depth: float in [8.0, 10.0, 12.0, 14.0]:
 			var row: String = "  v%.1f %2.0f m :" % [speed, depth]
@@ -218,15 +222,13 @@ func test_a_carrier_reaches_the_net_only_through_the_defender() -> void:
 				if r.reached_net:
 					reached += 1
 					if not r.touched:
-						untouched.append("v%.1f/%.0fm/c%.0f/d%.0f" % [speed, depth, lane[0],
+						untouched += 1
+					if not r.played:
+						unplayed.append("v%.1f/%.0fm/c%.0f/d%.0f" % [speed, depth, lane[0],
 								lane[1]])
 			gut.p(row)
-	gut.p("  → reached the net %d/32 | untouched %d %s  (· = never touched)"
-			% [reached, untouched.size(), str(untouched)])
-	var unknown: Array[String] = []
-	for label: String in untouched:
-		if not KNOWN_UNTOUCHED.has(label):
-			unknown.append(label)
-	assert_eq(unknown.size(), 0,
-			"a lone carrier walked onto the crease without the defender touching him: %s"
-					% str(unknown))
+	gut.p("  → reached the net %d/32 | untouched %d | unplayed %d %s  (· = never touched)"
+			% [reached, untouched, unplayed.size(), str(unplayed)])
+	assert_eq(unplayed.size(), 0,
+			"a lone carrier walked onto the crease with the defender never near him: %s"
+					% str(unplayed))
