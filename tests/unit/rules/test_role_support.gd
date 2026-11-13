@@ -130,7 +130,12 @@ func test_stays_goal_side_of_carrier() -> void:
 
 
 # A pass in flight on a 2-on-1: the passer is SUPPORT, the receiver driving at
-# the net, their only skater back. Team 0 attacks -Z.
+# the net, their only skater back, and their keeper committed to the passer's
+# side, which leaves the far side's one-timer the play. Team 0 attacks -Z.
+const _COMMITTED_KEEPER_X: float = -0.9
+const _COMMITTED_KEEPER_OUT_M: float = 0.6
+
+
 func _feed_in_flight_ctx(with_receiver: bool) -> RoleContext:
 	var skaters: Array = [
 		[1, TEAM_ID, Vector3(-3.7, 0, -10.2), Vector3(2.8, 0, -3.9)],   # the passer
@@ -142,6 +147,10 @@ func _feed_in_flight_ctx(with_receiver: bool) -> RoleContext:
 	ctx.snapshot.puck_state.position = Vector3(-1.9, 0, -15.4)
 	ctx.snapshot.puck_state.velocity = Vector3(9.9, 0, -7.3)
 	ctx.self_velocity = skaters[0][3]
+	var keeper := GoalieNetworkState.new()
+	keeper.position_x = _COMMITTED_KEEPER_X
+	keeper.position_z = OPP_NET_Z + _COMMITTED_KEEPER_OUT_M
+	ctx.snapshot.goalie_states[1 - TEAM_ID] = keeper
 	return ctx
 
 
