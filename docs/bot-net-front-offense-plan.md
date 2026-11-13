@@ -241,7 +241,7 @@ What the table shows:
 All three are the "slot-protecting defence never has to spread" picture the
 user described.
 
-### Status: first pass built, measured worse, not for playtest
+### Status: first pass built, no measurable change in outcomes
 
 Decided with the user: value decides the shape (no fixed 3-2 or 2-3), and the
 rotation is general, not only the pinch's.
@@ -262,28 +262,31 @@ rotation is general, not only the pinch's.
   (`AIStationSearch.shared_cover`, 2 × `BLADE_REACH_M`). This applies to
   HIGH_SLOT, the flank and the finisher's stations.
 
-**Measured** (`test_ozone_possession_5v5.gd`, 48 Hard possessions):
+**Measured** (`test_ozone_possession_5v5.gd` with `MITTS_OZ_JITTER=11`: 576
+Hard possessions a configuration, per possession, ± one standard error):
 
-| | shots | slot | picked | stripped |
-|---|---|---|---|---|
-| before | 18 | 7 | 15 | 13 |
-| all of it | 11 | 1 | 18 | 18 |
-| without the new HIGH_SLOT pricing | 17 | 4 | 15 | 13 |
-| without the flank activation | 17 | 5 | 14 | 17 |
-| without the finisher's shared cover | 11 | 1 | 18 | 18 |
+| | shot | slot shot | picked | stripped | set read of its shot |
+|---|---|---|---|---|---|
+| before | 0.312 ± 0.019 | 0.102 ± 0.013 | 0.326 | 0.318 | 0.040 ± 0.006 |
+| all of it | 0.306 | 0.109 | 0.323 | 0.339 | 0.036 ± 0.005 |
+| without the HIGH_SLOT pricing | 0.304 | 0.094 | 0.299 | 0.335 | 0.028 ± 0.004 |
+| without the flank activation | 0.307 | 0.102 | 0.325 | 0.337 | 0.030 ± 0.004 |
+| rotation only (neither of those two) | 0.321 | 0.116 | 0.316 | 0.319 | 0.041 ± 0.006 |
+| without the shared cover | 0.311 | 0.104 | 0.314 | 0.333 | 0.032 ± 0.005 |
 
-The attack's own spacing (off-puck nearest teammate, `test_ozone_spacing.gd`)
-went from 5.5 / 7.4 / 7.1 / 7.2 m to 5.3 / 5.0 / 7.4 / 6.4 m. The forwards
-settle just outside the one-defender span, where the old fixed staging spread
-them further.
+**What it shows.**
 
-**Next.**
+- **Every configuration is within noise of the others.** The 48-run sweep's
+  11 shots against 18 was chaos: one perturbation re-deals every possession.
+  Only a difference of about 0.05 in the shot rate shows at this size.
+- **The attack's own spacing** (off-puck nearest teammate,
+  `test_ozone_spacing.gd`) went from 5.5 / 7.4 / 7.1 / 7.2 m to
+  5.3 / 5.0 / 7.4 / 6.4 m with all of it. The forwards settle just outside the
+  one-defender span, where the old fixed staging spread them further.
 
-1. **Enlarge the sweep before judging anything.** Its 48 runs are 24 starts
-   and their mirrors, so a few shots either way is noise. Add more starts and
-   jitter, for a few hundred possessions.
-2. **Then measure the HIGH_SLOT pricing and the flank activation one at a
-   time,** and find why the two together lose the slot.
+So moving the off-puck bodies has not changed what the carrier makes of the
+possession. Whether that is because he does not use the new options (about
+one pass a possession either way) is the next thing to read.
 
 **Also seen:** the finisher's rush depth gate (`stage_dist`, 5 m in a set
 cycle) leaves its weak-dot and high-slot stations unreachable, so NET_FRONT
