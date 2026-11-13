@@ -389,7 +389,7 @@ var _peer_snapshot_acks: Dictionary = {}
 # Stored once so the client receive path doesn't allocate a bound
 # Callable per packet.
 var _snapshot_event_dispatch: Callable = _dispatch_snapshot_event
-var _session_start_ms: int = 0
+var _session_start_us: int = 0
 var _replay_mode: bool = false
 var _replay_clock: float = 0.0
 
@@ -628,7 +628,7 @@ func is_drill_mode() -> bool:
 
 
 func local_time() -> float:
-	return (Time.get_ticks_msec() - _session_start_ms) / 1000.0
+	return (Time.get_ticks_usec() - _session_start_us) / 1000000.0
 
 # Lobby-phase transport attach: turns the running offline host session into an
 # online one. Every hosted session now starts via start_offline (the unified
@@ -641,7 +641,7 @@ func local_time() -> float:
 # Host is still peer id 1, so all downstream RPC / slot / spawn code is
 # unchanged.
 func attach_online(public: bool) -> void:
-	_session_start_ms = Time.get_ticks_msec()
+	_session_start_us = Time.get_ticks_usec()
 	SteamManager.lobby_created.connect(_on_steam_lobby_created, CONNECT_ONE_SHOT)
 	SteamManager.lobby_create_failed.connect(_on_steam_lobby_create_failed, CONNECT_ONE_SHOT)
 	SteamManager.create_lobby(GameRules.MAX_CONNECTIONS, public)
@@ -665,7 +665,7 @@ func detach_online() -> void:
 	_invalidate_peer_cache()
 	SteamManager.leave_lobby()
 	is_offline_mode = true
-	_session_start_ms = 0
+	_session_start_us = 0
 
 func _on_steam_lobby_created(_lobby_id: int) -> void:
 	if SteamManager.lobby_create_failed.is_connected(_on_steam_lobby_create_failed):
@@ -823,9 +823,9 @@ func _on_peer_disconnected(id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	_connect_timer = -1.0
-	_session_start_ms = Time.get_ticks_msec()
+	_session_start_us = Time.get_ticks_usec()
 	_clock_sync = _ClockSyncScript.new()
-	_clock_sync.init_session(_session_start_ms)
+	_clock_sync.init_session(_session_start_us)
 	var local_attrs: PlayerAttributes = PlayerPrefs.get_player_attributes()
 	# Stamp the local peer's OWN entry, not [1] (which is the host from a
 	# client's view): on_slot_assigned spawns the local skater via
@@ -988,7 +988,7 @@ func reset() -> void:
 	_last_broadcast_us = 0
 	_connect_timer = -1.0
 	_clock_sync = null
-	_session_start_ms = 0
+	_session_start_us = 0
 	_last_ws_seq_received = -1
 	_replay_mode = false
 	_replay_clock = 0.0

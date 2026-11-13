@@ -219,3 +219,80 @@ func test_every_timing_probe_is_unreliable() -> void:
 		var annotation: String = src.substr(rpc_at, src.find("\n", rpc_at) - rpc_at)
 		assert_true(annotation.contains("\"unreliable\""),
 				"%s is %s" % [probe, annotation])
+
+
+# ── Applied offset ───────────────────────────────────────────────────────────
+
+const FRAME: float = 1.0 / 144.0
+
+
+# Steps the clock frame by frame over `seconds` of wall time from `wall`,
+# returning the smallest and largest host-time advance a frame saw, as a
+# fraction of the frame.
+func _frame_rates(cs: RefCounted, wall: float, seconds: float) -> Vector2:
+	var prev: float = cs.host_time_at(wall)
+	var lo: float = INF
+	var hi: float = -INF
+	var frames: int = int(seconds / FRAME)
+	for i in range(1, frames + 1):
+		var now: float = cs.host_time_at(wall + float(i) * FRAME)
+		lo = minf(lo, (now - prev) / FRAME)
+		hi = maxf(hi, (now - prev) / FRAME)
+		prev = now
+	return Vector2(lo, hi)
+
+
+func test_a_correction_runs_the_clock_slightly_fast_instead_of_jumping() -> void:
+	var cs := _ready_clock()
+	cs.host_time_at(10.0)
+	cs._offset += 0.02
+	var rates: Vector2 = _frame_rates(cs, 10.0, 2.0)
+	assert_almost_eq(rates.y, 1.0 + cs.OFFSET_SLEW_S, 1e-6, "no frame jumps past the slew")
+	assert_gt(rates.x, 1.0, "and every frame is gaining on the correction")
+
+
+func test_a_backward_correction_never_freezes_the_clock() -> void:
+	var cs := _ready_clock()
+	cs.host_time_at(10.0)
+	cs._offset -= 0.02
+	var rates: Vector2 = _frame_rates(cs, 10.0, 2.0)
+	assert_almost_eq(rates.x, 1.0 - cs.OFFSET_SLEW_S, 1e-6,
+			"each frame still advances, a little slower")
+
+
+func test_a_correction_is_taken_up_whole() -> void:
+	var cs := _ready_clock()
+	cs.host_time_at(10.0)
+	var target: float = cs._offset + 0.02
+	cs._offset = target
+	_frame_rates(cs, 10.0, 0.02 / cs.OFFSET_SLEW_S + 0.5)
+	assert_almost_eq(cs._applied_offset, target, 1e-9)
+	var settled: Vector2 = _frame_rates(cs, 20.0, 1.0)
+	assert_almost_eq(settled.x, 1.0, 1e-6, "and then it runs at real time")
+	assert_almost_eq(settled.y, 1.0, 1e-6)
+
+
+func test_a_large_error_snaps() -> void:
+	var cs := _ready_clock()
+	cs.host_time_at(10.0)
+	cs._offset += cs.OFFSET_SNAP_S * 2.0
+	assert_almost_eq(cs.host_time_at(10.0 + FRAME), 10.0 + FRAME + cs._offset, 1e-9)
+
+
+func test_a_snap_back_holds_the_clock_until_real_time_catches_up() -> void:
+	var cs := _ready_clock()
+	var before: float = cs.host_time_at(10.0)
+	cs._offset -= cs.OFFSET_SNAP_S * 2.0
+	assert_eq(cs.host_time_at(10.0 + FRAME), before, "never backward")
+
+
+# A 1 ms clock rounded every reading to the millisecond: 12% of a tick of noise
+# on every stamp and every packet delay. The session clock reads microseconds.
+func test_the_clock_resolves_under_a_millisecond() -> void:
+	var cs := _ready_clock()
+	var a: float = cs.estimated_host_time()
+	var b: float = a
+	var start: int = Time.get_ticks_usec()
+	while b == a and Time.get_ticks_usec() - start < 5000:
+		b = cs.estimated_host_time()
+	assert_lt(b - a, 0.0009, "consecutive distinct readings are under a millisecond apart")

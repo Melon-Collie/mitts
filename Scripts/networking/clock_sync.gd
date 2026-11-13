@@ -66,14 +66,27 @@ var latest_rtt_ms: float = 0.0
 # clock-quality telemetry signal.
 var last_correction_ms: float = 0.0
 
+# The NTP estimate (_offset) moves in steps, one per pong; the clock reads the
+# applied offset, which follows it at OFFSET_SLEW_S of host time per second, so
+# a correction runs the clock 0.5% fast or slow for a while instead of jumping
+# every render instant at once — or, downward, freezing them behind the
+# monotone floor. Past OFFSET_SNAP_S the error is warm-up or a changed path
+# rather than drift, and crawling would leave the clock wrong for tens of
+# seconds, so it snaps (the sim clock's _SIM_RESYNC_S, for the same reason).
+const OFFSET_SLEW_S: float = 0.005
+const OFFSET_SNAP_S: float = 0.1
+
 var _offset: float = 0.0
+var _applied_offset: float = 0.0
+var _applied_started: bool = false
+var _applied_at_wall: float = 0.0
 var _last_estimated_time: float = 0.0
 var _samples: Array = []  # Array of {rtt: float, offset: float}
 var _timer: float = 0.0
-var _session_start_ms: int = 0
+var _session_start_us: int = 0
 
-func init_session(ms: int) -> void:
-	_session_start_ms = ms
+func init_session(us: int) -> void:
+	_session_start_us = us
 
 # Warm-up keeps the quick cadence until enough pongs have LANDED, not until
 # enough pings were sent: the probes are unreliable, and one lost in warm-up
@@ -97,8 +110,26 @@ func record_pong(client_send_time: float, host_time: float, recv_time: float) ->
 		is_ready = true
 
 func estimated_host_time() -> float:
-	var t := (Time.get_ticks_msec() - _session_start_ms) / 1000.0 + _offset
-	_last_estimated_time = maxf(t, _last_estimated_time)
+	return host_time_at((Time.get_ticks_usec() - _session_start_us) / 1000000.0)
+
+
+# The host's clock at session-relative wall time `wall` (s), which only moves
+# forward. Advances the applied offset to `wall`.
+func host_time_at(wall: float) -> float:
+	if not _applied_started:
+		_applied_started = true
+		_applied_offset = _offset
+	else:
+		var err: float = _offset - _applied_offset
+		if absf(err) > OFFSET_SNAP_S:
+			_applied_offset = _offset
+		else:
+			var step: float = OFFSET_SLEW_S * maxf(wall - _applied_at_wall, 0.0)
+			_applied_offset += clampf(err, -step, step)
+	_applied_at_wall = wall
+	# Only a snap can step the clock back; the floor holds it there until real
+	# time catches up rather than let a render instant repeat.
+	_last_estimated_time = maxf(wall + _applied_offset, _last_estimated_time)
 	return _last_estimated_time
 
 func estimated_input_stamp_time() -> float:
