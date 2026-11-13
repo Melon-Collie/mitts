@@ -152,8 +152,28 @@ measurement asks for it.
 high and 2.6–3.0 low a tick, and 0% four-high. So the shape count does not see
 the complaint. Its "low" band reaches 10.7 m out, and a HIGH_SLOT at the top
 of the circles counts as low. The per-role depth, lateral and spread log above
-is therefore the first thing step 1 builds, and its baseline is recorded here
-before the role changes.
+is therefore the first thing step 1 builds. Its baseline, before the role
+changes (Hard bots, 6 s a fixture; weak x is positive away from the puck's
+side; "nearest D" is the attacker's nearest defender):
+
+| fixture | HIGH_SLOT depth / weak x / nearest D | NET_FRONT depth / weak x | off-puck nearest D |
+|---|---|---|---|
+| D holds it up top | 10.0 / −1.8 / 2.2 | 3.2 / −0.9 | 3.07 |
+| D carries at the point | 7.6 / +0.9 / 2.2 | 3.6 / −1.2 | 4.52 |
+| F carries low | 9.4 / −2.2 / 2.8 | 5.1 / −0.7 | 4.37 |
+| C carries high slot | 8.1 / −2.2 / 3.5 | — | 4.43 |
+
+What the table shows:
+
+- **HIGH_SLOT has a defender closest of any off-puck attacker** (2.2–3.5 m),
+  and he stands at the top of the circles, shaded to the strong side.
+- **Nobody holds the weak side low.** NET_FRONT stays central and
+  strong-shaded, and FINISHER only appears while a pass is in flight.
+- **The weak point drifts to the middle** (+0.4 m) while a forward carries
+  low.
+
+All three are the "slot-protecting defence never has to spread" picture the
+user described.
 
 ---
 
