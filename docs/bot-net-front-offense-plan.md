@@ -29,6 +29,12 @@ bot to go and use them.
   for example "the second attacker on a rush drives the net" (`finisher.gd`'s
   rush depth gate), it stays one. What this plan adds is the value those rules
   chase, priced so that the rule can eventually be retired.
+- **The rebound field has its own generator,** sharing `shot_odds_stager.gd`
+  with the shot field but never regenerated with it.
+- **The screen's model is chosen by 2b's measurement** (§2b: a separate table
+  or a shot-field cell kind).
+- **A second man on an O-zone loose puck is in scope** (§3d), together with
+  #604's attacking-zone chase decline.
 
 ---
 
@@ -180,6 +186,20 @@ line). This measures the conversion and the keeper's read delay against the
 unscreened cell. A body that does not hide the release is measured too, so the
 table knows where a screen stops working.
 
+The same screened cells are also measured with the keeper caught off the
+shot (DECOY-style), not only SET. Their result decides how a screen is
+modelled:
+
+- **A separate uplift table** if screened ÷ unscreened conversion holds
+  roughly constant across keeper states. The screen then scales the clean
+  odds, and that is cheap to read.
+- **A SCREEN cell kind in the shot field,** read through the existing kernel,
+  if the ratio moves with where the keeper stands. A single factor would
+  misprice exactly the screens that matter.
+
+The 2b instrument prints that comparison, and the choice is made with the user
+on its numbers.
+
 ### 2c. Tips through a live blade (#736's next step)
 
 Point and circle-top shots through a live skater's blade holding the deflect,
@@ -248,8 +268,33 @@ While our shot is in flight, the election races the measured rebound
 distribution for that release instead of a path through the cage, so bodies
 start moving at the release.
 
-**Open.** A second man on an O-zone loose puck (#924, #604) may be in or out of
-scope here.
+### 3d. A second man on an O-zone loose puck (#924, #604)
+
+Today one chaser goes and everyone else holds. In their zone that loses every
+50/50 that squirts out of the first contest. The second man plays the puck's
+NEXT spot, not the puck:
+
+- **Where.** The spot where the first contest sends it: where their soonest
+  collector would make his first play, by the forecheck's own clock
+  (`AIForecheckRead.read_loose`), or where a rebound comes off the keeper, from
+  3a's distribution.
+- **Who.** The teammate other than the elected chaser whose arrival there
+  (`AIArrival.time_to_arrive`) beats their soonest body by the most. He leaves
+  his station only if that race is ours (`arrival_race` above the contest
+  band) and if the shot we would get from winning it is worth more than the
+  station he leaves. Last-man discipline still binds him
+  (`offensive_station_target`), so a point never becomes the second man.
+- **#604's decline.** The chase decline that fires by default deep in the
+  attacking zone is reworked in this step. In their zone a lost race is
+  declined only when the second man's read says nobody of ours can contest
+  the next spot either.
+
+The election stays one chaser a team. The second man is a role decision read
+off the election's result, so the two never send the same body.
+
+Tests: a unit test that the second man goes when his race is won and holds
+when it is lost or when he is the last layer; a slow-tier 5v5 cycle with a
+rebound off a point shot, counting our share of first touches on the squirt.
 
 ### Tests
 
@@ -307,17 +352,8 @@ After each 5v5 step, re-measure 3v3 (`test_ozone_possession.gd`).
 
 ## Open questions
 
-1. **The rebound field: its own generator, or part of the shot field's?** I
-   recommend its own, sharing `shot_odds_stager.gd`. A shot-field
-   regeneration is the slowest thing in the repo, and the rebound field does
-   not need the shot field's density.
-2. **Screens: a separate uplift table, or a SCREEN cell kind in the shot
-   field?** A cell kind reads through the existing kernel (the honest model,
-   and the keeper's screened read is in the cell). A separate table is cheaper
-   to build but assumes the screen scales the clean odds. I lean to the cell
-   kind, if 2b shows the effect depends on where the keeper is.
-3. **A second chaser on O-zone loose pucks:** in step 3c, or left to #604?
-4. **Per-tier goalie fields (#786)** are out of scope. Every table here is
+1. **The screen's model** is decided on 2b's numbers (§2b).
+2. **Per-tier goalie fields (#786)** are out of scope. Every table here is
    measured against the Hard keeper, as the shot field is.
 
 ## Where it lives
