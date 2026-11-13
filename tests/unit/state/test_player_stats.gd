@@ -26,7 +26,7 @@ func _full() -> PlayerStats:
 	s.icings = 3
 	s.fights = 2
 	s.fight_wins = 1
-	s.pim = 4
+	s.pim_seconds = 48
 	s.pp_goals = 3
 	s.sh_goals = 2
 	s.penalty_shot_goals = 1
@@ -42,7 +42,7 @@ func _full() -> PlayerStats:
 func test_to_array_has_twenty_nine_fields_in_order() -> void:
 	var a := _full().to_array()
 	assert_eq(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 11, 12, 13, 14, 15, 2.5, 3, 2, 1,
-			4, 3, 2, 1, 5, 6, 2, 4, 1])
+			48, 3, 2, 1, 5, 6, 2, 4, 1])
 	assert_eq(a.size() + 1, WorldStateCodec.STATS_PLAYER_RECORD_SIZE,
 			"the codec's record is peer_id + this array")
 
@@ -103,7 +103,7 @@ func test_to_dict_includes_new_stats() -> void:
 
 func test_the_penalty_counters_cross_the_wire() -> void:
 	var restored := PlayerStats.from_array(_full().to_array())
-	assert_eq(restored.pim, 4)
+	assert_eq(restored.pim_seconds, 48)
 	assert_eq(restored.pp_goals, 3)
 	assert_eq(restored.sh_goals, 2)
 	assert_eq(restored.penalty_shot_goals, 1)
@@ -125,7 +125,7 @@ func test_a_goal_is_credited_to_the_situation_it_came_in() -> void:
 
 func test_the_career_row_carries_the_penalty_columns() -> void:
 	var row: Dictionary = _full().to_dict()
-	assert_eq(row["pim"], 4)
+	assert_eq(row["pim_seconds"], 48)
 	assert_eq(row["pp_goals"], 3)
 	assert_eq(row["pp_assists"], 5)
 	assert_eq(row["sh_goals"], 2)

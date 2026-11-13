@@ -1286,11 +1286,11 @@ func _on_penalty_ledger_changed() -> void:
 	penalties_changed.emit()
 
 
-func _on_penalty_assessed(peer_id: int) -> void:
+func _on_penalty_assessed(peer_id: int, minor_s: float) -> void:
 	var record: PlayerRecord = _registry.get_record(peer_id) if _registry != null else null
 	if record == null or record.stats == null:
 		return
-	record.stats.pim += PenaltyRules.MINOR_PIM
+	record.stats.pim_seconds += roundi(minor_s)
 	_stats_sync_gate.mark_dirty()
 
 

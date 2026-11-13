@@ -262,7 +262,7 @@ func test_nobody_changes_seats_during_a_penalty_shot() -> void:
 
 func test_a_minor_and_a_penalty_shot_are_each_a_penalty_to_the_man_who_fouled() -> void:
 	var assessed: Array[int] = []
-	_tracker.penalty_assessed.connect(func(p: int) -> void: assessed.append(p))
+	_tracker.penalty_assessed.connect(func(p: int, _s: float) -> void: assessed.append(p))
 	_tracker.ledger.call_foul(HITTER, 0, PenaltyRules.Foul.BOARDING, VICTIM)
 	assert_eq(assessed, [] as Array[int], "a call is not a penalty until it is paid for")
 	_tracker.assess_pending(PERIOD_S, SIZE)
@@ -273,9 +273,22 @@ func test_a_minor_and_a_penalty_shot_are_each_a_penalty_to_the_man_who_fouled() 
 	assert_eq(assessed, [HITTER, VICTIM] as Array[int], "the shot is VICTIM's foul")
 
 
+func test_each_penalty_costs_a_minor_on_this_matchs_clock() -> void:
+	var lengths: Array[float] = []
+	_tracker.penalty_assessed.connect(func(_p: int, s: float) -> void: lengths.append(s))
+	_tracker.ledger.call_foul(HITTER, 0, PenaltyRules.Foul.BOARDING, VICTIM)
+	_tracker.assess_pending(PERIOD_S, SIZE)
+	_tracker.clear()
+	_tracker.ledger.call_foul(VICTIM, 1, PenaltyRules.Foul.INTERFERENCE, HITTER)
+	_tracker.assess_pending(PERIOD_S, 3)
+	var minor_s: float = PenaltyRules.minor_seconds(PERIOD_S)
+	assert_eq(lengths, [minor_s, minor_s] as Array[float],
+			"a penalty shot given up costs what the minor would have")
+
+
 func test_a_call_washed_out_by_a_goal_is_no_penalty() -> void:
 	var assessed: Array[int] = []
-	_tracker.penalty_assessed.connect(func(p: int) -> void: assessed.append(p))
+	_tracker.penalty_assessed.connect(func(p: int, _s: float) -> void: assessed.append(p))
 	_tracker.ledger.call_foul(HITTER, 0, PenaltyRules.Foul.BOARDING, VICTIM)
 	_tracker.on_goal(1, SIZE)
 	_tracker.assess_pending(PERIOD_S, SIZE)

@@ -439,10 +439,12 @@ Known gaps, each small enough to leave for the playtest to rank:
 
 ## Phase 6 as built
 
-- **A player's own stats** (`PlayerStats`, on the stats sync): `pim`, two a
-  minor he was assessed (a fight's included) and two a penalty shot his foul
-  gave up, counted when the stoppage makes him pay and never for a call a
-  goal washed out; `pp_goals` and `pp_assists` (their sum is his power-play
+- **A player's own stats** (`PlayerStats`, on the stats sync): `pim_seconds`,
+  his penalty time: a minor's length on this match's clock for each minor he
+  was assessed (a fight's included) and for each penalty shot his foul gave
+  up, served in full or not (decided 2026-11-13; it was two minutes a minor
+  whatever the minor lasted). Counted when the stoppage makes him pay and
+  never for a call a goal washed out. Shown as M:SS; `pp_goals` and `pp_assists` (their sum is his power-play
   points); `sh_goals`; `penalty_shot_goals`. A goal's situation is the
   strength as it goes in (`PenaltyRules.goal_situation`), read before the
   goal releases the minor. Four on four is even strength.
@@ -469,7 +471,11 @@ Known gaps, each small enough to leave for the playtest to rank:
   opportunities, and one less the goals against over opportunities. They
   slice by roster size like every other rate and read "—" until a game with
   a power play is on record. Penalty-shot goals have no career column.
-- **Steam stats**: `STAT_PIM`, `STAT_PP_GOALS`, `STAT_PP_POINTS`
+  Penalty time is the `pim_seconds` column
+  (`supabase/migrations/20261114120000_career_pim_seconds.sql`); a row
+  posted before it has only `pim`, two a minor, which `career_totals_for()`
+  converts at the minor's length on that row's own period.
+- **Steam stats**: `STAT_PIM` (penalty time in seconds), `STAT_PP_GOALS`, `STAT_PP_POINTS`
   (`steam/STATS.md`: each must be defined in Steamworks on both apps before a
   build that writes it goes out). No ladder reads them yet.
 - **Game Pucks**: Man Advantage (a power-play goal), Shorty (a short-handed
@@ -486,7 +492,8 @@ Known gaps, each small enough to leave for the playtest to rank:
   ending without a goal. No phase was added.
 - **Phase 6 (v106):** the stats sync's player record grows
   from 21 fields to 30, and its footer gains each team's power plays and
-  power-play goals.
+  power-play goals. **v108:** its penalty field is seconds, no longer two a
+  minor.
 
 ## Not in this plan
 

@@ -15,7 +15,9 @@ signal possession_whistle(offending_team_id: int)
 # Host: the ledger changed and peers need it.
 signal ledger_changed
 # Host: a call was paid for, by a minor or by giving up a penalty shot.
-signal penalty_assessed(peer_id: int)
+# `minor_s` is a minor's length on this match's clock: what the call costs in
+# penalty time, served in full or not, and for a penalty shot too.
+signal penalty_assessed(peer_id: int, minor_s: float)
 # Every peer: a skater went into the box, or came out of it.
 signal skater_boxed(peer_id: int)
 signal skater_released(peer_id: int)
@@ -155,17 +157,17 @@ func on_goal(scoring_team_id: int, team_size: int) -> void:
 func assess_pending(period_duration: float, team_size: int) -> void:
 	if not ledger.has_pending():
 		return
+	var minor_s: float = PenaltyRules.minor_seconds(period_duration)
 	if PenaltyRules.awards_penalty_shot(team_size):
-		_stage_shot()
+		_stage_shot(minor_s)
 	else:
-		for peer_id: int in ledger.assess(PenaltyRules.minor_seconds(period_duration),
-				PenaltyRules.max_serving(team_size)):
-			penalty_assessed.emit(peer_id)
+		for peer_id: int in ledger.assess(minor_s, PenaltyRules.max_serving(team_size)):
+			penalty_assessed.emit(peer_id, minor_s)
 	apply_box_state()
 	ledger_changed.emit()
 
 
-func _stage_shot() -> void:
+func _stage_shot(minor_s: float) -> void:
 	var shooter: PlayerRecord = _registry.get_record(ledger.stage_shot())
 	if shooter == null or shooter.skater == null or shooter.team == null:
 		ledger.end_shot()  # the man fouled has left: nobody takes it
@@ -174,7 +176,7 @@ func _stage_shot() -> void:
 	_shot.max_wait_s = _SHOT_COLLECT_S
 	_shot.begin(attack_dir_z, attack_dir_z * GameRules.GOAL_LINE_Z, GameRules.NET_HALF_WIDTH)
 	_shot_saved = false
-	penalty_assessed.emit(ledger.shot_offender_peer_id())
+	penalty_assessed.emit(ledger.shot_offender_peer_id(), minor_s)
 
 
 func is_shot_on() -> bool:

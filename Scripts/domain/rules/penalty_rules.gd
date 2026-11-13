@@ -34,8 +34,6 @@ const MINOR_PERIOD_SHARE: float = 0.1
 const MINOR_MIN_S: float = 15.0
 # A team is never put below this many skaters: a further minor waits its turn.
 const MIN_SKATERS: int = 3
-# What a minor is in the book, whatever it lasts on this match's clock.
-const MINOR_PIM: int = 2
 
 
 # Fouls are called under NHL rules.
