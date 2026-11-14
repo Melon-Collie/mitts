@@ -819,6 +819,17 @@ for both: the ice worth holding moves with the carrier and his teammates (a
 crash point, a screen line, each follows its shot), and the spot he holds is a
 fixed point that goes stale. The incumbent is held by place, not by what it is.
 
+**Held by what it is** (`1661cb0`, `RoleDecision.station_key`: the shot a
+station is in front of, and how). The held station now slides with its
+shooter (22% of the spot's motion is continuous, from 4%), but the re-picks
+are unchanged at 0.82 a second, and so is the chain (J=11, 576: their man
+nearer out of reach 54%, xG 0.038 ± 0.005). Of 775 re-picks, 179 found the
+held station gone (its shot's lane shut, or its place filtered); in the rest
+the new one was worth 0.119 in front against the held one's 0.070. The value
+moves between our shots, not within one: each teammate's one-timer is
+weighted by the lane to him now, and lanes open and shut as the defence
+moves, so the shot worth standing in front of changes and he follows it.
+
 ---
 
 ## Step 5 — Tips
