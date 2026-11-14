@@ -2,8 +2,8 @@
 ready straight_on	0.5735
 ready dot_line_at_b	0.6871
 ready closing_share	0.5273
-low_ready straight_on	0.6098
-low_ready dot_line_at_b	0.8061
+low_ready straight_on	0.6356
+low_ready dot_line_at_b	0.8417
 low_ready closing_share	0.5820
 butterfly straight_on	0.6583
 butterfly dot_line_at_b	0.8212

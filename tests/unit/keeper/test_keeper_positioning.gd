@@ -464,10 +464,80 @@ func test_a_carrier_coming_backs_him_in_to_where_he_comes_in_tight() -> void:
 			KeeperPositioning.depth_for(Vector2(0.0, -4.0), Vector2.ZERO, skates, true) + 1e-6, "coming at him already: no further out")
 
 
+# How far out a carrier takes him down: in tight standing still, and as far
+# outside it as the carrier skates while he drops.
+func test_he_goes_down_in_time_to_land_as_the_carrier_comes_in_tight() -> void:
+	var drop_s: float = 0.12
+	assert_almost_eq(KeeperPositioning.down_range(0.0, drop_s), KeeperPositioning.TIGHT_M, 1e-6, "still: in tight")
+	assert_almost_eq(KeeperPositioning.down_range(-4.0, drop_s), KeeperPositioning.TIGHT_M, 1e-6, "skating away: in tight")
+	assert_almost_eq(KeeperPositioning.down_range(9.0, drop_s), KeeperPositioning.TIGHT_M + 9.0 * drop_s, 1e-6,
+			"coming: his drop's time of the carrier's skating further out")
+	for coming: float in [0.0, 9.0]:
+		for off: float in [-0.3, 0.3]:
+			_brain = KeeperPositioning.new()
+			_brain.play = KeeperPlayRead.new()
+			_brain.play.theirs = true
+			_brain.play.loose = false
+			_motor = KeeperMotor.new()
+			var within: float = KeeperPositioning.down_range(coming,
+					_motor.save_move.drop_s * _motor.low_ready.fall_share())
+			var puck := Vector2(0.0, -(within + off))
+			_brain.decide(puck, Vector2(0.0, coming), _motor)
+			_motor.x = _motor.route.spot.x
+			_motor.z = _motor.route.spot.y
+			_brain.decide(puck, Vector2(0.0, coming), _motor)
+			assert_eq(_brain.kept_down, off < 0.0, "coming at %.0f m/s, %+.1f m off his range" % [coming, off])
+
+
+# The share of the lines a shot from `from_m` straight out can take, no
+# steeper than the steepest loft lifts it, that get by him `depth` out.
+func _open_to_a_shot(skel: KeeperSkeleton, from_m: float, depth: float) -> float:
+	var out := SweptDiscOBB.Result.new()
+	var scratch := SweptDiscOBB.Result.new()
+	var r: float = GameRules.PUCK_COLLISION_RADIUS
+	var top: float = GameRules.NET_HEIGHT - GameRules.NET_POST_RADIUS - r
+	var release := Vector3(0.0, GameRules.PUCK_COLLISION_HALF_HEIGHT, depth - from_m)
+	var open: int = 0
+	var all: int = 0
+	var x: float = -KeeperCoverage.MOUTH_HALF_M
+	while x <= KeeperCoverage.MOUTH_HALF_M + 1e-6:
+		var reach: float = release.y + PlayerAttributes.steepest_loft_tan() * Vector2(x, from_m).length()
+		var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
+		while y <= minf(top, reach) + 1e-6:
+			all += 1
+			if KeeperGear.nearest(skel, release, Vector3(x, y, depth), r, out, scratch) < 0:
+				open += 1
+			y += 0.06
+		x += 0.06
+	return float(open) / all
+
+
+# In tight is where going down is the better shape: of the net a shot from
+# there can reach (it cannot be lifted over him from that near), the butterfly
+# shows no more than the low ready does; well outside it, where a shot gets up
+# over the pads, it shows more.
+func test_in_tight_the_butterfly_shows_a_shot_no_more_than_the_low_ready() -> void:
+	var skates := KeeperFootwork.new()
+	var pose := KeeperPose.new()
+	var low := KeeperSkeleton.new()
+	KeeperPoses.low_ready(pose)
+	low.pose(pose)
+	var down := KeeperSkeleton.new()
+	KeeperPoses.butterfly(pose)
+	down.pose(pose)
+	for r: float in [1.5, 2.0, KeeperPositioning.TIGHT_M]:
+		var d: float = KeeperPositioning.depth_for(Vector2(0.0, -r), Vector2.ZERO, skates, true)
+		assert_lte(_open_to_a_shot(down, r, d), _open_to_a_shot(low, r, d), "%.1f m out: down" % r)
+	var far: float = KeeperPositioning.TIGHT_M + 2.0
+	var far_d: float = KeeperPositioning.depth_for(Vector2(0.0, -far), Vector2.ZERO, skates, true)
+	assert_gt(_open_to_a_shot(down, far, far_d), _open_to_a_shot(low, far, far_d), "%.1f m out: on his feet" % far)
+
+
 # The live brain against a carrier of theirs skating straight in at a
 # breakaway's pace: backed in as he comes but still out when the carrier is in
-# shooting range, down once he is in tight though the carrier outruns his
-# C-cuts, and never carried past the floor.
+# shooting range, in the butterfly by the time he is in tight though the
+# carrier outruns his C-cuts, giving ground on the speed he dropped with, and
+# never carried past the floor.
 func test_a_breakaway_is_met_out_and_played_down_in_tight() -> void:
 	var speed: float = 8.5
 	_brain.play = KeeperPlayRead.new()
@@ -476,6 +546,9 @@ func test_a_breakaway_is_met_out_and_played_down_in_tight() -> void:
 	var tick: int = 0
 	var deepest: float = INF
 	var at_range: float = NAN
+	var dropped_at: float = NAN
+	# Whether he was in the butterfly when the carrier came in tight: 0 not yet there.
+	var at_tight: int = 0
 	while body.y < -1.5:
 		body.y += speed * DT
 		_brain.play.step(DT, body, Vector2(0.0, speed), false, body, true)
@@ -486,9 +559,15 @@ func test_a_breakaway_is_met_out_and_played_down_in_tight() -> void:
 		deepest = minf(deepest, -_motor.z)
 		if is_nan(at_range) and body.y >= -3.5:
 			at_range = -_motor.z
+		if is_nan(dropped_at) and _brain.kept_down:
+			dropped_at = -_motor.z
+		if at_tight == 0 and body.y >= -KeeperPositioning.TIGHT_M:
+			at_tight = 1 if _motor.save_move.is_set() or _motor.rest == R.DOWN else -1
 	assert_gte(at_range, KeeperPositioning.closing_depth(Vector2(0.0, -3.5)) - 0.1,
 			"3.5 m out: no further back than hides both posts")
 	assert_true(_brain.kept_down, "played down once the carrier is in tight")
+	assert_gt(at_tight, 0, "in the butterfly as the carrier came in tight, not starting his drop there")
+	assert_lt(-_motor.z, dropped_at - 0.05, "the speed he dropped with still giving ground")
 	# The carrier pulls up on top of him: the drop lands, and what speed he
 	# carried onto his pads is spent.
 	for i: int in int(1.0 / DT):

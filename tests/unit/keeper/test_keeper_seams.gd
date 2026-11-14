@@ -4,7 +4,7 @@ extends GutTest
 # (KeeperSeams) is one of his stance's intended windows: the openings the
 # stance itself makes, which the stick and the play cover (the five-holes of
 # ready, the low ready, the half butterflies, the extensions and the kicks; the
-# low ready's stick side down to the ice and the ice under the RVH's off pad). Any other hole fails
+# ice under the RVH's off pad). Any other hole fails
 # here, so the next change of puck, pad or pose cannot open one silently.
 #
 # A window is a region of the mouth (x across from its centre, y up from the
@@ -20,8 +20,7 @@ func _stances() -> Array:
 			"five-hole above the blade": Rect2(-0.14, 0.06, 0.25, 0.34),
 		}],
 		["low ready", func(p: KeeperPose) -> void: KeeperPoses.low_ready(p), {
-			"five-hole above the blade": Rect2(-0.20, 0.08, 0.25, 0.35),
-			"the five-hole's stick side, down to the ice": Rect2(0.03, 0.0, 0.19, 0.21),
+			"five-hole above the blade": Rect2(-0.20, 0.08, 0.34, 0.35),
 		}],
 		["butterfly", func(p: KeeperPose) -> void: KeeperPoses.butterfly(p), {}],
 		["half L", func(p: KeeperPose) -> void: KeeperPoses.half_butterfly(p, -1.0), {
@@ -105,3 +104,15 @@ func test_the_open_net_is_not_a_seam() -> void:
 	var row: int = 3
 	assert_eq(cells[row * nx + 2], KeeperSeams.Cell.OPEN)
 	assert_eq(cells[row * nx + nx - 3], KeeperSeams.Cell.OPEN)
+
+
+# Set on his feet, the blade seals the ice between his pads: neither stance he
+# waits in leaves a hole a puck sliding flat along the ice fits through.
+func test_no_stance_on_his_feet_is_open_along_the_ice() -> void:
+	for stance: Array in _stances().slice(0, 2):
+		(stance[1] as Callable).call(_pose)
+		_skel.pose(_pose)
+		for seam: Rect2 in KeeperSeams.find(_skel):
+			assert_gt(seam.position.y, GameRules.PUCK_COLLISION_HALF_HEIGHT * 2.0,
+					"%s: the hole at x %.2f..%.2f starts above a puck on the ice" % [stance[0], seam.position.x, seam.end.x])
+

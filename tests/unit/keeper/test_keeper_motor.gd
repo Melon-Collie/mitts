@@ -197,19 +197,26 @@ func test_asked_down_while_skating_he_drops_carrying_his_speed() -> void:
 	var was: float = _motor.x
 	_motor.go_to(spot + v * 0.3, 0.0, R.DOWN)
 	_solve()
+	var goal: Vector2 = _motor.route.spot
 	var bones: Array[Vector3] = _bones()
 	var t: float = 0.0
+	var landed: float = NAN
 	while _motor.rest != R.DOWN and t < 1.0:
 		_motor.step(DT)
 		t += DT
+		if is_nan(landed) and _motor.save_move.is_set():
+			landed = t
+			assert_true(_motor.carries(), "landed, the slide still carrying him toward his goal")
 		_solve()
 		var now: Array[Vector3] = _bones()
 		for b: int in KeeperSkeleton.BONE_COUNT:
 			assert_lt(now[b].distance_to(bones[b]), MAX_BONE_STEP_M, "t %.3f bone %d" % [t, b])
 		bones = now
 	assert_eq(_motor.rest, R.DOWN, "down")
-	assert_lte(t, _motor.save_move.drop_s + 2.0 * DT, "down in the drop's time, no stop first")
-	assert_gt(_motor.x - was, 0.5 * moving * t, "his speed carried on")
+	assert_lte(landed, _motor.save_move.drop_s + 2.0 * DT, "in the butterfly in the drop's time, no stop first")
+	assert_gt(_motor.x - was, 0.5 * moving * landed, "his speed carried on")
+	assert_false(_motor.carries(), "the slide let go")
+	assert_lt(absf(_motor.x - goal.x), moving * 2.0 * DT, "where it brought him to his goal, not on by it")
 
 
 # Down, a push across and another the moment it stops: the second sets out as

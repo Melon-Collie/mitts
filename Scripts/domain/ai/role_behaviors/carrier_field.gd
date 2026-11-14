@@ -334,9 +334,11 @@ static func pass_origin(ctx: RoleContext, pull_s: float = 0.0,
 # before he could stand up (AIGoalieModel.GOALIE_RECOVERY_S); upright after it,
 # since when he chooses to rise is his read, not one the carrier can make. A shot
 # decided with the puck at `puck`, at the net at `goal`, in tight finds him down
-# (AIGoalieModel.down_in_tight): he plays a carrier there down as it comes.
-func keeper_stance_at(t: float, puck: Vector3 = Vector3.INF, goal: Vector3 = Vector3.ZERO) -> int:
-	if puck.is_finite() and AIGoalieModel.down_in_tight(puck, goal):
+# (AIGoalieModel.down_in_tight): he plays a carrier there down as it comes, the
+# sooner the faster it comes at the net (`closing_speed_m_s`).
+func keeper_stance_at(t: float, puck: Vector3 = Vector3.INF, goal: Vector3 = Vector3.ZERO,
+		closing_speed_m_s: float = 0.0) -> int:
+	if puck.is_finite() and AIGoalieModel.down_in_tight(puck, goal, closing_speed_m_s):
 		return AIShotOdds.Stance.DOWN
 	return keeper_stance if t < AIGoalieModel.GOALIE_RECOVERY_S else AIShotOdds.Stance.UPRIGHT
 

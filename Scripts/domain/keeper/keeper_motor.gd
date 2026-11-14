@@ -390,8 +390,9 @@ func _step_mover(dt: float) -> void:
 			save_move.step(dt)
 			x = save_move.x
 			z = save_move.z
-			if _landing and save_move.is_set():
+			if _landing and save_move.is_set() and not _rides_on():
 				_landing = false
+				_rest_where_the_slide_left_him()
 				save_move.state = KeeperSaveMove.State.NONE
 				_rest_on(Rest.DOWN)
 			elif save_move.is_done():
@@ -452,11 +453,37 @@ func _step_glide(dt: float) -> void:
 
 
 # Down from a glide, its speed carried: into the butterfly as a low save drops
-# him, held only until he lands in it.
+# him, held until he lands in it and for as long after as the slide still
+# takes him toward his goal down (`_rides_on`).
 func _drop_carrying() -> void:
 	save(KeeperSaveMove.Low.BUTTERFLY, 1.0)
 	save_move.edges = false
 	_landing = true
+
+
+# Whether the speed he dropped with is still sliding him (`_drop_carrying`).
+func carries() -> bool:
+	return _mover == Mover.SAVE and _landing and save_move.velocity != Vector2.ZERO
+
+
+# The slide he dropped with spent short of a goal that is not a push across
+# his line from here: his goal is where it left him, until he is given
+# another. On his knees he has no way straight back or ahead, and the route to
+# one would stand him up or spin him round for it.
+func _rest_where_the_slide_left_him() -> void:
+	if not _goal or route.rest != Rest.DOWN or save_move.velocity != Vector2.ZERO:
+		return
+	var local: Vector2 = _turned(route.spot - Vector2(x, z), -yaw)
+	if absf(local.y) > absf(local.x) * tan(KeeperSlide.MAX_OFF_LINE_RAD):
+		route.spot = Vector2(x, z)
+
+
+# Landed from a glide and still sliding on his pads: whether the slide goes on
+# bringing him nearer his goal down. Once it would carry him by it he lets it
+# go and pushes for the goal from where he is.
+func _rides_on() -> bool:
+	return save_move.velocity != Vector2.ZERO and _goal and route.rest == Rest.DOWN \
+			and (route.spot - Vector2(x, z)).dot(save_move.velocity) > 0.0
 
 
 func _rest_on(r: int) -> void:

@@ -96,6 +96,17 @@ func test_the_bots_know_when_he_plays_a_carrier_in_tight_down() -> void:
 			brain.decide(at, Vector2.ZERO, motor)
 			assert_eq(AIGoalieModel.down_in_tight(puck, GOAL), brain.kept_down or brain.planted,
 					"down for a carrier at (%.1f, %.1f) as his brain plays him" % [x, out])
+	# Coming at the net he takes him down from further out, the bots' read by
+	# his own range, his drop the one from the low ready a carrier finds him in.
+	for closing: float in [3.0, 6.0, 9.0]:
+		var within: float = KeeperPositioning.down_range(closing, AIGoalieModel.goalie_drop_s)
+		assert_gt(within, KeeperPositioning.TIGHT_M, "coming at %.0f m/s" % closing)
+		for off: float in [-0.2, 0.2]:
+			assert_eq(AIGoalieModel.down_in_tight(Vector3(0.0, 0.0, GOAL.z + within + off), GOAL, closing), off < 0.0,
+					"coming at %.0f m/s, %+.1f m off his range" % [closing, off])
+	var sunk := KeeperMotor.new()
+	assert_almost_eq(AIGoalieModel.goalie_drop_s, sunk.save_move.drop_s * KeeperLowReady.fall_share_at(1.0), 1e-6,
+			"his drop from the low ready")
 
 
 func test_the_bots_measure_his_stance_on_his_gear() -> void:

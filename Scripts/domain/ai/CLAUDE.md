@@ -897,8 +897,10 @@ he gets there); his positioning is the same on every tier.
 
 **The skater AI's goalie model is a MIRROR, not a second tier.** What the bots
 predict of him outside the shot field — his leg read, his push, the depth he
-takes, the post he holds, his rise, his going down for a carrier in tight
-(`down_in_tight`, which a carry's shot on arrival reads his stance by) — lives
+takes, the post he holds, his rise, his going down for a carrier in tight and
+as far outside it as the carrier skates while he drops (`down_in_tight`, by
+his own `KeeperPositioning.down_range` and the tier's drop, which a carry's
+shot on arrival reads his stance by) — lives
 on `AIGoalieModel`, read from his own
 code (`KeeperPositioning`, `KeeperFootwork`, `KeeperDrop`, his gear), with the
 leg read synced from the match's profile by `set_goalie_profile`.
@@ -1419,7 +1421,8 @@ reaches back into what remains.
   the carrier would shoot from, through the same line gate
   (`AICarrierField.leaves_ahead_of_line`, a release behind it priced as no shot),
   against the keeper at the depth he takes for the pace the carry closes on him
-  at arrival, in the stance the release meets him in: down in tight
+  at arrival, in the stance the release meets him in: down in tight, and from
+  further out the faster the carrier comes
   (`AIGoalieModel.down_in_tight`), which the shot now reads too
   (`AIRoleCarrier._stance_met`). Priced from the body, or against the depth the
   drive's average pace pushed him to, a carry promised shots the shot now

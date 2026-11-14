@@ -136,7 +136,9 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	# In tight he goes down once he is on the spot he skates to, and stays down
 	# while the carrier stays in tight.
 	var me := Vector2(motor.x, motor.z)
-	kept_down = tight and not planted and puck.length() <= TIGHT_M + (MARGIN_M if kept_down else 0.0) \
+	var comes: float = -velocity.dot(puck.normalized()) if puck.length() > 1e-4 else 0.0
+	var down_within: float = down_range(comes, motor.save_move.drop_s * motor.low_ready.fall_share())
+	kept_down = tight and not planted and puck.length() <= down_within + (MARGIN_M if kept_down else 0.0) \
 			and (kept_down or motor.rest != KeeperRoute.Rest.FEET or _covers(me, _spot(puck, motor)))
 	if planted or kept_down:
 		_racing = false
@@ -172,6 +174,14 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	motor.go_to(spot, facing(spot, puck), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, meeting)
 
 
+# How near the net's centre a carrier of theirs coming at it at `coming` takes
+# him down: in tight, and as far outside it as the carrier skates in the
+# `drop_s` his drop takes, so the butterfly has landed as the carrier comes in
+# tight rather than starting there. A carrier standing off it does not.
+static func down_range(coming: float, drop_s: float) -> float:
+	return TIGHT_M + maxf(coming, 0.0) * drop_s
+
+
 # Whether he at `me` covers what he would from `spot`: on its line from the
 # net's centre, there or further out along it, as he is while a carrier comes
 # in faster than he backs in.
@@ -196,29 +206,44 @@ func _plant(post: Vector2, side: float, puck: Vector2, velocity: Vector2, motor:
 	motor.go_to(at if near else spot, _seal_turn, KeeperRoute.Rest.DOWN)
 
 
-# Down with the carrier in tight in front of him: pushed across at his depth
-# to the puck's line where the carrier will be when the push lands, square to
-# him there; a move under SEAL_NEAR_M he leaves to the rotation, a push being
-# a commitment he cannot cut short.
+# Down with the carrier in tight in front of him: pushed onto the puck's line
+# where the carrier will be when the push lands, square to him there
+# (`_down_spot`); a move under SEAL_NEAR_M he leaves to the rotation, a push
+# being a commitment he cannot cut short.
 func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var at := Vector2(motor.x, motor.z)
-	var depth: float = at.length()
-	var to: Vector2 = puck.normalized() * depth
+	var gives: bool = motor.carries()
+	var to: Vector2 = _down_spot(puck, at, gives)
 	var lands: Vector2 = puck
 	for i: int in SEAL_ROUNDS:
 		lands = puck + velocity * motor.slide.time_to(at.distance_to(to))
 		# A carrier driving at him stops on him, not past him.
-		if lands.y > -depth - GameRules.DEFAULT_STICK_LENGTH_M * 0.5:
+		if lands.y > -at.length() - GameRules.DEFAULT_STICK_LENGTH_M * 0.5:
 			lands = puck
-		to = lands.normalized() * depth
+		to = _down_spot(lands, at, gives)
 	# A spot as near as half a pad's width to the one he is still pushing for,
 	# or to where he has stopped, is no new push.
-	var pushing: bool = motor.route.rest == KeeperRoute.Rest.DOWN and not motor.is_idle()
+	var pushing: bool = motor.route.rest == KeeperRoute.Rest.DOWN and not motor.is_idle() and not gives
 	if pushing and to.distance_to(motor.route.spot) <= SEAL_NEAR_M:
 		to = motor.route.spot
 	elif at.distance_to(to) <= SEAL_NEAR_M:
 		to = at
 	motor.go_to(to, facing(to, lands), KeeperRoute.Rest.DOWN)
+
+
+# His spot down at `at` for a carrier's puck at `puck`: on its line at his
+# depth, a push across. While the speed he dropped with still slides him
+# (`gives`) he gives ground with the carrier instead, back to where he hides
+# both posts from the puck, in tight at the furthest (he dropped outside it to
+# be down there), and no further out than he is: backing in is the one way he
+# has there on his knees, and a carrier who comes on in or goes wide of him is
+# not left below him.
+static func _down_spot(puck: Vector2, at: Vector2, gives: bool) -> Vector2:
+	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
+	if not gives:
+		return out * at.length()
+	var deepest: float = minf(DEPTH_FLOOR_M, crease_edge(out))
+	return out * clampf(closing_depth(out * minf(puck.length(), TIGHT_M)), deepest, maxf(at.length(), deepest))
 
 
 # The spot that seals the post at `post` with his `side` pad, down square to a
