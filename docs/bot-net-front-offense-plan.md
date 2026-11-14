@@ -715,6 +715,34 @@ play's rebound is read only where even every rebound ours could beat the
 station's feed and tip. The rest is the race filled per play (≈0.3 ms each)
 and read per station near the net.
 
+### 4d. Why the battle seldom starts
+
+Every tick one of ours holds a battle spot while we carry, filed under the
+first link that fails (J=11, 576 possessions, after 4c):
+
+| link | share | |
+|---|---|---|
+| their man nearer the spot, out of the press's reach | 55% | |
+| nobody of theirs nearer it, ours not on it | 22% | closing at 1.8 m/s |
+| ours on it | 16% | |
+| pressing | 6% | |
+| in reach, the press too weak to move him | 1% | it would move him 1.05 m |
+
+- **The spot re-picks.** It moves 3.7–4.3 m a second, 96–97% of that in
+  re-picks of 2.6 m about 1.4 times a second, so he is sent somewhere new
+  before he gets anywhere. Discounting a station by his skate there
+  (`b34ffca`, `delay_discount` on `AIArrival.time_to_arrive`) took it only
+  from 1.6 re-picks a second to 1.4. The driver is the one-timer feed term:
+  a lane opening or closing moves a station's value by 0.3–0.4, more than the
+  trip or the switch margin holds, and the battle spot is whichever station
+  he holds. FINISHER and NET_FRONT share one search, and its job is getting
+  open, the opposite of holding the net front.
+- **The duel harness had no press** (`b34ffca`). Every sweep before it moved
+  nobody with one. `duel_harness.gd:_press` now lays `PressRules` as the
+  controller does, held to the live rig within 2 cm
+  (`test_duel_press_mirrors.gd`). Re-measured with it and the trip priced:
+  first touch ours 29% ± 4%, xG 0.028 ± 0.004, the chain the same.
+
 ---
 
 ## Step 5 — Tips
