@@ -43,6 +43,9 @@ var _their_t0 := PackedFloat32Array()
 var _their_late := PackedFloat32Array()
 var _our_t0 := PackedFloat32Array()
 var _our_late := PackedFloat32Array()
+# Their first touch of the row at either moment: a man of ours who cannot be
+# there inside the contest band of it changes nothing.
+var _their_first := PackedFloat32Array()
 var _saved: int = 0
 static var _scratch: AIReboundValue = null
 
@@ -75,6 +78,7 @@ func fill(release: Vector3, attacking_goal: Vector3,
 	_their_late.clear()
 	_our_t0.clear()
 	_our_late.clear()
+	_their_first.clear()
 	_saved = 0
 	var spot: int = AIReboundField.spot_of(release, attacking_goal)
 	var flight_s: float = release.distance_to(attacking_goal) \
@@ -98,31 +102,50 @@ func fill(release: Vector3, attacking_goal: Vector3,
 		# is on it by then.
 		_cover_by.append(flight_s + (k0 + LATE_SAMPLES) * AIReboundField.SAMPLE_S \
 				if late < 0 else INF)
+		var their_first: float = maxf(_their_t0[-1], _t0[-1])
 		if late < 0:
 			_at_late.append(Vector3.INF)
 			_t_late.append(INF)
 			_scored_late.append(0.0)
 			_our_late.append(INF)
 			_their_late.append(INF)
+			_their_first.append(their_first)
 			continue
 		var at_l: Vector3 = AIReboundField.sample_pos(row, late, attacking_goal)
+		var t_l: float = flight_s + late * AIReboundField.SAMPLE_S
 		_at_late.append(at_l)
-		_t_late.append(flight_s + late * AIReboundField.SAMPLE_S)
+		_t_late.append(t_l)
 		_scored_late.append(AIReboundField.late_scored(row))
 		_our_late.append(AIActionScoring.first_arrival(at_l, ours, ours_vel))
 		_their_late.append(AIActionScoring.first_arrival(at_l, theirs, theirs_vel))
+		_their_first.append(minf(their_first, maxf(_their_late[-1], t_l)))
+
+
+# The most a man added could make the filled release's rebound worth: every
+# second chance ours.
+func ceiling() -> float:
+	var sum: float = 0.0
+	for i: int in _at.size():
+		sum += maxf(_scored[i], _scored_late[i])
+	return sum / _saved if _saved > 0 else 0.0
 
 
 # The filled release's rebound credit with one more of ours standing at `body`
-# (INF: none), as credit prices it.
+# (INF: none), as credit prices it. His arrival is solved only where its bound
+# (the straight line at top speed, which time_to_arrive never beats) could beat
+# both ours and their first touch's contest band: elsewhere it changes nothing.
 func value_with(body: Vector3) -> float:
 	var sum: float = 0.0
+	var vmax: float = maxf(AIArrival.SKATER_REF_SPEED_M_S, AIArrival.MIN_TRAVEL_SPEED_M_S)
 	for i: int in _at.size():
 		var our_t0: float = _our_t0[i]
 		var our_l: float = _our_late[i]
 		if body.is_finite():
-			our_t0 = minf(our_t0, AIArrival.time_to_arrive(body, _at[i], Vector3.ZERO))
-			if _at_late[i].is_finite():
+			var useless: float = _their_first[i] + AIActionScoring.CHASE_CONTEST_MARGIN_S
+			if body.distance_to(_at[i]) < minf(our_t0, useless) * vmax:
+				our_t0 = minf(our_t0, AIArrival.time_to_arrive(body, _at[i], Vector3.ZERO))
+			if _at_late[i].is_finite() \
+					and body.distance_to(_at_late[i]) < minf(our_l, useless) * vmax:
 				our_l = minf(our_l, AIArrival.time_to_arrive(body, _at_late[i], Vector3.ZERO))
 		var t0: float = _t0[i]
 		var their_first: float = maxf(_their_t0[i], t0)

@@ -141,6 +141,7 @@ static var _play_keeper: Array[Vector3] = []
 static var _play_weight: Array[float] = []
 static var _play_rebound: Array[AIReboundValue] = []
 static var _play_rebound_base: Array[float] = []
+static var _play_rebound_gain_cap: Array[float] = []
 static var _screen_cfg := GoalieScreenRules.ScreenConfig.new()
 static var _no_vels: Array[Vector3] = []
 
@@ -156,6 +157,7 @@ static func fill_shot_plays(ctx: RoleContext, carrier_pos: Vector3,
 	_play_keeper.clear()
 	_play_weight.clear()
 	_play_rebound_base.clear()
+	_play_rebound_gain_cap.clear()
 	var goal: Vector3 = ctx.attacking_goal_pos
 	var release: Vector3 = AIPuckLane.release_point_toward(carrier_pos, goal)
 	_add_play(ctx, release, goalie_pos if goalie_pos.is_finite() else _keeper_square_on(goal, release),
@@ -184,6 +186,7 @@ static func _add_play(ctx: RoleContext, release: Vector3, keeper: Vector3, weigh
 	_play_rebound[i].fill(release, ctx.attacking_goal_pos, teammates, ctx.scratch_teammate_vels,
 			opp_positions, ctx.scratch_opp_vels)
 	_play_rebound_base.append(_play_rebound[i].value_with(Vector3.INF))
+	_play_rebound_gain_cap.append(maxf(_play_rebound[i].ceiling() - _play_rebound_base[i], 0.0))
 
 
 # Where a man in front stands for each play (fill_shot_plays): on its release's
@@ -206,14 +209,20 @@ static func append_net_front_stations(ctx: RoleContext, candidates: Array[Vector
 # What a body at `c` adds to our attack in front of their net (fill_shot_plays),
 # for the best of the plays, one puck being one shot: of the shots the keeper
 # would save, the share his screen there turns into goals, and of the rest,
-# what he adds to winning the rebound.
-static func net_front_value(ctx: RoleContext, c: Vector3) -> float:
+# what he adds to winning the rebound. A play that could not beat `beat` (or
+# the best so far) even with every rebound ours is not raced, and reads as no
+# more than that.
+static func net_front_value(ctx: RoleContext, c: Vector3, beat: float = 0.0) -> float:
 	var best: float = 0.0
 	for i: int in _play_release.size():
 		var screen: float = AIScreenField.uplift(_play_release[i], ctx.attacking_goal_pos,
 				_play_keeper[i], c, _screen_cfg)
+		var w: float = _play_weight[i]
+		best = maxf(best, w * screen)
+		if w * (screen + (1.0 - screen) * _play_rebound_gain_cap[i]) <= maxf(best, beat):
+			continue
 		var rebound: float = maxf(_play_rebound[i].value_with(c) - _play_rebound_base[i], 0.0)
-		best = maxf(best, _play_weight[i] * (screen + (1.0 - screen) * rebound))
+		best = maxf(best, w * (screen + (1.0 - screen) * rebound))
 	return best
 
 

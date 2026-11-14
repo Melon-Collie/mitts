@@ -289,7 +289,6 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	var carrier_release: Vector3 = AIPuckLane.release_point_toward(
 			carrier_pos, ctx.attacking_goal_pos)
 	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
-	var best_battles: bool = false
 	AIStationSearch.fill_feed_values(ctx, carrier_pos, goalie_pos, opp_positions,
 			teammate_positions)
 
@@ -321,8 +320,8 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 				opp_positions,
 				carrier_shot_speed, ctx.scratch_opp_caps, self_caps)
 		# What a body here adds to our shots in front of their net: the screen,
-		# and the rebound.
-		var front: float = AIStationSearch.net_front_value(ctx, c)
+		# and the rebound, read only as far as it could beat the feed and the tip.
+		var front: float = AIStationSearch.net_front_value(ctx, c, maxf(feed, tip))
 		# The best of the one-timer feed, the tip and the net front — max(), not
 		# sum: one puck, one outcome — less what a teammate a defender could
 		# cover with this spot already offers.
@@ -332,13 +331,12 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		if score > best_score:
 			best_score = score
 			best_pos = c
-			best_battles = front > 0.0
 
 	d.target_position = best_pos
 	# A station worth something in front of one of our shots is ice worth
 	# fighting for, whatever else it is worth: the press wins it
 	# (SkaterAgentPress).
-	if best_battles:
+	if AIStationSearch.net_front_value(ctx, best_pos) > 0.0:
 		d.battle_spot = best_pos
 	# No separate quality gate: a weak spot scores low for the carrier too. Half
 	# a search step — nearer the chosen station than any neighbour.
