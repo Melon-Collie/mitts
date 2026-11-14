@@ -1436,7 +1436,11 @@ reaches back into what remains.
     a perception), **buffered on both sides**: carry candidates stay
     `OZ_RETREAT_LINE_BUFFER_M` off the line (the pass windup sweeps the puck a
     stick's reach behind the body), and a pass target's lead sits
-    `OZ_RECEIVE_LINE_BUFFER_M` inside it.
+    `OZ_RECEIVE_LINE_BUFFER_M` inside it: a blade and the puck, since a catch
+    keeps the puck where the blade meets it and a bobble comes back off the
+    face into the zone (`tests/instruments/ai/test_line_reception.gd`). Never
+    widen it to a reception's "give": that excluded every feed to a point
+    on his stand, and only a feed that misses runs out, which the pass prices.
 
 - **The carry is a destination and a skated move** (`docs/hybrid-carry-plan.md`).
   The destination (`AICarrierDestinations`) is where the carry is FOR, chosen

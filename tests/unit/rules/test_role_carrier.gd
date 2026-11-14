@@ -1801,9 +1801,9 @@ func test_sharp_angle_shot_along_the_ice_into_an_rvh_seal_is_never_worth_firing(
 # ─── attacking blue-line keep-out bands ──────────────────────────────────────
 # The offside puck-line is the TRUE blue line while the carrier reasons in
 # body positions: the pass windup swings the carried puck a stick's reach
-# behind the body, and reception plays the puck a reach around the receiver.
-# Both bands (OZ_RETREAT_LINE_BUFFER_M / OZ_RECEIVE_LINE_BUFFER_M) exist so
-# blue-line slop can't turn a completed play into a zone exit / offside.
+# behind the body (OZ_RETREAT_LINE_BUFFER_M), and a feed is caught where the
+# blade meets it (OZ_RECEIVE_LINE_BUFFER_M), so neither turns a completed play
+# into a zone exit / offside.
 
 func test_oz_valve_prunes_carry_candidates_in_the_blue_line_band() -> void:
 	# Carrier established in the OZ (team 0 attacks -Z; OZ is z < -BLUE_LINE_Z).
@@ -1845,17 +1845,18 @@ func _best_pass_to_mate(ctx: RoleContext) -> AICarrierPassSearch:
 	return c._pass
 
 
-func test_oz_pass_skips_receiver_hugging_the_blue_line() -> void:
-	# Carrier in the OZ; the only teammate is wide open but his tape sits
-	# just inside the blue line — reception slop there takes the puck out
-	# of the zone, so he is excluded as a target entirely. The same open
-	# man past the keep-out band (the far-post backdoor the squared goalie
-	# can't re-square onto) is a legal (positive) feed.
+func test_oz_pass_feeds_a_man_at_the_line_but_not_on_it() -> void:
+	# Carrier in the OZ; the only teammate is wide open. Half a metre inside
+	# the blue line, his catch keeps the puck in the zone (a clean catch holds
+	# it where the blade meets it, a bobble comes back off the face:
+	# tests/instruments/ai/test_line_reception.gd), so he is a legal feed. On
+	# the line itself the puck he catches is outside it, and he is no target.
 	var at_line := Vector3(-2.5, 0.0, -(GameRules.BLUE_LINE_Z + 0.5))
-	assert_eq(_best_pass_to_mate(_backdoor_ctx(at_line)).best_score, 0.0,
-			"a receiver hugging the blue line is not a pass target from inside the zone")
-	assert_gt(_best_pass_to_mate(_backdoor_ctx(_BACKDOOR_MATE)).best_score, 0.0,
-			"the same open man past the keep-out band is a legal feed")
+	assert_gt(_best_pass_to_mate(_backdoor_ctx(at_line)).best_score, 0.0,
+			"a man half a metre inside the line is a pass target")
+	var on_line := Vector3(-2.5, 0.0, -(GameRules.BLUE_LINE_Z + 0.1))
+	assert_eq(_best_pass_to_mate(_backdoor_ctx(on_line)).best_score, 0.0,
+			"a man on the line is not a pass target from inside the zone")
 
 
 # ─── close-quarters saucer variant ───────────────────────────────────────────

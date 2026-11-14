@@ -26,11 +26,13 @@ const RECEIVER_DRIVE_MAX_M: float = AIPossessionValue.DRIVE_MAX_M
 const RECEIVER_DRIVE_MIN_NET_DIST_M: float = AIPossessionValue.DRIVE_MIN_NET_DIST_M
 
 # RECEIVE: how far inside the line a pass target must sit when the carrier is
-# in the OZ. The catch plays the puck up to a stick's reach around the body and
-# gives with it (~a stride), so routine reception slop on a line-hugging target
-# takes the puck out. Such feeds are hard reads for a human receiver too, so
-# they're excluded, not discounted.
-const OZ_RECEIVE_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 0.7
+# in the OZ: the blade that meets the puck there and the puck on it, so it is
+# caught on the zone side. Measured (tests/instruments/ai/test_line_reception.gd),
+# a still receiver's clean catch keeps the puck where the blade meets it and a
+# bobble comes back off the face into the zone, at any depth to half a metre;
+# only a feed that misses his stick runs out, and the pass already prices a miss.
+const OZ_RECEIVE_LINE_BUFFER_M: float = GameRules.DEFAULT_BLADE_LENGTH_M \
+		+ GameRules.PUCK_COLLISION_RADIUS
 # Haircut on the pass-OPTION value a carry candidate inherits (see
 # pass_option_from): the option is a coarse read — receiver valued at his
 # CURRENT spot, lane judged against CURRENT defenders — and it still has to
