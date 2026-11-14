@@ -696,12 +696,24 @@ ice the rebound comes to.
 |---|---|---|---|---|---|
 | 4b | 27% ± 4% | 0.35 s | 0.033 ± 0.005 | 0.04 s, 13% | 69%, 1.00 s |
 | 4c, pressing in flight too | 22% ± 4% | 0.28 s | 0.029 ± 0.004 | 0.11 s, 25% | 99%, 2.06 s |
+| 4c, pressing only while we carry | 24% ± 4% | 0.28 s | 0.028 ± 0.004 | 0.08 s, 22% | 99%, 1.60 s |
 
-The battle now happens, and it lost rebounds. The press takes the stick off
-the ice, and it was still on as the rebound came to the spot: the man it
-moved got there with his stick down first. So the spot is fought for only
-while one of ours carries the puck (`test_no_fight_for_the_spot_with_the_puck_loose`),
-the box-out being won before the shot, and the crash publishes none.
+The battle now happens, and it wins no rebounds. The press takes the stick
+off the ice, so the spot is fought for only while one of ours carries the
+puck (`test_no_fight_for_the_spot_with_the_puck_loose`), and the crash
+publishes none. That changed nothing measurable: their first touches are
+still their house D (ZONE_D_STRONG 47 of 99, ZONE_D_WEAK 22, the same split
+as 4b), and they now reach the puck sooner (0.28 s against 0.35 s). Every
+row is within a standard error or two of 4b, so neither direction is
+established.
+
+**Cost.** The rebound race read per station took FINISHER's argmax from
+3.2 ms to 5.9 ms on the micro-bench, and the 5v5 benchmarks' worst tick from
+about 41 ms to 59 ms. Two exact prunes (`f81422b`) bring the argmax to about
+4.9 ms: a man's arrival is solved only where it could change a race, and a
+play's rebound is read only where even every rebound ours could beat the
+station's feed and tip. The rest is the race filled per play (≈0.3 ms each)
+and read per station near the net.
 
 ---
 
