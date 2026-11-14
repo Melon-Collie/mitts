@@ -738,20 +738,34 @@ func test_the_net_front_man_holds_the_front_not_a_feed() -> void:
 
 
 func test_the_net_front_man_holds_his_station_where_the_play_takes_it() -> void:
-	# He holds a station in front of one of our shots; the carrier and our man
-	# at the slot's top skate on, and the station with its shooter. The next read holds that station where it now
-	# is, not the place it stood.
-	var ctx: RoleContext = _screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 6.0), true)
+	# He holds a station in front of the carrier's shot from the slot's top;
+	# the carrier skates across, and the station with him. The next read holds
+	# that station where it now is, not the place it stood.
+	var ctx: RoleContext = _screen_ctx(Vector3(-1.0, 0.0, OPP_NET_Z + 11.0), false)
 	var slots := SlotStub.new()
 	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
 	ctx.team_brain = slots
 	var first: RoleDecision = AIRoleFinisher.decide(ctx)
 	assert_ne(first.station_key, -1, "he holds a station in front; got %s" % first.target_position)
-	var moved: RoleContext = _screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 7.5), true)
-	moved.snapshot.skater_states[3].position += Vector3(-1.5, 0.0, 0.0)
+	var moved: RoleContext = _screen_ctx(Vector3(0.5, 0.0, OPP_NET_Z + 11.0), false)
 	moved.team_brain = slots
 	moved.prev_role_target = first.target_position
 	moved.prev_station_key = first.station_key
 	var next: RoleDecision = AIRoleFinisher.decide(moved)
 	assert_eq(next.station_key, first.station_key, "the same station")
 	assert_ne(next.target_position, first.target_position, "where the play has taken it")
+
+
+func test_the_net_front_man_reads_the_puck_not_a_teammates_shot() -> void:
+	# A teammate at the slot's top with an open lane adds no station of his own
+	# to the net-front man's read: the net-front man stands in front of the puck.
+	var ctx: RoleContext = _screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 6.0), true)
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	ctx.team_brain = slots
+	AIRoleFinisher.decide(ctx)
+	var carrier_peer: int = 2
+	for k: int in AIStationSearch.station_keys:
+		assert_true(k == AIStationSearch.station_key(carrier_peer, AIStationSearch.AT_REBOUND)
+				or k == AIStationSearch.station_key(carrier_peer, AIStationSearch.ON_SCREEN_LINE),
+				"every station is the carrier's; got key %d" % k)

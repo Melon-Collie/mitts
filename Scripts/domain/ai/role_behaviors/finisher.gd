@@ -288,14 +288,27 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	var to_carrier: Vector3 = carrier_pos - ctx.attacking_goal_pos
 	to_carrier.y = 0.0
 	var to_carrier_len: float = to_carrier.length()
+	var tip_at: int = -1
 	if to_carrier_len > TIP_STATION_DIST_M + 0.5:
+		tip_at = candidates.size()
 		candidates.append(ctx.attacking_goal_pos
 				+ to_carrier * (TIP_STATION_DIST_M / to_carrier_len))
 	var front_from: int = candidates.size()
+	var carrier_peer: int = ctx.snapshot.puck_state.carrier_peer_id \
+			if ctx.snapshot != null and ctx.snapshot.puck_state != null else -1
+	var tip_key: int = AIStationSearch.station_key(carrier_peer, AIStationSearch.ON_TIP_LINE)
+	# The 5v5 net-front man holds the net front: his station is priced by what
+	# he adds in front of it (the tip, the screen, the rebound), never by the
+	# feed to him, and in front of the puck alone, never a teammate's shot off a
+	# feed. A feed lane opening or closing moved either by more than any hold,
+	# and sent him from spot to spot faster than he could get to one; getting
+	# open for the feed, and in front of another's one-timer, is the FINISHER's.
+	var holds_front: bool = ctx.team_brain != null \
+			and ctx.team_brain.get_slot(ctx.peer_id) == AIRoleSlots.Slot.NET_FRONT
 	# NET-FRONT STATIONS — in front of each shot of ours, screening it or on
 	# its rebound.
 	AIStationSearch.fill_shot_plays(ctx, carrier_pos, goalie_pos, opp_positions,
-			teammate_positions)
+			teammate_positions, not holds_front)
 	AIStationSearch.append_net_front_stations(ctx, candidates)
 	var front_to: int = candidates.size()
 	# Switch-hysteresis (the pre-aim cursor snaps to this target). A net-front
@@ -307,16 +320,16 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		var k: int = AIStationSearch.station_keys.find(ctx.prev_station_key)
 		if k >= 0:
 			held_at = front_from + k
+		elif tip_at >= 0 and ctx.prev_station_key == tip_key:
+			held_at = tip_at
 	if held_at < 0:
 		AIStationSearch.append_incumbent(ctx, candidates)
 
 	# The carrier's rip, for the tip term: his real wrister pace, released a
 	# handle-length toward the net.
 	var carrier_caps: AISkaterCaps = null
-	var carrier_pid: int = ctx.snapshot.puck_state.carrier_peer_id \
-			if ctx.snapshot != null and ctx.snapshot.puck_state != null else -1
-	if carrier_pid != -1:
-		carrier_caps = ctx.caps_by_peer.get(carrier_pid)
+	if carrier_peer != -1:
+		carrier_caps = ctx.caps_by_peer.get(carrier_peer)
 	var carrier_shot_speed: float = carrier_caps.wrister_shot_speed \
 			if carrier_caps != null else AIBotMechanics.WRISTER_SHOT_SPEED_M_S
 	var carrier_release: Vector3 = AIPuckLane.release_point_toward(
@@ -334,13 +347,6 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	# states it directly. The cap is stage_dist itself — the staging
 	# decision just made.
 	var depth_cap: float = stage_dist
-	# The 5v5 net-front man holds the net front: his station is priced by what
-	# he adds in front of it (the tip, the screen, the rebound), never by the
-	# feed to him. A feed lane opening or closing moved the feed's worth by more
-	# than any hold, and sent him from spot to spot faster than he could get to
-	# one; getting open for the feed is the FINISHER's.
-	var holds_front: bool = ctx.team_brain != null \
-			and ctx.team_brain.get_slot(ctx.peer_id) == AIRoleSlots.Slot.NET_FRONT
 	var tracing: bool = trace != null and trace.peer == ctx.peer_id
 	if tracing:
 		trace.clear()
@@ -387,7 +393,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 			best_score = score
 			best_pos = c
 			d.station_key = AIStationSearch.station_keys[i - front_from] \
-					if i >= front_from and i < front_to else -1
+					if i >= front_from and i < front_to else (tip_key if i == tip_at else -1)
 			if tracing:
 				trace.chosen = i
 

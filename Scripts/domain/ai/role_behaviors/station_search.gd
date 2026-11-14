@@ -140,10 +140,14 @@ static var _play_release: Array[Vector3] = []
 # Each play's shooter: the carrier's peer id, or the teammate's (an index
 # stand-in when `teammates` is not the context's scratch_teammates).
 static var _play_shooter: Array[int] = []
-# What each station append_net_front_stations added is, index-matched to what
-# it appended: (its shooter + 2) × 2 + 0 at the rebound's contest point, + 1
-# on the screen line. The same station keeps its key while the play moves it.
+# What each station append_net_front_stations added is (station_key),
+# index-matched to what it appended. The same station keeps its key while the
+# play moves it.
 static var station_keys: Array[int] = []
+# How a station stands in front of its shot.
+const AT_REBOUND: int = 0
+const ON_SCREEN_LINE: int = 1
+const ON_TIP_LINE: int = 2
 static var _play_keeper: Array[Vector3] = []
 static var _play_weight: Array[float] = []
 static var _play_rebound: Array[AIReboundValue] = []
@@ -154,12 +158,13 @@ static var _no_vels: Array[Vector3] = []
 
 
 # The shots a body in front could help: our carrier's from where he stands, the
-# keeper as he is, and each of `teammates` off a feed to him, the keeper square
-# on him. Their rebounds are raced against `teammates` and the opponents where
-# collect_teammates_excluding_self and collect_opponents left them.
+# keeper as he is, and with `mates_shoot` each of `teammates` off a feed to him,
+# the keeper square on him. Their rebounds are raced against `teammates` and
+# the opponents where collect_teammates_excluding_self and collect_opponents
+# left them.
 static func fill_shot_plays(ctx: RoleContext, carrier_pos: Vector3,
 		goalie_pos: Vector3, opp_positions: Array[Vector3],
-		teammates: Array[Vector3]) -> void:
+		teammates: Array[Vector3], mates_shoot: bool = true) -> void:
 	_play_release.clear()
 	_play_shooter.clear()
 	_play_keeper.clear()
@@ -173,6 +178,8 @@ static func fill_shot_plays(ctx: RoleContext, carrier_pos: Vector3,
 	_play_shooter.append(carrier)
 	_add_play(ctx, release, goalie_pos if goalie_pos.is_finite() else _keeper_square_on(goal, release),
 			1.0 - AIShotValue.set_keeper(release, goal), opp_positions, teammates)
+	if not mates_shoot:
+		return
 	var ids_match: bool = ctx.scratch_teammate_ids.size() == teammates.size()
 	var ti: int = -1
 	for t: Vector3 in teammates:
@@ -214,13 +221,20 @@ static func append_net_front_stations(ctx: RoleContext, candidates: Array[Vector
 		var crash: Vector3 = AIReboundField.crash_point_at(_play_release[i], false, goal)
 		if crash.is_finite():
 			candidates.append(crash)
-			station_keys.append((_play_shooter[i] + 2) * 2)
+			station_keys.append(station_key(_play_shooter[i], AT_REBOUND))
 		var along: float = AIScreenField.best_station_along(_play_release[i], goal)
 		var line: Vector3 = _play_release[i] - goal
 		line.y = 0.0
 		if is_finite(along) and line.length() > along:
 			candidates.append(goal + line * (along / line.length()))
-			station_keys.append((_play_shooter[i] + 2) * 2 + 1)
+			station_keys.append(station_key(_play_shooter[i], ON_SCREEN_LINE))
+
+
+# A station's identity: whose shot (`shooter`'s peer id, or a negative
+# stand-in) it is in front of, and `how` (AT_REBOUND, ON_SCREEN_LINE,
+# ON_TIP_LINE). Never -1, which is a place's.
+static func station_key(shooter: int, how: int) -> int:
+	return (shooter + 2000) * 3 + how
 
 
 # What a body at `c` adds to our attack in front of their net (fill_shot_plays),
