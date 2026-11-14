@@ -603,13 +603,15 @@ func test_high_slot_fills_the_weak_point_while_its_d_is_down_the_flank() -> void
 	var d: RoleDecision = AIRoleHighSlot.decide(ctx)
 	assert_lt(d.target_position.distance_to(AIRoleDefenseman.weak_point_stand(ctx)), 1.0,
 			"F3 rotates up to the weak point; got %s" % d.target_position)
-	# And the strong D slides to the middle of the line.
+	# And the strong D keeps his own side of the line: F3 covers the weak point,
+	# and a strong D sliding to the middle for it leaves his wall to their
+	# breaker (test_counter_layer.gd).
 	ctx.self_pos = Vector3(6.0, 0.0, -9.5)
 	ctx.self_is_defense = true
 	ctx.peer_id = 2
 	var s: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.POINT_STRONG)
-	assert_lt(absf(s.target_position.x), 2.0,
-			"the strong D holds the middle of the line; got %s" % s.target_position)
+	assert_gt(s.target_position.x * ctx.strong_x, 2.0,
+			"the strong D stays on his side of the line; got %s" % s.target_position)
 	assert_gt(-s.target_position.z, GameRules.BLUE_LINE_Z + 1.0,
 			"...on the line, never sinking with his partner down; got %s" % s.target_position)
 

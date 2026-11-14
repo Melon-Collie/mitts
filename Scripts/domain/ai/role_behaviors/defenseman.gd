@@ -17,10 +17,11 @@ class_name AIRoleDefenseman
 # (AILastManDiscipline.offensive_station_target / neutral_station_target).
 #
 # THE ROTATION. While either D is deeper than any stand his slot takes (a pinch,
-# a battle, the weak D down his flank), his partner slides to the middle of the
-# line and a forward takes the vacated point: HIGH_SLOT in the O-zone, F3_WALL
-# on the forecheck (the strong point only), via rotate_up_to_point from his own
-# role. Only one D is ever off the line: each leaves it only with his partner on
+# a battle, the weak D down his flank), a forward takes the vacated point:
+# HIGH_SLOT in the O-zone, F3_WALL on the forecheck (the strong point only), via
+# rotate_up_to_point from his own role. The strong D gone, the weak D also
+# slides to the middle of the line; the weak D gone, the strong D keeps his
+# wall. Only one D is ever off the line: each leaves it only with his partner on
 # it and a forward able to take his point.
 
 # How far inside the offensive zone the points stand: past the reception
@@ -124,10 +125,13 @@ static func _decide_point(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 	if ctx.snapshot != null and ctx.snapshot.puck_state != null:
 		puck_depth = AIZoneCoverage.depth_of(
 				opp_net.z, ctx.snapshot.puck_state.position)
-	# The rotation's partner half: my partner off the line → I hold its middle,
-	# on the line.
-	var partner_off: bool = _partner_vacated(ctx, AIRoleSlots.Slot.POINT_WEAK \
-			if is_strong else AIRoleSlots.Slot.POINT_STRONG)
+	# The rotation's partner half: the strong D off the line (his pinch down his
+	# wall) → the weak D holds its middle, on the line. Never the other way: the
+	# weak D leaves only with HIGH_SLOT taking his point (_flank_activation), and
+	# a strong D sliding to the middle for him leaves his own wall to their
+	# breaker.
+	var partner_off: bool = not is_strong \
+			and _partner_vacated(ctx, AIRoleSlots.Slot.POINT_STRONG)
 	var allow_sink: bool = is_strong and not partner_off \
 			and puck_depth < POINT_SINK_PUCK_DEPTH_M
 	if is_strong:
@@ -185,8 +189,10 @@ static func _decide_point(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 # whichever he holds), or
 # Vector3.INF to stay on the line. He leaves it as the pinch does: the numbers
 # read lets him, nobody of theirs is behind his stand, his partner is on the
-# line, and HIGH_SLOT can take his point in time. Once down, he stays while his
-# partner holds the line.
+# line, and HIGH_SLOT on his point inside the late-man window: the cover is
+# there before he goes, not merely able to come, since his going takes his
+# partner's pinch away and leaves the strong D the middle. Once down, he stays
+# while that still holds; a cover that leaves sends him back.
 static func _flank_activation(ctx: RoleContext, line_spot: Vector3,
 		opp_positions: Array[Vector3], teammates: Array[Vector3]) -> Vector3:
 	var carrier_pos: Vector3 = AIRoleReads.resolve_teammate_carrier_pos(ctx)
@@ -218,14 +224,16 @@ static func _flank_activation(ctx: RoleContext, line_spot: Vector3,
 			and _depth_inside_attacked_zone(ctx, ctx.prev_role_target) \
 					> POINT_INSET_M + POINT_VACATED_SLACK_M
 	if down:
-		return Vector3.INF if point_vacated(ctx, AIRoleSlots.Slot.POINT_STRONG, false) \
-				else best
+		if point_vacated(ctx, AIRoleSlots.Slot.POINT_STRONG, false):
+			return Vector3.INF
+		return best if _pinch_is_covered(ctx, weak_point_stand(ctx), 0.0,
+				AIRoleSlots.Slot.POINT_STRONG,
+				_stand_depth_m(ctx, AIRoleSlots.Slot.POINT_STRONG), AIRoleSlots.Slot.HIGH_SLOT) \
+				else Vector3.INF
 	if not AILastManDiscipline.may_hold_forward_stand(
 			ctx, ctx.prev_held_forward_stand, line_spot):
 		return Vector3.INF
-	var t_me: float = AIArrival.time_to_arrive(ctx.self_pos, best, ctx.self_velocity,
-			ctx.self_max_speed, ctx.self_max_accel, ctx.self_lateral_grip)
-	if not _pinch_is_covered(ctx, weak_point_stand(ctx), t_me,
+	if not _pinch_is_covered(ctx, weak_point_stand(ctx), 0.0,
 			AIRoleSlots.Slot.POINT_STRONG,
 			_stand_depth_m(ctx, AIRoleSlots.Slot.POINT_STRONG), AIRoleSlots.Slot.HIGH_SLOT):
 		return Vector3.INF
