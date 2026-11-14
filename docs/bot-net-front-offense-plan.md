@@ -1,6 +1,6 @@
 # Bot net-front offence — spacing, rebounds, screens, tips
 
-Status: **plan, nothing built.** The CLAUDE.md workflow applies: this doc is
+Status: **steps 1–4 built and measured; 3c, 3d and 5 open.** The CLAUDE.md workflow applies: this doc is
 the plan, and deviations get discussed first. It is the decision-layer half of
 #785 (price net presence, crash the net) and the rebound half of #924, and it
 waits on #736 (tips) for its last step. The mechanics it leans on are already
@@ -32,7 +32,7 @@ bot to go and use them.
 - **The rebound field has its own generator,** sharing `shot_odds_stager.gd`
   with the shot field but never regenerated with it.
 - **The screen's model is chosen by 2b's measurement** (§2b: a separate table
-  or a shot-field cell kind).
+  or a shot-field cell kind). It came out a separate table (§2b's status).
 - **A second man on an O-zone loose puck is in scope** (§3d), together with
   #604's attacking-zone chase decline.
 - **The shape the bots play is a cycle-and-retrieve,** not the NHL's 2-3 as
@@ -628,6 +628,34 @@ rebound off a point shot, counting our share of first touches on the squirt.
   scenario counting net-front contact ticks in a 5v5 cycle, which is the
   aggregate the user asked for.
 
+**Status: built (`4d93203`). The battle works but seldom starts.**
+
+- **Built.** `AIScreenField` reads 2b. FINISHER / NET_FRONT gain a SCREEN
+  station on the carrier's line at the field's best distance out, valued at
+  the share of the carrier's misses a body there turns into goals, and they
+  publish it as `RoleDecision.screen_spot` when it wins. The press pass wins
+  that spot (`_win_the_screen`): Ctrl into a man of theirs nearer it, when the
+  press moves him off it. The carrier's shot and feed values credit the screen
+  standing in front of him (`AICarrierField.screen_at`).
+- **Rebound sweep, J=11, 576 possessions:**
+
+  | | shots | slot shots | first touch ours | 2nd shots / shot | xG / possession |
+  |---|---|---|---|---|---|
+  | crash, flat credit | 0.295 | 0.083 | 28% ± 4% | 0.088 | 0.030 ± 0.005 |
+  | + screen | 0.297 | 0.080 | 30% ± 4% | 0.105 | 0.031 ± 0.005 |
+
+  Within noise everywhere. Of the shots, 6% were screened (mean uplift
+  0.007). Ours pressed for a screen spot in 12% of possessions, for 0.03 s
+  each on average.
+- **Where the chain stops** (J=2, 144 possessions). The spot is published in
+  30% of possessions, for about 0.9 s in each of those. Our man is 2.2 m from
+  it on average while it is up, and a man of theirs is nearer it, in reach,
+  for 0.01 s per possession. So the battle almost never has anything to fight
+  for. The station is priced on where the carrier stands now, and the field
+  pays a screen only on central releases from 9.5–15 m, where the bot carrier
+  seldom is (8% of possessions end in a slot shot). It flickers on and off as
+  he moves, and the net front is not held between his shots.
+
 ---
 
 ## Step 5 — Tips
@@ -658,7 +686,8 @@ After each 5v5 step, re-measure 3v3 (`test_ozone_possession.gd`).
 
 ## Open questions
 
-1. **The screen's model** is decided on 2b's numbers (§2b).
+1. **The screen's model** was decided on 2b's numbers: a share of the SET
+   keeper's saves (§2b). A beaten keeper's screen is unmeasured.
 2. **Per-tier goalie fields (#786)** are out of scope. Every table here is
    measured against the Hard keeper, as the shot field is.
 
@@ -669,7 +698,9 @@ After each 5v5 step, re-measure 3v3 (`test_ozone_possession.gd`).
 | HIGH_SLOT station | `Scripts/domain/ai/role_behaviors/high_slot.gd` |
 | 3v3 SUPPORT station | `Scripts/domain/ai/role_behaviors/support.gd` |
 | FINISHER / NET_FRONT stations, tip read | `Scripts/domain/ai/role_behaviors/finisher.gd` |
-| rebound credit, `tip_ev` | `Scripts/domain/ai/action_scoring.gd` |
+| rebound credit, `tip_ev`, the screen in a shot | `Scripts/domain/ai/action_scoring.gd` |
+| rebound and screen fields | `Scripts/domain/ai/rebound_field.gd`, `rebound_value.gd`, `screen_field.gd` |
+| the screen battle | `Scripts/ai/skater_agent_press.gd:_win_the_screen` |
 | shot value seam | `Scripts/domain/ai/shot_value.gd`, `shot_odds.gd` |
 | chase election | `Scripts/domain/ai/loose_puck_chase.gd` |
 | carrier shot pick | `Scripts/domain/ai/role_behaviors/carrier.gd:_pick_fire_phase` |
