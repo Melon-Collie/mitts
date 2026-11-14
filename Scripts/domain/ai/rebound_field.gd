@@ -32,7 +32,6 @@ static var _x := PackedFloat32Array()
 static var _out := PackedFloat32Array()
 static var _vx := PackedFloat32Array()
 static var _vout := PackedFloat32Array()
-static var _y := PackedFloat32Array()
 static var _kx := PackedFloat32Array()
 static var _kout := PackedFloat32Array()
 static var _keeper_down := PackedByteArray()
@@ -113,11 +112,6 @@ static func keeper_pos(row: int, k: int, attacking_goal: Vector3) -> Vector3:
 	return Vector3(_kx[i], 0.0, attacking_goal.z - signf(attacking_goal.z) * _kout[i])
 
 
-# Metres off the ice.
-static func sample_height(row: int, k: int) -> float:
-	return _y[_sample_first[row] + k]
-
-
 static func keeper_down(row: int, k: int) -> bool:
 	return _keeper_down[_sample_first[row] + k] == 1
 
@@ -168,7 +162,6 @@ static func _build() -> void:
 				_out.append(float(v[1]))
 				_vx.append(float(v[3]))
 				_vout.append(float(v[4]))
-				_y.append(float(v[2]))
 				_kx.append(float(v[5]))
 				_kout.append(float(v[6]))
 				probe.state_enum = int(v[7])
