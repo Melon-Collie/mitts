@@ -382,6 +382,20 @@ Not measured: a keeper caught off the shot (the field's DECOY and FEED
 keepers), tips and screens (2b, 2c), and a missed shot's path round the
 boards (a "W" row stops at the goal line).
 
+**Who wins the rebound today (2d).** `test_ozone_possession_5v5.gd` with
+`MITTS_OZ_REBOUND=1` plays on past the first shot, drawing the save from the
+field (`AIReboundField`, the nearest spot's shots by a seed per run). On a J=11
+sweep (576 possessions, 169 shots, step-1 code):
+
+- **They touch a live rebound first 74% ± 4% of the time, and we touch it
+  first 26% ± 4%.** Their median first touch is 0.36 s after the save, ours
+  0.83 s.
+- **We get a second shot within 3 s on 11% ± 3% of live rebounds** (0.09 a
+  shot), a median 1.1 s after the save, when the keeper is still down 20% of
+  the time. We arrive after the half-second he is on his knees.
+
+28 of the shots were touched in flight (a block or a tip) and draw no save.
+
 ### 2b. Screen uplift
 
 The shot field's SET cells, repeated with a screener body on the sightline at

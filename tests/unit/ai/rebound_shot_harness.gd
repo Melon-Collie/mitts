@@ -36,6 +36,14 @@ func fire_release_tracking_rebound(shooter: Vector3, aim: Vector3, loft_level: i
 	_sampling = true
 	var outcome: int = fire_tracking_rebound(shooter, aim, loft_level, speed_m_s, 0.0)
 	_sampling = false
+	# Dead on the contact tick (at rest at his feet): the base loop returned
+	# before another goalie tick sampled it, so the rest spot is its one sample.
+	if last_part != -1 and sample_pos.is_empty() and rebound_pos.is_finite():
+		var gs := GoalieNetworkState.new()
+		_ctrl.fill_state(gs)
+		sample_pos.append(rebound_pos)
+		sample_vel.append(Vector3.ZERO)
+		sample_keeper.append(gs)
 	return outcome
 
 

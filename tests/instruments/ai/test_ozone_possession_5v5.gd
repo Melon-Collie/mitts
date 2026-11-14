@@ -21,6 +21,15 @@ extends GutTest
 # intent, shot, best pass and its receiver's slot, carry) and every receiver's
 # feed as the pass search priced it (slot:EV:lane:worth:gate, the pass
 # search's trace).
+#
+# MITTS_OZ_REBOUND=1 plays on past the first shot (docs/bot-net-front-offense-
+# plan.md, step 2d). The duel has no keeper to save it, so the save is drawn
+# from the measured rebound field (AIReboundField): one of the nearest spot's
+# shots, by a seed per run. A covered shot or a goal ends the run; a missed one
+# plays on; a live rebound flies the shot to the save point and leaves it as
+# the save did, and REBOUND_WINDOW_S is watched: who touches it first, and
+# whether we get a second shot (with whether the measured keeper was still down
+# then). Its OZRUN line gains those fields.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const SECS: float = 12.0
@@ -33,6 +42,7 @@ const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const KEEPER_SETTLE_S: float = 1.5
 const JITTER_M: float = 1.0
 const TRACE_EVERY_TICKS: int = 9
+const REBOUND_WINDOW_S: float = 3.0
 # A jittered spawn behind the goal line keeps this far outside the post.
 const JITTER_NET_CLEAR_M: float = GameRules.NET_HALF_WIDTH + 0.6
 const OURS: Array[int] = [101, 102, 103, 104, 105]
@@ -49,6 +59,7 @@ var _full_keeper: bool = true
 # The run being swept (its OZRUN index), and whether it is traced.
 var _run_index: int = 0
 var _trace: bool = false
+var _rebounds: bool = false
 
 
 func before_all() -> void:
@@ -159,6 +170,8 @@ func _run(duel: Object) -> Dictionary:
 				r["end"] = "shot"
 				r["t"] = t
 				r["shot"] = s
+				if _rebounds:
+					r["rebound"] = _play_rebound(duel, released)
 				return r
 			r["passes"] += 1
 			passing = true
@@ -199,6 +212,63 @@ func _run(duel: Object) -> Dictionary:
 			r["t"] = t
 			return r
 	return r
+
+
+# The save and what follows it (MITTS_OZ_REBOUND). `released` is our shot,
+# launched this tick.
+func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
+	var res: Dictionary = {"outcome": "-", "first": "none", "t_first": -1.0, "second": false,
+			"t_second": -1.0, "second_kind": "-", "down": false, "tipped": false}
+	var goal := Vector3(0.0, 0.0, GOAL_Z)
+	var spot: int = AIReboundField.spot_of(released["pos"], goal)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 104729 * _run_index + 7
+	var row: int = AIReboundField.shot(spot,
+			rng.randi_range(0, AIReboundField.shot_count(spot) - 1))
+	var o: int = AIReboundField.outcome(row)
+	res["outcome"] = "GWCSR"[o]
+	if o == AIReboundField.Outcome.GOAL or o == AIReboundField.Outcome.COVERED \
+			or o == AIReboundField.Outcome.REBOUND_GOAL:
+		return res
+	var shooter: int = int(released["peer"])
+	if o == AIReboundField.Outcome.LIVE:
+		var hit: Vector3 = AIReboundField.sample_pos(row, 0, goal)
+		var from := Vector3(duel.puck_pos.x, 0.0, duel.puck_pos.z)
+		var speed: float = maxf(Vector2(duel.puck_vel.x, duel.puck_vel.z).length(), 1.0)
+		var dir: Vector3 = (hit - from).normalized()
+		for k: int in ceili(from.distance_to(hit) / speed / Duel.DT):
+			duel.step()
+			if duel.carrier() != -1 or duel.loose_released_by != shooter:
+				res["tipped"] = true
+				break
+			duel.puck_pos = from + dir * speed * (k + 1) * Duel.DT
+			duel.puck_vel = dir * speed
+		if not res["tipped"]:
+			duel.puck_pos = hit
+			duel.puck_vel = AIReboundField.sample_vel(row, 0, goal)
+			duel.loose_released_by = -1
+			duel.airborne_ticks = 0
+	for k: int in int(REBOUND_WINDOW_S / Duel.DT):
+		var before: int = duel.releases.size()
+		duel.step()
+		var tt: float = (k + 1) * Duel.DT
+		var c: int = duel.carrier()
+		if res["first"] == "none" and c != -1:
+			res["first"] = "ours" if duel.team_map[c] == 0 else "theirs"
+			res["t_first"] = tt
+		if duel.releases.size() > before and int(duel.releases[-1]["team"]) == 0 \
+				and _is_shot(duel.releases[-1]):
+			res["second"] = true
+			res["t_second"] = tt
+			res["second_kind"] = _shot_kind(duel.releases[-1]["pos"])
+			var ks: int = roundi(tt / AIReboundField.SAMPLE_S)
+			res["down"] = o == AIReboundField.Outcome.LIVE and not res["tipped"] \
+					and ks < AIReboundField.sample_count(row) \
+					and AIReboundField.keeper_down(row, ks)
+			break
+		if res["first"] == "theirs" or duel.puck_pos.z > -GameRules.BLUE_LINE_Z:
+			break
+	return res
 
 
 func _print_trace(duel: Object, c: int, t: float) -> void:
@@ -325,6 +395,7 @@ func _sweep(label: String) -> void:
 	var shards: int = maxi(_env_int("MITTS_OZ_SHARDS", 1), 1)
 	var shard: int = _env_int("MITTS_OZ_SHARD", 0)
 	_trace = _env_int("MITTS_OZ_TRACE", 0) == 1
+	_rebounds = _env_int("MITTS_OZ_REBOUND", 0) == 1
 	var set_sum: float = 0.0
 	var set_sq: float = 0.0
 	var g: int = -1
@@ -350,9 +421,15 @@ func _sweep(label: String) -> void:
 			var shot_set: float = float(r["shot"]["set"]) if r["end"] == "shot" else 0.0
 			set_sum += shot_set
 			set_sq += shot_set * shot_set
-			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f" % [g, r["end"],
+			var reb: String = ""
+			if r.has("rebound"):
+				var rb: Dictionary = r["rebound"]
+				reb = "|%s|%s|%.2f|%d|%.2f|%s|%d|%d" % [rb["outcome"], rb["first"],
+						rb["t_first"], int(rb["second"]), rb["t_second"], rb["second_kind"],
+						int(rb["down"]), int(rb["tipped"])]
+			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f%s" % [g, r["end"],
 					r["shot"]["kind"] if r["end"] == "shot" else "-", shot_set,
-					r["passes"], r["t"]])
+					r["passes"], r["t"], reb])
 			row += " %s@%.1f/p%d" % [str(r["end"]).left(4), r["t"], r["passes"]]
 			ends[r["end"]] = int(ends.get(r["end"], 0)) + 1
 			passes += r["passes"]
