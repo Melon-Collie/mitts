@@ -59,6 +59,10 @@ var _full_keeper: bool = true
 # The run being swept (its OZRUN index), and whether it is traced.
 var _run_index: int = 0
 var _trace: bool = false
+# MITTS_OZ_TRACE_FRONT=1: the net-front man's positioning reads, and each
+# re-pick of his battle spot printed as OZFLIP|kind left|kind chosen|...
+var _front_trace: AIFinisherTrace = null
+var _front_kind: Dictionary = {}
 var _rebounds: bool = false
 
 
@@ -115,6 +119,12 @@ func _run(duel: Object) -> Dictionary:
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	for i: int in int(SECS / Duel.DT):
 		var before: int = duel.releases.size()
+		if _front_trace != null:
+			_front_trace.peer = -1
+			for sk: Object in duel.skaters:
+				if sk.team_id == 0 and duel.brains[0].get_slot(sk.peer_id) \
+						== AIRoleSlots.Slot.NET_FRONT:
+					_front_trace.peer = sk.peer_id
 		duel.step()
 		var t: float = (i + 1) * Duel.DT
 		var released: Dictionary = {}
@@ -334,7 +344,12 @@ func _count_screen(duel: Object, r: Dictionary) -> void:
 				r["flip_m"] = r.get("flip_m", 0.0) + jump
 				r["flip_n"] = r.get("flip_n", 0.0) + 1.0
 				r[who + "flip_n"] = r.get(who + "flip_n", 0.0) + 1.0
+				if who == "nf_" and _front_trace != null and _front_trace.chosen >= 0:
+					_print_flip(r, sk.peer_id)
 		_last_spot[sk.peer_id] = spot
+		if who == "nf_" and _front_trace != null and _front_trace.chosen >= 0 \
+				and _front_trace.peer == sk.peer_id:
+			_front_kind[sk.peer_id] = _front_trace.kind[_front_trace.chosen]
 		r["pub_s"] = r.get("pub_s", 0.0) + Duel.DT
 		r[who + "pub_s"] = r.get(who + "pub_s", 0.0) + Duel.DT
 		var to := Vector2(spot.x - sk.pos.x, spot.z - sk.pos.z)
@@ -370,6 +385,24 @@ func _count_screen(duel: Object, r: Dictionary) -> void:
 						.dot(to / maxf(mine, 0.001))
 		r["cat_" + cat] = r.get("cat_" + cat, 0.0) + Duel.DT
 		r[who + "cat_" + cat] = r.get(who + "cat_" + cat, 0.0) + Duel.DT
+
+
+# One re-pick of the net-front man's battle spot: the kind of station he held
+# and the kind chosen, the chosen one's score and terms, and the incumbent's
+# (score -INF: filtered out, so the re-pick was forced).
+func _print_flip(r: Dictionary, peer: int) -> void:
+	var ft: AIFinisherTrace = _front_trace
+	var c: int = ft.chosen
+	var inc: int = ft.kind.find(AIFinisherTrace.Kind.INCUMBENT)
+	var keys: Array = AIFinisherTrace.Kind.keys()
+	gut.p("OZFLIP|%s|%s|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f" % [
+			keys[_front_kind.get(peer, c)] if _front_kind.get(peer, -1) >= 0 else "?",
+			keys[ft.kind[c]], ft.score[c],
+			ft.score[inc] if inc >= 0 else -INF,
+			ft.front[c], ft.front[inc] if inc >= 0 else 0.0,
+			ft.reach[c], ft.reach[inc] if inc >= 0 else 0.0,
+			ft.tip[c], ft.tip[inc] if inc >= 0 else 0.0])
+	r["flips_logged"] = r.get("flips_logged", 0) + 1
 
 
 # The screen every other body gives a release at `at` (AIScreenField.best_uplift,
@@ -506,6 +539,9 @@ func _sweep(label: String) -> void:
 	var shards: int = maxi(_env_int("MITTS_OZ_SHARDS", 1), 1)
 	var shard: int = _env_int("MITTS_OZ_SHARD", 0)
 	_trace = _env_int("MITTS_OZ_TRACE", 0) == 1
+	if _env_int("MITTS_OZ_TRACE_FRONT", 0) == 1:
+		_front_trace = AIFinisherTrace.new()
+		AIRoleFinisher.trace = _front_trace
 	_rebounds = _env_int("MITTS_OZ_REBOUND", 0) == 1
 	var set_sum: float = 0.0
 	var set_sq: float = 0.0

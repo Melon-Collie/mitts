@@ -808,7 +808,16 @@ possessions for 0.15 s each (was 32%, 0.09 s), the net-front man first on 19
 rebounds (was 15), xG 0.040 ± 0.006 (unchanged). Split by slot (J=2), the
 chain is the net-front man's: he holds a spot 1.71 s a possession, their man
 nearer it out of reach 53%, re-picking 0.81 a second, 2.3 m each. The grid
-snaps were not the re-picks' driver; what is, is not yet known.
+snaps were not the re-picks' driver.
+
+**What the re-picks are** (`AIFinisherTrace`, `MITTS_OZ_TRACE_FRONT=1`, J=2,
+198 re-picks): 112 from the spot he held to another net-front station, 25 to
+the tip station, 19 to where he stands. Only 13 were forced (the held spot
+filtered out). In the rest, the station he went to was worth 0.121 in front
+against 0.061 for the one he left, with the trip and the switch margin alike
+for both: the ice worth holding moves with the carrier and his teammates (a
+crash point, a screen line, each follows its shot), and the spot he holds is a
+fixed point that goes stale. The incumbent is held by place, not by what it is.
 
 ---
 

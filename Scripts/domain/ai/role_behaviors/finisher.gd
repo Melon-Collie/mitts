@@ -47,6 +47,10 @@ const FEED_FLIGHT_MAX_S: float = 1.0
 # body screens and the blade reaches the point blast.
 const TIP_STATION_DIST_M: float = 2.5
 
+# An instrument's record of one positioning read (AIFinisherTrace), filled for
+# its peer only while one is held; null in play.
+static var trace: AIFinisherTrace = null
+
 
 
 static func decide(ctx: RoleContext) -> RoleDecision:
@@ -100,6 +104,20 @@ static func _try_crash(ctx: RoleContext) -> RoleDecision:
 	d.target_position = at
 	d.arrive_at_speed = true
 	return d
+
+
+# The kind of the `i`-th candidate positioning read in, by where it was added:
+# the named stations, the tip station, the net-front ones from `front_from` to
+# `front_to`, and the incumbent last of `count` when there is one.
+static func _trace_kind(i: int, front_from: int, front_to: int, count: int) -> int:
+	if i < AIFinisherTrace.Kind.TIP:
+		return i
+	if i < front_from:
+		return AIFinisherTrace.Kind.TIP
+	if i < front_to:
+		return AIFinisherTrace.Kind.NET_FRONT
+	return AIFinisherTrace.Kind.INCUMBENT if i == count - 1 and count > front_to \
+			else AIFinisherTrace.Kind.NET_FRONT
 
 
 # ── Reactive (incoming shot) ─────────────────────────────────────────────────
@@ -269,11 +287,13 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	if to_carrier_len > TIP_STATION_DIST_M + 0.5:
 		candidates.append(ctx.attacking_goal_pos
 				+ to_carrier * (TIP_STATION_DIST_M / to_carrier_len))
+	var front_from: int = candidates.size()
 	# NET-FRONT STATIONS — in front of each shot of ours, screening it or on
 	# its rebound.
 	AIStationSearch.fill_shot_plays(ctx, carrier_pos, goalie_pos, opp_positions,
 			teammate_positions)
 	AIStationSearch.append_net_front_stations(ctx, candidates)
+	var front_to: int = candidates.size()
 	# Switch-hysteresis (the pre-aim cursor snaps to this target).
 	AIStationSearch.append_incumbent(ctx, candidates)
 
@@ -308,12 +328,18 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	# one; getting open for the feed is the FINISHER's.
 	var holds_front: bool = ctx.team_brain != null \
 			and ctx.team_brain.get_slot(ctx.peer_id) == AIRoleSlots.Slot.NET_FRONT
+	var tracing: bool = trace != null and trace.peer == ctx.peer_id
+	if tracing:
+		trace.clear()
+	var i: int = -1
 	for c: Vector3 in candidates:
-		if not AIStationSearch.is_legal_position(c):
-			continue
-		if AIStationSearch.too_close_to_teammate(c, teammate_positions):
-			continue
-		if absf(c.z - goal_z) > depth_cap:
+		i += 1
+		if not AIStationSearch.is_legal_position(c) \
+				or AIStationSearch.too_close_to_teammate(c, teammate_positions) \
+				or absf(c.z - goal_z) > depth_cap:
+			if tracing:
+				trace.record(_trace_kind(i, front_from, front_to, candidates.size()), c,
+						0.0, 0.0, 0.0, 0.0, -INF)
 			continue
 		# The speed our carrier would actually fire at, not a flat constant —
 		# the defenders' reaction time scales with it.
@@ -340,9 +366,14 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		var score: float = maxf(maxf(feed, tip), front) * reach \
 				- AIStationSearch.shared_cover(c, teammate_positions) \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
+		if tracing:
+			trace.record(_trace_kind(i, front_from, front_to, candidates.size()), c,
+					feed, tip, front, reach, score)
 		if score > best_score:
 			best_score = score
 			best_pos = c
+			if tracing:
+				trace.chosen = i
 
 	d.target_position = best_pos
 	# A station worth something in front of one of our shots is ice worth
