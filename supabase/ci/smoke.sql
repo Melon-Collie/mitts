@@ -18,14 +18,14 @@ insert into public.career_stats
      team_sog_for, team_sog_against, xg_for, team_xg_for, team_xg_against,
      period_scores, num_periods, interceptions,
      pim, pp_goals, pp_assists, sh_goals, pp_opportunities, pp_on_ice_goals,
-     pk_opportunities, pk_on_ice_goals_against)
+     pk_opportunities, pk_on_ice_goals_against, period_seconds, pim_seconds)
 values
     (1001, 'Smoke Home', '11111111-1111-1111-1111-111111111111', 0,
      2, 1, 5, 900, 4, 2, 'win', 3, 6, 4, 11, 2, 20, 14, 1.5, 3.2, 2.1,
-     '[[1,2,1],[1,0,1]]'::jsonb, 3, 4, 4, 1, 1, 0, 4, 1, 2, 1),
+     '[[1,2,1],[1,0,1]]'::jsonb, 3, 4, 4, 1, 1, 0, 4, 1, 2, 1, 600, null),
     (1002, 'Smoke Away', '11111111-1111-1111-1111-111111111111', 1,
      1, 0, 3, 900, 2, 4, 'loss', 3, 4, 6, 7, 1, 14, 20, 0.8, 2.1, 3.2,
-     '[[1,2,1],[1,0,1]]'::jsonb, 3, 0, 2, 0, 0, 1, 2, 1, 4, 1);
+     '[[1,2,1],[1,0,1]]'::jsonb, 3, 0, 0, 0, 0, 1, 2, 1, 4, 1, 240, 30);
 
 insert into public.shot_events
     (game_id, steam_id, team_id, x, z, xg, outcome, shot_type, on_net,
@@ -50,9 +50,16 @@ begin
     if r.takeaways <> 4 then
         raise exception 'career_totals_for takeaways wrong: %', r.takeaways;
     end if;
-    if r.pim <> 4 or r.pp_points <> 2 or r.pp_pct <> 25.0 or r.pk_pct <> 50.0 then
-        raise exception 'career_totals_for special teams wrong: pim=% ppp=% pp=% pk=%',
-            r.pim, r.pp_points, r.pp_pct, r.pk_pct;
+    -- A row from before penalty seconds: two minors' minutes, each a 60 s minor
+    -- on its 600 s periods.
+    if r.pim_seconds <> 120 or r.pp_points <> 2 or r.pp_pct <> 25.0 or r.pk_pct <> 50.0 then
+        raise exception 'career_totals_for special teams wrong: pim_s=% ppp=% pp=% pk=%',
+            r.pim_seconds, r.pp_points, r.pp_pct, r.pk_pct;
+    end if;
+    select * into r from public.career_totals_for(1002, null);
+    if r.pim_seconds <> 30 then
+        raise exception 'career_totals_for pim_seconds wrong for a row that posts it: %',
+            r.pim_seconds;
     end if;
     if r.faceoff_pct is null or r.xgf_pct is null or r.pdo is null then
         raise exception 'career_totals_for derived ratios null: fo=% xgf=% pdo=%',

@@ -39,11 +39,11 @@ func test_increments_map_extended_stat_fields() -> void:
 
 func test_increments_map_the_penalty_stats() -> void:
 	var s := _stats(0, 0, 0, 0, 0)
-	s.pim = 4
+	s.pim_seconds = 48
 	s.pp_goals = 2
 	s.pp_assists = 3
 	var d := SteamStatRecorder.increments(s, "win")
-	assert_eq(d[SteamStats.PIM], 4)
+	assert_eq(d[SteamStats.PIM], 48)
 	assert_eq(d[SteamStats.PP_GOALS], 2)
 	assert_eq(d[SteamStats.PP_POINTS], 5, "his goals and his assists a man up")
 

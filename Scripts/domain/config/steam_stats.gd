@@ -40,6 +40,7 @@ const TAKEAWAYS := "STAT_TAKEAWAYS"
 const GIVEAWAYS := "STAT_GIVEAWAYS"
 const FACEOFF_WINS := "STAT_FACEOFF_WINS"
 const FIGHT_WINS := "STAT_FIGHT_WINS"
+# Penalty time in seconds; the API Name was published when it counted minutes.
 const PIM := "STAT_PIM"
 const PP_GOALS := "STAT_PP_GOALS"
 const PP_POINTS := "STAT_PP_POINTS"
@@ -64,7 +65,7 @@ const ALL: Array[Dictionary] = [
 	{"id": GIVEAWAYS, "key": "giveaways", "inc": {"kind": "stat", "field": "giveaways"}},
 	{"id": FACEOFF_WINS, "key": "faceoff_wins", "inc": {"kind": "stat", "field": "faceoff_wins"}},
 	{"id": FIGHT_WINS, "key": "fight_wins", "inc": {"kind": "stat", "field": "fight_wins"}},
-	{"id": PIM, "key": "pim", "inc": {"kind": "stat", "field": "pim"}},
+	{"id": PIM, "key": "pim_seconds", "inc": {"kind": "stat", "field": "pim_seconds"}},
 	{"id": PP_GOALS, "key": "pp_goals", "inc": {"kind": "stat", "field": "pp_goals"}},
 	{"id": PP_POINTS, "key": "pp_points", "inc": {"kind": "stat", "field": "pp_points"}},
 ]

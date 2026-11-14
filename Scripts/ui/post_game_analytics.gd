@@ -322,7 +322,7 @@ func _team_totals() -> Array[Dictionary]:
 	for t: int in 2:
 		out[t]["box"] = true
 		out[t]["icings"] = 0
-		out[t]["pim"] = 0
+		out[t]["pim_seconds"] = 0
 	var players: Dictionary[int, PlayerRecord] = GameManager.get_players()
 	for peer_id: int in players:
 		var rec: PlayerRecord = players[peer_id]
@@ -343,7 +343,7 @@ func _team_totals() -> Array[Dictionary]:
 		out[t]["takeaways"] = int(out[t]["takeaways"]) + s.takeaways
 		out[t]["giveaways"] = int(out[t]["giveaways"]) + s.giveaways
 		out[t]["icings"] = int(out[t]["icings"]) + s.icings
-		out[t]["pim"] = int(out[t]["pim"]) + s.pim
+		out[t]["pim_seconds"] = int(out[t]["pim_seconds"]) + s.pim_seconds
 	for t: int in 2:
 		out[t]["sog"] = GameManager.get_team_shots(t)
 	return out
@@ -362,7 +362,8 @@ func _build_tape_rows(totals: Array[Dictionary]) -> void:
 	var draws: int = int(home["faceoff_wins"]) + int(away["faceoff_wins"])
 	if has_box and draws > 0:
 		var home_pct: int = roundi(100.0 * float(home["faceoff_wins"]) / float(draws))
-		_add_tape_row(_tape, tr(&"TAPE_FACEOFF_PCT"), home_pct, 100 - home_pct, "%d%%")
+		_add_tape_row(_tape, tr(&"TAPE_FACEOFF_PCT"), home_pct, 100 - home_pct,
+				"%d%%" % home_pct, "%d%%" % (100 - home_pct))
 	if has_box:
 		_add_count_row(_tape, &"TAPE_HITS", home["hits"], away["hits"])
 	_add_count_row(_tape, &"TAPE_BLOCKED_SHOTS", home["blocks"], away["blocks"])
@@ -373,7 +374,10 @@ func _build_tape_rows(totals: Array[Dictionary]) -> void:
 	# where they are called.
 	if home.has("icings") and GameManager.get_rule_set() == GameRules.RuleSet.NHL:
 		_add_count_row(_tape, &"TAPE_ICINGS", home["icings"], away["icings"], false)
-		_add_count_row(_tape, &"TAPE_PIM", home["pim"], away["pim"], false)
+		var home_pim: int = home["pim_seconds"]
+		var away_pim: int = away["pim_seconds"]
+		_add_tape_row(_tape, tr(&"TAPE_PIM"), home_pim, away_pim,
+				HudChrome.format_clock(home_pim), HudChrome.format_clock(away_pim), false)
 		_add_count_row(_tape, &"TAPE_POWER_PLAYS",
 				GameManager.get_power_plays(0), GameManager.get_power_plays(1))
 		_add_count_row(_tape, &"TAPE_PP_GOALS",
@@ -381,19 +385,22 @@ func _build_tape_rows(totals: Array[Dictionary]) -> void:
 
 	_add_count_row(_advanced, &"TAPE_CORSI", home["corsi"], away["corsi"])
 	_add_count_row(_advanced, &"TAPE_FENWICK", home["fenwick"], away["fenwick"])
-	_add_tape_row(_advanced, tr(&"TAPE_XG"), float(home["xg"]), float(away["xg"]), "%.2f")
+	var home_xg: float = home["xg"]
+	var away_xg: float = away["xg"]
+	_add_tape_row(_advanced, tr(&"TAPE_XG"), home_xg, away_xg,
+			"%.2f" % home_xg, "%.2f" % away_xg)
 
 
 func _add_count_row(into: Container, key: StringName, home: int, away: int,
 		higher_is_better: bool = true) -> void:
-	_add_tape_row(into, tr(key), home, away, "%d", higher_is_better)
+	_add_tape_row(into, tr(key), home, away, str(home), str(away), higher_is_better)
 
 
 # One head-to-head row: the two values either side of a centred label, over a
 # proportional two-segment bar. The side ahead (fewer, where `higher_is_better`
 # is false) takes its team colour; the other stays neutral ink.
 func _add_tape_row(into: Container, label_text: String, home: float, away: float,
-		fmt: String, higher_is_better: bool = true) -> void:
+		home_text: String, away_text: String, higher_is_better: bool = true) -> void:
 	var row := VBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("separation", 2)
@@ -401,7 +408,7 @@ func _add_tape_row(into: Container, label_text: String, home: float, away: float
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 10)
 	var home_leads: bool = home >= away if higher_is_better else home <= away
-	var home_lbl := _lbl(fmt % home, 16, _team_colors[0] if home_leads else _DIM)
+	var home_lbl := _lbl(home_text, 16, _team_colors[0] if home_leads else _DIM)
 	home_lbl.custom_minimum_size = Vector2(56, 0)
 	head.add_child(home_lbl)
 	var lbl := _lbl(label_text.to_upper(), 11, _LABEL)
@@ -410,7 +417,7 @@ func _add_tape_row(into: Container, label_text: String, home: float, away: float
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	head.add_child(lbl)
-	var away_lbl := _lbl(fmt % away, 16, _team_colors[1] if not home_leads else _DIM)
+	var away_lbl := _lbl(away_text, 16, _team_colors[1] if not home_leads else _DIM)
 	away_lbl.custom_minimum_size = Vector2(56, 0)
 	away_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	head.add_child(away_lbl)

@@ -578,3 +578,9 @@ here whenever you bump, in the same format.
 #      must be refused. Replay FORMAT_VERSION unchanged: a replay's box score
 #      is a dictionary in its footer, and an older file's `interceptions`
 #      reads as takeaways.
+# v108: penalty time is seconds. PlayerStats.to_array's index 20 (`pim`,
+#      two a minor) becomes `pim_seconds`, a minor's length on the match's
+#      clock for each penalty assessed. Same size, new unit: a client uploads
+#      its career row from the stats the host sends, so a v107 host would put
+#      two a minor into a v108 client's seconds, and mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged: no replay reader reads it.
