@@ -178,16 +178,21 @@ static func tip_ev(
 
 
 # ── The rebound ──────────────────────────────────────────────────────────────
-# A shot that reaches the net and is saved or missed still leaves a puck in their
-# zone, and our side gets this share of those back, credited at the zone's floor
-# rather than as a second shot (docs/possession-floor-plan.md §2.3). A feel
-# tunable until it is measured.
-const REBOUND_RECOVER_SHARE: float = 0.3
+# The rebound credit the carrier prices a shot with until the bots play the
+# rebound the way the measured one is won: a share of the puck back, at the
+# zone's floor. AIReboundValue measures the real second chance (the rebound
+# field), and the follow-up that collects it is
+# docs/bot-net-front-offense-plan.md step 3b/3c: priced before it is played, it
+# had the carrier shoot for rebounds nobody collected.
+const FLAT_REBOUND_CREDIT: float = 0.3 * AIPossessionFloor.FLOOR_THEIR_GOAL_LINE
 
 
-# A shot reaching the net with first-contact odds `p`, worth its rebound too.
-static func with_rebound(p: float) -> float:
-	return p + (1.0 - p) * REBOUND_RECOVER_SHARE * AIPossessionFloor.FLOOR_THEIR_GOAL_LINE
+# A shot reaching the net with first-contact odds `p`, worth too the second
+# chance its save leaves: `credit`, the odds of scoring off the rebound once it
+# is saved (AIReboundValue.credit, which races it), read by the caller, which
+# knows who is there.
+static func with_rebound(p: float, credit: float) -> float:
+	return p + (1.0 - p) * credit
 
 
 # ── The shot, priced on the field ────────────────────────────────────────────
@@ -199,10 +204,11 @@ static func with_rebound(p: float) -> float:
 # AIShotOdds.Stance, facing `keeper_yaw` (AIShotValue.now); `keeper_pos` INF
 # means square and set on the release (AIShotValue.set_keeper).
 # `precomputed_quality` (>= 0) hands in the shot_quality a caller already has
-# for these arguments. `rebound`: the odds of reaching the net carry their
-# rebound (with_rebound) — the carrier's compete, weighing the shot against
-# keeping the puck. `history`: the play the shooter saw (AIShotOdds.History),
-# for a keeper read where he stands.
+# for these arguments. `rebound_credit` (>= 0): the odds of reaching the net
+# carry the rebound's second chance (with_rebound) — the carrier's compete,
+# weighing the shot against keeping the puck; negative, first contact only.
+# `history`: the play the shooter saw (AIShotOdds.History), for a keeper read
+# where he stands.
 static func score_shoot_value(
 		shooter: Vector3,
 		attacking_goal: Vector3,
@@ -214,7 +220,7 @@ static func score_shoot_value(
 		opponent_caps: Array = [],
 		precomputed_quality: float = -1.0,
 		keeper_yaw: float = NAN,
-		rebound: bool = false,
+		rebound_credit: float = -1.0,
 		history: int = AIShotOdds.History.ANY) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
@@ -231,8 +237,8 @@ static func score_shoot_value(
 		keeper = AIGoalieModel.goalie_squared_pos(
 				attacking_goal - Vector3(0.0, 0.0, signf(attacking_goal.z)
 						* AIGoalieModel.GOALIE_RESTING_DEPTH_M), attacking_goal, shooter)
-	if rebound:
-		quality = with_rebound(maxf(quality, 0.0))
+	if rebound_credit >= 0.0:
+		quality = with_rebound(maxf(quality, 0.0), rebound_credit)
 	if quality <= 0.0:
 		return 0.0
 	return quality * _shot_defender_terms(shooter, attacking_goal, keeper, opponents,
@@ -592,7 +598,7 @@ static func counter_rush_cost_at(
 			threat = score_shoot_value(
 					counter_point, our_net, our_goalie_pos, _scratch_counter_cover, 0.0,
 					AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [],
-					-1.0, NAN, false, AIShotOdds.History.CARRIED)
+					-1.0, NAN, -1.0, AIShotOdds.History.CARRIED)
 		if cover_count < threat_by_cover.size():
 			threat_by_cover[cover_count] = threat
 	return loss_prob * threat * delay_discount(t_counter)

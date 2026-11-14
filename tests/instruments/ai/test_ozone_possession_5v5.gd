@@ -218,7 +218,8 @@ func _run(duel: Object) -> Dictionary:
 # launched this tick.
 func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 	var res: Dictionary = {"outcome": "-", "first": "none", "t_first": -1.0, "second": false,
-			"t_second": -1.0, "second_kind": "-", "down": false, "tipped": false}
+			"t_second": -1.0, "second_kind": "-", "down": false, "tipped": false,
+			"second_xg": 0.0}
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	var spot: int = AIReboundField.spot_of(released["pos"], goal)
 	var rng := RandomNumberGenerator.new()
@@ -265,6 +266,14 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 			res["down"] = o == AIReboundField.Outcome.LIVE and not res["tipped"] \
 					and ks < AIReboundField.sample_count(row) \
 					and AIReboundField.keeper_down(row, ks)
+			# What the field measured a second shot to score at that moment: at
+			# its contest, or once past halfway to it, its late sample (0: no
+			# measured chance, a tipped or missed shot).
+			var k0: int = AIReboundField.contest_sample(row)
+			var kl: int = AIReboundField.late_sample(row)
+			if res["down"] or (o == AIReboundField.Outcome.LIVE and not res["tipped"] and k0 >= 0):
+				res["second_xg"] = AIReboundField.late_scored(row) \
+						if kl >= 0 and 2 * ks > k0 + kl else AIReboundField.contest_scored(row)
 			break
 		if res["first"] == "theirs" or duel.puck_pos.z > -GameRules.BLUE_LINE_Z:
 			break
@@ -424,9 +433,9 @@ func _sweep(label: String) -> void:
 			var reb: String = ""
 			if r.has("rebound"):
 				var rb: Dictionary = r["rebound"]
-				reb = "|%s|%s|%.2f|%d|%.2f|%s|%d|%d" % [rb["outcome"], rb["first"],
+				reb = "|%s|%s|%.2f|%d|%.2f|%s|%d|%d|%.4f" % [rb["outcome"], rb["first"],
 						rb["t_first"], int(rb["second"]), rb["t_second"], rb["second_kind"],
-						int(rb["down"]), int(rb["tipped"])]
+						int(rb["down"]), int(rb["tipped"]), rb["second_xg"]]
 			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f%s" % [g, r["end"],
 					r["shot"]["kind"] if r["end"] == "shot" else "-", shot_set,
 					r["passes"], r["t"], reb])

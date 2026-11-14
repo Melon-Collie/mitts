@@ -467,6 +467,44 @@ dispatch, the rebound read is a lookup on the release spot plus a race per
 landing cluster against bodies whose arrival times are computed once. It is
 held to the benchmarks (per-tick p95/max before and after).
 
+**Status: built and measured, not yet switched on.**
+
+- **The field measures the second chance itself.** Each live rebound is frozen
+  at its contest sample (the first within 1.5 s where a stick can play it in
+  front of the net) and 0.5 s later, and 12 second shots are fired from the
+  puck there at the keeper as he then was, restored before each
+  (`rebound_shot_harness.gd`, main's `keeper_state_cloner.gd`). They score
+  9.6% at the contest (mostly a puck in his pads) and 29% half a second later
+  (the puck in the slot, him still getting up). The NHL's rebound shots score
+  about 23%. Extrapolating the shot field instead (`AIShotValue.now` against a
+  "down" keeper) read 0.4–0.6, and a credit built on it reached 0.37 with two
+  defenders at the net.
+- **`AIReboundValue.credit`** prices it. Each rebound is touched first by one
+  side, at its contest sample or its late one, on the momentum-honest clock
+  and never before the puck. Ours, it is worth the second shot measured where
+  we touched it, or the late one when we touched it first and nobody of
+  theirs can be on it before then. Typical values: 0.03–0.07 for a shot from
+  4 m with its shooter following it, 0.14 from 9.5 m with a man at the crease
+  and one defender, 0.03 with two, and ~0 from the point unless we win the
+  crease.
+- **Switched on alone, it made the offence worse** (576 possessions, J=11, the
+  rebound sweep):
+
+  | | shots | slot shots | first touch ours | xG / possession (first + second) |
+  |---|---|---|---|---|
+  | flat credit | 0.29 | 53 | 26% | 0.0276 + 0.0043 = 0.032 ± 0.005 |
+  | measured credit | 0.41 | 36 | 33% | 0.0223 + 0.0023 = 0.025 ± 0.004 |
+
+  The carrier shot more, from angles, for rebounds the team does not collect
+  as priced. The credit races our men from where they stand at the release,
+  but nobody moves for the rebound until the save, and the second shots come
+  early (0.83 s median), at the keeper's pads, where the measured conversion
+  is lowest.
+- **So the carrier keeps a flat credit for now** (`AIActionScoring
+  .FLAT_REBOUND_CREDIT`, the old 0.3 × the floor at their goal line), and the
+  measured one is switched on with 3b/3c, which make the follow-up it prices
+  happen. The pair is then measured together on the rebound sweep's xG.
+
 ### 3b. Off the puck: stand where the rebound goes
 
 - **With a shot in flight** (our release, puck heading at the net), FINISHER,

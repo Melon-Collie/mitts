@@ -16,8 +16,14 @@ static var _built: bool = false
 # Per spot (SPOT_FWD-major, SPOT_X-minor): its first row and row count.
 static var _spot_first := PackedInt32Array()
 static var _spot_count := PackedInt32Array()
-# Per row.
+# Per row. The second chance measured at the contest sample and the late one:
+# the sample (-1: none) and the share of second shots from the puck there that
+# scored, at the keeper as he then was.
 static var _outcome := PackedByteArray()
+static var _contest_k := PackedInt32Array()
+static var _contest_scored := PackedFloat32Array()
+static var _late_k := PackedInt32Array()
+static var _late_scored := PackedFloat32Array()
 static var _sample_first := PackedInt32Array()
 static var _sample_count := PackedInt32Array()
 # Per sample, in the data's frame: x across, metres out from the goal line, and
@@ -26,6 +32,9 @@ static var _x := PackedFloat32Array()
 static var _out := PackedFloat32Array()
 static var _vx := PackedFloat32Array()
 static var _vout := PackedFloat32Array()
+static var _y := PackedFloat32Array()
+static var _kx := PackedFloat32Array()
+static var _kout := PackedFloat32Array()
 static var _keeper_down := PackedByteArray()
 
 
@@ -54,6 +63,31 @@ static func outcome(row: int) -> int:
 	return _outcome[row]
 
 
+# The first sample a stick can play the rebound at in front of the net within
+# the measured horizon (on the ice, playable, ahead of the goal line); -1, none.
+static func contest_sample(row: int) -> int:
+	_build()
+	return _contest_k[row]
+
+
+# The share of second shots from the puck at the contest sample that scored.
+static func contest_scored(row: int) -> float:
+	_build()
+	return _contest_scored[row]
+
+
+# The sample the second chance was measured at again, later (-1: none, the
+# keeper covered it first).
+static func late_sample(row: int) -> int:
+	_build()
+	return _late_k[row]
+
+
+static func late_scored(row: int) -> float:
+	_build()
+	return _late_scored[row]
+
+
 static func sample_count(row: int) -> int:
 	_build()
 	return _sample_count[row]
@@ -62,13 +96,26 @@ static func sample_count(row: int) -> int:
 # The rebound's `k`-th sample (k × SAMPLE_S after the first contact) on the
 # ice, in world coordinates of the net at `attacking_goal`.
 static func sample_pos(row: int, k: int, attacking_goal: Vector3) -> Vector3:
+	_build()
 	var i: int = _sample_first[row] + k
 	return Vector3(_x[i], 0.0, attacking_goal.z - signf(attacking_goal.z) * _out[i])
 
 
 static func sample_vel(row: int, k: int, attacking_goal: Vector3) -> Vector3:
+	_build()
 	var i: int = _sample_first[row] + k
 	return Vector3(_vx[i], 0.0, -signf(attacking_goal.z) * _vout[i])
+
+
+# The keeper as the sample recorded him: where he stood.
+static func keeper_pos(row: int, k: int, attacking_goal: Vector3) -> Vector3:
+	var i: int = _sample_first[row] + k
+	return Vector3(_kx[i], 0.0, attacking_goal.z - signf(attacking_goal.z) * _kout[i])
+
+
+# Metres off the ice.
+static func sample_height(row: int, k: int) -> float:
+	return _y[_sample_first[row] + k]
 
 
 static func keeper_down(row: int, k: int) -> bool:
@@ -107,15 +154,23 @@ static func _build() -> void:
 			_spot_first[spot] = r
 		_spot_count[spot] += 1
 		_outcome.append(codes.find(f[5]))
+		var shots: float = maxf(float(f[11]), 1.0)
+		_contest_k.append(int(f[7]))
+		_contest_scored.append(float(f[8]) / shots)
+		_late_k.append(int(f[9]))
+		_late_scored.append(float(f[10]) / shots)
 		_sample_first.append(_x.size())
 		var n: int = 0
-		if f.size() > 7 and not f[7].is_empty():
-			for s: String in f[7].split(";"):
+		if f.size() > 12 and not f[12].is_empty():
+			for s: String in f[12].split(";"):
 				var v: PackedStringArray = s.split(",")
 				_x.append(float(v[0]))
 				_out.append(float(v[1]))
 				_vx.append(float(v[3]))
 				_vout.append(float(v[4]))
+				_y.append(float(v[2]))
+				_kx.append(float(v[5]))
+				_kout.append(float(v[6]))
 				probe.state_enum = int(v[7])
 				_keeper_down.append(1 if probe.is_down() else 0)
 				n += 1

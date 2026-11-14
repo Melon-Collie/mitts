@@ -242,7 +242,7 @@ Hand-picked by design ([Evaluators model perception, never feel](CLAUDE.md#evalu
 - **Execution windows** — SM: `ONE_TIMER_*`, `BOT_WRISTER_*`, `INTENT_MAX_WAIT_TICKS`, `ENGAGEMENT_*`, `PROTECT_TURN_*`, `OWN_NET_BLADE_DISCIPLINE_M`, `READY_STANCE_AIM_FORWARD_M`, `FACE_THREAT_*`; `skater_agent_stick_play.gd` `STICK_LIFT_*`; `stick_path_read.gd` `PATH_*`; `skater_agent_board_play.gd` `THREAT_RANGE_M`, `PUCK_AT_FEET_M`; `skater_agent_steering.gd:SHOT_LANE_LEAD_TIME_S`; `skater_agent_reception.gd` `RECEIVE_*`, `ONE_TIME_*`, `SHOT_RECEPTION_SCORE_GATE`, `WALL_KILL_BAND_M`, `BODY_WALL_MARGIN_M`; `skater_agent_one_timer.gd` `ONE_TIMER_*`, `BOT_ONE_TIMER_ZONE_OFFSET_*`; `skater_agent_carry_cursor.gd` `STICKHANDLE_*`, `CARRY_PROTECT_*`, `CARRY_BEHIND_NET_*`, `CARRY_FACE_*`, `FIRE_AIM_*`, `PASS_LOAD_MAX_SHIELD`; `shot_holds.gd:SNAP_FOREHAND_RAD`; `bot_mechanics.gd`.
 - **Steering field** — `steering.gd`: `*_REPEL_*`, `NET_DETOUR_*`, `ANCHOR_DEADBAND`, `BRAKE_PIVOT_*`, `STANCE_*`, `ARRIVAL_BRAKE_*`, `OFFSIDE_BRAKE_*`.
 - **Faceoff draw** — `ai_controller.gd`: `bot_draw_*`.
-- **Possession continuation** — `possession_floor.gd`: `FLOOR_*`, `SLOT_BONUS`, `SLOT_REF_M` (what possession is worth before anything specific is on; `docs/possession-floor-plan.md`); `action_scoring.gd:REBOUND_RECOVER_SHARE` (the compete's rebound credit on a shot).
+- **Possession continuation** — `possession_floor.gd`: `FLOOR_*`, `SLOT_BONUS`, `SLOT_REF_M` (what possession is worth before anything specific is on; `docs/possession-floor-plan.md`); `action_scoring.gd:FLAT_REBOUND_CREDIT` (the compete's rebound credit on a shot, until `rebound_value.gd:AIReboundValue`'s measured one replaces it).
 
 ---
 

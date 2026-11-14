@@ -935,7 +935,10 @@ takes the whole class down and every static call on it from every file at once.
     `InfractionRules.judge_icing_race`) and the faceoff it hands over;
   - `possession_floor.gd` (`AIPossessionFloor`) — the continuation: what
     keeping the puck at a spot is worth by position alone, a floor up the ice
-    plus the slot bonus (`docs/possession-floor-plan.md`).
+    plus the slot bonus (`docs/possession-floor-plan.md`);
+  - `rebound_field.gd` (`AIReboundField`) — the generated rebound field read in
+    the frame of the net attacked: per measured spot its shots, their outcomes,
+    their sampled rebounds and the second chance measured at each.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
@@ -943,7 +946,8 @@ takes the whole class down and every static call on it from every file at once.
 
 Both evaluators read the leaves and never each other. `possession_value.gd`
 (`AIPossessionValue`, what possession of a spot is worth) reads both from above,
-so neither may read it; so does `evade_read.gd` (`AIEvadeRead`, the
+so neither may read it; so does `rebound_value.gd` (`AIReboundValue`, a
+rebound's second chance raced over the field); so does `evade_read.gd` (`AIEvadeRead`, the
 evadability it keeps the puck at). `test_scoring_split_stays_acyclic.gd` holds that. A
 primitive both need goes in a leaf; an extraction is cut where nothing in the cut
 reaches back into what remains.
@@ -1003,8 +1007,12 @@ reaches back into what remains.
     shots). First contact is the outcome: rebounds and screens are not in it
     (#785), so a clean shot from range against a set keeper is worth ~0. The
     carrier's compete credits a shot that reaches the net with its rebound
-    (`score_shoot_value`'s `rebound`: `AIActionScoring.with_rebound`), so a
-    point shot is weighed against keeping the puck at more than nothing.
+    (`score_shoot_value`'s `rebound_credit`: `AIActionScoring.with_rebound`),
+    so a point shot is weighed against keeping the puck at more than nothing.
+    Today that credit is flat (`FLAT_REBOUND_CREDIT`). The measured one
+    (`AIReboundValue`, raced over the rebound field) waits on the follow-up that
+    wins it: priced before the bots played it, the carrier shot for rebounds
+    nobody collected (`docs/bot-net-front-offense-plan.md` step 3a).
   - **The open set is goal intervals, not aim samples.** The generator sweeps
     24 aims per loft and bisects every edge of a goal run to ~5 mm
     (`tests/unit/ai/open_set_edges.gd`); a run reaching a post ends at the post.

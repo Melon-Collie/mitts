@@ -370,7 +370,10 @@ never park at the blue line waiting.
 
 ## 5. Open questions
 
-- **Measuring the rebound share.** `REBOUND_RECOVER_SHARE` is a property of the
+- **Measuring the rebound share.** Measured since: the rebound field and
+  `AIReboundValue` (`docs/bot-net-front-offense-plan.md` steps 2a and 3a);
+  the tunable is now `AIActionScoring.FLAT_REBOUND_CREDIT` until the measured
+  credit is switched on. As first written: `REBOUND_RECOVER_SHARE` is a property of the
   goalie and the puck, not of play, so it can be measured: the shot field's
   stager already fires shots at the live keeper; recording where saves and
   misses leave the puck, and which side's nearest body is first to it on the

@@ -679,7 +679,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 					attacking_goal, keeper_now, _field.opponents_release,
 					keeper_vel_x, _stance_met(keeper_stance, released_at, attacking_goal),
 					sample_speed,
-					_field.opponent_caps, -1.0, keeper_yaw, true, _shot_history())
+					_field.opponent_caps, -1.0, keeper_yaw,
+					AIActionScoring.FLAT_REBOUND_CREDIT, _shot_history())
 		if not shootable:
 			continue
 		var s: float = sum / hold_samples * _field.holds.keep[k]

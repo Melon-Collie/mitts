@@ -5,7 +5,10 @@ extends GutTest
 # keeper settled square on the carrier, a charged wrister at each loft and aim
 # post to post, played out for REBOUND_TRACK_S through the real save loop
 # (rebound_shot_harness.gd). Each shot is a row: the outcome, and for a live
-# rebound the puck and the keeper every SAMPLE_TICKS from the first contact.
+# rebound the puck and the keeper every SAMPLE_TICKS from the first contact, and
+# the second chance measured at its contest sample and LATE_SAMPLES after: a
+# shot from the puck there at each of SECOND_AIMS × SECOND_LOFTS, at the keeper
+# as he then was.
 # Written as Scripts/domain/ai/generated/rebound_field_data.gd. Run it through
 # .claude/hooks/generate-rebound-field.sh; re-run when the goalie changes
 # (test_rebound_field_is_current.gd says when). Never hand-edit the output.
@@ -25,6 +28,9 @@ const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const SPOT_X: Array[float] = [-8.0, -4.0, 0.0, 4.0, 8.0]
 const SPOT_FWD: Array[float] = [3.5, 6.0, 9.5, 15.0, 19.5]
 const AIM_POINTS: int = 8
+# The second shot: aims post to post and the lofts a rebound is put away at.
+const SECOND_AIMS: int = 6
+const SECOND_LOFTS: Array[int] = [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_HIGH]
 # Outcome codes: G a goal on first contact; W wide or off the post untouched;
 # C caught or held (the play stops); S saved, a live rebound; R saved, and the
 # rebound went in.
@@ -87,6 +93,20 @@ func _row(index: int, shot: Array) -> String:
 		code = REBOUND_GOAL
 	elif _h.rebound_caught or _h.rebound_held:
 		code = COVERED
+	var first_part: int = _h.last_part
+	var contest: String = "-1\t0\t-1\t0"
+	if code == LIVE and _h.contest_k >= 0:
+		var aims: Array[float] = []
+		for i: int in SECOND_AIMS:
+			aims.append(Edges.aim_x(i, SECOND_AIMS))
+		var cols: PackedStringArray = []
+		for c: int in 2:
+			if c < _h.capture_k.size():
+				cols.append("%d\t%d" % [_h.capture_k[c],
+						_h.second_shots(c, aims, SECOND_LOFTS, Stager.SHOT_SPEED)])
+			else:
+				cols.append("-1\t0")
+		contest = "\t".join(cols)
 	var samples: PackedStringArray = []
 	if code == LIVE or code == REBOUND_GOAL:
 		for k: int in _h.sample_pos.size():
@@ -96,8 +116,9 @@ func _row(index: int, shot: Array) -> String:
 			samples.append("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d" % [p.x, p.z - GOAL_Z, p.y,
 					v.x, v.z * -signf(GOAL_Z), gs.position_x, gs.position_z - GOAL_Z,
 					gs.state_enum])
-	return "%d\t%.2f\t%.2f\t%d\t%.3f\t%s\t%d\t%s" % [index, shot[0], shot[1], loft, shot[3],
-			code, _h.last_part, ";".join(samples)]
+	return "%d\t%.2f\t%.2f\t%d\t%.3f\t%s\t%d\t%s\t%d\t%s" % [index, shot[0], shot[1], loft,
+			shot[3], code, first_part, contest, SECOND_AIMS * SECOND_LOFTS.size(),
+			";".join(samples)]
 
 
 func test_measure_a_shard() -> void:
@@ -140,7 +161,9 @@ func test_merge_the_shards() -> void:
 		"# goalie's save does with a charged wrister from a keeper set square on the",
 		"# carrier. Row columns: index, spot x, spot metres out, loft, aim x, outcome",
 		"# (G goal, W missed untouched, C caught or held, S saved and live, R saved",
-		"# and the rebound in), the first SavePart touched (-1: none), then for S and",
+		"# and the rebound in), the first SavePart touched (-1: none), the contest",
+		"# sample and the goals of the second shots from it, the late sample and its",
+		"# goals (-1 0: none), the second shots fired at each, then for S and",
 		"# R the rebound every SAMPLE_S from the first contact, ';'-separated: puck x,",
 		"# metres out, height, vx, v_out (its velocity away from the goal line),",
 		"# keeper x, keeper metres out, keeper state_enum.",
