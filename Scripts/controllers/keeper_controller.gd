@@ -67,6 +67,7 @@ var look := KeeperLook.new()
 var fetch := KeeperFetch.new()
 var poke := KeeperPoke.new()
 var clear := KeeperClear.new()
+var reach := KeeperReach.new()
 
 var _keeper: Keeper = null
 var _keeper_pose := KeeperPose.new()
@@ -229,6 +230,7 @@ func _tier() -> void:
 	save.blocker_speed_m_s = _profile.blocker_react_max_speed_mps
 	save.drop_s = _profile.butterfly_drop_s
 	motor.save_move.drop_s = _profile.butterfly_drop_s
+	motor.pad_out.out_s = _profile.butterfly_drop_s
 	cover.glove_speed_m_s = _profile.glove_react_max_speed_mps
 
 
@@ -306,6 +308,8 @@ func _play(delta: float) -> void:
 	read.step(delta, in_net, flight)
 	_save_the_shot()
 	_cover_the_puck(delta, in_net)
+	if _ticks % PLANNER_EVERY == 0:
+		_reach_wide()
 	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering and not _squaring:
 		_read_receivers()
 		if _at_feet:
@@ -321,6 +325,24 @@ func _play(delta: float) -> void:
 	_place_body()
 	_stick_step(delta)
 	_smother(in_net)
+
+
+# A pad out for a puck a carrier of theirs in tight has wide of him
+# (KeeperReach), before any shot: asked of his motor while it shows the puck
+# less of the low net than the butterfly would from where he is, a scoot or a
+# slide that pad leads going on under it. Through a shot he is reading it
+# stays as asked, for his read to answer from.
+func _reach_wide() -> void:
+	if read.reading():
+		return
+	var out: KeeperPadOut = motor.pad_out
+	out.asked = 0.0
+	if not (play.theirs and not play.loose and (brain.kept_down or brain.planted)) \
+			or motor.rest != KeeperRoute.Rest.DOWN:
+		return
+	var mirrored: bool = _keeper.skeleton.mirrored
+	var side: float = reach.plan(play.puck, motor, mirrored, _keeper.skeleton.world_side(out.side))
+	out.asked = KeeperReach.own_side(side, mirrored)
 
 
 # A poke check at the puck an opposing carrier drives at him with (KeeperPoke):

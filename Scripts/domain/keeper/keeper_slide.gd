@@ -302,6 +302,12 @@ func post_seal_spot(post: Vector2, side: float, turn: float) -> Vector2:
 	return post - _across(turn) * (end.x + side * GameRules.NET_POST_RADIUS) - back * end.z
 
 
+# Whether this is a slide or a rotation from the butterfly that the pad on
+# `side` (his own) leads: that pad down on the ice the whole way.
+func leads_from_his_knees(side: float) -> bool:
+	return _from == From.BUTTERFLY and _side == side
+
+
 # Down on his spot with the stop settled out of him: in the butterfly.
 # Down on his spot with the push leg folded back: the next move can go. The
 # lean back against the stop eases out of him over SETTLE_S whatever comes

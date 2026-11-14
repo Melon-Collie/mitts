@@ -67,6 +67,7 @@ const SCENARIOS: Array = [
 	["cover_blocker_side", Vector2(0.7, 0.1), COVER],
 	["cover_behind_blocker", Vector2(0.4, -0.35), COVER],
 	["save_tight_low", Vector2(0.2, 0.0), SAVE_TIGHT],
+	["pad_out", 0.0, PAD_OUT],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
@@ -116,6 +117,10 @@ const LOW_READY_HOLD_S: float = 0.4
 # his feet in the middle), each given once he is at the last, making whatever
 # moves KeeperRoute picks; drawn as SEQUENCE is.
 const GOALS: int = -9
+# KeeperMotor down, a pad asked out (KeeperPadOut) at rest, kept out through a
+# slide it leads and a scoot, gathered back for a slide the other way, and out
+# to the other side; drawn as SEQUENCE is.
+const PAD_OUT: int = -19
 # The ready stance with its blade swept out past the blocker arm's reach (out
 # in front, round to his blocker side and behind him), so the stick is seen
 # brought to the hand: pivoting on its heel, sliding through the grip.
@@ -271,6 +276,8 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_low_ready()
 	if kind == GOALS:
 		return _record_goals()
+	if kind == PAD_OUT:
+		return _record_pad_out()
 
 	if kind == STICK_REACH:
 		return _record_stick_reach()
@@ -646,6 +653,35 @@ func _record_goals() -> Array:
 	return out
 
 
+# Each step: the side his pad is asked out to, his goal down, and how long
+# the step is given.
+func _record_pad_out() -> Array:
+	var motor := KeeperMotor.new()
+	motor.z = -1.1
+	motor.rest = KeeperRoute.Rest.DOWN
+	var steps: Array = [
+		[1.0, Vector2(0.0, -1.1), 0.35], [1.0, Vector2(0.7, -0.7), 0.9], [1.0, Vector2(0.85, -0.6), 0.4],
+		[1.0, Vector2(0.0, -0.9), 1.1], [-1.0, Vector2(0.0, -0.9), 0.45], [0.0, Vector2(0.0, -0.9), 0.35],
+	]
+	var out: Array = []
+	var tick: int = 0
+	for step: Array in steps:
+		motor.pad_out.asked = step[0]
+		var to: Vector2 = step[1]
+		motor.go_to(to, KeeperPositioning.facing(to, Vector2(to.x * 2.5, -3.0)), KeeperRoute.Rest.DOWN)
+		print("[keeper_strip] pad asked %+.0f, goal %s at t %.3f" % [step[0], to, tick * DT])
+		for i: int in int(float(step[2]) / DT):
+			if tick % SEQUENCE_FRAME_EVERY == 0:
+				var p := KeeperPose.new()
+				motor.pose(p)
+				var phase: int = KeeperFootwork.Phase.STOP if motor.pad_out.share >= 1.0 \
+						else (KeeperFootwork.Phase.PUSH if motor.pad_out.share > 0.0 else KeeperFootwork.Phase.GLIDE)
+				out.append([p, Vector3(motor.x, 0.0, motor.z), phase, motor.pad_out.share, tick * DT, motor.yaw])
+			motor.step(DT)
+			tick += 1
+	return out
+
+
 # The RVH's frames, as _record's: PUSH on the way in (and through the slide
 # before it), GLIDE sealed, STOP on the way out, SET at rest.
 func _record_post(post_side: float, from_slide: bool) -> Array:
@@ -730,11 +766,11 @@ func _process(_delta: float) -> bool:
 		var kind: int = int(_scenarios[_scenario_i][2])
 		for post: Node3D in _posts:
 			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE \
-					or kind == RVH_PUSH_OFF or kind == SEQUENCE or kind == GOALS or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT \
+					or kind == RVH_PUSH_OFF or kind == SEQUENCE or kind == GOALS or kind == PAD_OUT or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT \
 					or kind == SAVE_FAR or kind == COVER
 		_frames = _record(spot, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
-		if kind == SEQUENCE or kind == GOALS or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT or kind == SAVE_FAR \
+		if kind == SEQUENCE or kind == GOALS or kind == PAD_OUT or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT or kind == SAVE_FAR \
 				or kind == COVER:
 			_views = [_views[0], _views[2]]
 		_shots = []

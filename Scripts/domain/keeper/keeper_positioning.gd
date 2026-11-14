@@ -203,7 +203,10 @@ func _plant(post: Vector2, side: float, puck: Vector2, velocity: Vector2, motor:
 	if motor.rest == KeeperRoute.Rest.FEET and not near:
 		motor.go_to(spot, _seal_turn, KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, true)
 		return
-	motor.go_to(at if near else spot, _seal_turn, KeeperRoute.Rest.DOWN)
+	if near:
+		motor.go_to(at, _seal_turn, KeeperRoute.Rest.DOWN)
+	else:
+		_kneel_to(spot, _seal_turn, motor)
 
 
 # Down with the carrier in tight in front of him: on the puck's line where the
@@ -231,7 +234,18 @@ func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	# new push.
 	if motor.slides() and to.distance_to(motor.route.spot) <= SEAL_NEAR_M:
 		to = motor.route.spot
-	motor.go_to(to, facing(to, lands), KeeperRoute.Rest.DOWN)
+	_kneel_to(to, facing(to, lands), motor)
+
+
+# Down at `spot` turned `turn`, for a carrier in tight, without getting up for
+# it: where his quickest way there from his knees is by his feet, he makes for
+# it by what his knees reach instead, turned as he is. Standing up into a
+# carrier in tight shows him the whole net for longer than any push takes.
+static func _kneel_to(spot: Vector2, turn: float, motor: KeeperMotor) -> void:
+	motor.go_to(spot, turn, KeeperRoute.Rest.DOWN)
+	if motor.stands_up_for_goal():
+		var at := Vector2(motor.x, motor.z)
+		motor.go_to(at + (spot - at).limit_length(KeeperRoute.KNEE_REACH_M), motor.yaw, KeeperRoute.Rest.DOWN)
 
 
 # His spot down at `at` for a carrier's puck at `puck`: on its line, back

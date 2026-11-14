@@ -293,3 +293,79 @@ func test_a_goal_across_him_ends_the_slide_he_dropped_with() -> void:
 	assert_false(_motor.carries(), "landed: the slide let go, his goal across him")
 	_motor.step(DT)
 	assert_true(_motor.slides(), "and the push for it under way")
+
+
+# Down, a pad asked out goes out at rest, stays out through a scoot and a
+# slide it leads, and is brought back under him before a slide the other way,
+# a rotation or getting up starts; a save takes it into the pose it cuts in
+# from. Every tick unbroken.
+func test_a_pad_out_rides_what_it_can_and_comes_in_for_what_needs_the_leg() -> void:
+	_motor.z = -1.1
+	_motor.go_to(Vector2(0.0, -1.1), 0.0, R.DOWN)
+	_run_checked("down")
+	_motor.pad_out.asked = 1.0
+	_motor.go_to(Vector2(0.0, -1.1), 0.0, R.DOWN)
+	var was: Array[Vector3] = _bones()
+	for i: int in int(0.3 / DT):
+		_motor.step(DT)
+		var at: Array[Vector3] = _bones()
+		for b: int in KeeperSkeleton.BONE_COUNT:
+			assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "going out, tick %d bone %d" % [i, b])
+		was = at
+	assert_eq(_motor.pad_out.share, 1.0, "out at rest")
+	# Facing as the slide leaves him, so no rotation follows it.
+	var turned: float = KeeperSlide.facing((Vector2(0.8, -0.9) - Vector2(0.0, -1.1)).normalized(), 1.0)
+	_motor.go_to(Vector2(0.8, -0.9), turned, R.DOWN)
+	_motor.step(DT)
+	_motor.step(DT)
+	assert_true(_motor.slides(), "a slide it leads starts at once")
+	_run_checked("the slide it leads")
+	assert_eq(_motor.pad_out.share, 1.0, "out the whole way")
+	_motor.go_to(Vector2(0.95, -0.85), turned, R.DOWN)
+	_run_checked("a scoot")
+	assert_eq(_motor.pad_out.share, 1.0, "out through a scoot")
+	_motor.go_to(Vector2(0.0, -1.0), turned, R.DOWN)
+	_motor.step(DT)
+	_motor.step(DT)
+	assert_false(_motor.slides(), "the other way: not yet")
+	assert_lt(_motor.pad_out.share, 1.0, "the pad coming back under him first")
+	var waited: float = 0.0
+	while not _motor.slides() and waited < 1.0:
+		_motor.step(DT)
+		waited += DT
+	assert_eq(_motor.pad_out.share, 0.0, "in before he pushes off that leg")
+	assert_almost_eq(waited, _motor.pad_out.out_s, 3.0 * DT, "the leg's time")
+	_run_checked("the slide the other way")
+	_motor.pad_out.asked = -1.0
+	for i: int in int(0.3 / DT):
+		_motor.step(DT)
+	assert_eq(_motor.pad_out.share, 1.0, "out the other side")
+	_motor.go_to(Vector2(0.0, -1.0), 0.0, R.FEET)
+	_motor.step(DT)
+	assert_eq(_motor.rest, R.DOWN)
+	assert_eq(_motor._mover, KeeperMotor.Mover.NONE, "up: not before the pad is in")
+	_run_checked("up")
+	assert_eq(_motor.rest, R.FEET)
+	assert_eq(_motor.pad_out.share, 0.0)
+	assert_eq(_motor.refused, 0)
+
+
+func test_a_save_takes_the_pad_out_into_the_pose_it_cuts_in_from() -> void:
+	_motor.z = -1.1
+	_motor.go_to(Vector2(0.0, -1.1), 0.0, R.DOWN)
+	_run_checked("down")
+	_motor.pad_out.asked = 1.0
+	for i: int in int(0.3 / DT):
+		_motor.step(DT)
+	var was: Array[Vector3] = _bones()
+	_motor.save(KeeperSaveMove.Low.BUTTERFLY, 1.0)
+	assert_eq(_motor.pad_out.share, 0.0, "the save's now")
+	var t: float = 0.0
+	while t < 0.5:
+		_motor.step(DT)
+		t += DT
+		var at: Array[Vector3] = _bones()
+		for b: int in KeeperSkeleton.BONE_COUNT:
+			assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "t %.3f bone %d" % [t, b])
+		was = at
+
