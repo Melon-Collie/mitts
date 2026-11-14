@@ -830,6 +830,25 @@ moves between our shots, not within one: each teammate's one-timer is
 weighted by the lane to him now, and lanes open and shut as the defence
 moves, so the shot worth standing in front of changes and he follows it.
 
+**In front of the puck alone** (`4afe2f2`): NET_FRONT prices stations in
+front of the carrier's shot only, the tip station held by key too. J=11, 576:
+
+| | 4f + key hold | puck alone |
+|---|---|---|
+| net-front re-picks / s | 0.82 | 0.51 |
+| spot moves | 2.3 m/s | 1.6 m/s |
+| first touch ours on live rebounds | 27% ± 4% | 32% ± 4% |
+| our median first touch | 0.57 s | 0.24 s |
+| net-front man first on | 15 | 22 |
+| 2nd shots / shot | 0.106 | 0.125 |
+| battle (possessions, s each) | 32%, 0.14 s | 22%, 0.08 s |
+| shots screened | 8% | 4% |
+| xG / possession | 0.038 ± 0.005 | 0.039 ± 0.005 |
+
+He is on the rebound twice as fast, from in front of the puck, and screens
+less (the slot-top man's line is no longer his). Their man is still nearer
+his spot, out of reach, 52% of the time.
+
 ---
 
 ## Step 5 — Tips
