@@ -743,6 +743,42 @@ first link that fails (J=11, 576 possessions, after 4c):
   (`test_duel_press_mirrors.gd`). Re-measured with it and the trip priced:
   first touch ours 29% ± 4%, xG 0.028 ± 0.004, the chain the same.
 
+### 4e. The net-front man holds the front (`62f06b2`)
+
+NET_FRONT prices his station by what he adds in front of the net (the tip,
+the screen, the rebound) and never by a feed to him; getting open for the
+feed stays the FINISHER's.
+
+| (J=11, 576) | re-picks / s | spot moves | on it | their man nearer, not touching | net-front first touches | shots screened | xG / possession |
+|---|---|---|---|---|---|---|---|
+| 4c + the trip + the press | 1.37 | 3.7 m/s | 16% | 55% | 11 | 4% | 0.028 ± 0.004 |
+| 4e | 0.77 | 2.0 m/s | 18% | 55% | 16 | 7% | 0.030 ± 0.004 |
+
+The re-picks halved and the net-front man plays more of our rebounds, but
+the battle still seldom starts: he is 2.7 m from his spot on average, and
+their man is nearer it than he is, out of the press's reach (0.3 m edge to
+edge), over half the time. What is left:
+
+- **The remaining re-picks** are 2.5 m jumps. The rebound and screen fields
+  are read at the release's nearest measured spot (a 4 m grid), so a crash
+  point or a screen station snaps to the next cell's as the carrier crosses
+  a boundary.
+- **Their man on his spot is skated to, not stepped into.** His route ends
+  at the spot, which their man stands on, so he stops short of him.
+
+### The counter layer (step 1's regression)
+
+`tests/slow/ai/test_counter_layer.gd` had failed since step 1: 8–9 of 12
+breaks out of their zone with nobody of ours goal-side, the bar 7.
+
+- The weak D going down his flank read to the strong D as his partner off
+  the line, and he slid from his wall to the middle, where their breaker on
+  his side went free (`92261e0`: the strong D keeps his wall, and the weak
+  D leaves only with HIGH_SLOT already on his point).
+- With the activation off entirely it still reads 8 of 12: the points' 2.4 m
+  inset (`c0e91cb`, which made a point receivable) costs the rest. At 2.0 m
+  it passes (6 of 12, +0.9 m). Not yet decided.
+
 ---
 
 ## Step 5 — Tips
