@@ -518,6 +518,31 @@ The rush depth gate (`finisher.gd`) says that "nothing in the scoring prices
 the net's rebounds and body presence". Once this term does, re-measure whether
 the gate still binds, and retire it if it does not.
 
+**Status: built (`645baa1`), no measurable effect.** NET_FRONT crashes to
+the release's measured contest point and the FINISHER to its late point
+(`AIReboundField.crash_point`) while our shot is on its way. The finisher's
+tip read now asks whether his blade can reach the puck's line in time
+(`AILoosePuckChase.reach_eta`), so a tip he cannot make becomes a crash.
+
+Rebound sweep, J=11, 576 possessions each:
+
+| | first touch ours | 2nd shots / shot | xG / possession |
+|---|---|---|---|
+| flat credit | 26% ± 4% | 0.089 | 0.032 ± 0.005 |
+| crash, flat credit | 28% ± 4% | 0.088 | 0.030 ± 0.005 |
+| measured credit, no crash | 33% ± 3% | 0.119 | 0.025 ± 0.004 |
+| crash + measured credit | 32% ± 3% | 0.119 | 0.029 ± 0.004 |
+
+**Who beats us** (the first toucher's slot, crash + flat credit, 136 live
+rebounds): their ZONE_D_STRONG 47 and ZONE_D_WEAK 20, half of all
+rebounds, then ZONE_C 12 and the wingers 19. Ours: FINISHER 14, NET_FRONT 12,
+the rest 12. Their house D stand between our forwards and the net, and a
+rebound comes out to whoever is inside. Crashing on the release cannot
+change that geometry. Winning inside position at the net is what can, and
+that is step 4's net-front battle (the screen and the box-out), not more of
+step 3. The measured credit stays off until something wins rebounds as it
+prices them.
+
 ### 3c. The chase races the rebound from the release
 
 While our shot is in flight, the election races the measured rebound
