@@ -306,6 +306,8 @@ func _battling(duel: Object) -> int:
 # width off it; "press" Ctrl is down. Also how far the spot jumps between
 # ticks, and his closing speed on it while it is free.
 const AT_SPOT_M: float = 0.75
+# A spot that moves further than this in a tick was re-picked, not carried.
+const FLIP_M: float = 0.5
 var _last_spot: Dictionary = {}
 
 
@@ -323,8 +325,12 @@ func _count_screen(duel: Object, r: Dictionary) -> void:
 			continue
 		var spot: Vector3 = dec.battle_spot
 		if _last_spot.has(sk.peer_id):
-			r["jump_m"] = r.get("jump_m", 0.0) + Vector2(spot.x - _last_spot[sk.peer_id].x,
+			var jump: float = Vector2(spot.x - _last_spot[sk.peer_id].x,
 					spot.z - _last_spot[sk.peer_id].z).length()
+			r["jump_m"] = r.get("jump_m", 0.0) + jump
+			if jump > FLIP_M:
+				r["flip_m"] = r.get("flip_m", 0.0) + jump
+				r["flip_n"] = r.get("flip_n", 0.0) + 1.0
 		_last_spot[sk.peer_id] = spot
 		r["pub_s"] = r.get("pub_s", 0.0) + Duel.DT
 		var to := Vector2(spot.x - sk.pos.x, spot.z - sk.pos.z)
@@ -531,7 +537,7 @@ func _sweep(label: String) -> void:
 					r.get("mine_m", 0.0) / maxf(r.get("pub_s", 0.0), 0.001)])
 			gut.p("OZCHAIN|%d|%s" % [g, JSON.stringify(r.keys().filter(
 					func(k: String) -> bool: return k.begins_with("cat_") or k in [
-						"jump_m", "moved_m", "moved_n", "close_ms", "pub_s"]).map(
+						"jump_m", "flip_m", "flip_n", "moved_m", "moved_n", "close_ms", "pub_s"]).map(
 					func(k: String) -> String: return "%s=%.3f" % [k, r[k]]))])
 			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f%s|%.2f|%.3f" % [g, r["end"],
 					r["shot"]["kind"] if r["end"] == "shot" else "-", shot_set,
