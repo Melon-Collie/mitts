@@ -108,8 +108,12 @@ static func _try_crash(ctx: RoleContext) -> RoleDecision:
 
 # The kind of the `i`-th candidate positioning read in, by where it was added:
 # the named stations, the tip station, the net-front ones from `front_from` to
-# `front_to`, and the incumbent last of `count` when there is one.
-static func _trace_kind(i: int, front_from: int, front_to: int, count: int) -> int:
+# `front_to`, and the incumbent: the station held by its key at `held_at`, or
+# else last of `count` when there is one.
+static func _trace_kind(i: int, front_from: int, front_to: int, count: int,
+		held_at: int) -> int:
+	if i == held_at:
+		return AIFinisherTrace.Kind.INCUMBENT
 	if i < AIFinisherTrace.Kind.TIP:
 		return i
 	if i < front_from:
@@ -294,8 +298,17 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 			teammate_positions)
 	AIStationSearch.append_net_front_stations(ctx, candidates)
 	var front_to: int = candidates.size()
-	# Switch-hysteresis (the pre-aim cursor snaps to this target).
-	AIStationSearch.append_incumbent(ctx, candidates)
+	# Switch-hysteresis (the pre-aim cursor snaps to this target). A net-front
+	# station is held by what it is: the same station, where its shot has taken
+	# it, takes the margin, and the place it stood last read is not a candidate
+	# (held there, he sat on ice the play had left).
+	var held_at: int = -1
+	if ctx.prev_station_key != -1:
+		var k: int = AIStationSearch.station_keys.find(ctx.prev_station_key)
+		if k >= 0:
+			held_at = front_from + k
+	if held_at < 0:
+		AIStationSearch.append_incumbent(ctx, candidates)
 
 	# The carrier's rip, for the tip term: his real wrister pace, released a
 	# handle-length toward the net.
@@ -338,7 +351,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 				or AIStationSearch.too_close_to_teammate(c, teammate_positions) \
 				or absf(c.z - goal_z) > depth_cap:
 			if tracing:
-				trace.record(_trace_kind(i, front_from, front_to, candidates.size()), c,
+				trace.record(_trace_kind(i, front_from, front_to, candidates.size(), held_at), c,
 						0.0, 0.0, 0.0, 0.0, -INF)
 			continue
 		# The speed our carrier would actually fire at, not a flat constant —
@@ -363,15 +376,18 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		# The best of the one-timer feed, the tip and the net front — max(), not
 		# sum: one puck, one outcome — less what a teammate a defender could
 		# cover with this spot already offers.
+		var held: float = (AIStationSearch.TARGET_SWITCH_MARGIN if i == held_at else 0.0) \
+				if held_at >= 0 else AIStationSearch.incumbent_bonus(ctx, c)
 		var score: float = maxf(maxf(feed, tip), front) * reach \
-				- AIStationSearch.shared_cover(c, teammate_positions) \
-				+ AIStationSearch.incumbent_bonus(ctx, c)
+				- AIStationSearch.shared_cover(c, teammate_positions) + held
 		if tracing:
-			trace.record(_trace_kind(i, front_from, front_to, candidates.size()), c,
+			trace.record(_trace_kind(i, front_from, front_to, candidates.size(), held_at), c,
 					feed, tip, front, reach, score)
 		if score > best_score:
 			best_score = score
 			best_pos = c
+			d.station_key = AIStationSearch.station_keys[i - front_from] \
+					if i >= front_from and i < front_to else -1
 			if tracing:
 				trace.chosen = i
 

@@ -232,6 +232,7 @@ var _prev_role_slot: int = AIRoleSlots.Slot.NONE
 var _prev_role_target: Vector3 = Vector3.INF
 var _prev_role_target_vel: Vector3 = Vector3.ZERO
 var _prev_role_target_age_s: float = 0.0
+var _prev_station_key: int = -1
 # The man this skater's role is covering, from the last role dispatch
 # (RoleDecision.locked_man_pid) — reset on slot change, and cleared on
 # leaving OFF_PUCK: a skater chasing or carrying
@@ -1333,6 +1334,7 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 	# target (see RoleContext.prev_role_target).
 	ctx.prev_role_target = _prev_role_target + _prev_role_target_vel * _prev_role_target_age_s \
 			if slot == _prev_role_slot and _prev_role_target.is_finite() else Vector3.INF
+	ctx.prev_station_key = _prev_station_key if slot == _prev_role_slot else -1
 	# Pinch-read hysteresis incumbent, same reset-across-slot-change contract.
 	ctx.prev_held_forward_stand = _prev_held_forward_stand \
 			if slot == _prev_role_slot else false
@@ -1415,6 +1417,7 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 	_prev_role_target = decision.target_position
 	_prev_role_target_vel = decision.target_velocity
 	_prev_role_target_age_s = 0.0
+	_prev_station_key = decision.station_key
 	_prev_locked_man_pid = decision.locked_man_pid
 	_prev_held_forward_stand = decision.held_forward_stand
 	return decision

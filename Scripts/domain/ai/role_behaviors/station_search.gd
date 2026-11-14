@@ -137,6 +137,13 @@ static func shared_cover(c: Vector3, teammates: Array[Vector3]) -> float:
 # the man asking. The carrier's own is his miss; a teammate's is the lane to
 # him times his one-timer's miss off the feed.
 static var _play_release: Array[Vector3] = []
+# Each play's shooter: the carrier's peer id, or the teammate's (an index
+# stand-in when `teammates` is not the context's scratch_teammates).
+static var _play_shooter: Array[int] = []
+# What each station append_net_front_stations added is, index-matched to what
+# it appended: (its shooter + 2) × 2 + 0 at the rebound's contest point, + 1
+# on the screen line. The same station keeps its key while the play moves it.
+static var station_keys: Array[int] = []
 static var _play_keeper: Array[Vector3] = []
 static var _play_weight: Array[float] = []
 static var _play_rebound: Array[AIReboundValue] = []
@@ -154,15 +161,22 @@ static func fill_shot_plays(ctx: RoleContext, carrier_pos: Vector3,
 		goalie_pos: Vector3, opp_positions: Array[Vector3],
 		teammates: Array[Vector3]) -> void:
 	_play_release.clear()
+	_play_shooter.clear()
 	_play_keeper.clear()
 	_play_weight.clear()
 	_play_rebound_base.clear()
 	_play_rebound_gain_cap.clear()
 	var goal: Vector3 = ctx.attacking_goal_pos
 	var release: Vector3 = AIPuckLane.release_point_toward(carrier_pos, goal)
+	var carrier: int = ctx.snapshot.puck_state.carrier_peer_id \
+			if ctx.snapshot != null and ctx.snapshot.puck_state != null else -1
+	_play_shooter.append(carrier)
 	_add_play(ctx, release, goalie_pos if goalie_pos.is_finite() else _keeper_square_on(goal, release),
 			1.0 - AIShotValue.set_keeper(release, goal), opp_positions, teammates)
+	var ids_match: bool = ctx.scratch_teammate_ids.size() == teammates.size()
+	var ti: int = -1
 	for t: Vector3 in teammates:
+		ti += 1
 		if Vector2(t.x - carrier_pos.x, t.z - carrier_pos.z).length() < 0.5 \
 				or (t.z - goal.z) * signf(goal.z) >= 0.0:
 			continue
@@ -171,6 +185,7 @@ static func fill_shot_plays(ctx: RoleContext, carrier_pos: Vector3,
 				ctx.scratch_opp_caps)
 		if lane <= 0.0:
 			continue
+		_play_shooter.append(ctx.scratch_teammate_ids[ti] if ids_match else -1000 - ti)
 		_add_play(ctx, t, _keeper_square_on(goal, t), lane * (1.0 - AIShotValue.feed(
 				carrier_pos, t, speed, goal, goalie_pos, true)), opp_positions, teammates)
 
@@ -194,15 +209,18 @@ static func _add_play(ctx: RoleContext, release: Vector3, keeper: Vector3, weigh
 # and where its rebounds are first played (AIReboundField.crash_point_at).
 static func append_net_front_stations(ctx: RoleContext, candidates: Array[Vector3]) -> void:
 	var goal: Vector3 = ctx.attacking_goal_pos
+	station_keys.clear()
 	for i: int in _play_release.size():
 		var crash: Vector3 = AIReboundField.crash_point_at(_play_release[i], false, goal)
 		if crash.is_finite():
 			candidates.append(crash)
+			station_keys.append((_play_shooter[i] + 2) * 2)
 		var along: float = AIScreenField.best_station_along(_play_release[i], goal)
 		var line: Vector3 = _play_release[i] - goal
 		line.y = 0.0
 		if is_finite(along) and line.length() > along:
 			candidates.append(goal + line * (along / line.length()))
+			station_keys.append((_play_shooter[i] + 2) * 2 + 1)
 
 
 # What a body at `c` adds to our attack in front of their net (fill_shot_plays),

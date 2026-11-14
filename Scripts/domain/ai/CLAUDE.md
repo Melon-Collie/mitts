@@ -508,6 +508,11 @@ his share of the rebound, raced against everyone else (`AIReboundValue`'s
 when it is worth anything in front (`RoleDecision.battle_spot`), whatever else
 it is worth: a man at the slot's top keeps the net front's ice worth holding
 while the carrier works the wall, and their D standing inside is a man to move.
+A net-front station is held by what it is (`RoleDecision.station_key`: the
+shot it is in front of, and how), wherever its shooter has taken it since.
+Never hold one by its place: the ice worth holding moves with the play, and
+held where it stood it went stale, half as valuable, and he re-picked 2.3 m a
+time almost once a second.
 The press pass then wins it while one of ours carries the puck (skating into a man who
 stands on it short of contact, `CLOSE_IN_M`, rather than stopping at the spot
 his body holds), never with it loose: the press takes the stick off the ice, and the rebound it was won for

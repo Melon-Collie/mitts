@@ -82,3 +82,8 @@ var held_forward_stand: bool = false
 # that screens one of our shots or wins a share of its rebound. The press fights
 # a man off it while we carry the puck (SkaterAgentPress).
 var battle_spot: Vector3 = Vector3.INF
+# Which station target_position is, by what it is rather than where
+# (AIStationSearch.station_keys: the shot it is in front of, and how), so the
+# next read holds the same station where the play has taken it; -1 for a
+# place.
+var station_key: int = -1

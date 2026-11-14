@@ -735,3 +735,23 @@ func test_the_net_front_man_holds_the_front_not_a_feed() -> void:
 	assert_gt(AIStationSearch.net_front_value(ctx, d.target_position), 0.0,
 			"his ice is worth something in front; got %s" % d.target_position)
 	assert_eq(d.battle_spot, d.target_position, "and it is the spot he fights for")
+
+
+func test_the_net_front_man_holds_his_station_where_the_play_takes_it() -> void:
+	# He holds a station in front of one of our shots; the carrier and our man
+	# at the slot's top skate on, and the station with its shooter. The next read holds that station where it now
+	# is, not the place it stood.
+	var ctx: RoleContext = _screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 6.0), true)
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	ctx.team_brain = slots
+	var first: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_ne(first.station_key, -1, "he holds a station in front; got %s" % first.target_position)
+	var moved: RoleContext = _screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 7.5), true)
+	moved.snapshot.skater_states[3].position += Vector3(-1.5, 0.0, 0.0)
+	moved.team_brain = slots
+	moved.prev_role_target = first.target_position
+	moved.prev_station_key = first.station_key
+	var next: RoleDecision = AIRoleFinisher.decide(moved)
+	assert_eq(next.station_key, first.station_key, "the same station")
+	assert_ne(next.target_position, first.target_position, "where the play has taken it")
