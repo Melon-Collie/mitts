@@ -504,11 +504,12 @@ would save: the screen field's share turned into goals, and of the saves left,
 his share of the rebound, raced against everyone else (`AIReboundValue`'s
 `fill` once, `value_with` per station). They publish the station they hold
 when it is worth anything in front (`RoleDecision.battle_spot`), whatever else
-it is worth, and the rebound's contest point while our shot is on its way: a
-man at the slot's top keeps the net front's ice worth holding while the carrier
-works the wall, and their D standing inside is a man to move. The press pass
-then wins it (`SkaterAgentPress._win_the_spot`): a man of theirs nearer
-the spot, within `STEP_IN_M`, is pressed when the push moves him off it by both
+it is worth: a man at the slot's top keeps the net front's ice worth holding
+while the carrier works the wall, and their D standing inside is a man to move.
+The press pass then wins it while one of ours carries the puck, never with it
+loose: the press takes the stick off the ice, and the rebound it was won for
+goes to the man it moved (`SkaterAgentPress._win_the_spot`): a man of theirs
+nearer the spot, within `STEP_IN_M`, is pressed when the push moves him off it by both
 bodies' width. Never value a screen off the line: the field measured a body
 0.4 m off it adding nothing, because the keeper looks round it.
 

@@ -69,14 +69,17 @@ func _body_radius(pid: int) -> float:
 
 
 # The ice our role holds in their end, with their man nearer it than us
-# and leaned on: drive into him when the press moves him in AIPressRead.READ_S a
-# body's width off it (his body radius and ours, AISkaterCaps.body_radius), so
-# we can stand there. The push runs along the line through him, so it wins the
-# spot only from the side that moves him off it.
+# and leaned on, while one of ours carries the puck: drive into him when the
+# press moves him in AIPressRead.READ_S a body's width off it (his body radius
+# and ours, AISkaterCaps.body_radius), so we can stand there. The push runs
+# along the line through him, so it wins the spot only from the side that moves
+# him off it. Never with the puck loose: the press takes the stick off the ice,
+# and a rebound coming to the spot is then the man's we moved.
 func _win_the_spot(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
 		own_goal_dir: float, spot: Vector3) -> bool:
 	if not spot.is_finite() or input.hit_held or input.stick_lift_held \
-			or own_goal_dir * me.position.z > -GameRules.BLUE_LINE_Z:
+			or own_goal_dir * me.position.z > -GameRules.BLUE_LINE_Z \
+			or _team_id_by_peer.get(snapshot.puck_state.carrier_peer_id, -1) != _team_id:
 		return false
 	var mine: float = Vector2(spot.x - me.position.x, spot.z - me.position.z).length()
 	for pid: int in snapshot.skater_states:

@@ -79,7 +79,6 @@ var arrive_at_speed: bool = false
 var held_forward_stand: bool = false
 
 # The ice this decision holds in front of their net (INF: none): a station
-# that screens one of our shots or wins a share of its rebound, or the rebound's
-# contest point while our shot is on its way. The press fights a man off it
-# (SkaterAgentPress).
+# that screens one of our shots or wins a share of its rebound. The press fights
+# a man off it while we carry the puck (SkaterAgentPress).
 var battle_spot: Vector3 = Vector3.INF

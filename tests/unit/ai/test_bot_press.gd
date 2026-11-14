@@ -246,3 +246,14 @@ func test_no_fight_for_a_spot_he_is_not_on() -> void:
 	var input := InputState.new()
 	sm.apply_press(input, s)
 	assert_false(input.hit_held, "we are nearer the spot than he is")
+
+
+func test_no_fight_for_the_spot_with_the_puck_loose() -> void:
+	# Our shot is away: the press would take his stick off the ice the rebound
+	# comes to.
+	var s: WorldSnapshot = _spot_snap()
+	s.puck_state.carrier_peer_id = -1
+	s.puck_state.position = Vector3(3.0, 0.02, -_goal_z + 6.0)
+	var input := InputState.new()
+	sm.apply_press(input, s)
+	assert_false(input.hit_held and not input.brake, "no drive into him")

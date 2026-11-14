@@ -99,7 +99,6 @@ static func _try_crash(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 	d.target_position = at
 	d.arrive_at_speed = true
-	d.battle_spot = at
 	return d
 
 

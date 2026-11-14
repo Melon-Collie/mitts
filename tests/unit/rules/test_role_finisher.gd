@@ -605,7 +605,7 @@ func test_the_net_front_man_crashes_to_where_the_rebound_sits() -> void:
 			"to the measured contest point; got %s for %s" % [d.target_position, want])
 	assert_true(AIStationSearch.is_legal_position(d.target_position), "never in the crease")
 	assert_true(d.arrive_at_speed, "he gets there at speed")
-	assert_eq(d.battle_spot, d.target_position, "and boxes out whoever is on it")
+	assert_false(d.battle_spot.is_finite(), "his stick is for the puck now, not the man")
 
 
 func test_the_finisher_takes_the_late_rebound_in_the_slot() -> void:

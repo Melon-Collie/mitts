@@ -689,9 +689,19 @@ shot the keeper would save: the screen's share turned into goals, and of the
 saves left, his share of the rebound, raced against everyone else
 (`AIReboundValue.fill` once a play, `value_with` per station). Each play's
 measured contest point is a station. The station held is the battle spot
-whenever it is worth anything in front, and so is the contest point while
-our shot is on its way, so the press moves their D off the ice the rebound
-comes to.
+whenever it is worth anything in front, so the press moves their D off the
+ice the rebound comes to.
+
+| (J=11, 576) | first touch ours | their median touch | xG / possession | battle | spot published |
+|---|---|---|---|---|---|
+| 4b | 27% ± 4% | 0.35 s | 0.033 ± 0.005 | 0.04 s, 13% | 69%, 1.00 s |
+| 4c, pressing in flight too | 22% ± 4% | 0.28 s | 0.029 ± 0.004 | 0.11 s, 25% | 99%, 2.06 s |
+
+The battle now happens, and it lost rebounds. The press takes the stick off
+the ice, and it was still on as the rebound came to the spot: the man it
+moved got there with his stick down first. So the spot is fought for only
+while one of ours carries the puck (`test_no_fight_for_the_spot_with_the_puck_loose`),
+the box-out being won before the shot, and the crash publishes none.
 
 ---
 
