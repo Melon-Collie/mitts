@@ -206,44 +206,57 @@ func _plant(post: Vector2, side: float, puck: Vector2, velocity: Vector2, motor:
 	motor.go_to(at if near else spot, _seal_turn, KeeperRoute.Rest.DOWN)
 
 
-# Down with the carrier in tight in front of him: pushed onto the puck's line
-# where the carrier will be when the push lands, square to him there
-# (`_down_spot`); a move under SEAL_NEAR_M he leaves to the rotation, a push
-# being a commitment he cannot cut short.
+# Down with the carrier in tight in front of him: on the puck's line where the
+# carrier will be when he gets there, square to him there, giving ground with
+# him (`_down_spot`); a spot within his knees' reach scooted to and followed as
+# it moves, one beyond it pushed for, a push being a commitment he cannot cut
+# short.
 func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var at := Vector2(motor.x, motor.z)
 	var gives: bool = motor.carries()
 	var to: Vector2 = _down_spot(puck, at, gives)
 	var lands: Vector2 = puck
 	for i: int in SEAL_ROUNDS:
-		lands = puck + velocity * motor.slide.time_to(at.distance_to(to))
-		# A carrier driving at him stops on him, not past him.
-		if lands.y > -at.length() - GameRules.DEFAULT_STICK_LENGTH_M * 0.5:
+		# Read on no further than level with the back of the paint: by there a
+		# carrier going by him is the post's.
+		var ahead: float = motor.slide.time_to(at.distance_to(to))
+		if velocity.y > 1e-3:
+			ahead = minf(ahead, maxf(-DEPTH_FLOOR_M - puck.y, 0.0) / velocity.y)
+		lands = puck + velocity * ahead
+		# A carrier whose way there runs into him stops on him, not past him.
+		if _passes(puck, lands, at) < GameRules.DEFAULT_STICK_LENGTH_M * 0.5:
 			lands = puck
 		to = _down_spot(lands, at, gives)
-	# A spot as near as half a pad's width to the one he is still pushing for,
-	# or to where he has stopped, is no new push.
-	var pushing: bool = motor.route.rest == KeeperRoute.Rest.DOWN and not motor.is_idle() and not gives
-	if pushing and to.distance_to(motor.route.spot) <= SEAL_NEAR_M:
+	# A spot as near as half a pad's width to the one he is pushing for is no
+	# new push.
+	if motor.slides() and to.distance_to(motor.route.spot) <= SEAL_NEAR_M:
 		to = motor.route.spot
-	elif at.distance_to(to) <= SEAL_NEAR_M:
-		to = at
 	motor.go_to(to, facing(to, lands), KeeperRoute.Rest.DOWN)
 
 
-# His spot down at `at` for a carrier's puck at `puck`: on its line at his
-# depth, a push across. While the speed he dropped with still slides him
-# (`gives`) he gives ground with the carrier instead, back to where he hides
-# both posts from the puck, in tight at the furthest (he dropped outside it to
-# be down there), and no further out than he is: backing in is the one way he
-# has there on his knees, and a carrier who comes on in or goes wide of him is
-# not left below him.
+# His spot down at `at` for a carrier's puck at `puck`: on its line, back
+# where he hides both posts from it, in tight at the furthest (he dropped
+# outside it to be down there), and no further out than he is, so a carrier
+# who comes on in or goes wide of him is not left below him. Sliding on the
+# speed he dropped with (`gives`), or where getting there takes him across the
+# puck's line at least as much as back along it (a slide, turned to the
+# carrier), that is where he goes; straight back he has only his knees, and
+# gives what they reach.
 static func _down_spot(puck: Vector2, at: Vector2, gives: bool) -> Vector2:
 	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
-	if not gives:
-		return out * at.length()
 	var deepest: float = minf(DEPTH_FLOOR_M, crease_edge(out))
-	return out * clampf(closing_depth(out * minf(puck.length(), TIGHT_M)), deepest, maxf(at.length(), deepest))
+	var hides: float = clampf(closing_depth(out * minf(puck.length(), TIGHT_M)), deepest, maxf(at.length(), deepest))
+	var move: Vector2 = out * hides - at
+	if gives or absf(move.cross(out)) >= absf(move.dot(out)):
+		return out * hides
+	return out * maxf(hides, at.length() - KeeperRoute.KNEE_REACH_M)
+
+
+# How near the way from `from` to `to` passes `at`.
+static func _passes(from: Vector2, to: Vector2, at: Vector2) -> float:
+	var way: Vector2 = to - from
+	var along: float = clampf((at - from).dot(way) / maxf(way.length_squared(), 1e-9), 0.0, 1.0)
+	return at.distance_to(from + way * along)
 
 
 # The spot that seals the post at `post` with his `side` pad, down square to a

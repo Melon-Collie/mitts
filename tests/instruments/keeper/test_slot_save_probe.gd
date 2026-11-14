@@ -9,6 +9,7 @@ extends GutTest
 #   FLAT        — the flat shots post to post: G clean goal, o in off him,
 #                 s save, w wide
 # and the goals in off him by the part the puck met first.
+# test_tight_saves is the same against a breakaway's drive released in tight.
 # test_trace_one_slot_goal follows one flat shot tick by tick to the gear it
 # meets: the pads and blade boxes, and the contact's normal and rebound.
 
@@ -20,6 +21,8 @@ const SPEEDS: Array[float] = [20.0, 27.0, 33.0]
 const SPOTS: Array[Vector2] = [Vector2(0.0, 5.0), Vector2(1.5, 5.0), Vector2(0.0, 7.0),
 		Vector2(1.5, 7.0)]
 const DRIVE_M_S: float = 7.0
+const TIGHT_SPOTS: Array[Vector2] = [Vector2(0.0, 3.0), Vector2(0.0, 3.6), Vector2(0.0, 4.3), Vector2(1.0, 3.3)]
+const TIGHT_DRIVE_M_S: float = 8.5
 const DRIVE_FROM_M: float = 14.0
 const PART_NAMES: Array[String] = ["STICK", "PAD", "BLOCKER", "CHEST", "GLOVE", "MASK"]
 
@@ -111,6 +114,42 @@ func _cell(spot: Vector2, speed: float, driving: bool, charged: bool) -> String:
 			spot.x, spot.y, speed,
 			1.0 - float(clean) / maxf(on_net, 1),
 			1.0 - float(clean + off_total) / maxf(on_net, 1), flat, clean, off_total, str(off_him)]
+
+
+# Every loft and lane against a carrier driving in at a breakaway's pace,
+# released in tight and just outside it, on his line and held a metre off it:
+# FLAT / LOW / HIGH post to post (G clean, o in off him, s save, w wide) and
+# the goals of the cell. What a shooter who can put it anywhere has there.
+func test_tight_saves() -> void:
+	var lines: PackedStringArray = []
+	var total: int = 0
+	for spot: Vector2 in TIGHT_SPOTS:
+		for speed: float in [28.6, 33.0]:
+			var row: String = "drive %.1f m/s to (%.1f, %.1f) at %.1f m/s |" % [TIGHT_DRIVE_M_S, spot.x, spot.y, speed]
+			var goals: int = 0
+			for loft: int in Stager.LOFTS:
+				var lanes: String = ""
+				for i: int in Stager.AIM_POINTS:
+					_h.settle_ready(Vector3(spot.x, 0.0, GOAL_Z + DRIVE_FROM_M))
+					var at: Vector3 = _h.drive_in(spot.x, DRIVE_FROM_M, spot.y, TIGHT_DRIVE_M_S)
+					var r: int = _fire(at, Vector3(Stager.aim_x(i), 0.0, GOAL_Z), loft, speed, false)
+					var touched: bool = _h.last_part >= 0
+					var c: String = "w"
+					if r == Harness.GOAL and not touched:
+						c = "G"
+					elif touched and (r == Harness.GOAL or _h.rebound_goal):
+						c = "o"
+					elif touched:
+						c = "s"
+					if c == "G" or c == "o":
+						goals += 1
+					lanes += c
+				row += " " + lanes
+			total += goals
+			lines.append("%s | %d in" % [row, goals])
+	lines.append("%d in" % total)
+	gut.p("\n" + "\n".join(lines))
+	assert_true(true)
 
 
 # A flat shot that goes in off his right pad (aim 3) and one his blade stops

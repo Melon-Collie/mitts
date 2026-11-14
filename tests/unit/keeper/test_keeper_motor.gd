@@ -5,8 +5,9 @@ extends GutTest
 # him jumping and his gear out of the ice; the pivot turning him at its rate and
 # stopping on its facing; footwork going in his turned frame; a move asked
 # for from the wrong rest refused; asked down while he skates, down at once
-# carrying his speed; and down pushes one after another, the next going as soon
-# as the last stops.
+# carrying his speed, the slide ridden to a goal behind him and let go for one
+# across; down pushes one after another, the next going as soon as the last
+# stops; and a goal within his knees' reach scooted to and followed.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
@@ -234,3 +235,61 @@ func test_down_pushes_follow_one_another() -> void:
 	_motor.step(DT)
 	assert_eq(_motor._mover, KeeperMotor.Mover.SLIDE, "the next push under way at once")
 	_run_checked("second push")
+
+
+# Down, a goal within his knees' reach he scoots to in the butterfly, no faster
+# than his knees shuffle and with nothing committed: a goal that moves he
+# follows, a low save can cut in, and one moved past his reach he pushes for.
+func test_down_he_scoots_on_his_knees_and_follows_his_goal() -> void:
+	_motor.z = -1.0
+	_motor.go_to(Vector2(0.0, -1.0), 0.0, R.DOWN)
+	_run_checked("down")
+	var butterfly := KeeperPose.new()
+	KeeperPoses.butterfly(butterfly)
+	_motor.go_to(Vector2(0.25, -1.0), 0.0, R.DOWN)
+	var was := Vector2(_motor.x, _motor.z)
+	for i: int in 8:
+		_motor.step(DT)
+		assert_eq(_motor._mover, KeeperMotor.Mover.KNEES, "scooting, tick %d" % i)
+		assert_true(_motor.can_save(true), "a save can cut in, tick %d" % i)
+		var at := Vector2(_motor.x, _motor.z)
+		assert_almost_eq(at.distance_to(was), KeeperSlide.KNEE_SHUFFLE_M_S * DT, 1e-6, "at his knees' pace, tick %d" % i)
+		was = at
+		_motor.pose(_pose)
+		for leg: int in 2:
+			assert_almost_eq(_pose.legs[leg].knee, butterfly.legs[leg].knee, Vector3.ONE * 1e-6,
+					"both pads down, tick %d" % i)
+	_motor.go_to(Vector2(-0.1, -0.9), 0.0, R.DOWN)
+	_motor.step(DT)
+	assert_eq(_motor._mover, KeeperMotor.Mover.KNEES, "a goal moved the other way followed without stopping")
+	assert_lt(Vector2(_motor.x, _motor.z).distance_to(Vector2(-0.1, -0.9)), was.distance_to(Vector2(-0.1, -0.9)), "toward it")
+	_run_checked("to the moved goal")
+	assert_almost_eq(Vector2(_motor.x, _motor.z), Vector2(-0.1, -0.9), Vector2.ONE * KeeperRoute.THERE_M, "there")
+	assert_eq(_motor.rest, R.DOWN)
+	_motor.go_to(Vector2(0.8, -0.9), 0.0, R.DOWN)
+	_motor.step(DT)
+	_motor.step(DT)
+	assert_eq(_motor._mover, KeeperMotor.Mover.SLIDE, "past his knees' reach he pushes")
+	assert_true(_motor.slides())
+
+
+# Dropped while he skates back, a goal across him rather than behind is a push
+# from where he lands: the slide he dropped with is let go for it.
+func test_a_goal_across_him_ends_the_slide_he_dropped_with() -> void:
+	_motor.z = -1.6
+	var spot := Vector2(0.0, -1.6)
+	var back := Vector2(0.0, 1.8)
+	for i: int in int(0.5 / DT):
+		spot += back * DT
+		_motor.go_to(spot, 0.0, R.FEET, back)
+		_motor.step(DT)
+	assert_gt(_motor.glide.velocity.y, 1.0, "backing in")
+	_motor.go_to(Vector2(0.9, _motor.z + 0.2), 0.0, R.DOWN)
+	var t: float = 0.0
+	while not _motor.save_move.is_set() and t < 1.0:
+		_motor.step(DT)
+		t += DT
+	_motor.step(DT)
+	assert_false(_motor.carries(), "landed: the slide let go, his goal across him")
+	_motor.step(DT)
+	assert_true(_motor.slides(), "and the push for it under way")

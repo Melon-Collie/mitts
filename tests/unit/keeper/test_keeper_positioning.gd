@@ -533,6 +533,72 @@ func test_in_tight_the_butterfly_shows_a_shot_no_more_than_the_low_ready() -> vo
 	assert_gt(_open_to_a_shot(down, far, far_d), _open_to_a_shot(low, far, far_d), "%.1f m out: on his feet" % far)
 
 
+# Down, his spot gives ground with the carrier: back to where he hides both
+# posts from the puck, never further out than he is. Sliding on the speed he
+# dropped with, or where that is a move across the puck's line (a slide, turned
+# to the carrier), all the way; straight back he gives only what his knees
+# reach.
+func test_down_he_gives_ground_with_the_carrier() -> void:
+	var at := Vector2(0.0, -1.4)
+	var puck := Vector2(0.0, -2.0)
+	var hides: float = KeeperPositioning.closing_depth(puck)
+	assert_lt(hides, at.length() - KeeperRoute.KNEE_REACH_M, "the carrier well inside where he dropped")
+	assert_almost_eq(KeeperPositioning._down_spot(puck, at, true).length(), hides, 1e-6, "sliding: all the way back")
+	assert_almost_eq(KeeperPositioning._down_spot(puck, at, false).length(), at.length() - KeeperRoute.KNEE_REACH_M,
+			1e-6, "at rest, straight back: what his knees reach")
+	var wide: Vector2 = Vector2(sin(deg_to_rad(50.0)), -cos(deg_to_rad(50.0))) * 2.0
+	var across: Vector2 = KeeperPositioning._down_spot(wide, at, false)
+	assert_almost_eq(across.length(), maxf(KeeperPositioning.closing_depth(wide), KeeperPositioning.DEPTH_FLOOR_M), 1e-6,
+			"at rest, the carrier gone wide: all the way back, a slide across")
+	assert_almost_eq(absf(across.normalized().cross(wide.normalized())), 0.0, 1e-6, "on the puck's line")
+	for gives: bool in [true, false]:
+		var out_there := Vector2(0.0, -0.6)
+		assert_almost_eq(KeeperPositioning._down_spot(Vector2(0.0, -2.6), out_there, gives).length(), out_there.length(),
+				1e-6, "deeper than he need be: he takes no ground back on his knees")
+	assert_almost_eq(KeeperPositioning._down_spot(Vector2(0.0, -3.6), Vector2(0.0, -1.5), true).length(),
+			KeeperPositioning.closing_depth(Vector2(0.0, -KeeperPositioning.TIGHT_M)), 1e-6,
+			"dropped for a carrier still outside tight: back to where he hides the posts from in tight")
+
+
+# The live brain, down for a carrier of theirs who then carries wide round him
+# toward the post: he stays on his knees, reads the carrier on along his way
+# rather than pushing for where the puck was, and ends back by that post
+# turned toward him, not left out in front with the carrier below him.
+func test_a_carrier_going_round_him_is_pushed_back_to_the_post_with() -> void:
+	for side: float in [1.0, -1.0]:
+		_brain = KeeperPositioning.new()
+		_brain.play = KeeperPlayRead.new()
+		_motor = KeeperMotor.new()
+		_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+		var what: String = "%+.0f" % side
+		var body := Vector2(0.0, -9.0)
+		var tick: int = 0
+		var velocity := Vector2(0.0, 5.0)
+		var round_to := Vector2(side * 1.5, -0.7)
+		var was_down: bool = false
+		var t_round: float = 0.0
+		while body.distance_to(round_to) > 0.05:
+			if _brain.kept_down or was_down:
+				was_down = true
+				velocity = (round_to - body).normalized() * 4.0
+				t_round += DT
+			body += velocity * DT
+			_brain.play.step(DT, body, velocity, false, body, true)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+			_motor.step(DT)
+			tick += 1
+			if was_down and _motor.rest == R.FEET and _motor.is_idle():
+				assert_ne(_motor.rest, R.FEET, "%s: back on his feet %.2f s into it" % [what, t_round])
+				break
+		assert_true(was_down, "%s: down for him as he came" % what)
+		var at := Vector2(_motor.x, _motor.z)
+		assert_gt(side * at.x, 0.0, "%s: across to his side" % what)
+		assert_lt(at.length(), 1.0, "%s: back toward his net, not out where he dropped" % what)
+		assert_lt(at.y, body.y + 0.3, "%s: the carrier not left below him" % what)
+		assert_gt(-side * _motor.yaw, 0.0, "%s: turned toward the carrier" % what)
+
+
 # The live brain against a carrier of theirs skating straight in at a
 # breakaway's pace: backed in as he comes but still out when the carrier is in
 # shooting range, in the butterfly by the time he is in tight though the

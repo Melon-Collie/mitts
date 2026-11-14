@@ -40,7 +40,7 @@ extends RefCounted
 
 const Rest := KeeperRoute.Rest
 const Do := KeeperRoute.Do
-enum Mover { NONE, PIVOT, FOOTWORK, DROP, SLIDE, POST, SAVE, GLIDE }
+enum Mover { NONE, PIVOT, FOOTWORK, DROP, SLIDE, POST, SAVE, GLIDE, KNEES }
 
 # The pivot: its top turn rate, near the old goalie's (whose 5/s lerp turns him
 # through 45° at up to 3.9 rad/s), and how hard his edges start and stop it.
@@ -243,7 +243,8 @@ func rvh_fold_out() -> void:
 func can_save(down: bool) -> bool:
 	var gathering: bool = _mover == Mover.SAVE and save_move.state == KeeperSaveMove.State.GATHERING
 	if down:
-		return rest == Rest.DOWN and _mover == Mover.NONE or gathering and save_move.rests_down()
+		return rest == Rest.DOWN and (_mover == Mover.NONE or _mover == Mover.KNEES) \
+				or gathering and save_move.rests_down()
 	return rest == Rest.FEET and (_mover == Mover.NONE or _mover == Mover.PIVOT or _mover == Mover.FOOTWORK
 			or _mover == Mover.GLIDE) or _mover == Mover.DROP or gathering and not save_move.rests_down()
 
@@ -399,6 +400,16 @@ func _step_mover(dt: float) -> void:
 				_rest_on(Rest.DOWN if save_move.rests_down() else Rest.FEET)
 		Mover.GLIDE:
 			_step_glide(dt)
+		Mover.KNEES:
+			# Toward his goal as it is now, nothing committed: he stops the tick
+			# the way there is no longer a scoot.
+			slide.step(dt)
+			if not _goal or _plan() != Do.KNEE_SHUFFLE:
+				_mover = Mover.NONE
+			else:
+				var scoot: Vector2 = (route.spot - Vector2(x, z)).limit_length(KeeperSlide.KNEE_SHUFFLE_M_S * dt)
+				x += scoot.x
+				z += scoot.y
 		Mover.NONE:
 			# Down at rest, the last slide's stop still easing out of him.
 			if rest == Rest.DOWN:
@@ -461,6 +472,12 @@ func _drop_carrying() -> void:
 	_landing = true
 
 
+# Whether a push across on his knees is under way: a slide, which cannot be
+# cut short, not a scoot.
+func slides() -> bool:
+	return _mover == Mover.SLIDE
+
+
 # Whether the speed he dropped with is still sliding him (`_drop_carrying`).
 func carries() -> bool:
 	return _mover == Mover.SAVE and _landing and save_move.velocity != Vector2.ZERO
@@ -478,12 +495,16 @@ func _rest_where_the_slide_left_him() -> void:
 		route.spot = Vector2(x, z)
 
 
-# Landed from a glide and still sliding on his pads: whether the slide goes on
-# bringing him nearer his goal down. Once it would carry him by it he lets it
-# go and pushes for the goal from where he is.
+# Landed from a glide and still sliding on his pads: whether the slide is
+# still his way to his goal down, which lies more along it than across it.
+# Once it would carry him by the goal, or the goal is a push across from where
+# he is, he lets it go and pushes for the goal.
 func _rides_on() -> bool:
-	return save_move.velocity != Vector2.ZERO and _goal and route.rest == Rest.DOWN \
-			and (route.spot - Vector2(x, z)).dot(save_move.velocity) > 0.0
+	if save_move.velocity == Vector2.ZERO or not _goal or route.rest != Rest.DOWN:
+		return false
+	var to: Vector2 = route.spot - Vector2(x, z)
+	var way: Vector2 = save_move.velocity.normalized()
+	return to.dot(way) > absf(to.cross(way))
 
 
 func _rest_on(r: int) -> void:
@@ -564,6 +585,10 @@ func _start(what: int, spot: Vector2, side: float, top: float) -> bool:
 				else:
 					slide.slide_from_feet(spot, top)
 			_mover = Mover.SLIDE
+		Do.KNEE_SHUFFLE:
+			if rest != Rest.DOWN:
+				return false
+			_mover = Mover.KNEES
 		Do.ROTATE:
 			if rest != Rest.DOWN:
 				return false

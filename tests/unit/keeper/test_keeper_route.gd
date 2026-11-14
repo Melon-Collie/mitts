@@ -308,3 +308,39 @@ func test_the_last_order_wins() -> void:
 	_motor.go_to(Vector2(-0.8, 0.0), 0.0)
 	_run_checked("a goal after the asks")
 	assert_almost_eq(Vector2(_motor.x, _motor.z), Vector2(-0.8, 0.0), Vector2.ONE * 1e-4)
+
+
+# Down, a spot within his knees' reach he scoots to, whichever way it lies,
+# where a push would take longer; one behind him he slides to in one move,
+# turned as he loads, when that leaves him no further off the facing than a
+# slide goes, and is not stood up or spun round first for it.
+func test_down_he_scoots_to_a_near_spot_and_slides_turned_to_one_behind() -> void:
+	for near: Vector2 in [Vector2(0.2, -1.0), Vector2(0.0, -0.75), Vector2(-0.15, -1.15)]:
+		_place(R.DOWN, Vector2(0.0, -1.0), 0.0)
+		_motor.go_to(near, 0.0, R.DOWN)
+		var what: String = "to %s" % near
+		var planned: float = _motor.time_to_goal()
+		assert_eq(_motor.route.first, DO.KNEE_SHUFFLE, "%s: on his knees" % what)
+		assert_almost_eq(planned, near.distance_to(Vector2(0.0, -1.0)) / KeeperSlide.KNEE_SHUFFLE_M_S, 2.0 * DT,
+				"%s: at his knees' pace" % what)
+		var took: float = _run_checked(what)
+		assert_almost_eq(took, planned, PLAN_TOLERANCE_S, "%s: in the time planned" % what)
+		assert_eq(_motor.rest, R.DOWN, "%s: down throughout" % what)
+		assert_almost_eq(Vector2(_motor.x, _motor.z), near, Vector2.ONE * KeeperRoute.THERE_M, "%s: there" % what)
+	var from := Vector2(-0.5, -1.1)
+	var behind := Vector2(0.0, -0.4)
+	var turned: float = KeeperSlide.facing((behind - from).normalized(), 1.0)
+	assert_gt(absf(turned), KeeperSlide.MAX_OFF_LINE_RAD, "the spot further off his line than a load turns him")
+	_place(R.DOWN, from, 0.0)
+	_motor.go_to(behind, turned, R.DOWN)
+	var planned_slide: float = _motor.time_to_goal()
+	assert_eq(_motor.route.first, DO.SLIDE, "behind him, facing as the slide leaves him: one slide")
+	var took_slide: float = _run_checked("behind him")
+	assert_almost_eq(took_slide, planned_slide, PLAN_TOLERANCE_S, "behind him: in the time planned")
+	assert_eq(_motor.refused, 0)
+	assert_almost_eq(Vector2(_motor.x, _motor.z), behind, Vector2.ONE * KeeperRoute.THERE_M, "behind him: there")
+	assert_almost_eq(_motor.yaw, turned, KeeperRoute.DOWN_FACED_RAD, "behind him: turned by the slide")
+	_place(R.DOWN, from, 0.0)
+	_motor.go_to(behind, 0.0, R.DOWN)
+	_motor.time_to_goal()
+	assert_ne(_motor.route.first, DO.SLIDE, "square to a shot in front, he does not slide away turned off it")
