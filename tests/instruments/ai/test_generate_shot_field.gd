@@ -21,7 +21,8 @@ extends GutTest
 # their edges bisected). Reads are stored raw; AIShotOdds
 # derives its features from them, so a feature change needs no re-measurement.
 #
-#   MITTS_FIELD_SHARD=i MITTS_FIELD_SHARDS=n   measure every n-th cell from i
+#   MITTS_FIELD_SHARD=i MITTS_FIELD_SHARDS=n   measure every n-th cell from i,
+#                                              after those a stopped run kept
 #   MITTS_FIELD_MERGE=1                        merge the shards into the data file
 
 const Stager := preload("res://tests/unit/ai/shot_odds_stager.gd")
@@ -29,6 +30,7 @@ const Fingerprint := preload("res://tests/unit/ai/shot_field_fingerprint.gd")
 
 const OUT_PATH: String = "res://Scripts/domain/ai/generated/shot_field_data.gd"
 const SHARD_PATH: String = "user://shot_field_shard_%d.txt"
+const PROGRESS_EVERY: int = 25
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 # Lateral and metres-out release grid, in the frame of the net at GOAL_Z, out
 # to the boards and the blue line's far edge (19.51 m), so a release on the ice
@@ -196,23 +198,68 @@ func _row(index: int, cell: Array) -> String:
 			release.x, release.z - GOAL_Z, pre_fields, decision_fields, "\t".join(patterns)]
 
 
+# The first line of a shard file: what it was measured against and which shard
+# it is, so a run resumes only its own cells of the same goalie.
+static func _shard_header(shard: int, shards: int) -> String:
+	return "# %s %d/%d" % [Fingerprint.compute(), shard, shards]
+
+
+# The rows an earlier run of this shard measured before it was stopped, if its
+# file carries `header`: whole lines only, since a kill can land mid-write.
+static func _resumable_rows(path: String, header: String) -> PackedStringArray:
+	var kept := PackedStringArray()
+	if not FileAccess.file_exists(path):
+		return kept
+	var lines: PackedStringArray = FileAccess.get_file_as_string(path).split("\n")
+	if lines[0] != header:
+		return kept
+	# The last element follows the final newline: empty, or a torn row.
+	for i: int in range(1, lines.size() - 1):
+		if not lines[i].is_empty():
+			kept.append(lines[i])
+	return kept
+
+
+# Each row is written and flushed as it is measured, so a run that is stopped
+# loses one cell, and the next run of the same shard picks up after the rows
+# already there.
 func test_measure_a_shard() -> void:
 	var shards: int = int(OS.get_environment("MITTS_FIELD_SHARDS"))
 	if shards <= 0:
 		pending("set MITTS_FIELD_SHARD / MITTS_FIELD_SHARDS (generate-shot-field.sh)")
 		return
 	var shard: int = int(OS.get_environment("MITTS_FIELD_SHARD"))
+	var path: String = SHARD_PATH % shard
+	var header: String = _shard_header(shard, shards)
+	var kept: PackedStringArray = _resumable_rows(path, header)
+	var done: Dictionary = {}
+	for line: String in kept:
+		done[int(line.get_slice("\t", 0))] = true
 	var cells: Array = _cells()
-	var lines: PackedStringArray = []
+	var mine: int = 0
 	for i: int in cells.size():
 		if i % shards == shard:
-			lines.append(_row(i, cells[i]))
-	var f := FileAccess.open(SHARD_PATH % shard, FileAccess.WRITE)
+			mine += 1
+	var f := FileAccess.open(path, FileAccess.WRITE)
 	assert_not_null(f, "can write shard %d" % shard)
-	if f != null:
-		f.store_string("\n".join(lines) + "\n")
-		f.close()
-	gut.p("shard %d/%d: %d cells" % [shard, shards, lines.size()])
+	if f == null:
+		return
+	f.store_line(header)
+	for line: String in kept:
+		f.store_line(line)
+	f.flush()
+	gut.p("shard %d/%d: %d cells, %d already measured" % [shard, shards, mine, kept.size()])
+	var measured: int = kept.size()
+	for i: int in cells.size():
+		if i % shards != shard or done.has(i):
+			continue
+		f.store_line(_row(i, cells[i]))
+		f.flush()
+		measured += 1
+		if measured % PROGRESS_EVERY == 0:
+			gut.p("shard %d/%d: %d of %d" % [shard, shards, measured, mine])
+	f.close()
+	gut.p("shard %d/%d: %d cells" % [shard, shards, measured])
 
 
 func test_merge_the_shards() -> void:
@@ -223,7 +270,9 @@ func test_merge_the_shards() -> void:
 	var rows: Array[String] = []
 	rows.resize(_cells().size())
 	for shard: int in shards:
-		for line: String in FileAccess.get_file_as_string(SHARD_PATH % shard).split("\n"):
+		var lines: PackedStringArray = FileAccess.get_file_as_string(SHARD_PATH % shard).split("\n")
+		assert_eq(lines[0], _shard_header(shard, shards), "shard %d measured this goalie" % shard)
+		for line: String in lines.slice(1):
 			if not line.is_empty():
 				rows[int(line.get_slice("\t", 0))] = line
 	for i: int in rows.size():

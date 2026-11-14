@@ -3,7 +3,9 @@
 # open set the bots' shot odds are read from (docs/shot-currency-plan.md). Run it
 # whenever the goalie changes; test_shot_field_is_current.gd fails until you do.
 # Shards the cells over SHARDS Godot processes (default: the core count), then
-# merges. Expect tens of minutes.
+# merges. Expect an hour or more. A stopped run is resumed by running this
+# again with the same SHARDS: each shard keeps the cells it already measured,
+# unless the goalie's sources changed since. Each shard's log prints its count.
 set -euo pipefail
 
 HOOKS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

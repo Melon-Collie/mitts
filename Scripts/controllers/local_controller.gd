@@ -9,9 +9,42 @@ func shot_power_sensitivity() -> float:
 # A client's puck node carries no velocity (PuckController drives only its
 # position), so the one-timer and the deflect judge the rendered flight.
 func _sample_live_puck_view(out: SkaterController.PuckView) -> void:
+	if is_replaying and _replay_view != null:
+		out.position = _replay_view.puck_position
+		out.velocity = _replay_view.puck_velocity
+		return
 	super(out)
 	if not _is_host and GameManager.puck_controller != null:
 		out.velocity = GameManager.puck_controller.rendered_loose_velocity
+
+
+func goalie_save_boxes() -> PackedFloat32Array:
+	if is_replaying and _replay_view != null:
+		return _replay_view.goalie_boxes
+	return super()
+
+
+# The live tick reads the puck and the goalie where this client draws them at
+# the input's stamp; the replay runs an unacked window later, when both have
+# moved on. So the live tick notes what it read (_append_prediction_snapshot
+# records it) and the replay plays it back (_replay_view).
+func _process_input(input: InputState, delta: float) -> void:
+	if not is_replaying:
+		_sample_live_puck_view(_tick_puck_view)
+		var boxes: PackedFloat32Array = goalie_save_boxes()
+		_tick_goalie_boxes = boxes if _goalie_in_reach(boxes) else _no_boxes
+	super(input, delta)
+
+
+# Holding the goalie's arrays costs GameManager a copy on its next in-place
+# refresh, so a tick records them only with a box in reach. Out of reach, the
+# live clamps did nothing and the replay's empty boxes do nothing; the slack is
+# how far the replayed body may part from the live one and still agree — far
+# past the reconcile threshold. Asked as a body that wide: one his gear does not
+# touch holds every blade and body within that reach clear of it.
+func _goalie_in_reach(boxes: PackedFloat32Array) -> bool:
+	var reach: float = _ik.full_blade_reach() + skater.blade_length + _GOALIE_RECORD_SLACK_M
+	return GoalieGearCollision.body_out(skater.global_position, reach, boxes) != Vector3.ZERO
 
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
@@ -68,6 +101,13 @@ var _poke_claim_floor: float = 0.0
 # Provider: func(exclude_skater: Skater, host_ts: float) -> Array of
 # {skater, position, velocity, hit, puck, ghost}. Set by GameManager (_sample_historical_others).
 var _historical_others_provider: Callable = Callable()
+# The live tick's reads of the puck and goalie (_process_input), and the entry
+# the replay plays them back from while it runs.
+var _tick_puck_view := SkaterController.PuckView.new()
+var _tick_goalie_boxes := PackedFloat32Array()
+var _no_boxes := PackedFloat32Array()
+var _replay_view: PredictedState = null
+const _GOALIE_RECORD_SLACK_M: float = 1.0
 # Reused across pairs during replay re-resolution — no per-pair allocation.
 var _replay_collision_result: SkaterCollisionRules.Result = SkaterCollisionRules.Result.new()
 const _BLADE_JUMP_THRESHOLD: float = 0.05
@@ -433,6 +473,13 @@ func _append_prediction_snapshot() -> void:
 	snap.carry_hop = skater.carry_read_hop()
 	snap.hold_ease = _ik.hold.state()
 	snap.blade_dangle_vel = _ik.blade_dangle_velocity()
+	snap.puck_position = _tick_puck_view.position
+	snap.puck_velocity = _tick_puck_view.velocity
+	snap.goalie_boxes = _tick_goalie_boxes
+	_tick_goalie_boxes = _no_boxes
+	# The body clamp ran this tick just before this capture, on these boxes.
+	var body_boxes: PackedFloat32Array = skater.goalie_body_boxes()
+	snap.goalie_body_boxes = body_boxes if _goalie_in_reach(body_boxes) else _no_boxes
 	_prediction_history.append(snap)
 	if _prediction_history.size() > _PREDICTION_HISTORY_CAP:
 		_prediction_history.pop_front()
@@ -687,6 +734,20 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# trajectory below — see the re-record comment inside the loop.
 	var replay_hist_i: int = 0
 	for input in _input_history:
+		# This input's live entry, matched by timestamp (epsilon-tolerant) rather
+		# than assumed 1:1: the live capture is deferred to post_move_integrated
+		# and can skip a tick. Its reads of the puck and goalie are played back
+		# through this input, and it is re-recorded after it.
+		while replay_hist_i < _prediction_history.size() \
+				and _prediction_history[replay_hist_i].host_timestamp \
+					< input.host_timestamp - PredictedState.TS_MATCH_EPSILON:
+			replay_hist_i += 1
+		var entry: PredictedState = null
+		if replay_hist_i < _prediction_history.size() \
+				and absf(_prediction_history[replay_hist_i].host_timestamp - input.host_timestamp) \
+					<= PredictedState.TS_MATCH_EPSILON:
+			entry = _prediction_history[replay_hist_i]
+		_replay_view = entry
 		if carry_from != null:
 			skater.adopt_carry_read(carry_from.carry_side_smoothed, carry_from.carry_hop)
 			_ik.hold.adopt(carry_from.hold_ease)
@@ -711,25 +772,21 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		# Same for the goal net — keep the replay in lockstep with the live tick so a
 		# net brush can't compound into a reconcile loop.
 		skater.clamp_body_to_net()
-		# And the goalie footprint, for the same reason.
-		skater.clamp_body_to_goalies()
+		# And the goalie footprint, for the same reason, where the live tick had him.
+		if entry != null:
+			skater.clamp_body_to_goalie_boxes(entry.goalie_body_boxes)
+		else:
+			skater.clamp_body_to_goalies()
 		if predicted != null:
 			skater.step_tick_state(input.delta)
 		# Re-record this input's prediction from the corrected trajectory: the
 		# pre-correction snapshots sit on the trajectory the replay just
 		# abandoned, so leaving them re-trips the threshold on every subsequent
 		# advanced ack in the unacked span — ~an RTT window of redundant
-		# corrections per real divergence. Matched by timestamp
-		# (epsilon-tolerant) rather than assumed 1:1: the live capture is
-		# deferred to post_move_integrated and can skip a tick.
-		while replay_hist_i < _prediction_history.size() \
-				and _prediction_history[replay_hist_i].host_timestamp \
-					< input.host_timestamp - PredictedState.TS_MATCH_EPSILON:
-			replay_hist_i += 1
-		if replay_hist_i < _prediction_history.size() \
-				and absf(_prediction_history[replay_hist_i].host_timestamp - input.host_timestamp) \
-					<= PredictedState.TS_MATCH_EPSILON:
-			var replay_snap: PredictedState = _prediction_history[replay_hist_i]
+		# corrections per real divergence. Only the trajectory is re-recorded:
+		# the world reads it was run against stay the live tick's.
+		if entry != null:
+			var replay_snap: PredictedState = entry
 			replay_snap.position = skater.global_position
 			replay_snap.velocity = skater.velocity
 			replay_snap.facing = _pose.facing
@@ -740,6 +797,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			carry_from = replay_snap
 			replay_hist_i += 1
 	is_replaying = false
+	_replay_view = null
 	skater.adopt_carry_read(live_carry_side, live_carry_hop)
 	_ik.hold.adopt(live_hold_ease)
 	var replayed_state: State = _sm.get_state()

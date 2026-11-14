@@ -15,22 +15,21 @@ func _make() -> RefCounted:
 
 func test_not_ready_before_initial_ping_count() -> void:
 	var cs := _make()
-	cs.record_pong(0.0, 0.05, 0.1)
-	cs.record_pong(0.0, 0.05, 0.1)
+	for _i in range(cs.INITIAL_PING_COUNT - 1):
+		cs.record_pong(0.0, 0.05, 0.1)
 	assert_false(cs.is_ready)
 
 
 func test_ready_after_initial_ping_count() -> void:
 	var cs := _make()
-	cs.record_pong(0.0, 0.05, 0.1)
-	cs.record_pong(0.0, 0.05, 0.1)
-	cs.record_pong(0.0, 0.05, 0.1)
+	for _i in range(cs.INITIAL_PING_COUNT):
+		cs.record_pong(0.0, 0.05, 0.1)
 	assert_true(cs.is_ready)
 
 
 func test_ready_stays_true_after_more_samples() -> void:
 	var cs := _make()
-	for i: int in 6:
+	for i: int in cs.INITIAL_PING_COUNT + 3:
 		cs.record_pong(0.0, 0.05, 0.1)
 	assert_true(cs.is_ready)
 
@@ -77,7 +76,7 @@ func test_zero_offset_when_clocks_are_in_sync() -> void:
 	# If host_time == midpoint of the round trip, offset should be ~0.
 	# send=0, recv=0.1, host_time=0.05 → rtt=0.1, offset=(0.05+0.05)-0.1=0
 	var cs := _make()
-	for i: int in 3:
+	for i: int in cs.INITIAL_PING_COUNT:
 		cs.record_pong(0.0, 0.05, 0.1)
 	# estimated_host_time ≈ local_time + 0 ≈ local_time
 	var now: float = Time.get_ticks_msec() / 1000.0
@@ -88,7 +87,7 @@ func test_positive_offset_when_host_is_ahead() -> void:
 	# host is 10 s ahead of client; mid-trip host_time should be ~(local+10+rtt/2)
 	# send=0, recv=0.1, host_time=10.05 → offset=(10.05+0.05)-0.1=10.0
 	var cs := _make()
-	for i: int in 3:
+	for i: int in cs.INITIAL_PING_COUNT:
 		cs.record_pong(0.0, 10.05, 0.1)
 	var now: float = Time.get_ticks_msec() / 1000.0
 	assert_almost_eq(cs.estimated_host_time(), now + 10.0, 0.05)
@@ -98,9 +97,8 @@ func test_positive_offset_when_host_is_ahead() -> void:
 
 func _ready_clock() -> RefCounted:
 	var cs := _make()
-	cs.record_pong(0.0, 0.05, 0.1)
-	cs.record_pong(0.0, 0.05, 0.1)
-	cs.record_pong(0.0, 0.05, 0.1)
+	for _i in range(cs.INITIAL_PING_COUNT):
+		cs.record_pong(0.0, 0.05, 0.1)
 	return cs
 
 
@@ -170,3 +168,143 @@ func test_lead_never_touches_the_ntp_offset() -> void:
 	var lead_gap: float = cs.estimated_input_stamp_time() - cs.estimated_host_time()
 	assert_almost_eq(lead_gap, cs.current_input_lead_s(), 2e-3,
 			"stamp lead is the lead, with no offset drift folded in")
+
+
+# ── Probe cadence ────────────────────────────────────────────────────────────
+
+func _ticks_until_ping(cs: RefCounted, step: float) -> float:
+	var waited: float = 0.0
+	while not cs.tick(step):
+		waited += step
+	return waited + step
+
+
+func test_lost_warmup_probes_cost_only_warmup_intervals() -> void:
+	var cs := _make()
+	var step: float = 0.01
+	assert_true(cs.tick(step), "the first probe goes at once")
+	# Four probes go out and two are lost: two pongs land.
+	for i in range(3):
+		_ticks_until_ping(cs, step)
+		if i > 0:
+			cs.record_pong(0.0, 0.05, 0.1)
+	assert_false(cs.is_ready, "the control: two samples are not a clock")
+	var wait: float = _ticks_until_ping(cs, step)
+	assert_almost_eq(wait, cs.INITIAL_PING_INTERVAL, step * 1.5,
+			"the next probe follows at the warm-up interval, not the ongoing one")
+
+
+func test_a_ready_clock_probes_at_the_ongoing_interval() -> void:
+	var cs := _make()
+	var step: float = 0.01
+	cs.tick(step)
+	for _i in range(cs.INITIAL_PING_COUNT):
+		cs.record_pong(0.0, 0.05, 0.1)
+	assert_true(cs.is_ready)
+	_ticks_until_ping(cs, step)  # the one already scheduled at the warm-up interval
+	var wait: float = _ticks_until_ping(cs, step)
+	assert_almost_eq(wait, cs.ONGOING_PING_INTERVAL, step * 1.5)
+
+
+# A probe that waits on a retransmit, or behind other reliable traffic, carries
+# that wait in its round trip and skews the offset by half of it.
+func test_every_timing_probe_is_unreliable() -> void:
+	var src: String = FileAccess.get_file_as_string("res://Scripts/networking/network_manager.gd")
+	for probe: String in ["send_ping", "receive_pong", "host_ping", "host_pong"]:
+		var at: int = src.find("\nfunc %s(" % probe)
+		assert_gt(at, -1, "%s exists" % probe)
+		var rpc_at: int = src.rfind("@rpc(", at)
+		var annotation: String = src.substr(rpc_at, src.find("\n", rpc_at) - rpc_at)
+		assert_true(annotation.contains("\"unreliable\""),
+				"%s is %s" % [probe, annotation])
+
+
+# ── Applied offset ───────────────────────────────────────────────────────────
+
+const FRAME: float = 1.0 / 144.0
+
+
+# Steps the clock frame by frame over `seconds` of wall time from `wall`,
+# returning the smallest and largest host-time advance a frame saw, as a
+# fraction of the frame.
+func _frame_rates(cs: RefCounted, wall: float, seconds: float) -> Vector2:
+	var prev: float = cs.host_time_at(wall)
+	var lo: float = INF
+	var hi: float = -INF
+	var frames: int = int(seconds / FRAME)
+	for i in range(1, frames + 1):
+		var now: float = cs.host_time_at(wall + float(i) * FRAME)
+		lo = minf(lo, (now - prev) / FRAME)
+		hi = maxf(hi, (now - prev) / FRAME)
+		prev = now
+	return Vector2(lo, hi)
+
+
+func test_a_correction_runs_the_clock_slightly_fast_instead_of_jumping() -> void:
+	var cs := _ready_clock()
+	cs.host_time_at(10.0)
+	cs._offset += 0.02
+	var rates: Vector2 = _frame_rates(cs, 10.0, 2.0)
+	assert_almost_eq(rates.y, 1.0 + cs.OFFSET_SLEW_S, 1e-6, "no frame jumps past the slew")
+	assert_gt(rates.x, 1.0, "and every frame is gaining on the correction")
+
+
+func test_a_backward_correction_never_freezes_the_clock() -> void:
+	var cs := _ready_clock()
+	cs.host_time_at(10.0)
+	cs._offset -= 0.02
+	var rates: Vector2 = _frame_rates(cs, 10.0, 2.0)
+	assert_almost_eq(rates.x, 1.0 - cs.OFFSET_SLEW_S, 1e-6,
+			"each frame still advances, a little slower")
+
+
+func test_a_correction_is_taken_up_whole() -> void:
+	var cs := _ready_clock()
+	cs.host_time_at(10.0)
+	var target: float = cs._offset + 0.02
+	cs._offset = target
+	_frame_rates(cs, 10.0, 0.02 / cs.OFFSET_SLEW_S + 0.5)
+	assert_almost_eq(cs._applied_offset, target, 1e-9)
+	var settled: Vector2 = _frame_rates(cs, 20.0, 1.0)
+	assert_almost_eq(settled.x, 1.0, 1e-6, "and then it runs at real time")
+	assert_almost_eq(settled.y, 1.0, 1e-6)
+
+
+func test_a_large_error_snaps() -> void:
+	var cs := _ready_clock()
+	cs.host_time_at(10.0)
+	cs._offset += cs.OFFSET_SNAP_S * 2.0
+	assert_almost_eq(cs.host_time_at(10.0 + FRAME), 10.0 + FRAME + cs._offset, 1e-9)
+
+
+func test_a_snap_back_holds_the_clock_until_real_time_catches_up() -> void:
+	var cs := _ready_clock()
+	var before: float = cs.host_time_at(10.0)
+	cs._offset -= cs.OFFSET_SNAP_S * 2.0
+	assert_eq(cs.host_time_at(10.0 + FRAME), before, "never backward")
+
+
+# A 1 ms clock rounded every reading to the millisecond: 12% of a tick of noise
+# on every stamp and every packet delay. The session clock reads microseconds.
+func test_the_clock_resolves_under_a_millisecond() -> void:
+	var cs := _ready_clock()
+	var a: float = cs.estimated_host_time()
+	var b: float = a
+	var start: int = Time.get_ticks_usec()
+	while b == a and Time.get_ticks_usec() - start < 5000:
+		b = cs.estimated_host_time()
+	assert_lt(b - a, 0.0009, "consecutive distinct readings are under a millisecond apart")
+
+
+# Each round trip's offset carries its own error. The clock starts on the mean
+# of the best round trips of the warm-up, so errors that cancel, cancel; started
+# on the single best, it kept that sample's whole error for the first seconds.
+func test_the_clock_starts_on_several_round_trips() -> void:
+	var cs := _make()
+	var errors: Array[float] = [0.004, -0.004, 0.002, -0.002, 0.009, -0.009]
+	assert_eq(errors.size(), cs.INITIAL_PING_COUNT)
+	for i in range(errors.size()):
+		var rtt: float = 0.05 + 0.01 * float(i)  # the last two are the outliers dropped
+		cs.record_pong(0.0, rtt / 2.0 + errors[i], rtt)
+	assert_true(cs.is_ready)
+	assert_almost_eq(cs._offset, 0.0, 1e-9)

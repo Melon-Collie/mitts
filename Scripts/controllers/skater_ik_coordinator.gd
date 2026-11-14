@@ -126,7 +126,9 @@ var _pass_scalars := PackedFloat64Array()
 # The hold config the native pass last took (_sync_hold_config).
 var _native_hold_cfg: StickHoldRules.Config = null
 var _pass_vectors := PackedVector3Array()
-var _no_goalies := PackedFloat32Array()
+# The puck as the controller reads it this tick (read_puck_view): on a client the
+# drawn flight, and in a reconcile replay the live tick's.
+var _puck_view := SkaterController.PuckView.new()
 # NativeBladePass.run's inputs, by index (its Scalar and Vec enums).
 enum PassS {
 	DELTA, HOLD_BLADE, HOLD_SEAT, HAS_PUCK, LEFT_HANDED, WRISTER_AIM, TRUNK_FOLD,
@@ -718,8 +720,9 @@ func _native_blade_toward(target_world: Vector3, delta: float, hold_blade: bool,
 	v[PassV.BLADE_FORWARD] = -_skater.blade.global_transform.basis.z
 	v[PassV.PREV_CONTACT] = _skater.get_prev_blade_contact_global()
 	if puck != null:
-		v[PassV.PUCK_POS] = puck.global_position
-		v[PassV.PUCK_VEL] = puck.linear_velocity
+		_controller.read_puck_view(_puck_view)
+		v[PassV.PUCK_POS] = _puck_view.position
+		v[PassV.PUCK_VEL] = _puck_view.velocity
 	v[PassV.VELOCITY] = _skater.velocity
 	v[PassV.UB_ROTATION] = _skater.upper_body.rotation
 	v[PassV.LAST_TARGET] = last_target_blade_world
@@ -915,8 +918,9 @@ func _reach_purpose(skater_pos: Vector3, cursor_world: Vector3) -> float:
 	if puck == null or _controller.has_puck:
 		return 1.0
 	var body := Vector2(skater_pos.x, skater_pos.z)
-	var at: Vector3 = puck.global_position
-	var vel: Vector3 = puck.linear_velocity
+	_controller.read_puck_view(_puck_view)
+	var at: Vector3 = _puck_view.position
+	var vel: Vector3 = _puck_view.velocity
 	return maxf(ReachPurposeRules.purpose(body, full_blade_reach(),
 			Vector2(at.x, at.z), Vector2(vel.x, vel.z), _controller.reach_purpose_lookahead_s,
 			_controller.reach_purpose_near_m, _controller.reach_purpose_far_m),
@@ -1629,9 +1633,7 @@ func resolve_blade_against_goalies(heel_world: Vector3, hand_world: Vector3) -> 
 
 
 func _goalie_boxes() -> PackedFloat32Array:
-	if not _controller._game_state.has_method("get_goalie_boxes"):
-		return _no_goalies
-	return _controller._game_state.get_goalie_boxes()
+	return _controller.goalie_save_boxes()
 
 # ── Geometry Helpers ──────────────────────────────────────────────────────────
 # Converts the world-space blade_height to upper-body-local Y.
