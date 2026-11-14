@@ -658,9 +658,40 @@ rebound off a point shot, counting our share of first touches on the squirt.
 - **The sweep above ran with a bug since fixed.** A receiver read his own
   body, where it stood at the pass, as a screen on his shot off the feed
   (0.47 against 0.33 for a man skating out from the crease to the slot's
-  top). A feed's shot now counts only their bodies as screens
-  (`test_carrier_field_screen.gd`). The battle numbers are the finisher's
-  station, which the bug did not touch.
+  top). A feed's shot now leaves the receiver out, by where he stands, and
+  counts every other body (`test_carrier_field_screen.gd`). The battle
+  numbers are the finisher's station, which the bug did not touch.
+
+### 4b. Hold the net front between shots (`8c838b5`)
+
+The screen station is priced over every shot of ours a body in front could
+help (`AIStationSearch.fill_shot_plays`): the carrier's from where he stands,
+and each teammate's off a feed, weighted by the lane to him and the keeper's
+save on his one-timer. The best play counts, one puck being one shot. The
+station he holds is published whenever it screens any of them, not only when
+the screen is its best term. Read from what the net-front man can see; the
+carrier's own planned release is his agent's, and a human carrier has none.
+
+| (J=11, 576) | slot shots | first touch ours | xG / possession | spot published | contested |
+|---|---|---|---|---|---|
+| 4 | 0.080 | 30% ± 4% | 0.031 ± 0.005 | 30%, 0.27 s | 0.01 s |
+| 4b | 0.090 | 27% ± 4% | 0.033 ± 0.005 | 69%, 1.00 s | 0.07 s |
+
+The net front is held seven times as long and contested seven times as
+often. Outcomes stay within noise, and our man is 3.4 m from the spot on
+average while it is up.
+
+### 4c. Box out for the rebound (`48638ab`)
+
+Step 3 found their house D win half of all rebounds by standing inside our
+forwards. A net-front station is now priced by what a body there adds to each
+shot the keeper would save: the screen's share turned into goals, and of the
+saves left, his share of the rebound, raced against everyone else
+(`AIReboundValue.fill` once a play, `value_with` per station). Each play's
+measured contest point is a station. The station held is the battle spot
+whenever it is worth anything in front, and so is the contest point while
+our shot is on its way, so the press moves their D off the ice the rebound
+comes to.
 
 ---
 
