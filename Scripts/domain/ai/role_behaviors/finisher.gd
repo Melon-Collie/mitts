@@ -52,7 +52,53 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	var reactive: RoleDecision = _try_reactive_decision(ctx)
 	if reactive != null:
 		return reactive
+	var crash: RoleDecision = _try_crash(ctx)
+	if crash != null:
+		return crash
 	return _positioning_decision(ctx)
+
+
+# ── The crash (our shot on its way) ──────────────────────────────────────────
+# How far a crash point inside the crease is walked out along its bearing from
+# the goal per step, to the first legal ice.
+const CRASH_STEP_OUT_M: float = 0.25
+
+
+# With our shot on its way to their net (a teammate's release, untouched since,
+# at a shot's pace and heading at it), go to where its rebound is worth playing:
+# the measured crash point for the release (AIReboundField.crash_point) — the
+# contest point, where it first sits playable, for NET_FRONT, and the late one,
+# half a second on in the slot, for the FINISHER. Arrived at speed. Null when no
+# shot of ours is on its way, or the release's spot leaves no rebound to play.
+static func _try_crash(ctx: RoleContext) -> RoleDecision:
+	var puck: PuckNetworkState = ctx.snapshot.puck_state
+	if puck == null or puck.carrier_peer_id != -1:
+		return null
+	var releaser: int = ctx.snapshot.loose_puck_released_by
+	if releaser == -1 or ctx.team_id_by_peer.get(releaser, -1) != ctx.team_id \
+			or not ctx.snapshot.skater_states.has(releaser):
+		return null
+	var vel := Vector2(puck.velocity.x, puck.velocity.z)
+	var goal: Vector3 = ctx.attacking_goal_pos
+	if vel.length() < INCOMING_SHOT_SPEED_M_S \
+			or vel.dot(Vector2(goal.x - puck.position.x, goal.z - puck.position.z)) <= 0.0:
+		return null
+	var late: bool = ctx.team_brain == null \
+			or ctx.team_brain.get_slot(ctx.peer_id) != AIRoleSlots.Slot.NET_FRONT
+	var at: Vector3 = AIReboundField.crash_point(AIReboundField.spot_of(
+			ctx.snapshot.skater_states[releaser].position, goal), late, goal)
+	if not at.is_finite():
+		return null
+	var out := Vector3(at.x - goal.x, 0.0, at.z - goal.z).normalized()
+	if out == Vector3.ZERO:
+		out = Vector3(0.0, 0.0, ctx.own_goal_dir)
+	while not AIStationSearch.is_legal_position(at) \
+			and Vector2(at.x - goal.x, at.z - goal.z).length() < GameRules.SLOT_DIST_M:
+		at += out * CRASH_STEP_OUT_M
+	var d := RoleDecision.new()
+	d.target_position = at
+	d.arrive_at_speed = true
+	return d
 
 
 # ── Reactive (incoming shot) ─────────────────────────────────────────────────
@@ -113,6 +159,11 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 			-TIP_MAX_TURN_RAD, TIP_MAX_TURN_RAD)
 	var bearing: Vector2 = (-travel).rotated(-asin(turn / TIP_MAX_TURN_RAD))
 	var body: Vector2 = tip - bearing * TIP_BLADE_OUT_M
+	# A tip his blade cannot be on before the puck crosses his line, stick out
+	# (AILoosePuckChase.reach_eta), is no tip: the crash is his play instead.
+	if AILoosePuckChase.reach_eta(ctx.self_pos, Vector3(tip.x, 0.0, tip.y), ctx.self_velocity,
+			ctx.self_max_speed, ctx.self_max_accel, ctx.self_blade_reach) > t_to_my_z:
+		return null
 	var d := RoleDecision.new()
 	d.target_position = Vector3(body.x, 0.0, body.y)
 	d.aim_world_pos = Vector3(tip.x, 0.0, tip.y)

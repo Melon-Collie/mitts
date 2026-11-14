@@ -35,6 +35,13 @@ static var _vout := PackedFloat32Array()
 static var _kx := PackedFloat32Array()
 static var _kout := PackedFloat32Array()
 static var _keeper_down := PackedByteArray()
+# Per spot, where its rebounds are worth playing, in the data's frame: the mean
+# contest and late puck positions (NAN: none), weighted by what playing each is
+# worth (crash_point).
+static var _crash_x := PackedFloat32Array()
+static var _crash_out := PackedFloat32Array()
+static var _late_x := PackedFloat32Array()
+static var _late_out := PackedFloat32Array()
 
 
 # The measured spot nearest `release`, attacking the net at `attacking_goal`.
@@ -55,6 +62,20 @@ static func shot_count(spot: int) -> int:
 static func shot(spot: int, k: int) -> int:
 	_build()
 	return _spot_first[spot] + k
+
+
+# Where `spot`'s rebounds are worth playing on the net at `attacking_goal`: the
+# contest points of its live rebounds, each weighted by the better of the two
+# second shots measured on it (touched first there, the late one can be held
+# for), or with `late` the late points, by the late shot. Unweighted where none
+# of them scored. INF when it has none.
+static func crash_point(spot: int, late: bool, attacking_goal: Vector3) -> Vector3:
+	_build()
+	var x: float = _late_x[spot] if late else _crash_x[spot]
+	if is_nan(x):
+		return Vector3.INF
+	var out: float = _late_out[spot] if late else _crash_out[spot]
+	return Vector3(x, 0.0, attacking_goal.z - signf(attacking_goal.z) * out)
 
 
 static func outcome(row: int) -> int:
@@ -168,3 +189,36 @@ static func _build() -> void:
 				_keeper_down.append(1 if probe.is_down() else 0)
 				n += 1
 		_sample_count.append(n)
+	for spot: int in spots:
+		_append_crash(spot, false)
+		_append_crash(spot, true)
+
+
+static func _append_crash(spot: int, late: bool) -> void:
+	var w: float = 0.0
+	var x: float = 0.0
+	var out: float = 0.0
+	var n: int = 0
+	var x_any: float = 0.0
+	var out_any: float = 0.0
+	for r: int in range(_spot_first[spot], _spot_first[spot] + _spot_count[spot]):
+		var k: int = _late_k[r] if late else _contest_k[r]
+		if k < 0:
+			continue
+		var scored: float = _late_scored[r] if late \
+				else maxf(_contest_scored[r], _late_scored[r])
+		var i: int = _sample_first[r] + k
+		w += scored
+		x += scored * _x[i]
+		out += scored * _out[i]
+		n += 1
+		x_any += _x[i]
+		out_any += _out[i]
+	var mean_x: float = x / w if w > 0.0 else (x_any / n if n > 0 else NAN)
+	var mean_out: float = out / w if w > 0.0 else (out_any / n if n > 0 else NAN)
+	if late:
+		_late_x.append(mean_x)
+		_late_out.append(mean_out)
+	else:
+		_crash_x.append(mean_x)
+		_crash_out.append(mean_out)

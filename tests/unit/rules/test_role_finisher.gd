@@ -150,9 +150,11 @@ func test_a_wide_shot_a_tip_can_bring_back_is_tipped_in() -> void:
 	# The same line from 1.7 m further right crosses the goal line ~0.8 m
 	# outside the mouth: under a tip's turn from the blade, so it is tipped,
 	# and as far as a tip turns it lands inside the mouth.
+	# He stands where his stick can be on it in time (from the back door's 4.6 m
+	# it is past before he could reach).
 	var vel := Vector3(-3.0, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
-			Vector3(-2.0, 0.0, -22.0),
+			Vector3(1.0, 0.0, -22.0),
 			Vector3(4.0, 0.0, -15.0), vel)
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
 	_assert_blade_on_the_path(d, 2.6)
@@ -561,3 +563,73 @@ func test_finisher_staging_snapshot() -> void:
 		snap.record("%s, target z" % key, target.z)
 	snap.record("weak-side stage x, strong side +X", _stage_x_for_strong_side(1.0))
 	snap.verify(self)
+
+
+# ─── CRASH: our shot on its way ──────────────────────────────────────────────
+
+class SlotStub extends TeamStrategyView:
+	var slots: Dictionary = {}
+
+	func get_slot(peer_id: int) -> int:
+		return slots.get(peer_id, AIRoleSlots.Slot.NONE)
+
+
+const SHOOTER := 2
+const POINT_SHOT_FROM := Vector3(-6.0, 0.0, -9.0)
+
+
+# Our point man (peer 2) has just let a shot go at their net; me (peer 1) on
+# `slot`, standing at `me`, behind the puck so no tip is on.
+func _crash_ctx(slot: int, me: Vector3 = Vector3(3.0, 0.0, -8.5),
+		puck_vel: Vector3 = Vector3.INF) -> RoleContext:
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var from: Vector3 = POINT_SHOT_FROM + Vector3(0.4, 0.0, -0.8)
+	var vel: Vector3 = (goal - from).normalized() * 25.0 if not puck_vel.is_finite() else puck_vel
+	var ctx: RoleContext = _make_ctx(me, from, vel,
+			[_make_skater(1, TEAM_ID, me), _make_skater(SHOOTER, TEAM_ID, POINT_SHOT_FROM)])
+	ctx.snapshot.loose_puck_released_by = SHOOTER
+	var slots := SlotStub.new()
+	slots.slots = {1: slot, SHOOTER: AIRoleSlots.Slot.POINT_WEAK}
+	ctx.team_brain = slots
+	return ctx
+
+
+func test_the_net_front_man_crashes_to_where_the_rebound_sits() -> void:
+	var ctx: RoleContext = _crash_ctx(AIRoleSlots.Slot.NET_FRONT)
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var want: Vector3 = AIReboundField.crash_point(
+			AIReboundField.spot_of(POINT_SHOT_FROM, goal), false, goal)
+	assert_true(want.is_finite(), "the point shot's spot has rebounds to play")
+	assert_lt(Vector2(d.target_position.x - want.x, d.target_position.z - want.z).length(), 1.0,
+			"to the measured contest point; got %s for %s" % [d.target_position, want])
+	assert_true(AIStationSearch.is_legal_position(d.target_position), "never in the crease")
+	assert_true(d.arrive_at_speed, "he gets there at speed")
+
+
+func test_the_finisher_takes_the_late_rebound_in_the_slot() -> void:
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var d: RoleDecision = AIRoleFinisher.decide(_crash_ctx(AIRoleSlots.Slot.FINISHER))
+	var late: Vector3 = AIReboundField.crash_point(
+			AIReboundField.spot_of(POINT_SHOT_FROM, goal), true, goal)
+	assert_lt(Vector2(d.target_position.x - late.x, d.target_position.z - late.z).length(), 1.0,
+			"to the measured late point; got %s for %s" % [d.target_position, late])
+
+
+func test_no_crash_on_their_release_or_a_puck_going_away() -> void:
+	var ctx: RoleContext = _crash_ctx(AIRoleSlots.Slot.NET_FRONT)
+	ctx.team_id_by_peer[SHOOTER] = 1
+	assert_false(AIRoleFinisher.decide(ctx).arrive_at_speed, "their shot is not ours to crash")
+	var away: RoleContext = _crash_ctx(AIRoleSlots.Slot.NET_FRONT, Vector3(3.0, 0.0, -8.5),
+			Vector3(0.0, 0.0, 20.0))
+	assert_false(AIRoleFinisher.decide(away).arrive_at_speed, "a puck going up the ice is no shot")
+
+
+func test_a_tip_he_cannot_make_is_a_crash() -> void:
+	# Ahead of the puck but 9 m across from its line: the shot is past his line
+	# before he could be on it.
+	var d: RoleDecision = AIRoleFinisher.decide(
+			_crash_ctx(AIRoleSlots.Slot.NET_FRONT, Vector3(8.0, 0.0, -20.0)))
+	assert_false(d.has_aim_override, "no tip")
+	assert_true(d.arrive_at_speed, "the crash")
+
