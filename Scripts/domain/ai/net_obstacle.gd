@@ -1,8 +1,8 @@
 class_name AINetObstacle
 
 # Segment tests on the ice plane against the two cages and our own slot: what
-# a pass, a carry or a blade target may not pass through. A leaf (GameRules
-# only).
+# a pass, a carry or a blade target may not pass through. A leaf (GameRules,
+# CreaseRules and CarryPostureRules only).
 
 # ── The net as a CARRY / BLADE obstacle ──────────────────────────────────────
 # The carry model sees the cage the way the body steering does
@@ -77,6 +77,71 @@ static func net_safe_blade_target(from: Vector3, target: Vector3) -> Vector3:
 	var swing: float = min_rel if -min_rel <= max_rel else max_rel
 	var out_ang: float = target_ang + swing + signf(swing) * 0.05
 	return Vector3(from.x + sin(out_ang) * dist, 0.0, from.z + cos(out_ang) * dist)
+
+
+# ── Our own goal mouth as a CARRIED puck's no-go ─────────────────────────────
+# The twine holds a carried puck at its surface rather than stripping it, so
+# nothing in the physics stops a carrier dragging the puck over his own goal
+# line between the posts: that is a goal. A carried puck goes where the blade
+# cursor is, so the cursor is the one place to forbid it.
+#
+# The mouth: the span a puck riding anywhere on the blade crosses the line
+# inside — the post centrelines, the pipe and the puck's radius, and half a
+# blade either side of mid-blade, which the cursor names — from the top of the
+# crease back to the cage's back frame.
+const OWN_MOUTH_HALF_WIDTH_M: float = GameRules.NET_HALF_WIDTH + GameRules.NET_POST_RADIUS \
+		+ GameRules.PUCK_COLLISION_RADIUS + 0.5 * GameRules.DEFAULT_BLADE_LENGTH_M
+const OWN_MOUTH_DEPTH_M: float = CreaseRules.ARC_RADIUS
+# Where a target forced out of the mouth goes: wide of the cage frame by the
+# blade standoff net_safe_blade_target keeps, so the blade is not pressed onto
+# a post, whose pipe strips the puck.
+const OWN_MOUTH_EXIT_HALF_WIDTH_M: float = GameRules.NET_BACK_HALF_WIDTH \
+		+ BLADE_NET_CLEAR_MARGIN_M
+
+
+# Whether the carried puck, aimed at `target` while the body travels at
+# `self_velocity`, is in or crossing our own goal mouth over the next
+# `horizon_s` (the blade's time to take the puck clear of it).
+static func carried_puck_in_own_mouth(target: Vector3, self_velocity: Vector3,
+		own_goal_dir: float, horizon_s: float) -> bool:
+	var near_z: float = own_goal_dir * (GameRules.GOAL_LINE_Z - OWN_MOUTH_DEPTH_M)
+	var far_z: float = own_goal_dir * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH)
+	var to_x: float = target.x + self_velocity.x * horizon_s
+	var to_z: float = target.z + self_velocity.z * horizon_s
+	return _segment_crosses_aabb_xz(target.x, target.z, to_x, to_z,
+			-OWN_MOUTH_HALF_WIDTH_M, OWN_MOUTH_HALF_WIDTH_M,
+			minf(near_z, far_z), maxf(near_z, far_z))
+
+
+# A carrier's blade target kept out of our own goal mouth. The puck is not at
+# the cursor but where the carry holds it, no nearer than the floor
+# (`floor_band`: the carry's floor standing and under its skating fold) along
+# the cursor's bearing, or along `facing` with the cursor on his centre — which
+# is where a cursor parked on the body (a cradle) puts it. Held in the mouth, or
+# dragged through it by the body's travel within `horizon_s`, the target goes
+# out wide of the post on the body's own side, at the held depth unless the
+# floor would pull it back in from there, when it goes up the ice from the body
+# until the floor is met. Any other target returns unchanged.
+static func own_mouth_safe_blade_target(self_pos: Vector3, self_velocity: Vector3,
+		facing: Vector2, target: Vector3, floor_band: Vector2, own_goal_dir: float,
+		horizon_s: float) -> Vector3:
+	var offset := Vector2(target.x - self_pos.x, target.z - self_pos.z)
+	var near: Vector2 = CarryPostureRules.held_out_along(offset, facing, floor_band.x)
+	var far: Vector2 = CarryPostureRules.held_out_along(offset, facing, floor_band.y)
+	if not carried_puck_in_own_mouth(Vector3(self_pos.x + near.x, 0.0, self_pos.z + near.y),
+			self_velocity, own_goal_dir, horizon_s) \
+			and not carried_puck_in_own_mouth(
+					Vector3(self_pos.x + far.x, 0.0, self_pos.z + far.y),
+					self_velocity, own_goal_dir, horizon_s):
+		return target
+	var side: float = signf(self_pos.x)
+	if side == 0.0:
+		side = signf(self_velocity.x) if self_velocity.x != 0.0 else 1.0
+	var dx: float = side * OWN_MOUTH_EXIT_HALF_WIDTH_M - self_pos.x
+	var dz: float = near.y
+	if dx * dx + dz * dz < floor_band.y * floor_band.y:
+		dz = -own_goal_dir * sqrt(maxf(floor_band.y * floor_band.y - dx * dx, 0.0))
+	return Vector3(self_pos.x + dx, 0.0, self_pos.z + dz)
 
 
 # Own-DZ slot danger zone. True iff the pass segment crosses the

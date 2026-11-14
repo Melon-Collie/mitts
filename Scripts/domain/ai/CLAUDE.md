@@ -1390,6 +1390,9 @@ reaches back into what remains.
     behind a goal line, a rolled move is held off the cage as the body is, and
     the carry cursor
     swings around the nearer post (stick-on-net contact dislodges the puck).
+    Our own mouth is a hard no-go for a carried puck
+    (`own_mouth_safe_blade_target`, `Scripts/ai/CLAUDE.md`): an execution
+    clamp like the boards', not an evaluation term.
     Behind-the-goal-line ice is playable for a carrier already back there
     (`AICarrierCarrySearch._candidate_ice_legal`), or the walkouts are the only moves and
     a pressured carrier plants on the end wall.

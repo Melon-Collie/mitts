@@ -147,6 +147,21 @@ stay on the aim ring. The shot-hold pricing (`AIShotHolds`) measures the pull on
 the same route, and times the swing at the bot's arc rate, so what the carrier
 prices is the path the cursor walks.
 
+**A carried puck never goes into our own net.** The twine holds a carried puck
+rather than stripping it, so nothing in the physics stops a carrier dragging it
+over his own goal line. Every cursor step a carrier takes — the carry aim, a
+cradle, a pocket, a wind-up — goes through `AINetObstacle
+.own_mouth_safe_blade_target` in `_step_mouse_internal`. It reads the puck
+where the carry holds it, no nearer than the floor
+(`AISkaterCaps.carry_reach_min_m`, straight ahead for a cursor parked on the
+body, which is where the goalie cradle parks it), never the cursor itself: held
+in our mouth, or dragged through it by the body's travel in the blade's time to
+sweep it clear, it goes out wide of the post on the body's own side. And a carrier
+or loose-puck chaser whose stop would run into our own crease brakes
+(`AISteering.stops_in_own_crease`, after the dispatch): the repel steers but
+sheds no momentum, and the puck goes over the line with him.
+`test_own_goal_guards.gd` replays the own goal `tools/own_goal_hunt.gd` caught.
+
 **A charged release comes from a listed spot, and is loaded before the press.**
 A shot from a pocket, a reach to either side of its line or the snapshot out
 front on the forehand (where the carry presents the puck, so a shot in stride

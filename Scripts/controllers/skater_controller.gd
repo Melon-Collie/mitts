@@ -1447,6 +1447,8 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.one_timer_min_windup_s = one_timer_min_windup_time
 	caps.one_timer_feed_grip = one_timer_feed_grip
 	caps.reception_ceiling_mult = skater.reception_ceiling_mult
+	caps.carry_reach_min_m = carry_reach_min_m
+	caps.carry_reach_fold_m = carry_reach_fold_m
 	# Handle reach scales with the blade lever: max_blade_speed / its base is
 	# exactly the lever ratio (attributes v4 — reach + stick length), so a
 	# longer lever protects the puck further out. _base is captured on the

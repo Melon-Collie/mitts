@@ -372,6 +372,10 @@ var _self_lateral_grip: float = 1.0
 var _self_weight: float = 1.0
 var _self_body_check_transfer: float = 0.65
 var _self_handle_reach: float = 0.9
+# How near a carried puck comes, standing and under the skating fold
+# (AISkaterCaps.carry_reach_min_m and its fold).
+var _carry_floor_band := Vector2(AISkaterCaps.LEAGUE_CARRY_REACH_MIN_M,
+		AISkaterCaps.LEAGUE_CARRY_REACH_MIN_M + AISkaterCaps.LEAGUE_CARRY_REACH_FOLD_M)
 # Blade reach cone half-angle (ROM + torso twist) and Agility-scaled facing turn
 # rate, so the carrier prices body rotation at this bot's real reach and speed.
 var _self_reach_cone_half_angle: float = deg_to_rad(157.0)
@@ -667,6 +671,8 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_self_weight = caps.weight
 	_self_body_check_transfer = caps.body_check_transfer
 	_self_handle_reach = caps.handle_reach
+	_carry_floor_band = Vector2(caps.carry_reach_min_m,
+			caps.carry_reach_min_m + caps.carry_reach_fold_m)
 	_self_reach_cone_half_angle = caps.reach_cone_half_angle
 	_self_facing_turn_rate = caps.facing_turn_rate
 	_self_blade_speed = caps.blade_speed
@@ -982,6 +988,7 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	_dispatch_skip_counter = dispatch_span - 1
 	full_dispatch_count += 1
 
+	var plays_the_puck: bool = _state == State.CARRY or _state == State.CHASE_PUCK
 	match _state:
 		State.OFF_PUCK:
 			_state_off_puck(input, snapshot, self_pos, have_puck)
@@ -995,6 +1002,13 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 			_state_pass_pressed(input, snapshot, self_pos, have_puck)
 		State.ONE_TIMER_PRESSED:
 			_state_one_timer_pressed(input, snapshot, self_pos, have_puck)
+	# A carrier, or a chaser going for a loose puck, never skates his momentum
+	# into our own crease: the puck on his stick, or the one he is about to
+	# collect, goes over the line with him.
+	if plays_the_puck and self_state != null and AISteering.stops_in_own_crease(self_pos,
+			Vector2(self_state.velocity.x, self_state.velocity.z), _own_goal_dir):
+		input.brake = true
+		input.stance_held = false
 
 	_cached_move_vector = input.move_vector
 	_cached_stick_lift_held = input.stick_lift_held
@@ -2926,6 +2940,12 @@ func _step_mouse_face(target: Vector3) -> Vector3:
 	return _step_mouse_internal(target, _STEP_FACE, MOUSE_MAX_SPEED_M_S, MOUSE_ARC_RATE_RAD_S)
 
 
+# The blade's time to sweep a carried puck across our whole goal mouth at its
+# slew: how far ahead the mouth guard reads the body's travel.
+func _own_mouth_clear_s() -> float:
+	return 2.0 * AINetObstacle.OWN_MOUTH_HALF_WIDTH_M / maxf(_mouse_max_speed_m_s, 0.1)
+
+
 func _step_mouse_toward(target: Vector3) -> Vector3:
 	return _step_mouse_internal(target, _STEP_DIRECT, _mouse_max_speed_m_s, _mouse_arc_rate_rad_s)
 
@@ -2974,6 +2994,14 @@ func _apply_committed_aim_error(pivot: Vector3, aim_point: Vector3) -> Vector3:
 
 func _step_mouse_internal(target: Vector3, mode: int,
 		max_speed: float, arc_rate: float) -> Vector3:
+	# A carried puck never goes into our own net, whatever placed the target: the
+	# carry aim, a cradle, a pocket or a wind-up (AINetObstacle
+	# .own_mouth_safe_blade_target, over the blade's time to sweep it clear).
+	if _current_snapshot != null and _current_self_state != null \
+			and _current_snapshot.real_puck_carrier_peer_id == _peer_id:
+		target = AINetObstacle.own_mouth_safe_blade_target(_current_self_pos,
+				_current_self_state.velocity, _current_self_state.facing.normalized(), target,
+				_carry_floor_band, _own_goal_dir, _own_mouth_clear_s())
 	# Cache the FINAL un-shaped target, mode and rates so skipped ticks re-shape
 	# fresh every physics frame, or a swing would take dispatch-period× too long.
 	_cached_aim_target = target

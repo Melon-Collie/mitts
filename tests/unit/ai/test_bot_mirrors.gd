@@ -29,6 +29,13 @@ func test_the_chase_and_slot_elections_share_their_stickiness() -> void:
 	assert_eq(AILoosePuckChase.HYSTERESIS_S, AIRoleSlots.HYSTERESIS_PENALTY_S)
 
 
+func test_the_carry_floor_the_bots_read_is_the_controllers() -> void:
+	var ctrl: SkaterController = SkaterControllerScript.new()
+	assert_almost_eq(AISkaterCaps.LEAGUE_CARRY_REACH_MIN_M, ctrl.carry_reach_min_m, 0.0001)
+	assert_almost_eq(AISkaterCaps.LEAGUE_CARRY_REACH_FOLD_M, ctrl.carry_reach_fold_m, 0.0001)
+	ctrl.free()
+
+
 func test_the_one_timer_salvage_sits_inside_the_controllers_zone() -> void:
 	var ctrl: SkaterController = SkaterControllerScript.new()
 	assert_lt(SkaterAgentOneTimer.ONE_TIMER_RELEASE_RADIUS_M, ctrl.slapper_zone_radius,

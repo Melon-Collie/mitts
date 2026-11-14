@@ -56,3 +56,11 @@ static func held_out(target: Vector2, min_out: float) -> Vector2:
 	if out < 0.001:
 		return Vector2(0.0, -min_out)
 	return target * (min_out / out)
+
+
+# held_out in any frame: `offset` and `facing` (unit) share one, and a cursor on
+# his centre reaches out along `facing`.
+static func held_out_along(offset: Vector2, facing: Vector2, min_out: float) -> Vector2:
+	if offset.length() < 0.001:
+		return facing * min_out
+	return held_out(offset, min_out)

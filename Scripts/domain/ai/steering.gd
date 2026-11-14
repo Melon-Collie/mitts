@@ -515,6 +515,32 @@ static func _crease_repel(self_pos: Vector3) -> Vector2:
 	return dir * (CREASE_REPEL_WEIGHT * falloff)
 
 
+# Whether a body travelling at `velocity_xz` would stop inside our own crease
+# (the repel's extended one) if it braked now — its straight-line stop
+# (ARRIVAL_BRAKE_DECEL_M_S2, plus the engage margin) reaches the paint from the
+# rink side while closing on the goal centre. The crease repel only steers: it
+# sheds no momentum, so a body driving at our net reaches the paint at speed
+# with the puck, or onto a loose one there, and the line is a stride behind it.
+# Below ARRIVAL_BRAKE_MIN_SPEED_M_S the repel settles it.
+static func stops_in_own_crease(self_pos: Vector3, velocity_xz: Vector2,
+		own_goal_dir: float) -> bool:
+	var speed: float = velocity_xz.length()
+	if speed < ARRIVAL_BRAKE_MIN_SPEED_M_S:
+		return false
+	var centre := Vector2(0.0, own_goal_dir * GameRules.GOAL_LINE_Z)
+	var p := Vector2(self_pos.x, self_pos.z)
+	if velocity_xz.dot(centre - p) <= 0.0:
+		return false
+	var stop_dist: float = (speed * speed) / (2.0 * ARRIVAL_BRAKE_DECEL_M_S2) \
+			+ ARRIVAL_BRAKE_ENGAGE_MARGIN_M
+	var dir: Vector2 = velocity_xz / speed
+	var q: Vector2 = p + dir * clampf(dir.dot(centre - p), 0.0, stop_dist)
+	var radius: float = CreaseRules.ARC_RADIUS + CREASE_REPEL_EXTENSION
+	# The rink side of the goal line only: a stop behind the net is the detour's.
+	var in_front: bool = (q.y - centre.y) * -own_goal_dir >= 0.0
+	return in_front and q.distance_squared_to(centre) <= radius * radius
+
+
 # Lateral "round the post" force for a bot pinned behind a goal line.
 # Returns ZERO unless the bot is at/behind a goal line AND laterally
 # within the net's post span AND its anchor is on the rink side of that

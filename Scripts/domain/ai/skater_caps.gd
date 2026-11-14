@@ -123,6 +123,15 @@ var height_mult: float = 1.0
 # (AIBotMechanics.EVADE_CARRY_HANDLE_M).
 var handle_reach: float = 0.9
 
+# How near his centre a carried puck comes (SkaterController.carry_reach_min_m,
+# m), and how much further out the floor sits under the skating fold
+# (carry_reach_fold_m): a cursor nearer than that holds the puck out to it along
+# its bearing (CarryPostureRules.held_out). Defaults are the league build's.
+const LEAGUE_CARRY_REACH_MIN_M: float = 0.97
+const LEAGUE_CARRY_REACH_FOLD_M: float = 0.15
+var carry_reach_min_m: float = LEAGUE_CARRY_REACH_MIN_M
+var carry_reach_fold_m: float = LEAGUE_CARRY_REACH_FOLD_M
+
 # Half-angle of the blade's reach cone: how far off its FACING the body can
 # place the blade WITHOUT turning — arm ROM plus torso twist
 # (SkaterController.rom_backhand_angle_max_deg + upper_body_max_twist_deg, the
