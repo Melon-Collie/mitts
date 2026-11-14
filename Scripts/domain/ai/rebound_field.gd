@@ -78,6 +78,31 @@ static func crash_point(spot: int, late: bool, attacking_goal: Vector3) -> Vecto
 	return Vector3(x, 0.0, attacking_goal.z - signf(attacking_goal.z) * out)
 
 
+# crash_point read between the measured spots round `release`: their points by
+# bilinear weight (AIFieldGrid), those with no rebounds left out. Read this
+# where a body is placed for the release, so the place moves with the carrier
+# rather than snapping to the next spot's as he crosses into it. INF when none
+# of the four has any.
+static func crash_point_at(release: Vector3, late: bool, attacking_goal: Vector3) -> Vector3:
+	_build()
+	AIFieldGrid.fill(AIReboundFieldData.SPOT_X, AIReboundFieldData.SPOT_FWD, release.x,
+			_out_of(release, attacking_goal))
+	var w: float = 0.0
+	var x: float = 0.0
+	var out: float = 0.0
+	for k: int in 4:
+		var s: int = AIFieldGrid.spot[k]
+		var cx: float = _late_x[s] if late else _crash_x[s]
+		if is_nan(cx) or AIFieldGrid.weight[k] <= 0.0:
+			continue
+		w += AIFieldGrid.weight[k]
+		x += AIFieldGrid.weight[k] * cx
+		out += AIFieldGrid.weight[k] * (_late_out[s] if late else _crash_out[s])
+	if w <= 0.0:
+		return crash_point(spot_of(release, attacking_goal), late, attacking_goal)
+	return Vector3(x / w, 0.0, attacking_goal.z - signf(attacking_goal.z) * out / w)
+
+
 static func outcome(row: int) -> int:
 	_build()
 	return _outcome[row]

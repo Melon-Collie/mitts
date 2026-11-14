@@ -47,3 +47,17 @@ func test_a_body_on_the_release_is_no_screen() -> void:
 		var body: Vector3 = release + Vector3(0.0, 0.0, -0.5)
 		assert_eq(AIScreenField.uplift(release, NET, _keeper(), body, _cfg), 0.0,
 				"%.1f m out" % out)
+
+
+# Read between the measured spots, the screen moves with the release: a
+# release half a centimetre either side of the boundary between two spots
+# reads within a hair of the same.
+func test_the_screen_does_not_snap_between_spots() -> void:
+	var mid_out: float = 0.5 * (AIScreenFieldData.SPOT_FWD[0] + AIScreenFieldData.SPOT_FWD[1])
+	var a := Vector3(0.0, 0.0, NET.z + mid_out - 0.005)
+	var b := Vector3(0.0, 0.0, NET.z + mid_out + 0.005)
+	assert_almost_eq(AIScreenField.best_station_along(a, NET),
+			AIScreenField.best_station_along(b, NET), 0.01)
+	var body := Vector3(0.0, 0.0, NET.z + 3.5)
+	assert_almost_eq(AIScreenField.uplift(a, NET, _keeper(), body, _cfg),
+			AIScreenField.uplift(b, NET, _keeper(), body, _cfg), 0.01)

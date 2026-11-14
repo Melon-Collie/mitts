@@ -55,3 +55,17 @@ func test_the_other_end_mirrors_the_path() -> void:
 		var vb: Vector3 = AIReboundField.sample_vel(r, 1, OTHER_NET)
 		assert_almost_eq(va.z, -vb.z, 1e-4)
 		return
+
+
+# Read between the measured spots, the crash point moves with the release: a
+# release half a centimetre either side of the boundary between two spots
+# reads within a hair of the same.
+func test_the_crash_point_does_not_snap_between_spots() -> void:
+	var goal := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+	var mid_x: float = 0.5 * (AIReboundFieldData.SPOT_X[2] + AIReboundFieldData.SPOT_X[3])
+	var a := Vector3(mid_x - 0.005, 0.0, goal.z + 9.5)
+	var b := Vector3(mid_x + 0.005, 0.0, goal.z + 9.5)
+	var pa: Vector3 = AIReboundField.crash_point_at(a, false, goal)
+	var pb: Vector3 = AIReboundField.crash_point_at(b, false, goal)
+	assert_true(pa.is_finite(), "the slot's top has rebounds to play")
+	assert_lt(pa.distance_to(pb), 0.05, "got %s and %s" % [pa, pb])

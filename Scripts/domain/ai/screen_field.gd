@@ -21,8 +21,9 @@ static var _station := PackedFloat32Array()
 # only while it hides the release from him (AIScreenRead.hides_release, his own
 # test, `cfg`); the field measured a screen off the line by as little as 0.4 m
 # adding nothing, so the value is the one measured on the line, at the station
-# nearest the body's distance out from the goal along it. 0 for a body that
-# hides nothing, or stands where a screen was measured to be worth nothing.
+# nearest the body's distance out from the goal along it, read between the
+# measured spots round the release (AIFieldGrid). 0 for a body that hides
+# nothing, or stands where a screen was measured to be worth nothing.
 static func uplift(release: Vector3, attacking_goal: Vector3, keeper_pos: Vector3,
 		body: Vector3, cfg: GoalieScreenRules.ScreenConfig) -> float:
 	_build()
@@ -38,14 +39,18 @@ static func uplift(release: Vector3, attacking_goal: Vector3, keeper_pos: Vector
 	if along >= reach or along < alongs[0] - _half_gap(alongs, 0) \
 			or along > alongs[-1] + _half_gap(alongs, alongs.size() - 2):
 		return 0.0
-	var spot: int = _spot_of(release, attacking_goal)
-	var base: float = _base[spot]
 	var on_line: int = _nearest(AIScreenFieldData.STATION_ACROSS_M, 0.0)
-	var screened: float = _station[(spot * alongs.size() + _nearest(alongs, along))
-			* AIScreenFieldData.STATION_ACROSS_M.size() + on_line]
-	if screened <= base or base >= 1.0:
-		return 0.0
-	return (screened - base) / (1.0 - base)
+	var station: int = _nearest(alongs, along)
+	_fill_corners(release, attacking_goal)
+	var v: float = 0.0
+	for k: int in 4:
+		var spot: int = AIFieldGrid.spot[k]
+		var base: float = _base[spot]
+		var screened: float = _station[(spot * alongs.size() + station)
+				* AIScreenFieldData.STATION_ACROSS_M.size() + on_line]
+		if screened > base and base < 1.0:
+			v += AIFieldGrid.weight[k] * (screened - base) / (1.0 - base)
+	return v
 
 
 # The best of `bodies`' screens for a shot from `release` (uplift): a second
@@ -58,12 +63,25 @@ static func best_uplift(release: Vector3, attacking_goal: Vector3, keeper_pos: V
 	return best
 
 
-# The distance out along a release's line to the net its spot's screen was
-# measured worth most at (the on-line station; NAN where none was worth
-# anything): where a screener goes.
+# The distance out along a release's line to the net a screen was measured
+# worth most at (the on-line station), read between the measured spots round
+# the release (AIFieldGrid) by the weight of those where one was worth
+# anything: where a screener goes. NAN where none of them was.
 static func best_station_along(release: Vector3, attacking_goal: Vector3) -> float:
 	_build()
-	var spot: int = _spot_of(release, attacking_goal)
+	_fill_corners(release, attacking_goal)
+	var w: float = 0.0
+	var at: float = 0.0
+	for k: int in 4:
+		var a: float = _spot_best_along(AIFieldGrid.spot[k])
+		if is_nan(a) or AIFieldGrid.weight[k] <= 0.0:
+			continue
+		w += AIFieldGrid.weight[k]
+		at += AIFieldGrid.weight[k] * a
+	return at / w if w > 0.0 else NAN
+
+
+static func _spot_best_along(spot: int) -> float:
 	var alongs: Array[float] = AIScreenFieldData.STATION_ALONG_M
 	var on_line: int = _nearest(AIScreenFieldData.STATION_ACROSS_M, 0.0)
 	var best: float = _base[spot]
@@ -77,14 +95,13 @@ static func best_station_along(release: Vector3, attacking_goal: Vector3) -> flo
 	return at
 
 
+static func _fill_corners(release: Vector3, attacking_goal: Vector3) -> void:
+	AIFieldGrid.fill(AIScreenFieldData.SPOT_X, AIScreenFieldData.SPOT_FWD, release.x,
+			(attacking_goal.z - release.z) * signf(attacking_goal.z))
+
+
 static func _half_gap(grid: Array[float], i: int) -> float:
 	return 0.5 * (grid[i + 1] - grid[i])
-
-
-static func _spot_of(release: Vector3, attacking_goal: Vector3) -> int:
-	var out: float = (attacking_goal.z - release.z) * signf(attacking_goal.z)
-	return _nearest(AIScreenFieldData.SPOT_FWD, out) * AIScreenFieldData.SPOT_X.size() \
-			+ _nearest(AIScreenFieldData.SPOT_X, release.x)
 
 
 static func _nearest(grid: Array[float], v: float) -> int:

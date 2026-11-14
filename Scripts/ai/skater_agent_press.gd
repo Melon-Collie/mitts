@@ -19,6 +19,9 @@ extends RefCounted
 
 # A man within 45° of the carrier's skate is one he is skating into.
 const DRIVE_THROUGH_COS: float = 0.7071
+# How far off a man standing on our spot we skate straight into him rather
+# than to the spot, which his body holds us short of. A starting value.
+const CLOSE_IN_M: float = 2.0
 
 var _peer_id: int = -1
 var _team_id: int = -1
@@ -74,7 +77,9 @@ func _body_radius(pid: int) -> float:
 # and ours, AISkaterCaps.body_radius), so we can stand there. The push runs
 # along the line through him, so it wins the spot only from the side that moves
 # him off it. Never with the puck loose: the press takes the stick off the ice,
-# and a rebound coming to the spot is then the man's we moved.
+# and a rebound coming to the spot is then the man's we moved. A man standing
+# on the spot short of that, within CLOSE_IN_M, is skated into (no Ctrl yet):
+# routed to the spot itself, his body stops us short of him.
 func _win_the_spot(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
 		own_goal_dir: float, spot: Vector3) -> bool:
 	if not spot.is_finite() or input.hit_held or input.stick_lift_held \
@@ -82,13 +87,20 @@ func _win_the_spot(input: InputState, snapshot: WorldSnapshot, me: SkaterNetwork
 			or _team_id_by_peer.get(snapshot.puck_state.carrier_peer_id, -1) != _team_id:
 		return false
 	var mine: float = Vector2(spot.x - me.position.x, spot.z - me.position.z).length()
+	var close_in: SkaterNetworkState = null
+	var close_gap: float = CLOSE_IN_M
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == _team_id:
 			continue
 		var man: SkaterNetworkState = snapshot.skater_states[pid]
-		if man.is_ghost or man.knockdown_timer > 0.0 \
-				or AIPressRead.gap_m(me.position, man.position) > AIPressRead.STEP_IN_M \
-				or Vector2(spot.x - man.position.x, spot.z - man.position.z).length() >= mine:
+		var his: float = Vector2(spot.x - man.position.x, spot.z - man.position.z).length()
+		if man.is_ghost or man.knockdown_timer > 0.0 or his >= mine:
+			continue
+		var gap: float = AIPressRead.gap_m(me.position, man.position)
+		if gap > AIPressRead.STEP_IN_M:
+			if gap < close_gap and his < _body_radius(_peer_id) + _body_radius(pid):
+				close_gap = gap
+				close_in = man
 			continue
 		var n := Vector2(man.position.x - me.position.x, man.position.z - me.position.z).normalized()
 		var moved: float = AIPressRead.displacement_m(me, _caps_by_peer.get(_peer_id), man,
@@ -101,6 +113,11 @@ func _win_the_spot(input: InputState, snapshot: WorldSnapshot, me: SkaterNetwork
 		input.stance_held = false
 		input.move_vector = n
 		return true
+	if close_in != null:
+		input.brake = false
+		input.stance_held = false
+		input.move_vector = Vector2(close_in.position.x - me.position.x,
+				close_in.position.z - me.position.z).normalized()
 	return false
 
 

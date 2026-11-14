@@ -191,12 +191,11 @@ static func _add_play(ctx: RoleContext, release: Vector3, keeper: Vector3, weigh
 
 # Where a man in front stands for each play (fill_shot_plays): on its release's
 # line to the net, as far out as the screen field measured a body worth most,
-# and where its rebounds are first played (AIReboundField.crash_point).
+# and where its rebounds are first played (AIReboundField.crash_point_at).
 static func append_net_front_stations(ctx: RoleContext, candidates: Array[Vector3]) -> void:
 	var goal: Vector3 = ctx.attacking_goal_pos
 	for i: int in _play_release.size():
-		var crash: Vector3 = AIReboundField.crash_point(
-				AIReboundField.spot_of(_play_release[i], goal), false, goal)
+		var crash: Vector3 = AIReboundField.crash_point_at(_play_release[i], false, goal)
 		if crash.is_finite():
 			candidates.append(crash)
 		var along: float = AIScreenField.best_station_along(_play_release[i], goal)

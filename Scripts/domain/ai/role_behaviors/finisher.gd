@@ -67,7 +67,7 @@ const CRASH_STEP_OUT_M: float = 0.25
 
 # With our shot on its way to their net (a teammate's release, untouched since,
 # at a shot's pace and heading at it), go to where its rebound is worth playing:
-# the measured crash point for the release (AIReboundField.crash_point) — the
+# the measured crash point for the release (AIReboundField.crash_point_at) — the
 # contest point, where it first sits playable, for NET_FRONT, and the late one,
 # half a second on in the slot, for the FINISHER. Arrived at speed. Null when no
 # shot of ours is on its way, or the release's spot leaves no rebound to play.
@@ -86,8 +86,8 @@ static func _try_crash(ctx: RoleContext) -> RoleDecision:
 		return null
 	var late: bool = ctx.team_brain == null \
 			or ctx.team_brain.get_slot(ctx.peer_id) != AIRoleSlots.Slot.NET_FRONT
-	var at: Vector3 = AIReboundField.crash_point(AIReboundField.spot_of(
-			ctx.snapshot.skater_states[releaser].position, goal), late, goal)
+	var at: Vector3 = AIReboundField.crash_point_at(
+			ctx.snapshot.skater_states[releaser].position, late, goal)
 	if not at.is_finite():
 		return null
 	var out := Vector3(at.x - goal.x, 0.0, at.z - goal.z).normalized()

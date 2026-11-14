@@ -508,8 +508,9 @@ his share of the rebound, raced against everyone else (`AIReboundValue`'s
 when it is worth anything in front (`RoleDecision.battle_spot`), whatever else
 it is worth: a man at the slot's top keeps the net front's ice worth holding
 while the carrier works the wall, and their D standing inside is a man to move.
-The press pass then wins it while one of ours carries the puck, never with it
-loose: the press takes the stick off the ice, and the rebound it was won for
+The press pass then wins it while one of ours carries the puck (skating into a man who
+stands on it short of contact, `CLOSE_IN_M`, rather than stopping at the spot
+his body holds), never with it loose: the press takes the stick off the ice, and the rebound it was won for
 goes to the man it moved (`SkaterAgentPress._win_the_spot`): a man of theirs
 nearer the spot, within `STEP_IN_M`, is pressed when the push moves him off it by both
 bodies' width. Never value a screen off the line: the field measured a body
@@ -959,7 +960,12 @@ takes the whole class down and every static call on it from every file at once.
     their sampled rebounds and the second chance measured at each;
   - `screen_field.gd` (`AIScreenField`) — the generated screen field: what a
     body hiding the release from the live keeper adds to a shot from a spot,
-    by how far out along the release's line it stands.
+    by how far out along the release's line it stands;
+  - `field_grid.gd` (`AIFieldGrid`) — a measured field's spot grid read
+    between its spots by bilinear weight. The rebound and screen fields place
+    bodies through it (`crash_point_at`, `best_station_along`, `uplift`):
+    read at the nearest spot, a body's place snapped ~2.5 m as the carrier
+    crossed into the next one, and the net front re-picked on every snap.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:

@@ -705,9 +705,10 @@ func test_ice_far_from_the_net_adds_nothing_in_front() -> void:
 
 
 func test_a_point_shot_gets_its_rebound_station_and_no_screen() -> void:
-	# The field measured a screen worth nothing from the points, so nobody is
-	# sent onto its line; its rebound is still played where it comes out.
-	var from := Vector3(-8.0, 0.0, OPP_NET_Z + 19.5)
+	# The field measured a screen worth nothing from its last row out, so a
+	# shot from past it sends nobody onto its line; its rebound is still played
+	# where it comes out.
+	var from := Vector3(-8.0, 0.0, OPP_NET_Z + 22.0)
 	var ctx: RoleContext = _screen_ctx(from, false)
 	var goalie: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
 	var opps: Array[Vector3] = ctx.scratch_opp_positions
@@ -717,8 +718,8 @@ func test_a_point_shot_gets_its_rebound_station_and_no_screen() -> void:
 	var stations: Array[Vector3] = []
 	AIStationSearch.append_net_front_stations(ctx, stations)
 	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
-	var crash: Vector3 = AIReboundField.crash_point(AIReboundField.spot_of(
-			AIPuckLane.release_point_toward(from, goal), goal), false, goal)
+	var crash: Vector3 = AIReboundField.crash_point_at(
+			AIPuckLane.release_point_toward(from, goal), false, goal)
 	assert_eq(stations, [crash] as Array[Vector3])
 
 

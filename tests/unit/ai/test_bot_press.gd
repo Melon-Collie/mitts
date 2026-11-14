@@ -257,3 +257,15 @@ func test_no_fight_for_the_spot_with_the_puck_loose() -> void:
 	var input := InputState.new()
 	sm.apply_press(input, s)
 	assert_false(input.hit_held and not input.brake, "no drive into him")
+
+
+func test_a_man_on_the_spot_out_of_reach_is_skated_into() -> void:
+	# He stands on our spot a metre off us: routed to the spot, his body would
+	# hold us short of him, so we skate straight into him, no Ctrl until contact.
+	var s: WorldSnapshot = _spot_snap()
+	s.skater_states[SELF_ID].position.z += 1.0
+	var input := InputState.new()
+	sm.apply_press(input, s)
+	assert_false(input.hit_held, "no Ctrl short of him")
+	var to_him := Vector2(0.0, -1.0)
+	assert_almost_eq(input.move_vector.angle_to(to_him), 0.0, 1e-3, "into him")
