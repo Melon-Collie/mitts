@@ -681,7 +681,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 					sample_speed,
 					_field.opponent_caps, -1.0, keeper_yaw,
 					AIActionScoring.FLAT_REBOUND_CREDIT, _shot_history(),
-					_field.screen_at(ctx, released_at, keeper_now, _field.opponents_release))
+					AIScreenField.best_uplift(released_at, attacking_goal, keeper_now,
+							_field.screens_release, _field.screen_cfg) if keeper_now.is_finite() else 0.0)
 		if not shootable:
 			continue
 		var s: float = sum / hold_samples * _field.holds.keep[k]

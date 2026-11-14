@@ -1026,7 +1026,7 @@ reaches back into what remains.
     nobody collected (`docs/bot-net-front-offense-plan.md` step 3a). A
     screen is credited the same way, on top of the field: the share of the
     keeper's saves a body hiding the release turns into goals
-    (`score_shoot_value`'s `screen`, `AICarrierField.screen_at` over every
+    (`score_shoot_value`'s `screen`, `AICarrierField._screen_at` over every
     other body, either side's).
   - **The open set is goal intervals, not aim samples.** The generator sweeps
     24 aims per loft and bisects every edge of a goal run to ~5 mm

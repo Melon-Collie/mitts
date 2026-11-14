@@ -103,8 +103,11 @@ var _drive_buf: Array[Vector3] = []
 # (against our defenders), priced by fill().
 var _ours := AIPossessionValue.new()
 var _theirs := AIPossessionValue.new()
-# The keeper's sightline test screen_at reads, at the league's eye height.
-var _screen_cfg := GoalieScreenRules.ScreenConfig.new()
+# The keeper's sightline test a screen is read by, at the league's eye height.
+var screen_cfg := GoalieScreenRules.ScreenConfig.new()
+# Who can screen a shot the carrier releases now: their skaters where it meets
+# them (opponents_release) and ours, filled by fill().
+var screens_release: Array[Vector3] = []
 var _screen_bodies: Array[Vector3] = []
 
 
@@ -135,6 +138,8 @@ func fill(ctx: RoleContext) -> void:
 			our_defenders.append(s.position)
 			our_defender_caps.append(ctx.caps_by_peer.get(peer_id))
 			our_defender_vels.append(s.velocity)
+	screens_release.assign(opponents_release)
+	screens_release.append_array(our_defenders)
 	if ctx.team_size >= 5:
 		AIActionScoring.fill_counter_cover_etas(
 				ctx.defending_goal_pos, our_defenders, exposure_mate_etas)
@@ -153,14 +158,17 @@ func fill(ctx: RoleContext) -> void:
 
 # What the bodies in front of their keeper at `keeper` add to a shot released
 # at `at` by hiding it (AIScreenField.best_uplift): `opps` (their skaters where
-# the shot meets them) and ours, the carrier aside.
-func screen_at(ctx: RoleContext, at: Vector3, keeper: Vector3, opps: Array[Vector3]) -> float:
+# the shot meets them), and with `ours` our skaters, the carrier aside. A feed's
+# shot leaves ours out: the receiver stands among them, where he is now.
+func _screen_at(ctx: RoleContext, at: Vector3, keeper: Vector3, opps: Array[Vector3],
+		ours: bool) -> float:
 	if not keeper.is_finite():
 		return 0.0
 	_screen_bodies.assign(opps)
-	_screen_bodies.append_array(our_defenders)
+	if ours:
+		_screen_bodies.append_array(our_defenders)
 	return AIScreenField.best_uplift(at, ctx.attacking_goal_pos, keeper, _screen_bodies,
-			_screen_cfg)
+			screen_cfg)
 
 
 func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
@@ -442,7 +450,7 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
 			stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 			opponent_caps, -1.0, keeper_yaw, AIActionScoring.FLAT_REBOUND_CREDIT, history,
-			screen_at(ctx, pos, keeper_pos, opps)) * shot_keep
+			_screen_at(ctx, pos, keeper_pos, opps, true)) * shot_keep
 	return _regime_value(ctx, pos, from_pos, shoot_s, arrive_s, arrive_vel)
 
 
@@ -459,7 +467,7 @@ func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: 
 	var fed: float = AIShotValue.feed(passer, pos, pass_speed,
 			ctx.attacking_goal_pos, goalie_now(ctx), one_timer) if ctx.reads_goalie_motion \
 			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos)
-	var screen: float = screen_at(ctx, pos, goalie_now(ctx), opps)
+	var screen: float = _screen_at(ctx, pos, goalie_now(ctx), opps, false)
 	var shoot_s: float = AIActionScoring.with_rebound(fed + (1.0 - fed) * screen,
 			AIActionScoring.FLAT_REBOUND_CREDIT)
 	if shoot_s > 0.0:

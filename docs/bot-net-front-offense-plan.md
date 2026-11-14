@@ -636,7 +636,7 @@ rebound off a point shot, counting our share of first touches on the squirt.
   publish it as `RoleDecision.screen_spot` when it wins. The press pass wins
   that spot (`_win_the_screen`): Ctrl into a man of theirs nearer it, when the
   press moves him off it. The carrier's shot and feed values credit the screen
-  standing in front of him (`AICarrierField.screen_at`).
+  standing in front of him (`AICarrierField._screen_at`).
 - **Rebound sweep, J=11, 576 possessions:**
 
   | | shots | slot shots | first touch ours | 2nd shots / shot | xG / possession |
@@ -655,6 +655,12 @@ rebound off a point shot, counting our share of first touches on the squirt.
   pays a screen only on central releases from 9.5–15 m, where the bot carrier
   seldom is (8% of possessions end in a slot shot). It flickers on and off as
   he moves, and the net front is not held between his shots.
+- **The sweep above ran with a bug since fixed.** A receiver read his own
+  body, where it stood at the pass, as a screen on his shot off the feed
+  (0.47 against 0.33 for a man skating out from the crease to the slot's
+  top). A feed's shot now counts only their bodies as screens
+  (`test_carrier_field_screen.gd`). The battle numbers are the finisher's
+  station, which the bug did not touch.
 
 ---
 

@@ -37,3 +37,13 @@ func test_the_best_of_several_bodies_counts_once() -> void:
 	var single: float = AIScreenField.uplift(release, NET, _keeper(), one, _cfg)
 	var two: Array[Vector3] = [one, one + Vector3(0.0, 0.0, 0.5)]
 	assert_almost_eq(AIScreenField.best_uplift(release, NET, _keeper(), two, _cfg), single, 1e-6)
+
+
+# A body on the release is the shooter's, not a screen: the keeper's own test
+# (GoalieScreenRules' min_along) sees past it, from every spot.
+func test_a_body_on_the_release_is_no_screen() -> void:
+	for out: float in [3.0, 4.0, 5.5]:
+		var release := Vector3(0.0, 0.0, NET.z + out)
+		var body: Vector3 = release + Vector3(0.0, 0.0, -0.5)
+		assert_eq(AIScreenField.uplift(release, NET, _keeper(), body, _cfg), 0.0,
+				"%.1f m out" % out)
