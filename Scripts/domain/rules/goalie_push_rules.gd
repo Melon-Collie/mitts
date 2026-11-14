@@ -27,6 +27,19 @@ static func cruise_reach(max_speed: float, accel: float, t: float) -> float:
 	return max_speed * t - 0.5 * max_speed * t_ramp
 
 
+# The inverse of cruise_reach: how long he takes to cover `dist` from rest,
+# still moving as he gets there.
+static func time_to_cruise(dist: float, max_speed: float, accel: float) -> float:
+	if dist <= 0.0:
+		return 0.0
+	if accel <= 0.0:
+		return dist / maxf(max_speed, 0.001)
+	var t_ramp: float = max_speed / accel
+	if dist <= 0.5 * max_speed * t_ramp:
+		return sqrt(2.0 * dist / accel)
+	return dist / max_speed + 0.5 * t_ramp
+
+
 # The farthest spot he can push to and be stopped on within `t`, from rest.
 static func set_reach(max_speed: float, accel: float, t: float) -> float:
 	if t <= 0.0 or max_speed <= 0.0:

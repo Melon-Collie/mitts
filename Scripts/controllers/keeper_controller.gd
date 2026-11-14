@@ -141,6 +141,9 @@ func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: f
 	goalie.set_stand_in(_keeper)
 	for part: int in KeeperGear.PART_COUNT:
 		goalie.add_save_box(KeeperGear.save_part(part), _glove_side(part), KeeperGear.half_extents(part))
+	# Measured from his gear once a process, some tens of milliseconds: here,
+	# not on the first tick a carrier comes into range.
+	KeeperPositioning.closing_share()
 	_place_in_crease()
 
 

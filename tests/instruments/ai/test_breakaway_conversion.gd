@@ -3,15 +3,18 @@ extends GutTest
 # ── Do the bots' breakaways go in? (#943, #946) ───────────────────────────────
 # A real bot carrier alone on a breakaway against the real keeper
 # (bot_vs_goalie_harness: the bot picks the shot, the keeper tries to stop it,
-# rebounds played out), from three lanes at the red line at a breakaway's pace
-# and two at the blue line slower, per tier: how many shots, how many in, and
-# where they were released. The measure a release-distance proxy stands for.
-# Each start is run over SEEDS carrier peer ids, which seed the hands' draws:
-# one id releases every shot at the same point of the tier's hold.
+# rebounds played out), from LANES_M across the ice at the red line at a
+# breakaway's pace and again at the blue line slower, per tier: how many
+# shots, how many in, and where they were released. The measure a
+# release-distance proxy stands for. Each start is run over SEEDS carrier peer
+# ids, which seed the hands' draws: one id releases every shot at the same
+# point of the tier's hold. The keeper starts every rush reset, so a start's
+# seeds mostly agree and the lanes are what spread the sample.
 
 const BotGoalie := preload("res://tests/unit/ai/bot_vs_goalie_harness.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
-const SEEDS: int = 12
+const SEEDS: int = 4
+const LANES_M: Array[float] = [-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0]
 const DETAIL: bool = false
 # Release bands (body off the goal line, m) for the priced-against-scored table.
 const BANDS_M: Array[float] = [1.5, 2.5, 3.5, 4.5, 6.0, 99.0]
@@ -33,13 +36,12 @@ func before_each() -> void:
 
 
 static func _starts() -> Array:
-	return [
-		[Vector3(-3.0, 0.0, -1.0), Vector3(0.0, 0.0, -8.5)],
-		[Vector3(0.0, 0.0, -1.0), Vector3(0.0, 0.0, -8.5)],
-		[Vector3(3.0, 0.0, -1.0), Vector3(0.0, 0.0, -8.5)],
-		[Vector3(-2.0, 0.0, GOAL_Z + 19.0), Vector3(0.0, 0.0, -5.0)],
-		[Vector3(2.0, 0.0, GOAL_Z + 19.0), Vector3(0.0, 0.0, -5.0)],
-	]
+	var starts: Array = []
+	for x: float in LANES_M:
+		starts.append([Vector3(x, 0.0, -1.0), Vector3(0.0, 0.0, -8.5)])
+	for x: float in LANES_M:
+		starts.append([Vector3(x, 0.0, GOAL_Z + 19.0), Vector3(0.0, 0.0, -5.0)])
+	return starts
 
 
 func test_report_breakaway_conversion() -> void:
