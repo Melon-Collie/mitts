@@ -107,7 +107,7 @@ static func _is_shot(rec: Dictionary) -> bool:
 # receiver's spot), carry, and the set read at the release.
 func _run(duel: Object) -> Dictionary:
 	var r: Dictionary = {"end": "timeout", "t": SECS, "low_s": 0.0, "passes": 0, "shot": {},
-			"pass_log": []}
+			"pass_log": [], "battle_s": 0.0, "screen": 0.0}
 	var passing: bool = false
 	var last_pass: Dictionary = {}
 	var last_pass_t: float = 0.0
@@ -127,6 +127,7 @@ func _run(duel: Object) -> Dictionary:
 			r["low_s"] += Duel.DT
 		if _trace and ours and i % TRACE_EVERY_TICKS == 0:
 			_print_trace(duel, c, t)
+		r["battle_s"] += Duel.DT * _battling(duel)
 		if not released.is_empty():
 			if _is_shot(released):
 				var at: Vector3 = released["pos"]
@@ -170,6 +171,7 @@ func _run(duel: Object) -> Dictionary:
 				r["end"] = "shot"
 				r["t"] = t
 				r["shot"] = s
+				r["screen"] = _screen_on(duel, int(released["peer"]), at, goal, keeper)
 				if _rebounds:
 					r["rebound"] = _play_rebound(duel, released)
 				return r
@@ -280,6 +282,29 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 		if res["first"] == "theirs" or duel.puck_pos.z > -GameRules.BLUE_LINE_Z:
 			break
 	return res
+
+
+# How many of ours fight for a screen spot this tick: Ctrl held with the spot
+# their role holds, in contact with a man of theirs.
+func _battling(duel: Object) -> int:
+	var n: int = 0
+	for sk: Object in duel.skaters:
+		if sk.team_id != 0 or sk.agent == null or not sk.input.hit_held:
+			continue
+		var dec: RoleDecision = sk.agent._cached_role_decision
+		if dec != null and dec.screen_spot.is_finite():
+			n += 1
+	return n
+
+
+# The screen every other body gives a release at `at` (AIScreenField.best_uplift,
+# the keeper's own sightline test).
+func _screen_on(duel: Object, shooter: int, at: Vector3, goal: Vector3, keeper: Vector3) -> float:
+	var bodies: Array[Vector3] = []
+	for sk: Object in duel.skaters:
+		if sk.peer_id != shooter:
+			bodies.append(sk.pos)
+	return AIScreenField.best_uplift(at, goal, keeper, bodies, GoalieScreenRules.ScreenConfig.new())
 
 
 func _print_trace(duel: Object, c: int, t: float) -> void:
@@ -438,9 +463,9 @@ func _sweep(label: String) -> void:
 				reb = "|%s|%s|%.2f|%d|%.2f|%s|%d|%d|%.4f|%s" % [rb["outcome"], rb["first"],
 						rb["t_first"], int(rb["second"]), rb["t_second"], rb["second_kind"],
 						int(rb["down"]), int(rb["tipped"]), rb["second_xg"], rb["first_slot"]]
-			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f%s" % [g, r["end"],
+			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f%s|%.2f|%.3f" % [g, r["end"],
 					r["shot"]["kind"] if r["end"] == "shot" else "-", shot_set,
-					r["passes"], r["t"], reb])
+					r["passes"], r["t"], reb, r["battle_s"], r["screen"]])
 			row += " %s@%.1f/p%d" % [str(r["end"]).left(4), r["t"], r["passes"]]
 			ends[r["end"]] = int(ends.get(r["end"], 0)) + 1
 			passes += r["passes"]

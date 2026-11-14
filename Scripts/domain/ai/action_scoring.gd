@@ -208,7 +208,9 @@ static func with_rebound(p: float, credit: float) -> float:
 # carry the rebound's second chance (with_rebound) — the carrier's compete,
 # weighing the shot against keeping the puck; negative, first contact only.
 # `history`: the play the shooter saw (AIShotOdds.History), for a keeper read
-# where he stands.
+# where he stands. `screen`: the share of the keeper's saves a body hiding the
+# release turns into goals (AIScreenField.best_uplift), laid on the odds before
+# the rebound.
 static func score_shoot_value(
 		shooter: Vector3,
 		attacking_goal: Vector3,
@@ -221,7 +223,8 @@ static func score_shoot_value(
 		precomputed_quality: float = -1.0,
 		keeper_yaw: float = NAN,
 		rebound_credit: float = -1.0,
-		history: int = AIShotOdds.History.ANY) -> float:
+		history: int = AIShotOdds.History.ANY,
+		screen: float = 0.0) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
 	var quality: float = precomputed_quality
@@ -237,6 +240,8 @@ static func score_shoot_value(
 		keeper = AIGoalieModel.goalie_squared_pos(
 				attacking_goal - Vector3(0.0, 0.0, signf(attacking_goal.z)
 						* AIGoalieModel.GOALIE_RESTING_DEPTH_M), attacking_goal, shooter)
+	if screen > 0.0:
+		quality = maxf(quality, 0.0) + (1.0 - maxf(quality, 0.0)) * screen
 	if rebound_credit >= 0.0:
 		quality = with_rebound(maxf(quality, 0.0), rebound_credit)
 	if quality <= 0.0:

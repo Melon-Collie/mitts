@@ -2780,7 +2780,9 @@ func apply_shot_block(input: InputState, snapshot: WorldSnapshot) -> void:
 func apply_press(input: InputState, snapshot: WorldSnapshot) -> bool:
 	return _press.apply(input, snapshot, _own_goal_dir,
 			_cached_role_decision.locked_man_pid if _cached_role_decision != null else -1,
-			_check_aggression, _protects_the_puck, _state == State.CARRY)
+			_check_aggression, _protects_the_puck, _state == State.CARRY,
+			_cached_role_decision.screen_spot if _cached_role_decision != null \
+					and _state == State.OFF_PUCK else Vector3.INF)
 
 
 # Holds the stick-check button for a lift or a tie the dispatch started, every

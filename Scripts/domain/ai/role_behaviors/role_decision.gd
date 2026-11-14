@@ -77,3 +77,8 @@ var arrive_at_speed: bool = false
 # An offensive station kept its forward stand this dispatch. Round-tripped into
 # RoleContext.prev_held_forward_stand as the pinch read's hysteresis incumbent.
 var held_forward_stand: bool = false
+
+# The screen spot this decision holds in their end (INF: none): the ice on our
+# carrier's line to their keeper a screen there is worth most at. The press
+# fights a man off it (SkaterAgentPress).
+var screen_spot: Vector3 = Vector3.INF
