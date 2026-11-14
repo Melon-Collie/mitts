@@ -681,10 +681,15 @@ func test_high_slot_stays_the_help_while_a_man_of_theirs_is_above_him() -> void:
 			3: AIRoleSlots.Slot.POINT_WEAK, 5: AIRoleSlots.Slot.CARRIER}
 	ctx.team_brain = strategy
 	var help := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + AIRoleHighSlot.REST_DEPTH_M)
+	var mates: Array[Vector3] = [Vector3(6.0, 0.0, -9.5), Vector3(-6.0, 0.0, -9.5),
+			Vector3(10.0, 0.0, -23.0)]
 	ctx.rush_read.attacker_leads.clear()
-	assert_true(AIRoleHighSlot._help_free(ctx, help), "nobody of theirs above him")
+	assert_true(AIRoleHighSlot._help_free(ctx, help, mates), "nobody of theirs above him")
 	ctx.rush_read.attacker_leads.append(Vector3(0.0, 0.0, -13.0))
-	assert_false(AIRoleHighSlot._help_free(ctx, help), "a man of theirs above the help")
+	assert_false(AIRoleHighSlot._help_free(ctx, help, mates), "a man of theirs above the help")
+	mates[2] = Vector3(-3.0, 0.0, -13.0)
+	assert_true(AIRoleHighSlot._help_free(ctx, help, mates),
+			"a forward of ours already as high is the help")
 	var d: RoleDecision = AIRoleHighSlot.decide(ctx)
 	assert_gte(d.target_position.z + GameRules.GOAL_LINE_Z, AIRoleHighSlot.REST_DEPTH_M - 0.01,
 			"F3 holds the top of the slot or above; got %s" % d.target_position)

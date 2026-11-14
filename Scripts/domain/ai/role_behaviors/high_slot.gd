@@ -26,6 +26,8 @@ const FAR_POST_WIDE_M: float = GameRules.NET_HALF_WIDTH + 1.4
 # help's stand: the top of the slot, which he leaves for deeper ice only while
 # _help_free.
 const REST_DEPTH_M: float = 9.5
+# The two points, who stand above the help and are not it.
+const POINTS: int = 2
 
 
 static func decide(ctx: RoleContext) -> RoleDecision:
@@ -58,7 +60,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	AIStationSearch.fill_feed_values(ctx, carrier_pos, goalie_pos, opp_positions, teammates)
 
 	var weak: float = -ctx.strong_x
-	var deep_ok: bool = _help_free(ctx, rest)
+	var deep_ok: bool = _help_free(ctx, rest, teammates)
 	var best_pos: Vector3 = Vector3.INF
 	var best_score: float = -INF
 	for depth: float in GRID_DEPTHS_M:
@@ -88,10 +90,19 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	return _through_station_read(ctx, d, best_pos)
 
 
-# Whether the help may leave its stand `help` for deeper ice: no man of theirs
-# is nearer our net than it by more than a cover envelope (the pinch's own read,
-# AIRoleDefenseman._pinch_is_covered), so a turnover now finds nobody above him.
-static func _help_free(ctx: RoleContext, help: Vector3) -> bool:
+# Whether the help may leave its stand `help` for deeper ice: a forward of ours
+# other than him already stands as high (`teammates` beyond the two points at
+# its depth or above), or no man of theirs is nearer our net than it by more
+# than a cover envelope (the pinch's own read, AIRoleDefenseman._pinch_is_covered),
+# so a turnover now finds nobody above him.
+static func _help_free(ctx: RoleContext, help: Vector3, teammates: Array[Vector3]) -> bool:
+	var help_depth: float = AIZoneCoverage.depth_of(ctx.attacking_goal_pos.z, help)
+	var high: int = 0
+	for t: Vector3 in teammates:
+		if AIZoneCoverage.depth_of(ctx.attacking_goal_pos.z, t) >= help_depth:
+			high += 1
+	if high > POINTS:
+		return true
 	var our_net: Vector3 = ctx.defending_goal_pos
 	var help_d: float = AIRoleReads.xz_distance(help, our_net)
 	for lead: Vector3 in ctx.rush_read.attacker_leads:
