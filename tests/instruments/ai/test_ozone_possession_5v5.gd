@@ -108,6 +108,7 @@ static func _is_shot(rec: Dictionary) -> bool:
 func _run(duel: Object) -> Dictionary:
 	var r: Dictionary = {"end": "timeout", "t": SECS, "low_s": 0.0, "passes": 0, "shot": {},
 			"pass_log": [], "battle_s": 0.0, "screen": 0.0}
+	_last_spot.clear()
 	var passing: bool = false
 	var last_pass: Dictionary = {}
 	var last_pass_t: float = 0.0
@@ -298,25 +299,66 @@ func _battling(duel: Object) -> int:
 	return n
 
 
-# Where the battle chain stops: ticks one of ours holds a published screen
-# spot, a man of theirs within STEP_IN_M is nearer it, and our Ctrl is down.
+# Where the battle chain stops, while one of ours carries and one of ours
+# holds a battle spot: each tick filed under the first link that fails. "at"
+# he stands on it; "free" nobody of theirs is nearer it; "far" their nearer
+# man is out of the press's reach; "weak" the press would not move him a body
+# width off it; "press" Ctrl is down. Also how far the spot jumps between
+# ticks, and his closing speed on it while it is free.
+const AT_SPOT_M: float = 0.75
+var _last_spot: Dictionary = {}
+
+
 func _count_screen(duel: Object, r: Dictionary) -> void:
+	var carrier: int = duel.carrier_id
+	if carrier == -1 or duel.team_map.get(carrier, -1) != 0:
+		return
+	var snap: WorldSnapshot = null
 	for sk: Object in duel.skaters:
 		if sk.team_id != 0 or sk.agent == null:
 			continue
 		var dec: RoleDecision = sk.agent._cached_role_decision
 		if dec == null or not dec.battle_spot.is_finite():
+			_last_spot.erase(sk.peer_id)
 			continue
+		var spot: Vector3 = dec.battle_spot
+		if _last_spot.has(sk.peer_id):
+			r["jump_m"] = r.get("jump_m", 0.0) + Vector2(spot.x - _last_spot[sk.peer_id].x,
+					spot.z - _last_spot[sk.peer_id].z).length()
+		_last_spot[sk.peer_id] = spot
 		r["pub_s"] = r.get("pub_s", 0.0) + Duel.DT
-		var mine: float = Vector2(dec.battle_spot.x - sk.pos.x, dec.battle_spot.z - sk.pos.z).length()
+		var to := Vector2(spot.x - sk.pos.x, spot.z - sk.pos.z)
+		var mine: float = to.length()
 		r["mine_m"] = r.get("mine_m", 0.0) + Duel.DT * mine
-		for o: Object in duel.skaters:
-			if o.team_id == 0:
-				continue
-			var theirs: float = Vector2(dec.battle_spot.x - o.pos.x, dec.battle_spot.z - o.pos.z).length()
-			if theirs < mine and AIPressRead.gap_m(sk.pos, o.pos) <= AIPressRead.STEP_IN_M:
-				r["contest_s"] = r.get("contest_s", 0.0) + Duel.DT
-				break
+		var cat: String = "at"
+		if sk.input.hit_held:
+			cat = "press"
+		elif mine > AT_SPOT_M:
+			cat = "free"
+			var best: Object = null
+			for o: Object in duel.skaters:
+				if o.team_id == 0:
+					continue
+				var theirs: float = Vector2(spot.x - o.pos.x, spot.z - o.pos.z).length()
+				if theirs < mine and (best == null or AIPressRead.gap_m(sk.pos, o.pos)
+						< AIPressRead.gap_m(sk.pos, best.pos)):
+					best = o
+			if best != null:
+				cat = "far"
+				if AIPressRead.gap_m(sk.pos, best.pos) <= AIPressRead.STEP_IN_M:
+					if snap == null:
+						snap = duel._build_snapshot()
+					var me_st: SkaterNetworkState = snap.skater_states[sk.peer_id]
+					var man: SkaterNetworkState = snap.skater_states[best.peer_id]
+					var moved: float = AIPressRead.displacement_m(me_st,
+							duel.caps_by_peer.get(sk.peer_id), man, duel.caps_by_peer.get(best.peer_id))
+					r["moved_m"] = r.get("moved_m", 0.0) + Duel.DT * moved
+					r["moved_n"] = r.get("moved_n", 0.0) + Duel.DT
+					cat = "weak"
+			else:
+				r["close_ms"] = r.get("close_ms", 0.0) + Duel.DT * Vector2(sk.vel.x, sk.vel.z) \
+						.dot(to / maxf(mine, 0.001))
+		r["cat_" + cat] = r.get("cat_" + cat, 0.0) + Duel.DT
 
 
 # The screen every other body gives a release at `at` (AIScreenField.best_uplift,
@@ -487,6 +529,10 @@ func _sweep(label: String) -> void:
 						int(rb["down"]), int(rb["tipped"]), rb["second_xg"], rb["first_slot"]]
 			gut.p("OZSCREEN|%d|%.2f|%.2f|%.2f" % [g, r.get("pub_s", 0.0), r.get("contest_s", 0.0),
 					r.get("mine_m", 0.0) / maxf(r.get("pub_s", 0.0), 0.001)])
+			gut.p("OZCHAIN|%d|%s" % [g, JSON.stringify(r.keys().filter(
+					func(k: String) -> bool: return k.begins_with("cat_") or k in [
+						"jump_m", "moved_m", "moved_n", "close_ms", "pub_s"]).map(
+					func(k: String) -> String: return "%s=%.3f" % [k, r[k]]))])
 			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f%s|%.2f|%.3f" % [g, r["end"],
 					r["shot"]["kind"] if r["end"] == "shot" else "-", shot_set,
 					r["passes"], r["t"], reb, r["battle_s"], r["screen"]])
