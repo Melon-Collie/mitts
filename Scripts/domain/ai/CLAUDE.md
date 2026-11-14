@@ -497,6 +497,14 @@ who stands him up holds Ctrl, the brace, when the pair moves his way harder
 with his body in it (`AIPressRead.pair_accel`, with against without). Both ride
 the `protects_the_puck` gate.
 
+**In their end the screen spot is fought for.** FINISHER / NET_FRONT price a
+station on the carrier's line by what the screen field says a body there adds
+to the shot he misses, and publish it (`RoleDecision.screen_spot`). The press
+pass then wins it (`SkaterAgentPress._win_the_screen`): a man of theirs nearer
+the spot, within `STEP_IN_M`, is pressed when the push moves him off it by both
+bodies' width. Never value a screen off the line: the field measured a body
+0.4 m off it adding nothing, because the keeper looks round it.
+
 ### The three facts a station reads, and the one that stays unread
 
 **CONTROL** (`AIRushRead.pressure_eta_s`) drives NEITHER the hold decision nor
@@ -938,7 +946,10 @@ takes the whole class down and every static call on it from every file at once.
     plus the slot bonus (`docs/possession-floor-plan.md`);
   - `rebound_field.gd` (`AIReboundField`) — the generated rebound field read in
     the frame of the net attacked: per measured spot its shots, their outcomes,
-    their sampled rebounds and the second chance measured at each.
+    their sampled rebounds and the second chance measured at each;
+  - `screen_field.gd` (`AIScreenField`) — the generated screen field: what a
+    body hiding the release from the live keeper adds to a shot from a spot,
+    by how far out along the release's line it stands.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
@@ -1012,7 +1023,11 @@ reaches back into what remains.
     Today that credit is flat (`FLAT_REBOUND_CREDIT`). The measured one
     (`AIReboundValue`, raced over the rebound field) waits on the follow-up that
     wins it: priced before the bots played it, the carrier shot for rebounds
-    nobody collected (`docs/bot-net-front-offense-plan.md` step 3a).
+    nobody collected (`docs/bot-net-front-offense-plan.md` step 3a). A
+    screen is credited the same way, on top of the field: the share of the
+    keeper's saves a body hiding the release turns into goals
+    (`score_shoot_value`'s `screen`, `AICarrierField.screen_at` over every
+    other body, either side's).
   - **The open set is goal intervals, not aim samples.** The generator sweeps
     24 aims per loft and bisects every edge of a goal run to ~5 mm
     (`tests/unit/ai/open_set_edges.gd`); a run reaching a post ends at the post.

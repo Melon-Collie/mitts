@@ -418,6 +418,31 @@ modelled:
 The 2b instrument prints that comparison, and the choice is made with the user
 on its numbers.
 
+**Status: measured, SET keeper only** (`test_generate_screen_field.gd` →
+`generated/screen_field_data.gd`, 20 spots × 21 cells × 24 shots). The share
+scored, unscreened → the best on-line station:
+
+| out \ across | −8 | −4 | 0 | +4 | +8 |
+|---|---|---|---|---|---|
+| 6 m | 0 → 0.08 | 0 → 0.04 | 0.04 → 0.17 | 0 → 0.04 | 0 → 0.04 |
+| 9.5 m | 0 → 0.04 | 0 → 0.21 | 0 → 0.25 | 0 → 0.25 | 0 → 0.08 |
+| 15 m | 0 → 0.04 | 0 → 0.08 | 0 → 0.21 | 0 → 0.08 | 0 → 0.04 |
+| 19.5 m | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
+
+- **Only a body on the line screens.** At 0.4 m off it every spot but the
+  slot's top measured 0. The keeper looks round a body that does not cover the
+  release, which is the point of his peek.
+- **The best stations are 2.5–5 m out**, not on the crease.
+- **From the points a screen buys nothing.** A charged wrister from 19.5 m
+  scores 0 with or without a body in front. That is a fact about the goalie,
+  not the bots, and is raised with the user separately.
+- **The DECOY half was not measured.** The SET keeper concedes ~0, so the
+  ratio the two options were to be chosen by has no denominator. The screen is
+  modelled as a share of his saves turned into goals ((screened − clean) ÷
+  (1 − clean)), read through his own sightline test. That form is nothing
+  against a net already open, and it is cheap. Whether a screen on a beaten
+  keeper is worth more than this share says is unmeasured.
+
 ### 2c. Tips through a live blade (#736's next step)
 
 Point and circle-top shots through a live skater's blade holding the deflect,
