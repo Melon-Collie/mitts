@@ -1171,6 +1171,11 @@ reaches back into what remains.
   ("Forecheck or set up").
 
 - **Loose-puck retrieval is two reads, not one** (`AILoosePuckChase`).
+  - **A loose puck at our own keeper's feet is his** (`AIGoalieModel
+    .covers_at_feet`, his own `KeeperCover.at_feet`): the team's election is
+    dead for it (`GameManager._enrich_snapshot_for_ai`), so our skaters play
+    their men around him while he covers or clears it. A stick of ours stabbing
+    at it in our crease is how it goes in off us.
   - The **election** names exactly one chaser per team: momentum-aware
     intercept, incumbent hysteresis, per-build top-speed caps, and the friction +
     board-aware path walk for every loose puck. Race times are solved to the

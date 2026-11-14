@@ -159,8 +159,10 @@ in our mouth, or dragged through it by the body's travel in the blade's time to
 sweep it clear, it goes out wide of the post on the body's own side. And a carrier
 or loose-puck chaser whose stop would run into our own crease brakes
 (`AISteering.stops_in_own_crease`, after the dispatch): the repel steers but
-sheds no momentum, and the puck goes over the line with him.
-`test_own_goal_guards.gd` replays the own goal `tools/own_goal_hunt.gd` caught.
+sheds no momentum, and the puck goes over the line with him. A loose puck at
+our own keeper's feet is left to him: nobody of ours is elected to it
+(`AIGoalieModel.covers_at_feet`). `test_own_goal_guards.gd` replays the own
+goals `tools/own_goal_hunt.gd` caught.
 
 **A charged release comes from a listed spot, and is loaded before the press.**
 A shot from a pocket, a reach to either side of its line or the snapshot out

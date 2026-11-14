@@ -3613,8 +3613,16 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 	# elects a fresh chaser immediately.
 	var puck_playable: bool = not (puck != null and puck.pickup_locked \
 			and puck.get_carrier() == null)
+	var loose: bool = snap.puck_state.carrier_peer_id == -1
 	for team_id: int in snap.teammate_ids_by_team:
 		var ids: Array = snap.teammate_ids_by_team[team_id]
+		# A loose puck at our own keeper's feet is his to cover: a stick of ours
+		# stabbing at it in our crease is how it goes in off us. Nobody of ours is
+		# elected, so the team plays its men around him.
+		var keeper: GoalieNetworkState = snap.goalie_states.get(team_id)
+		var team_playable: bool = puck_playable and not (loose and keeper != null
+				and AIGoalieModel.covers_at_feet(Vector2(keeper.position_x, keeper.position_z),
+						puck_pos, puck_vel))
 		# Election-side eligibility (see AILoosePuckChase.elect): humans
 		# can't be assigned by an election (they only suppress the bots
 		# while demonstrably playing the puck), and a one-timer camper — or a
@@ -3643,12 +3651,12 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 		var best_pid: int = AILoosePuckChase.elect(
 				snap.skater_states, ids, puck_pos, puck_vel,
 				_prev_chase_by_team.get(team_id, -1), _registry.caps_by_peer,
-				puck_playable, human_ids, camped_ids)
+				team_playable, human_ids, camped_ids)
 		# Smart-ping GET_PUCK: a live retrieval order replaces the natural
 		# election for its duration — the ordered bot chases (the state
 		# machine's decline gates are bypassed for it too) and nobody else
 		# doubles up on the puck.
-		if puck_playable and team_id >= 0 and team_id < team_brains.size():
+		if team_playable and team_id >= 0 and team_id < team_brains.size():
 			# Mirrored, not read live — the worker advances + expires the ping
 			# directives this comes from (see AICoordinator).
 			var pinged_chaser: int = _ai_coordinator.ping_chase_peer(team_id)

@@ -7,6 +7,8 @@ extends Node
 const _START_TIMEOUT_FRAMES: int = 6000
 const _RING_TICKS: int = 360
 const _PRINT_EVERY_TICKS: int = 6
+# The last second at every tick: where a touch that sends the puck in happens.
+const _PRINT_EVERY_TICK_LAST: int = 90
 const _PERIOD_SEC: float = 36000.0
 
 var _ring: Array[String] = []
@@ -94,7 +96,7 @@ func _on_goal(scoring_team: Team, _scorer: String, _a1: String, _a2: String) -> 
 			_own_goals, who_team, who, _last_carrier != -1, _RING_TICKS])
 	for i: int in _RING_TICKS:
 		var idx: int = (_ring_head + i) % _RING_TICKS
-		if i % _PRINT_EVERY_TICKS == 0 or i >= _RING_TICKS - 12:
+		if i % _PRINT_EVERY_TICKS == 0 or i >= _RING_TICKS - _PRINT_EVERY_TICK_LAST:
 			print("[own-goal]   " + _ring[idx])
 
 

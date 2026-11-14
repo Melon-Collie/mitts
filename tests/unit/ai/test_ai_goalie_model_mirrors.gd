@@ -105,3 +105,22 @@ func test_the_bots_measure_his_stance_on_his_gear() -> void:
 	skel.pose(pose)
 	assert_almost_eq(AIGoalieModel.standing_pad_reach_m, KeeperGear.post_contact(skel, 1.0).x, 0.02,
 			"his ready stance's pads reach out past his centre this far")
+
+
+func test_the_bots_leave_him_the_puck_he_covers_at_his_feet() -> void:
+	# His net frame is the world turned about his net, and the read is distance
+	# and speed alone, so the bots' world read and his net-frame read agree.
+	var motor := KeeperMotor.new()
+	motor.x = 0.2
+	motor.z = -0.6
+	var keeper_world := Vector2(GOAL.x - motor.x, GOAL.z - motor.z)
+	for dx: float in [-1.2, -0.8, 0.0, 0.5, 0.9]:
+		for dz: float in [-0.9, -0.3, 0.4]:
+			for speed: float in [0.0, 2.0, 4.0]:
+				var in_net := Vector3(motor.x + dx, KeeperShotRead.ON_ICE_Y, motor.z + dz)
+				var v_net := Vector3(speed, 0.0, 0.0)
+				var world := Vector3(keeper_world.x - dx, KeeperShotRead.ON_ICE_Y,
+						keeper_world.y - dz)
+				assert_eq(AIGoalieModel.covers_at_feet(keeper_world, world, -v_net),
+						KeeperCover.at_feet(in_net, v_net, motor),
+						"at (%.1f, %.1f) going %.1f m/s" % [dx, dz, speed])

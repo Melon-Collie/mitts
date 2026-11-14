@@ -158,6 +158,17 @@ static func down_in_tight(puck: Vector3, attacking_goal: Vector3) -> bool:
 const COVER_STOPS_M_S: float = KeeperCover.STOPS_M_S
 
 
+# Whether the keeper at `keeper_xz` (world, across the ice) covers the loose
+# puck at `puck` going at `puck_vel`: down on the ice, slow enough for his
+# glove, and at his feet — the puck he plays himself (KeeperCover.at_feet,
+# which reads only distance and speed, so it holds in any frame).
+static func covers_at_feet(keeper_xz: Vector2, puck: Vector3, puck_vel: Vector3) -> bool:
+	return KeeperCover.on_ice(puck, puck_vel) \
+			and Vector2(puck_vel.x, puck_vel.z).length() <= COVER_STOPS_M_S \
+			and Vector2(puck.x - keeper_xz.x, puck.z - keeper_xz.y).length() \
+					<= KeeperCover.FEET_M
+
+
 # ── Predicted post-seal ─────────────────────────────────────────────────────
 # The shoot-now eval reads the LIVE goalie's seal state
 # (GoalieNetworkState.post_seal_x_sign); a predictive caller (carry candidate,
