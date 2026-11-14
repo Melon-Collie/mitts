@@ -263,8 +263,8 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		# HIGH SLOT — the trailing seam.
 		Vector3(weak * 1.5, 0.0, goal_z + own_dir * 9.5),
 	]
-	# TIP/SCREEN STATION — on the carrier→net line at TIP_STATION_DIST_M, so it
-	# tracks the carrier. Its value comes only from the tip term: as a pass target
+	# TIP STATION — on the carrier→net line at TIP_STATION_DIST_M, so it
+	# tracks the carrier. Its value comes from the tip and the screen: as a pass target
 	# a body in the goalie's chest is rightly worthless.
 	var to_carrier: Vector3 = carrier_pos - ctx.attacking_goal_pos
 	to_carrier.y = 0.0
@@ -306,8 +306,8 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	# RUSH DEPTH GATE — a coaching decision, deliberately not a perception: on a
 	# rush the second attacker drives the net. On the shot alone these stations
 	# are indistinguishable (each hinges on whether the goalie has re-squared),
-	# and nothing in the scoring prices the net's rebounds and body presence, so
-	# the gate states it directly. The cap is stage_dist itself — the staging
+	# and nothing in the scoring prices the net's rebounds yet, so the gate
+	# states it directly. The cap is stage_dist itself — the staging
 	# decision just made.
 	var depth_cap: float = stage_dist
 	for c: Vector3 in candidates:

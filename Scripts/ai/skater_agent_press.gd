@@ -62,16 +62,16 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 			screen_spot)
 
 
-# The screen spot our role holds, in their end, with their man nearer it than us
-# and leaned on: drive into him when the press moves him in AIPressRead.READ_S a
-# body's width off it (his body radius and ours, AISkaterCaps.body_radius), so
-# we can stand there. The push runs along the line through him, so it wins the
-# spot only from the side that moves him off it.
 func _body_radius(pid: int) -> float:
 	var caps: AISkaterCaps = _caps_by_peer.get(pid)
 	return caps.body_radius if caps != null else _LEAGUE_CAPS.body_radius
 
 
+# The screen spot our role holds, in their end, with their man nearer it than us
+# and leaned on: drive into him when the press moves him in AIPressRead.READ_S a
+# body's width off it (his body radius and ours, AISkaterCaps.body_radius), so
+# we can stand there. The push runs along the line through him, so it wins the
+# spot only from the side that moves him off it.
 func _win_the_screen(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
 		own_goal_dir: float, spot: Vector3) -> bool:
 	if not spot.is_finite() or input.hit_held or input.stick_lift_held \

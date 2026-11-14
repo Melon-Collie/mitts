@@ -128,6 +128,7 @@ func _run(duel: Object) -> Dictionary:
 		if _trace and ours and i % TRACE_EVERY_TICKS == 0:
 			_print_trace(duel, c, t)
 		r["battle_s"] += Duel.DT * _battling(duel)
+		_count_screen(duel, r)
 		if not released.is_empty():
 			if _is_shot(released):
 				var at: Vector3 = released["pos"]
@@ -297,6 +298,27 @@ func _battling(duel: Object) -> int:
 	return n
 
 
+# Where the battle chain stops: ticks one of ours holds a published screen
+# spot, a man of theirs within STEP_IN_M is nearer it, and our Ctrl is down.
+func _count_screen(duel: Object, r: Dictionary) -> void:
+	for sk: Object in duel.skaters:
+		if sk.team_id != 0 or sk.agent == null:
+			continue
+		var dec: RoleDecision = sk.agent._cached_role_decision
+		if dec == null or not dec.screen_spot.is_finite():
+			continue
+		r["pub_s"] = r.get("pub_s", 0.0) + Duel.DT
+		var mine: float = Vector2(dec.screen_spot.x - sk.pos.x, dec.screen_spot.z - sk.pos.z).length()
+		r["mine_m"] = r.get("mine_m", 0.0) + Duel.DT * mine
+		for o: Object in duel.skaters:
+			if o.team_id == 0:
+				continue
+			var theirs: float = Vector2(dec.screen_spot.x - o.pos.x, dec.screen_spot.z - o.pos.z).length()
+			if theirs < mine and AIPressRead.gap_m(sk.pos, o.pos) <= AIPressRead.STEP_IN_M:
+				r["contest_s"] = r.get("contest_s", 0.0) + Duel.DT
+				break
+
+
 # The screen every other body gives a release at `at` (AIScreenField.best_uplift,
 # the keeper's own sightline test).
 func _screen_on(duel: Object, shooter: int, at: Vector3, goal: Vector3, keeper: Vector3) -> float:
@@ -463,6 +485,8 @@ func _sweep(label: String) -> void:
 				reb = "|%s|%s|%.2f|%d|%.2f|%s|%d|%d|%.4f|%s" % [rb["outcome"], rb["first"],
 						rb["t_first"], int(rb["second"]), rb["t_second"], rb["second_kind"],
 						int(rb["down"]), int(rb["tipped"]), rb["second_xg"], rb["first_slot"]]
+			gut.p("OZSCREEN|%d|%.2f|%.2f|%.2f" % [g, r.get("pub_s", 0.0), r.get("contest_s", 0.0),
+					r.get("mine_m", 0.0) / maxf(r.get("pub_s", 0.0), 0.001)])
 			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f%s|%.2f|%.3f" % [g, r["end"],
 					r["shot"]["kind"] if r["end"] == "shot" else "-", shot_set,
 					r["passes"], r["t"], reb, r["battle_s"], r["screen"]])
