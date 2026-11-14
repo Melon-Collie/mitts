@@ -720,3 +720,17 @@ func test_a_point_shot_gets_its_rebound_station_and_no_screen() -> void:
 	var crash: Vector3 = AIReboundField.crash_point(AIReboundField.spot_of(
 			AIPuckLane.release_point_toward(from, goal), goal), false, goal)
 	assert_eq(stations, [crash] as Array[Vector3])
+
+
+func test_the_net_front_man_holds_the_front_not_a_feed() -> void:
+	# The 5v5 net-front man prices his station by what he adds in front of the
+	# net, never by a feed to him: where he goes screens or plays a rebound, and
+	# it is the spot he fights for.
+	var ctx: RoleContext = _screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 6.0), true)
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	ctx.team_brain = slots
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_gt(AIStationSearch.net_front_value(ctx, d.target_position), 0.0,
+			"his ice is worth something in front; got %s" % d.target_position)
+	assert_eq(d.battle_spot, d.target_position, "and it is the spot he fights for")

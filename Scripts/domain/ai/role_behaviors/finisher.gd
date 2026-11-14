@@ -301,6 +301,13 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	# states it directly. The cap is stage_dist itself — the staging
 	# decision just made.
 	var depth_cap: float = stage_dist
+	# The 5v5 net-front man holds the net front: his station is priced by what
+	# he adds in front of it (the tip, the screen, the rebound), never by the
+	# feed to him. A feed lane opening or closing moved the feed's worth by more
+	# than any hold, and sent him from spot to spot faster than he could get to
+	# one; getting open for the feed is the FINISHER's.
+	var holds_front: bool = ctx.team_brain != null \
+			and ctx.team_brain.get_slot(ctx.peer_id) == AIRoleSlots.Slot.NET_FRONT
 	for c: Vector3 in candidates:
 		if not AIStationSearch.is_legal_position(c):
 			continue
@@ -312,7 +319,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		# the defenders' reaction time scales with it.
 		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
 		# The FINISHER fires on contact: his one-timer off the feed.
-		var feed: float = AIActionScoring.score_pass_value(
+		var feed: float = 0.0 if holds_front else AIActionScoring.score_pass_value(
 				carrier_pos, c, ctx.attacking_goal_pos, goalie_pos, opp_positions,
 				pass_speed, ctx.scratch_opp_caps, true)
 		var tip: float = AIActionScoring.tip_ev(

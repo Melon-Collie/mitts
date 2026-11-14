@@ -500,7 +500,9 @@ the `protects_the_puck` gate.
 **In their end the net front is fought for.** FINISHER / NET_FRONT price a
 station in front of each shot of ours (the carrier's now, and each teammate's
 off a feed, at the lane to him) by what a body there adds to the shot the keeper
-would save: the screen field's share turned into goals, and of the saves left,
+would save, NET_FRONT by that and the tip alone, never a feed to him (a lane
+opening or closing moved a feed's worth by more than any hold, and sent him
+spot to spot faster than he could reach one): the screen field's share turned into goals, and of the saves left,
 his share of the rebound, raced against everyone else (`AIReboundValue`'s
 `fill` once, `value_with` per station). They publish the station they hold
 when it is worth anything in front (`RoleDecision.battle_spot`), whatever else
