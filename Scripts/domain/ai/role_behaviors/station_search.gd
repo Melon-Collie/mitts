@@ -131,30 +131,35 @@ static func shared_cover(c: Vector3, teammates: Array[Vector3]) -> float:
 	return best
 
 
-# Our shots a body in front of their keeper could screen, refilled by
-# fill_screen_plays (one worker): each one's release, the keeper square on it,
-# and the odds it is taken and saved. The carrier's own is his miss; a
-# teammate's is the lane to him times his one-timer's miss off the feed.
+# Our shots a body in front of their net could help, refilled by
+# fill_shot_plays (one worker): each one's release, the keeper square on it,
+# the odds it is taken and saved, and its rebound raced against both teams but
+# the man asking. The carrier's own is his miss; a teammate's is the lane to
+# him times his one-timer's miss off the feed.
 static var _play_release: Array[Vector3] = []
 static var _play_keeper: Array[Vector3] = []
 static var _play_weight: Array[float] = []
+static var _play_rebound: Array[AIReboundValue] = []
+static var _play_rebound_base: Array[float] = []
 static var _screen_cfg := GoalieScreenRules.ScreenConfig.new()
 static var _no_vels: Array[Vector3] = []
 
 
-# The shots a screen could help: our carrier's from where he stands, the keeper
-# as he is, and each of `teammates` off a feed to him, the keeper square on him.
-static func fill_screen_plays(ctx: RoleContext, carrier_pos: Vector3,
+# The shots a body in front could help: our carrier's from where he stands, the
+# keeper as he is, and each of `teammates` off a feed to him, the keeper square
+# on him. Their rebounds are raced against `teammates` and the opponents where
+# collect_teammates_excluding_self and collect_opponents left them.
+static func fill_shot_plays(ctx: RoleContext, carrier_pos: Vector3,
 		goalie_pos: Vector3, opp_positions: Array[Vector3],
 		teammates: Array[Vector3]) -> void:
 	_play_release.clear()
 	_play_keeper.clear()
 	_play_weight.clear()
+	_play_rebound_base.clear()
 	var goal: Vector3 = ctx.attacking_goal_pos
 	var release: Vector3 = AIPuckLane.release_point_toward(carrier_pos, goal)
-	_play_release.append(release)
-	_play_keeper.append(goalie_pos if goalie_pos.is_finite() else _keeper_square_on(goal, release))
-	_play_weight.append(1.0 - AIShotValue.set_keeper(release, goal))
+	_add_play(ctx, release, goalie_pos if goalie_pos.is_finite() else _keeper_square_on(goal, release),
+			1.0 - AIShotValue.set_keeper(release, goal), opp_positions, teammates)
 	for t: Vector3 in teammates:
 		if Vector2(t.x - carrier_pos.x, t.z - carrier_pos.z).length() < 0.5 \
 				or (t.z - goal.z) * signf(goal.z) >= 0.0:
@@ -164,17 +169,33 @@ static func fill_screen_plays(ctx: RoleContext, carrier_pos: Vector3,
 				ctx.scratch_opp_caps)
 		if lane <= 0.0:
 			continue
-		_play_release.append(t)
-		_play_keeper.append(_keeper_square_on(goal, t))
-		_play_weight.append(lane * (1.0 - AIShotValue.feed(carrier_pos, t, speed, goal,
-				goalie_pos, true)))
+		_add_play(ctx, t, _keeper_square_on(goal, t), lane * (1.0 - AIShotValue.feed(
+				carrier_pos, t, speed, goal, goalie_pos, true)), opp_positions, teammates)
 
 
-# Where a screener stands for each play (fill_screen_plays): on its release's
-# line to the net, as far out as the screen field measured a body worth most.
-static func append_screen_stations(ctx: RoleContext, candidates: Array[Vector3]) -> void:
+static func _add_play(ctx: RoleContext, release: Vector3, keeper: Vector3, weight: float,
+		opp_positions: Array[Vector3], teammates: Array[Vector3]) -> void:
+	var i: int = _play_release.size()
+	_play_release.append(release)
+	_play_keeper.append(keeper)
+	_play_weight.append(weight)
+	if _play_rebound.size() <= i:
+		_play_rebound.append(AIReboundValue.new())
+	_play_rebound[i].fill(release, ctx.attacking_goal_pos, teammates, ctx.scratch_teammate_vels,
+			opp_positions, ctx.scratch_opp_vels)
+	_play_rebound_base.append(_play_rebound[i].value_with(Vector3.INF))
+
+
+# Where a man in front stands for each play (fill_shot_plays): on its release's
+# line to the net, as far out as the screen field measured a body worth most,
+# and where its rebounds are first played (AIReboundField.crash_point).
+static func append_net_front_stations(ctx: RoleContext, candidates: Array[Vector3]) -> void:
 	var goal: Vector3 = ctx.attacking_goal_pos
 	for i: int in _play_release.size():
+		var crash: Vector3 = AIReboundField.crash_point(
+				AIReboundField.spot_of(_play_release[i], goal), false, goal)
+		if crash.is_finite():
+			candidates.append(crash)
 		var along: float = AIScreenField.best_station_along(_play_release[i], goal)
 		var line: Vector3 = _play_release[i] - goal
 		line.y = 0.0
@@ -182,13 +203,17 @@ static func append_screen_stations(ctx: RoleContext, candidates: Array[Vector3])
 			candidates.append(goal + line * (along / line.length()))
 
 
-# What a body at `c` adds to our attack by screening (fill_screen_plays): the
-# best of the plays it hides, one puck being one shot.
-static func screen_value(ctx: RoleContext, c: Vector3) -> float:
+# What a body at `c` adds to our attack in front of their net (fill_shot_plays),
+# for the best of the plays, one puck being one shot: of the shots the keeper
+# would save, the share his screen there turns into goals, and of the rest,
+# what he adds to winning the rebound.
+static func net_front_value(ctx: RoleContext, c: Vector3) -> float:
 	var best: float = 0.0
 	for i: int in _play_release.size():
-		best = maxf(best, _play_weight[i] * AIScreenField.uplift(_play_release[i],
-				ctx.attacking_goal_pos, _play_keeper[i], c, _screen_cfg))
+		var screen: float = AIScreenField.uplift(_play_release[i], ctx.attacking_goal_pos,
+				_play_keeper[i], c, _screen_cfg)
+		var rebound: float = maxf(_play_rebound[i].value_with(c) - _play_rebound_base[i], 0.0)
+		best = maxf(best, _play_weight[i] * (screen + (1.0 - screen) * rebound))
 	return best
 
 

@@ -285,7 +285,7 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 	return res
 
 
-# How many of ours fight for a screen spot this tick: Ctrl held with the spot
+# How many of ours fight for the net front this tick: Ctrl held with the spot
 # their role holds, in contact with a man of theirs.
 func _battling(duel: Object) -> int:
 	var n: int = 0
@@ -293,7 +293,7 @@ func _battling(duel: Object) -> int:
 		if sk.team_id != 0 or sk.agent == null or not sk.input.hit_held:
 			continue
 		var dec: RoleDecision = sk.agent._cached_role_decision
-		if dec != null and dec.screen_spot.is_finite():
+		if dec != null and dec.battle_spot.is_finite():
 			n += 1
 	return n
 
@@ -305,15 +305,15 @@ func _count_screen(duel: Object, r: Dictionary) -> void:
 		if sk.team_id != 0 or sk.agent == null:
 			continue
 		var dec: RoleDecision = sk.agent._cached_role_decision
-		if dec == null or not dec.screen_spot.is_finite():
+		if dec == null or not dec.battle_spot.is_finite():
 			continue
 		r["pub_s"] = r.get("pub_s", 0.0) + Duel.DT
-		var mine: float = Vector2(dec.screen_spot.x - sk.pos.x, dec.screen_spot.z - sk.pos.z).length()
+		var mine: float = Vector2(dec.battle_spot.x - sk.pos.x, dec.battle_spot.z - sk.pos.z).length()
 		r["mine_m"] = r.get("mine_m", 0.0) + Duel.DT * mine
 		for o: Object in duel.skaters:
 			if o.team_id == 0:
 				continue
-			var theirs: float = Vector2(dec.screen_spot.x - o.pos.x, dec.screen_spot.z - o.pos.z).length()
+			var theirs: float = Vector2(dec.battle_spot.x - o.pos.x, dec.battle_spot.z - o.pos.z).length()
 			if theirs < mine and AIPressRead.gap_m(sk.pos, o.pos) <= AIPressRead.STEP_IN_M:
 				r["contest_s"] = r.get("contest_s", 0.0) + Duel.DT
 				break

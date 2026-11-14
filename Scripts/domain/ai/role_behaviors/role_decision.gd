@@ -78,7 +78,8 @@ var arrive_at_speed: bool = false
 # RoleContext.prev_held_forward_stand as the pinch read's hysteresis incumbent.
 var held_forward_stand: bool = false
 
-# The screen spot this decision holds in their end (INF: none): the ice on our
-# carrier's line to their keeper a screen there is worth most at. The press
-# fights a man off it (SkaterAgentPress).
-var screen_spot: Vector3 = Vector3.INF
+# The ice this decision holds in front of their net (INF: none): a station
+# that screens one of our shots or wins a share of its rebound, or the rebound's
+# contest point while our shot is on its way. The press fights a man off it
+# (SkaterAgentPress).
+var battle_spot: Vector3 = Vector3.INF

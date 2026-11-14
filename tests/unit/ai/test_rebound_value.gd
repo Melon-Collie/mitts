@@ -49,3 +49,18 @@ func test_never_more_than_a_goal() -> void:
 	var v: float = _credit([Vector3(0.0, 0.0, GOAL.z + 2.0), Vector3(-2.0, 0.0, GOAL.z + 3.0),
 			Vector3(2.0, 0.0, GOAL.z + 3.0)] as Array[Vector3], _none)
 	assert_between(v, 0.0, 1.0)
+
+
+# A man added at a station (value_with) is priced as credit prices him among
+# ours, so a station's share of a rebound is the credit's own.
+func test_a_man_added_at_a_station_is_priced_as_one_of_ours() -> void:
+	var d: Array[Vector3] = [Vector3(-1.5, 0.0, GOAL.z + 4.5)]
+	var dv: Array[Vector3] = [Vector3.ZERO]
+	var ours: Array[Vector3] = [RELEASE]
+	var ov: Array[Vector3] = [Vector3.ZERO]
+	var race := AIReboundValue.new()
+	race.fill(RELEASE, GOAL, ours, ov, d, dv)
+	assert_almost_eq(race.value_with(Vector3.INF), _credit(ours, d), 1e-6, "nobody added")
+	for at: Vector3 in [Vector3(0.5, 0.0, GOAL.z + 3.0), Vector3(-3.0, 0.0, GOAL.z + 8.0)]:
+		assert_almost_eq(race.value_with(at), _credit([RELEASE, at] as Array[Vector3], d), 1e-6,
+				"a man at %s" % at)

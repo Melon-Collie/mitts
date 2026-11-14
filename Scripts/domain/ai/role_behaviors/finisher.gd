@@ -99,6 +99,7 @@ static func _try_crash(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 	d.target_position = at
 	d.arrive_at_speed = true
+	d.battle_spot = at
 	return d
 
 
@@ -269,10 +270,11 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	if to_carrier_len > TIP_STATION_DIST_M + 0.5:
 		candidates.append(ctx.attacking_goal_pos
 				+ to_carrier * (TIP_STATION_DIST_M / to_carrier_len))
-	# SCREEN STATIONS — in front of each shot of ours a screen could help.
-	AIStationSearch.fill_screen_plays(ctx, carrier_pos, goalie_pos, opp_positions,
+	# NET-FRONT STATIONS — in front of each shot of ours, screening it or on
+	# its rebound.
+	AIStationSearch.fill_shot_plays(ctx, carrier_pos, goalie_pos, opp_positions,
 			teammate_positions)
-	AIStationSearch.append_screen_stations(ctx, candidates)
+	AIStationSearch.append_net_front_stations(ctx, candidates)
 	# Switch-hysteresis (the pre-aim cursor snaps to this target).
 	AIStationSearch.append_incumbent(ctx, candidates)
 
@@ -288,7 +290,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	var carrier_release: Vector3 = AIPuckLane.release_point_toward(
 			carrier_pos, ctx.attacking_goal_pos)
 	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
-	var best_screens: bool = false
+	var best_battles: bool = false
 	AIStationSearch.fill_feed_values(ctx, carrier_pos, goalie_pos, opp_positions,
 			teammate_positions)
 
@@ -319,24 +321,26 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 				carrier_release, c, ctx.attacking_goal_pos, goalie_pos,
 				opp_positions,
 				carrier_shot_speed, ctx.scratch_opp_caps, self_caps)
-		# What a body here adds to our shot by hiding its release.
-		var screen: float = AIStationSearch.screen_value(ctx, c)
-		# The best of the one-timer feed, the tip and the screen — max(), not
+		# What a body here adds to our shots in front of their net: the screen,
+		# and the rebound.
+		var front: float = AIStationSearch.net_front_value(ctx, c)
+		# The best of the one-timer feed, the tip and the net front — max(), not
 		# sum: one puck, one outcome — less what a teammate a defender could
 		# cover with this spot already offers.
-		var score: float = maxf(maxf(feed, tip), screen) \
+		var score: float = maxf(maxf(feed, tip), front) \
 				- AIStationSearch.shared_cover(c, teammate_positions) \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
 			best_pos = c
-			best_screens = screen > 0.0
+			best_battles = front > 0.0
 
 	d.target_position = best_pos
-	# A station that hides one of our shots is ice worth fighting for, whatever
-	# else it is worth: the press wins it (SkaterAgentPress).
-	if best_screens:
-		d.screen_spot = best_pos
+	# A station worth something in front of one of our shots is ice worth
+	# fighting for, whatever else it is worth: the press wins it
+	# (SkaterAgentPress).
+	if best_battles:
+		d.battle_spot = best_pos
 	# No separate quality gate: a weak spot scores low for the carrier too. Half
 	# a search step — nearer the chosen station than any neighbour.
 	if ctx.self_pos.distance_to(best_pos) < AIStationSearch.SEARCH_STEP_M * 0.5:

@@ -497,14 +497,17 @@ who stands him up holds Ctrl, the brace, when the pair moves his way harder
 with his body in it (`AIPressRead.pair_accel`, with against without). Both ride
 the `protects_the_puck` gate.
 
-**In their end the screen spot is fought for.** FINISHER / NET_FRONT price a
+**In their end the net front is fought for.** FINISHER / NET_FRONT price a
 station in front of each shot of ours (the carrier's now, and each teammate's
-off a feed, at the lane to him) by what the screen field says a body there adds
-to the shot the keeper would save, and publish the one they hold when it screens
-any of them (`RoleDecision.screen_spot`), whatever else it is worth: a man at the
-slot's top keeps the net front's ice worth holding while the carrier works the
-wall. The press
-pass then wins it (`SkaterAgentPress._win_the_screen`): a man of theirs nearer
+off a feed, at the lane to him) by what a body there adds to the shot the keeper
+would save: the screen field's share turned into goals, and of the saves left,
+his share of the rebound, raced against everyone else (`AIReboundValue`'s
+`fill` once, `value_with` per station). They publish the station they hold
+when it is worth anything in front (`RoleDecision.battle_spot`), whatever else
+it is worth, and the rebound's contest point while our shot is on its way: a
+man at the slot's top keeps the net front's ice worth holding while the carrier
+works the wall, and their D standing inside is a man to move. The press pass
+then wins it (`SkaterAgentPress._win_the_spot`): a man of theirs nearer
 the spot, within `STEP_IN_M`, is pressed when the push moves him off it by both
 bodies' width. Never value a screen off the line: the field measured a body
 0.4 m off it adding nothing, because the keeper looks round it.

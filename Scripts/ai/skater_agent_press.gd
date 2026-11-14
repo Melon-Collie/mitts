@@ -9,8 +9,9 @@ extends RefCounted
 # - screening their goalie with an engaged opponent on us: dig in (Ctrl and the
 #   brake, the edges set), unless the stick is up for a tip, which Ctrl would
 #   take off the ice;
-# - going for the screen spot our role holds with their man standing on it:
-#   drive into him (Ctrl, the stick toward him) when the press moves him off it;
+# - going for the ice our role holds in front of their net (a screen, a
+#   rebound) with their man standing on it: drive into him (Ctrl, the stick
+#   toward him) when the press moves him off it;
 # - carrying into a man who stands us up: put the body into it (Ctrl, which a
 #   carrier holds as the brace, the stick staying on the puck).
 # A held tie keeps its stick through the press: the commit takes the stick off
@@ -36,15 +37,15 @@ func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary,
 	_caps_by_peer = caps_by_peer
 
 
-# `locked_man_pid` is the man our role covers (-1 for none); `screen_spot` the
-# screen spot our role holds (INF for none); `check_aggression`
+# `locked_man_pid` is the man our role covers (-1 for none); `battle_spot` the
+# ice our role holds in front of their net (INF for none); `check_aggression`
 # the tier's PACE physicality knob (0 never presses); `digs_in` the cognition
 # gate on the screener's and the carrier's answers; `carrying` whether we are
 # skating the puck (not winding up a release with it). True when it took the
 # body this tick.
 func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 		locked_man_pid: int, check_aggression: float, digs_in: bool, carrying: bool,
-		screen_spot: Vector3 = Vector3.INF) -> bool:
+		battle_spot: Vector3 = Vector3.INF) -> bool:
 	if snapshot == null or snapshot.puck_state == null:
 		return false
 	var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
@@ -58,8 +59,8 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 		return true
 	if digs_in and _dig_in(input, snapshot, me, own_goal_dir):
 		return true
-	return check_aggression > 0.0 and _win_the_screen(input, snapshot, me, own_goal_dir,
-			screen_spot)
+	return check_aggression > 0.0 and _win_the_spot(input, snapshot, me, own_goal_dir,
+			battle_spot)
 
 
 func _body_radius(pid: int) -> float:
@@ -67,12 +68,12 @@ func _body_radius(pid: int) -> float:
 	return caps.body_radius if caps != null else _LEAGUE_CAPS.body_radius
 
 
-# The screen spot our role holds, in their end, with their man nearer it than us
+# The ice our role holds in their end, with their man nearer it than us
 # and leaned on: drive into him when the press moves him in AIPressRead.READ_S a
 # body's width off it (his body radius and ours, AISkaterCaps.body_radius), so
 # we can stand there. The push runs along the line through him, so it wins the
 # spot only from the side that moves him off it.
-func _win_the_screen(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
+func _win_the_spot(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
 		own_goal_dir: float, spot: Vector3) -> bool:
 	if not spot.is_finite() or input.hit_held or input.stick_lift_held \
 			or own_goal_dir * me.position.z > -GameRules.BLUE_LINE_Z:

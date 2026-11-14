@@ -215,12 +215,12 @@ func _spot_snap() -> WorldSnapshot:
 	s.skater_states[SELF_ID] = _state(Vector3(0.0, 0.85, spot.z + TOUCHING_M), Vector2(0.0, -1.0))
 	s.goalie_states[1] = _goalie(-_goal_z + 0.6)
 	var hold := RoleDecision.new()
-	hold.screen_spot = spot
+	hold.battle_spot = spot
 	sm._cached_role_decision = hold
 	return s
 
 
-func test_a_forward_drives_their_man_off_the_screen_spot() -> void:
+func test_a_forward_drives_their_man_off_the_battle_spot() -> void:
 	var input := InputState.new()
 	assert_true(sm.apply_press(input, _spot_snap()))
 	assert_true(input.hit_held, "Ctrl: the drive")

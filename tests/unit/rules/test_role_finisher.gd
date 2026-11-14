@@ -605,6 +605,7 @@ func test_the_net_front_man_crashes_to_where_the_rebound_sits() -> void:
 			"to the measured contest point; got %s for %s" % [d.target_position, want])
 	assert_true(AIStationSearch.is_legal_position(d.target_position), "never in the crease")
 	assert_true(d.arrive_at_speed, "he gets there at speed")
+	assert_eq(d.battle_spot, d.target_position, "and boxes out whoever is on it")
 
 
 func test_the_finisher_takes_the_late_rebound_in_the_slot() -> void:
@@ -635,7 +636,7 @@ func test_a_tip_he_cannot_make_is_a_crash() -> void:
 
 
 
-# ─── SCREEN: ice in front of one of our shots ────────────────────────────────
+# ─── NET FRONT: ice in front of one of our shots ─────────────────────────────
 
 const SLOT_TOP_MATE := Vector3(0.5, 0.0, OPP_NET_Z + 10.0)
 
@@ -660,35 +661,62 @@ func _screen_ctx(carrier: Vector3, mate: bool) -> RoleContext:
 	return ctx
 
 
-func test_he_fights_for_ice_that_screens_the_slot_tops_one_timer() -> void:
-	# The carrier low on the wall has no shot a screen helps; our man at the
-	# slot's top has a one-timer off the feed, and the station that screens it
-	# is published for the press to win.
-	var ctx: RoleContext = _screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 6.0), true)
-	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	assert_true(d.screen_spot.is_finite(), "a screen spot is published")
-	assert_eq(d.screen_spot, d.target_position, "it is the ice he holds")
-	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
-	var keeper: Vector3 = goal + (SLOT_TOP_MATE - goal).normalized() * 1.1
-	assert_gt(AIScreenField.uplift(SLOT_TOP_MATE, goal, keeper, d.screen_spot,
-			GoalieScreenRules.ScreenConfig.new()), 0.0, "it hides his release; got %s" % d.screen_spot)
-
-
-func test_a_station_that_hides_no_shot_is_not_fought_for() -> void:
+func test_he_fights_for_ice_in_front_while_the_carrier_works_the_wall() -> void:
 	var d: RoleDecision = AIRoleFinisher.decide(
-			_screen_ctx(Vector3(0.0, 0.0, OPP_NET_Z + 11.0), false))
-	assert_false(d.screen_spot.is_finite(), "got %s at %s" % [d.screen_spot, d.target_position])
+			_screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 6.0), true))
+	assert_true(d.battle_spot.is_finite(), "the spot is published")
+	assert_eq(d.battle_spot, d.target_position, "it is the ice he holds")
 
 
-func test_a_point_shot_gets_no_screen_station() -> void:
+# net_front_value over the plays _screen_ctx's carrier and team make.
+func _front_at(ctx: RoleContext, carrier: Vector3, at: Vector3) -> float:
+	var goalie: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
+	var opps: Array[Vector3] = ctx.scratch_opp_positions
+	AIRoleReads.collect_opponents(ctx, opps, ctx.scratch_opp_states)
+	var mates: Array[Vector3] = ctx.scratch_teammates
+	AIRoleReads.collect_teammates_excluding_self(ctx, mates)
+	AIStationSearch.fill_shot_plays(ctx, carrier, goalie, opps, mates)
+	return AIStationSearch.net_front_value(ctx, at)
+
+
+func test_a_man_at_the_slot_top_makes_his_line_worth_holding() -> void:
+	# The carrier low on the wall has no shot a screen helps; our man at the
+	# slot's top has a one-timer off the feed, which a body on his line hides.
+	var carrier := Vector3(8.0, 0.0, OPP_NET_Z + 6.0)
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var along: float = AIScreenField.best_station_along(SLOT_TOP_MATE, goal)
+	var on_line: Vector3 = goal + (SLOT_TOP_MATE - goal).normalized() * along
+	var with_him: float = _front_at(_screen_ctx(carrier, true), carrier, on_line)
+	var without: float = _front_at(_screen_ctx(carrier, false), carrier, on_line)
+	assert_gt(with_him, without, "his shot is the one a body there screens")
+
+
+func test_ice_far_from_the_net_adds_nothing_in_front() -> void:
+	var ctx: RoleContext = _screen_ctx(Vector3(0.0, 0.0, OPP_NET_Z + 11.0), false)
+	var goalie: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
+	var opps: Array[Vector3] = ctx.scratch_opp_positions
+	AIRoleReads.collect_opponents(ctx, opps, ctx.scratch_opp_states)
+	var mates: Array[Vector3] = ctx.scratch_teammates
+	AIRoleReads.collect_teammates_excluding_self(ctx, mates)
+	AIStationSearch.fill_shot_plays(ctx, Vector3(0.0, 0.0, OPP_NET_Z + 11.0), goalie, opps, mates)
+	assert_eq(AIStationSearch.net_front_value(ctx, Vector3(-9.0, 0.0, OPP_NET_Z + 18.0)), 0.0)
+	assert_gt(AIStationSearch.net_front_value(ctx, Vector3(0.0, 0.0, OPP_NET_Z + 2.5)), 0.0,
+			"the crease top screens him and plays his rebound")
+
+
+func test_a_point_shot_gets_its_rebound_station_and_no_screen() -> void:
 	# The field measured a screen worth nothing from the points, so nobody is
-	# sent in front of one.
-	var ctx: RoleContext = _screen_ctx(Vector3(-8.0, 0.0, OPP_NET_Z + 19.5), false)
+	# sent onto its line; its rebound is still played where it comes out.
+	var from := Vector3(-8.0, 0.0, OPP_NET_Z + 19.5)
+	var ctx: RoleContext = _screen_ctx(from, false)
 	var goalie: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
 	var opps: Array[Vector3] = ctx.scratch_opp_positions
 	AIRoleReads.collect_opponents(ctx, opps, ctx.scratch_opp_states)
 	var none: Array[Vector3] = []
-	AIStationSearch.fill_screen_plays(ctx, Vector3(-8.0, 0.0, OPP_NET_Z + 19.5), goalie, opps, none)
+	AIStationSearch.fill_shot_plays(ctx, from, goalie, opps, none)
 	var stations: Array[Vector3] = []
-	AIStationSearch.append_screen_stations(ctx, stations)
-	assert_eq(stations.size(), 0, "got %s" % [stations])
+	AIStationSearch.append_net_front_stations(ctx, stations)
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var crash: Vector3 = AIReboundField.crash_point(AIReboundField.spot_of(
+			AIPuckLane.release_point_toward(from, goal), goal), false, goal)
+	assert_eq(stations, [crash] as Array[Vector3])

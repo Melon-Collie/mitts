@@ -633,8 +633,8 @@ rebound off a point shot, counting our share of first touches on the squirt.
 - **Built.** `AIScreenField` reads 2b. FINISHER / NET_FRONT gain a SCREEN
   station on the carrier's line at the field's best distance out, valued at
   the share of the carrier's misses a body there turns into goals, and they
-  publish it as `RoleDecision.screen_spot` when it wins. The press pass wins
-  that spot (`_win_the_screen`): Ctrl into a man of theirs nearer it, when the
+  publish it as `RoleDecision.battle_spot` when it wins. The press pass wins
+  that spot (`_win_the_spot`): Ctrl into a man of theirs nearer it, when the
   press moves him off it. The carrier's shot and feed values credit the screen
   standing in front of him (`AICarrierField._screen_at`).
 - **Rebound sweep, J=11, 576 possessions:**
@@ -706,7 +706,7 @@ After each 5v5 step, re-measure 3v3 (`test_ozone_possession.gd`).
 | FINISHER / NET_FRONT stations, tip read | `Scripts/domain/ai/role_behaviors/finisher.gd` |
 | rebound credit, `tip_ev`, the screen in a shot | `Scripts/domain/ai/action_scoring.gd` |
 | rebound and screen fields | `Scripts/domain/ai/rebound_field.gd`, `rebound_value.gd`, `screen_field.gd` |
-| the screen battle | `Scripts/ai/skater_agent_press.gd:_win_the_screen` |
+| the screen battle | `Scripts/ai/skater_agent_press.gd:_win_the_spot` |
 | shot value seam | `Scripts/domain/ai/shot_value.gd`, `shot_odds.gd` |
 | chase election | `Scripts/domain/ai/loose_puck_chase.gd` |
 | carrier shot pick | `Scripts/domain/ai/role_behaviors/carrier.gd:_pick_fire_phase` |
