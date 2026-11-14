@@ -151,8 +151,9 @@ Sized for a closed beta, and deliberately small:
   when it has no room.
 - **The matchmaker on Supabase**, which the game already uses: a queue table
   and a function that pairs parties and asks the allocator for a server.
-- **One region.** The input lead covers a one-way trip of up to 100 ms
-  (`MAX_ONE_WAY_S`).
+- **One region, central North America (Dallas).** The input lead covers a
+  one-way trip of up to 100 ms (`MAX_ONE_WAY_S`), and from the middle of the
+  continent both coasts sit well inside it.
 
 **What one match needs**, for sizing the box: under half a core of main thread
 with the native kernels built (§7) plus the bots' worker thread; about 600 MB
