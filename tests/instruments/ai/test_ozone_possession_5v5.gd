@@ -324,6 +324,8 @@ func _count_screen(duel: Object, r: Dictionary) -> void:
 			_last_spot.erase(sk.peer_id)
 			continue
 		var spot: Vector3 = dec.battle_spot
+		var who: String = "nf_" if duel.brains[0].get_slot(sk.peer_id) \
+				== AIRoleSlots.Slot.NET_FRONT else "fi_"
 		if _last_spot.has(sk.peer_id):
 			var jump: float = Vector2(spot.x - _last_spot[sk.peer_id].x,
 					spot.z - _last_spot[sk.peer_id].z).length()
@@ -331,8 +333,10 @@ func _count_screen(duel: Object, r: Dictionary) -> void:
 			if jump > FLIP_M:
 				r["flip_m"] = r.get("flip_m", 0.0) + jump
 				r["flip_n"] = r.get("flip_n", 0.0) + 1.0
+				r[who + "flip_n"] = r.get(who + "flip_n", 0.0) + 1.0
 		_last_spot[sk.peer_id] = spot
 		r["pub_s"] = r.get("pub_s", 0.0) + Duel.DT
+		r[who + "pub_s"] = r.get(who + "pub_s", 0.0) + Duel.DT
 		var to := Vector2(spot.x - sk.pos.x, spot.z - sk.pos.z)
 		var mine: float = to.length()
 		r["mine_m"] = r.get("mine_m", 0.0) + Duel.DT * mine
@@ -365,6 +369,7 @@ func _count_screen(duel: Object, r: Dictionary) -> void:
 				r["close_ms"] = r.get("close_ms", 0.0) + Duel.DT * Vector2(sk.vel.x, sk.vel.z) \
 						.dot(to / maxf(mine, 0.001))
 		r["cat_" + cat] = r.get("cat_" + cat, 0.0) + Duel.DT
+		r[who + "cat_" + cat] = r.get(who + "cat_" + cat, 0.0) + Duel.DT
 
 
 # The screen every other body gives a release at `at` (AIScreenField.best_uplift,
@@ -536,7 +541,7 @@ func _sweep(label: String) -> void:
 			gut.p("OZSCREEN|%d|%.2f|%.2f|%.2f" % [g, r.get("pub_s", 0.0), r.get("contest_s", 0.0),
 					r.get("mine_m", 0.0) / maxf(r.get("pub_s", 0.0), 0.001)])
 			gut.p("OZCHAIN|%d|%s" % [g, JSON.stringify(r.keys().filter(
-					func(k: String) -> bool: return k.begins_with("cat_") or k in [
+					func(k: String) -> bool: return k.begins_with("cat_") or k.begins_with("nf_") or k.begins_with("fi_") or k in [
 						"jump_m", "flip_m", "flip_n", "moved_m", "moved_n", "close_ms", "pub_s"]).map(
 					func(k: String) -> String: return "%s=%.3f" % [k, r[k]]))])
 			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f%s|%.2f|%.3f" % [g, r["end"],

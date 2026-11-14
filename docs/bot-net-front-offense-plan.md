@@ -799,6 +799,17 @@ The battle chain is unchanged (their man nearer the spot, out of reach,
 55%; re-picks 0.78 a second): the grid snaps and the step into the man are
 still to do.
 
+### 4f. The fields read between spots; the man on the spot skated into (`7def294`)
+
+The rebound and screen fields now place bodies between their measured spots
+(`AIFieldGrid`), and a man of theirs standing on our spot short of contact
+is skated into (`CLOSE_IN_M`). J=11, 576 possessions: battle in 38% of
+possessions for 0.15 s each (was 32%, 0.09 s), the net-front man first on 19
+rebounds (was 15), xG 0.040 ± 0.006 (unchanged). Split by slot (J=2), the
+chain is the net-front man's: he holds a spot 1.71 s a possession, their man
+nearer it out of reach 53%, re-picking 0.81 a second, 2.3 m each. The grid
+snaps were not the re-picks' driver; what is, is not yet known.
+
 ---
 
 ## Step 5 — Tips
