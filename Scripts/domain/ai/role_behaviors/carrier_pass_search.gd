@@ -355,7 +355,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 				rim_state.velocity, floor_ev,
 				rim_dir, AIRimPass.opp_meet[rim_k], 0.0,
 				ctx.icing_enforced and _rim.ices(ctx, pass_origin, rim_k),
-				pass_origin, rim_keep)
+				pass_origin, rim_keep, rim_state.position)
 		if rim_peer == ctx.ping_pass_target_peer and s_rim > 0.0:
 			s_rim *= PING_PASS_EV_MULT
 		if s_rim > best_pass_score:
@@ -515,7 +515,8 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	return _pass_ev(ctx, receiver, pass_speed, flight_t,
 			receiver_release_t, flight_t + maxf(rotation_time, pull_s), our_goalie,
 			receiver_caps, lane, miss_prob, receiver_state.velocity, useless_below,
-			Vector3.ZERO, Vector3.INF, closing, false, pass_origin, keep)
+			Vector3.ZERO, Vector3.INF, closing, false, pass_origin, keep,
+			receiver_state.position)
 
 
 # A gate that zeroes a feed, noted for the trace.
@@ -542,7 +543,7 @@ func _stop(gate: int) -> float:
 # or a rim: no reception to price). `origin` is where it leaves the blade (INF:
 # AICarrierField.pass_origin, the puck where it is) and `keep` the odds it is
 # still on the blade when it goes (AIShotHolds.keep_for), a loss there priced
-# as a poke at the release.
+# as a poke at the release. `receiver_now` is where the receiver stands.
 func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		flight_t: float, receiver_release_t: float, delay_s: float,
 		our_goalie: Vector3, receiver_caps: AISkaterCaps = null,
@@ -555,7 +556,8 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		closing: float = 0.0,
 		rim_iced: bool = false,
 		origin: Vector3 = Vector3.INF,
-		keep: float = 1.0) -> float:
+		keep: float = 1.0,
+		receiver_now: Vector3 = Vector3.INF) -> float:
 	var self_pos: Vector3 = ctx.self_pos
 	# The pass flies from the PUCK, not the body: behind the net the two differ
 	# by up to a stick's reach. The lane and its loss points are the puck's;
@@ -592,7 +594,8 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# leaves (the goalie's own answer to the flight, AIShotValue.feed). A
 	# one-timer-ready receiver's release is the flight alone (_pass_variant_ev).
 	var receiver_value: float = _field.feed_value_at(ctx, origin, receiver_spot,
-			pass_speed, receiver_release_t <= flight_t, self_pos, _proj_buf)
+			pass_speed, receiver_release_t <= flight_t, self_pos, _proj_buf, 0.0,
+			Vector3.ZERO, receiver_now)
 	# An OPEN receiver can carry into a better look, so he is credited the best
 	# value he can REACH with a short drive toward the net. It bites in the OZ,
 	# where value_at is shot-only. (Re-projects _proj_buf, which
@@ -817,5 +820,6 @@ func _developing_outlet_feed(ctx: RoleContext, tm: SkaterNetworkState,
 				flight_t + rotation_time, our_goalie, receiver_caps, -1.0,
 				AIPuckLane.PASS_MISS_BASE_PROB, Vector3.ZERO, best,
 				Vector3.ZERO, Vector3.INF,
-				AIFeedReception.arrival_closing_speed(ctx.self_pos, spot, pass_speed, vel)))
+				AIFeedReception.arrival_closing_speed(ctx.self_pos, spot, pass_speed, vel),
+				false, Vector3.INF, 1.0, tm.position))
 	return best

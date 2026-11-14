@@ -158,15 +158,17 @@ func fill(ctx: RoleContext) -> void:
 
 # What the bodies in front of their keeper at `keeper` add to a shot released
 # at `at` by hiding it (AIScreenField.best_uplift): `opps` (their skaters where
-# the shot meets them), and with `ours` our skaters, the carrier aside. A feed's
-# shot leaves ours out: the receiver stands among them, where he is now.
+# the shot meets them) and ours, the carrier aside and the shooter where he
+# stands now (`shooter_now`): a feed's receiver is among them, and is no screen
+# on his own shot.
 func _screen_at(ctx: RoleContext, at: Vector3, keeper: Vector3, opps: Array[Vector3],
-		ours: bool) -> float:
+		shooter_now: Vector3 = Vector3.INF) -> float:
 	if not keeper.is_finite():
 		return 0.0
 	_screen_bodies.assign(opps)
-	if ours:
-		_screen_bodies.append_array(our_defenders)
+	for b: Vector3 in our_defenders:
+		if b != shooter_now:
+			_screen_bodies.append(b)
 	return AIScreenField.best_uplift(at, ctx.attacking_goal_pos, keeper, _screen_bodies,
 			screen_cfg)
 
@@ -450,7 +452,7 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
 			stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 			opponent_caps, -1.0, keeper_yaw, AIActionScoring.FLAT_REBOUND_CREDIT, history,
-			_screen_at(ctx, pos, keeper_pos, opps, true)) * shot_keep
+			_screen_at(ctx, pos, keeper_pos, opps)) * shot_keep
 	return _regime_value(ctx, pos, from_pos, shoot_s, arrive_s, arrive_vel)
 
 
@@ -459,15 +461,16 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 # it; otherwise he catches and charges. A goalie-motion-blind tier
 # (ctx.reads_goalie_motion) reads the keeper already set on the receiver. The
 # feed reaches him `arrive_s` from now, moving at `arrive_vel` (horizon_value).
+# `receiver_now` is where the receiver stands as it is priced.
 func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: float,
 		one_timer: bool, from_pos: Vector3, opps: Array[Vector3], arrive_s: float = 0.0,
-		arrive_vel: Vector3 = Vector3.ZERO) -> float:
+		arrive_vel: Vector3 = Vector3.ZERO, receiver_now: Vector3 = Vector3.INF) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, 0.0):
 		return horizon_value(pos, arrive_s, arrive_vel)
 	var fed: float = AIShotValue.feed(passer, pos, pass_speed,
 			ctx.attacking_goal_pos, goalie_now(ctx), one_timer) if ctx.reads_goalie_motion \
 			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos)
-	var screen: float = _screen_at(ctx, pos, goalie_now(ctx), opps, false)
+	var screen: float = _screen_at(ctx, pos, goalie_now(ctx), opps, receiver_now)
 	var shoot_s: float = AIActionScoring.with_rebound(fed + (1.0 - fed) * screen,
 			AIActionScoring.FLAT_REBOUND_CREDIT)
 	if shoot_s > 0.0:

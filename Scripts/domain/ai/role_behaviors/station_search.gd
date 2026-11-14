@@ -131,6 +131,79 @@ static func shared_cover(c: Vector3, teammates: Array[Vector3]) -> float:
 	return best
 
 
+# Our shots a body in front of their keeper could screen, refilled by
+# fill_screen_plays (one worker): each one's release, the keeper square on it,
+# and the odds it is taken and saved. The carrier's own is his miss; a
+# teammate's is the lane to him times his one-timer's miss off the feed.
+static var _play_release: Array[Vector3] = []
+static var _play_keeper: Array[Vector3] = []
+static var _play_weight: Array[float] = []
+static var _screen_cfg := GoalieScreenRules.ScreenConfig.new()
+static var _no_vels: Array[Vector3] = []
+
+
+# The shots a screen could help: our carrier's from where he stands, the keeper
+# as he is, and each of `teammates` off a feed to him, the keeper square on him.
+static func fill_screen_plays(ctx: RoleContext, carrier_pos: Vector3,
+		goalie_pos: Vector3, opp_positions: Array[Vector3],
+		teammates: Array[Vector3]) -> void:
+	_play_release.clear()
+	_play_keeper.clear()
+	_play_weight.clear()
+	var goal: Vector3 = ctx.attacking_goal_pos
+	var release: Vector3 = AIPuckLane.release_point_toward(carrier_pos, goal)
+	_play_release.append(release)
+	_play_keeper.append(goalie_pos if goalie_pos.is_finite() else _keeper_square_on(goal, release))
+	_play_weight.append(1.0 - AIShotValue.set_keeper(release, goal))
+	for t: Vector3 in teammates:
+		if Vector2(t.x - carrier_pos.x, t.z - carrier_pos.z).length() < 0.5 \
+				or (t.z - goal.z) * signf(goal.z) >= 0.0:
+			continue
+		var speed: float = AIPuckLane.expected_pass_speed(carrier_pos, t)
+		var lane: float = AIPuckLane.lane_clear(carrier_pos, t, opp_positions, speed, _no_vels,
+				ctx.scratch_opp_caps)
+		if lane <= 0.0:
+			continue
+		_play_release.append(t)
+		_play_keeper.append(_keeper_square_on(goal, t))
+		_play_weight.append(lane * (1.0 - AIShotValue.feed(carrier_pos, t, speed, goal,
+				goalie_pos, true)))
+
+
+# Where a screener stands for each play (fill_screen_plays): on its release's
+# line to the net, as far out as the screen field measured a body worth most.
+static func append_screen_stations(ctx: RoleContext, candidates: Array[Vector3]) -> void:
+	var goal: Vector3 = ctx.attacking_goal_pos
+	for i: int in _play_release.size():
+		var along: float = AIScreenField.best_station_along(_play_release[i], goal)
+		var line: Vector3 = _play_release[i] - goal
+		line.y = 0.0
+		if is_finite(along) and line.length() > along:
+			candidates.append(goal + line * (along / line.length()))
+
+
+# What a body at `c` adds to our attack by screening (fill_screen_plays): the
+# best of the plays it hides, one puck being one shot.
+static func screen_value(ctx: RoleContext, c: Vector3) -> float:
+	var best: float = 0.0
+	for i: int in _play_release.size():
+		best = maxf(best, _play_weight[i] * AIScreenField.uplift(_play_release[i],
+				ctx.attacking_goal_pos, _play_keeper[i], c, _screen_cfg))
+	return best
+
+
+# Where their keeper stands set for a shot from `release` (AIGoalieModel
+# .keeper_depth along its line); in his net for one behind the goal line.
+static func _keeper_square_on(goal: Vector3, release: Vector3) -> Vector3:
+	var forward: float = (release.z - goal.z) * -signf(goal.z)
+	var depth: float = AIGoalieModel.keeper_depth(goal, release)
+	if not is_finite(depth):
+		return goal
+	var at: Vector3 = goal + (release - goal) * (depth / forward)
+	at.y = 0.0
+	return at
+
+
 # ── Target switch-hysteresis ─────────────────────────────────────────────────
 #
 # Along an argmax's tie ridge two spots trade the lead on noise, and the off-puck

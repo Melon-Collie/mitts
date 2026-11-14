@@ -498,8 +498,12 @@ with his body in it (`AIPressRead.pair_accel`, with against without). Both ride
 the `protects_the_puck` gate.
 
 **In their end the screen spot is fought for.** FINISHER / NET_FRONT price a
-station on the carrier's line by what the screen field says a body there adds
-to the shot he misses, and publish it (`RoleDecision.screen_spot`). The press
+station in front of each shot of ours (the carrier's now, and each teammate's
+off a feed, at the lane to him) by what the screen field says a body there adds
+to the shot the keeper would save, and publish the one they hold when it screens
+any of them (`RoleDecision.screen_spot`), whatever else it is worth: a man at the
+slot's top keeps the net front's ice worth holding while the carrier works the
+wall. The press
 pass then wins it (`SkaterAgentPress._win_the_screen`): a man of theirs nearer
 the spot, within `STEP_IN_M`, is pressed when the push moves him off it by both
 bodies' width. Never value a screen off the line: the field measured a body

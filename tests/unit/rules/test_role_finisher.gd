@@ -633,3 +633,62 @@ func test_a_tip_he_cannot_make_is_a_crash() -> void:
 	assert_false(d.has_aim_override, "no tip")
 	assert_true(d.arrive_at_speed, "the crash")
 
+
+
+# ─── SCREEN: ice in front of one of our shots ────────────────────────────────
+
+const SLOT_TOP_MATE := Vector3(0.5, 0.0, OPP_NET_Z + 10.0)
+
+
+# Our carrier (peer 2) at `carrier`, me (peer 1) low on the weak side, their
+# three in the house; with `mate` our man at the slot's top (peer 3).
+func _screen_ctx(carrier: Vector3, mate: bool) -> RoleContext:
+	var g: float = OPP_NET_Z
+	var me := Vector3(-3.0, 0.0, g + 5.0)
+	var sk: Array = [
+		_make_skater(1, TEAM_ID, me),
+		_make_skater(2, TEAM_ID, carrier),
+		_make_skater(10, 1, Vector3(-2.3, 0.0, g + 1.5)),
+		_make_skater(11, 1, Vector3(-0.8, 0.0, g + 6.0)),
+		_make_skater(12, 1, Vector3(1.2, 0.0, g + 3.0)),
+	]
+	if mate:
+		sk.append(_make_skater(3, TEAM_ID, SLOT_TOP_MATE))
+	var ctx: RoleContext = _make_ctx(me, carrier, Vector3.ZERO, sk)
+	ctx.snapshot.puck_state.carrier_peer_id = 2
+	_add_opp_goalie(ctx, carrier)
+	return ctx
+
+
+func test_he_fights_for_ice_that_screens_the_slot_tops_one_timer() -> void:
+	# The carrier low on the wall has no shot a screen helps; our man at the
+	# slot's top has a one-timer off the feed, and the station that screens it
+	# is published for the press to win.
+	var ctx: RoleContext = _screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 6.0), true)
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_true(d.screen_spot.is_finite(), "a screen spot is published")
+	assert_eq(d.screen_spot, d.target_position, "it is the ice he holds")
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var keeper: Vector3 = goal + (SLOT_TOP_MATE - goal).normalized() * 1.1
+	assert_gt(AIScreenField.uplift(SLOT_TOP_MATE, goal, keeper, d.screen_spot,
+			GoalieScreenRules.ScreenConfig.new()), 0.0, "it hides his release; got %s" % d.screen_spot)
+
+
+func test_a_station_that_hides_no_shot_is_not_fought_for() -> void:
+	var d: RoleDecision = AIRoleFinisher.decide(
+			_screen_ctx(Vector3(0.0, 0.0, OPP_NET_Z + 11.0), false))
+	assert_false(d.screen_spot.is_finite(), "got %s at %s" % [d.screen_spot, d.target_position])
+
+
+func test_a_point_shot_gets_no_screen_station() -> void:
+	# The field measured a screen worth nothing from the points, so nobody is
+	# sent in front of one.
+	var ctx: RoleContext = _screen_ctx(Vector3(-8.0, 0.0, OPP_NET_Z + 19.5), false)
+	var goalie: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
+	var opps: Array[Vector3] = ctx.scratch_opp_positions
+	AIRoleReads.collect_opponents(ctx, opps, ctx.scratch_opp_states)
+	var none: Array[Vector3] = []
+	AIStationSearch.fill_screen_plays(ctx, Vector3(-8.0, 0.0, OPP_NET_Z + 19.5), goalie, opps, none)
+	var stations: Array[Vector3] = []
+	AIStationSearch.append_screen_stations(ctx, stations)
+	assert_eq(stations.size(), 0, "got %s" % [stations])
