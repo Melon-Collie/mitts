@@ -3211,7 +3211,8 @@ func _enter_shot_block() -> void:
 	_sm.set_state(State.SHOT_BLOCKING)
 	skater.set_block_stance(true)
 	# Snap facing toward puck on entry — locked for duration of stance
-	var to_puck: Vector3 = puck.global_position - skater.global_position
+	_sample_live_puck_view(_tick_read_view)
+	var to_puck: Vector3 = _tick_read_view.position - skater.global_position
 	to_puck.y = 0.0
 	if to_puck.length() > 0.01:
 		_pose.facing = Vector2(to_puck.x, to_puck.z).normalized()
@@ -3540,7 +3541,8 @@ func _fire_slapper_shot(input: InputState) -> bool:
 		_strike_moving_puck(result, _caught_feed())
 		var zone_world: Vector3 = skater.get_slapper_zone_global_position()
 		var zone_xz := Vector2(zone_world.x, zone_world.z)
-		var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
+		_sample_live_puck_view(_tick_read_view)
+		var puck_xz := Vector2(_tick_read_view.position.x, _tick_read_view.position.z)
 		result.power = ShotReleaseRules.one_timer_power(
 				result.power, one_timer_center_power_bonus,
 				zone_xz, puck_xz, slapper_zone_radius)
@@ -3732,6 +3734,16 @@ class PuckView extends RefCounted:
 
 var _one_timer_puck_view := PuckView.new()
 var _live_puck_view := PuckView.new()
+var _tick_read_view := PuckView.new()
+var _no_goalie_boxes := PackedFloat32Array()
+
+
+# Every goalie's save boxes, the wall the blade stops on, as this tick reads them.
+# A client's reconcile replay plays back the live tick's (LocalController).
+func goalie_save_boxes() -> PackedFloat32Array:
+	if not _game_state.has_method("get_goalie_boxes"):
+		return _no_goalie_boxes
+	return _game_state.get_goalie_boxes()
 
 
 # Live puck: for a local player and for a bot, the sim and the puck view share
@@ -3739,6 +3751,11 @@ var _live_puck_view := PuckView.new()
 # reads the same instant out of the host's buffer, since a remote's input can be
 # applied a frame or more after its stamp.
 func sample_shooter_puck_view(_input: InputState, out: PuckView) -> void:
+	_sample_live_puck_view(out)
+
+
+# The puck as this tick reads it, for a collaborator: _sample_live_puck_view.
+func read_puck_view(out: PuckView) -> void:
 	_sample_live_puck_view(out)
 
 

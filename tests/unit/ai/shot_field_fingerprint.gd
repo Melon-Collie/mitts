@@ -20,6 +20,7 @@ const SOURCES: Array[String] = [
 	"res://tests/unit/ai/open_set_edges.gd",
 	"res://tests/unit/ai/shot_odds_stager.gd",
 	"res://tests/instruments/ai/test_generate_shot_field.gd",
+	"res://tests/instruments/keeper/keeper_state_cloner.gd",
 ]
 # Every file in these directories whose name starts with its prefix: the goalie
 # and the keeper who plays him.

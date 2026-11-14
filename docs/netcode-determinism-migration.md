@@ -273,7 +273,6 @@ Even with a deterministic, RL-family puck, the AAA gap the opening review named 
 only *partly* closed. Still open, and independent of this doc:
 - **Dedicated servers** (participant-host means host advantage, no host migration, a
   cheatable authority). Determinism *helps* here but doesn't deliver it.
-- **Delta compression + rate** (stage 5) — bandwidth is still 120 Hz full-state.
 - **Anti-cheat** beyond the claim clamps — a deterministic client sim is, if anything,
   *easier* to cheat locally (the client knows the whole sim), so authority + validation
   discipline matters more, not less.

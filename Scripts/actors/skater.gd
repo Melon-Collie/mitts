@@ -701,6 +701,7 @@ func contact_others() -> Array:
 # each goalie — skater-vs-goalie contact is analytic.
 # Empty Callable (tutorial dummy / test) → no goalie block.
 var _goalie_boxes_provider: Callable = Callable()
+var _no_goalie_boxes := PackedFloat32Array()
 
 
 func set_goalie_boxes_provider(provider: Callable) -> void:
@@ -1199,7 +1200,7 @@ func _physics_process(delta: float) -> void:
 	global_position += velocity * delta
 	# Capture velocity BEFORE the analytic skater-vs-skater resolution so the delta
 	# below isolates the body-check impulse (the resolver's self velocity change) for
-	# the reconcile replay recording.
+	# the hit feedback.
 	var vel_pre_body_check: Vector3 = velocity
 	_resolve_player_collisions()
 	var body_check_delta: Vector3 = velocity - vel_pre_body_check
@@ -1314,16 +1315,13 @@ func _resolve_player_collisions() -> void:
 			continue
 		# Self: separation + inelastic decel / drive-through, applied
 		# unconditionally (this machine simulates self wherever the resolver runs).
-		# Recorded for reconcile replay via the body_check_delta capture in
-		# _physics_process (velocity - vel_pre_body_check).
 		global_position += _collision_result.sep_a
 		my_pos = global_position
 		var self_delta: Vector3 = _collision_result.dvel_a
 		velocity += self_delta
 		# Both bodies take their own outcome (body_check_received) where this
 		# machine owns them: the host owns all, a client only its local predicted
-		# skater. The other's emit also records his incoming impulse for HIS
-		# reconcile replay; ours is captured by the body_check_delta above.
+		# skater.
 		if (is_host_machine or is_local_skater) and self_delta.length_squared() > 0.0001:
 			body_check_received.emit(self_delta,
 					_backstopped(self, other, self_delta, -n, transfer,
@@ -1472,13 +1470,22 @@ func clamp_body_to_net() -> void:
 # less his stick) and strip any velocity pointing into him so the skater slides
 # along him instead of being re-seated next tick. A ghosted skater (crease-dwell
 # / offside) passes through, matching the is_ghost gate in
-# _resolve_player_collisions. Called live after the rink/net clamps; same replay
-# and allocation contract.
+# _resolve_player_collisions. Called live after the rink/net clamps; same
+# allocation contract. The replay passes the boxes its live tick clamped against
+# (clamp_body_to_goalie_boxes), never the ones the goalie holds now.
 func clamp_body_to_goalies() -> void:
-	if is_ghost or not _goalie_boxes_provider.is_valid():
-		return
-	var boxes: PackedFloat32Array = _goalie_boxes_provider.call()
-	if boxes.is_empty():
+	clamp_body_to_goalie_boxes(goalie_body_boxes())
+
+
+# His body boxes as this tick's clamp reads them; empty with no provider.
+func goalie_body_boxes() -> PackedFloat32Array:
+	if not _goalie_boxes_provider.is_valid():
+		return _no_goalie_boxes
+	return _goalie_boxes_provider.call()
+
+
+func clamp_body_to_goalie_boxes(boxes: PackedFloat32Array) -> void:
+	if is_ghost or boxes.is_empty():
 		return
 	var push: Vector3 = GoalieGearCollision.body_out(global_position, collision_radius(), boxes)
 	if push.length_squared() <= 1e-12:
