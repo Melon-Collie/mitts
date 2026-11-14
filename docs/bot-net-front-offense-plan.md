@@ -777,7 +777,27 @@ breaks out of their zone with nobody of ours goal-side, the bar 7.
   D leaves only with HIGH_SLOT already on his point).
 - With the activation off entirely it still reads 8 of 12: the points' 2.4 m
   inset (`c0e91cb`, which made a point receivable) costs the rest. At 2.0 m
-  it passes (6 of 12, +0.9 m). Not yet decided.
+  it passes (6 of 12, +0.9 m).
+- **Resolved** (`516d4f0`, `5d5d474`, `65119b4`). The reception buffer was
+  measured (`tests/instruments/ai/test_line_reception.gd`): a still point
+  man's clean catch keeps the puck where the blade meets it and a bobble
+  comes back into the zone, at every depth to 0.5 m; only a feed that misses
+  his stick runs out. `OZ_RECEIVE_LINE_BUFFER_M` is now the blade and the
+  puck (0.34 m, from 2.1 m), and the points stand at 2.0 m again. With the
+  net-front man holding the front, F3 then dropped into the low slot and the
+  counter layer read -1.2 m; HIGH_SLOT now goes below the top of the slot only
+  while another forward of ours is that high or no man of theirs is above it
+  (`_help_free`). Slow tier all green: counter layer +0.6 m and 6 of 12,
+  spacing 0–1% four high.
+
+| (J=11, 576) | slot shots / poss | first touch ours | 2nd shots / shot | xG / possession |
+|---|---|---|---|---|
+| 4e | 0.085 | 26% ± 4% | 0.091 | 0.030 ± 0.004 |
+| buffer + F3 the help | 0.101 | 29% ± 4% | 0.109 | 0.040 ± 0.005 |
+
+The battle chain is unchanged (their man nearer the spot, out of reach,
+55%; re-picks 0.78 a second): the grid snaps and the step into the man are
+still to do.
 
 ---
 
