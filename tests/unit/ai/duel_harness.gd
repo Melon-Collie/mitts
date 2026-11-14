@@ -18,7 +18,8 @@ extends RefCounted
 #     and knockdown, settle, top hand, loft and intents.
 #   - The body: SkaterMovementRules at the physics tick, the controller's facing step
 #     (turn wind-up, board shield, a wrister's freeze, the slapper stance), a
-#     wound-up body only gliding, skater contacts (SkaterCollisionRules), hits
+#     wound-up body only gliding, skater contacts (SkaterCollisionRules), the
+#     press (PressRules, test_duel_press_mirrors.gd), hits
 #     staggering and knocking down by the balance model, the boards and nets
 #     holding bodies.
 #   - The arm (duel_rig.gd): the upper body's twist and reach lean, the blade
@@ -37,7 +38,7 @@ extends RefCounted
 #     do not limit its reach.
 #   - The puck is flat: an airborne one is touched by nothing, and a landing
 #     keeps its pace; shots take no body blocks.
-#   - Board pins and the press's pair coupling are absent, as is goalie
+#   - Board pins and the press's squeeze against the boards are absent, as is goalie
 #     BEHAVIOR (a static net-center keeper per team, or a goalie_provider's).
 #   - Puppets and scripted attackers skate their own simple policies.
 
@@ -186,6 +187,16 @@ class SimSkater:
 	var drive_phase: int = CheckDriveRules.Phase.IDLE
 	var drive_elapsed: float = 0.0
 	var stance_active: bool = false
+	# The body as the tick started, which a press against him reads
+	# (Skater's latched_* fields): where he stood, his velocity, facing, stick,
+	# brake, posture and stagger.
+	var start_pos: Vector3 = Vector3.ZERO
+	var start_vel: Vector3 = Vector3.ZERO
+	var start_facing: Vector2 = Vector2(0, -1)
+	var start_intent: Vector2 = Vector2.ZERO
+	var start_brake: bool = false
+	var start_posture: int = SkaterMovementRules.Posture.UPRIGHT
+	var start_stagger: float = 0.0
 	# The blade marker's offset off the body, latched as a wrister charge starts
 	# (see step()).
 	var wrister_hold: Vector3 = Vector3.ZERO
@@ -562,6 +573,8 @@ func step() -> void:
 			carrier_id = -1
 			loose_released_by = c.peer_id
 	_puckless_swings()
+	for s: SimSkater in skaters:
+		_latch(s)
 	# Integrate bodies + blades.
 	for s: SimSkater in skaters:
 		if s.agent == null:
@@ -587,6 +600,8 @@ func step() -> void:
 		s.prev_blade = s.blade
 		_place_blade(s)
 		s.slap_charge_s = s.slap_charge_s + DT if s.input.slap_held else 0.0
+	for s: SimSkater in skaters:
+		_press(s)
 	_resolve_contacts()
 	for s: SimSkater in skaters:
 		if s.agent != null:
@@ -768,6 +783,72 @@ func _move(s: SimSkater) -> void:
 			BodyCheckRules.grip_mult(s.stagger, cfg))
 	move_cfg.thrust = base_thrust
 	s.pos += s.vel * DT
+
+
+func _latch(s: SimSkater) -> void:
+	s.start_pos = s.pos
+	s.start_vel = s.vel
+	s.start_facing = s.facing
+	s.start_intent = s.input.move_vector \
+			if s.input.move_vector.length() > move_cfg.move_deadzone else Vector2.ZERO
+	s.start_brake = s.input.brake
+	s.start_posture = SkaterMovementRules.posture_of(s.stance_active, s.hit_active)
+	s.start_stagger = s.stagger
+
+
+# SkaterController._apply_press: pressed against the nearest body he touches,
+# his motion along the contact normal is the pair's (PressRules), laid over the
+# move's from the velocity the tick started with, against the partner as he
+# stood at its start, and carried into this tick's step. Not modelled: the
+# squeeze against the boards (BoardWallRules), as the board pins are not.
+func _press(s: SimSkater) -> void:
+	if s.knockdown > 0.0:
+		return
+	var r: float = _match_body.radius
+	var p: SimSkater = null
+	var best_gap: float = INF
+	for o: SimSkater in skaters:
+		if o == s or o.knockdown > 0.0:
+			continue
+		var gap: float = Vector2(o.start_pos.x - s.start_pos.x, o.start_pos.z - s.start_pos.z) \
+				.length() - 2.0 * r
+		if PressRules.touching(gap, 0.0, 0.0) and gap < best_gap:
+			best_gap = gap
+			p = o
+	if p == null:
+		return
+	var d := Vector3(p.start_pos.x - s.start_pos.x, 0.0, p.start_pos.z - s.start_pos.z)
+	var dist: float = d.length()
+	if dist < 0.0001:
+		return
+	var n3: Vector3 = d / dist
+	var n := Vector2(n3.x, n3.z)
+	var bc: BodyCheckRules.Config = _match_body.check_cfg
+	var posture: int = SkaterMovementRules.posture_of(s.stance_active, s.hit_active)
+	var intent: Vector2 = s.input.move_vector \
+			if s.input.move_vector.length() > move_cfg.move_deadzone else Vector2.ZERO
+	var u: float = s.start_vel.dot(n3)
+	var drive_self: float = PressRules.drive(move_cfg, _match_body.thrust, posture, s.input.brake,
+			false, BodyCheckRules.thrust_mult(s.stagger, bc), s.facing,
+			WorldStateCodec.quantize_move_intent(intent), n, u)
+	var drive_other: float = PressRules.drive(move_cfg, _match_body.thrust, p.start_posture,
+			p.start_brake, false, BodyCheckRules.thrust_mult(p.start_stagger, bc), p.start_facing,
+			WorldStateCodec.quantize_move_intent(p.start_intent), -n, -u)
+	if not PressRules.pressing(drive_self, drive_other):
+		return
+	var hold_self: float = PressRules.hold(move_cfg, posture, s.input.brake, false,
+			BodyCheckRules.grip_mult(s.stagger, bc), s.facing, n, u)
+	var hold_other: float = PressRules.hold(move_cfg, p.start_posture, p.start_brake, false,
+			BodyCheckRules.grip_mult(p.start_stagger, bc), p.start_facing, n, u)
+	var w: float = _match_body.weight
+	var u_new: float = u + DT * PressRules.pair_accel(w, drive_self, hold_self,
+			w, drive_other, hold_other, u, DT)
+	if absf(u_new) > absf(u):
+		u_new = clampf(u_new, -maxf(move_cfg.max_speed, absf(u)), maxf(move_cfg.max_speed, absf(u)))
+	var dv: Vector3 = n3 * (u_new - s.vel.dot(n3))
+	s.vel += dv
+	s.pos += dv * DT
+	_hold_on_ice(s)
 
 
 # Skater.clamp_body_to_rink and clamp_body_to_net: the body's edge stops at the

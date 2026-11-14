@@ -200,7 +200,9 @@ func _try_catch(pos: Vector3, vel: Vector3, out: Outcome) -> bool:
 func _argmax_spot() -> Vector3:
 	var sm := SkaterAgentStateMachine.new()
 	sm.setup(FINISHER_ID, 0, _brain, _team_map, false)
-	var probe := Vector3(-4.0, 0.0, -21.65)
+	# He has skated into the slot: the station is priced from there, since a
+	# station's worth is his only once he is on it.
+	var probe := Vector3(-0.8, 0.0, -21.65)
 	_snap.skater_states[FINISHER_ID].position = probe
 	_brain.tick(1.0, _snap)
 	var ctx: RoleContext = sm._build_role_context(_snap, probe, _snap.skater_states[FINISHER_ID])

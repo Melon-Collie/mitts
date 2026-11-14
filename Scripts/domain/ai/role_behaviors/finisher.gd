@@ -322,10 +322,15 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		# What a body here adds to our shots in front of their net: the screen,
 		# and the rebound, read only as far as it could beat the feed and the tip.
 		var front: float = AIStationSearch.net_front_value(ctx, c, maxf(feed, tip))
+		# Each is his only once he stands there, so it is discounted by his skate
+		# there: ice he cannot reach before the play moves on does not pull him
+		# off ice he is on.
+		var reach: float = AIActionScoring.delay_discount(AIArrival.time_to_arrive(
+				ctx.self_pos, c, ctx.self_velocity, ctx.self_max_speed))
 		# The best of the one-timer feed, the tip and the net front — max(), not
 		# sum: one puck, one outcome — less what a teammate a defender could
 		# cover with this spot already offers.
-		var score: float = maxf(maxf(feed, tip), front) \
+		var score: float = maxf(maxf(feed, tip), front) * reach \
 				- AIStationSearch.shared_cover(c, teammate_positions) \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:

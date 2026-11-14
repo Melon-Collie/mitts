@@ -265,7 +265,8 @@ func test_a_feed_given_up_on_is_caught_not_recommitted() -> void:
 	# The camped man gives up on a feed he cannot set for and stays given up on
 	# it: re-committing on the next tick only to give up again leaves him neither
 	# swinging nor squared to catch it. The next possession re-arms him.
-	var finisher_pos := Vector3(-4.0, 0.0, -21.65)
+	# He has skated into the slot: the station is priced from there.
+	var finisher_pos := Vector3(-0.8, 0.0, -21.65)
 	var s: WorldSnapshot = _cycle_snap(finisher_pos)
 	_brain.tick(1.0, s)
 	var sm: SkaterAgentStateMachine = Agent.new()
