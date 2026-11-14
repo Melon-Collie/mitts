@@ -154,8 +154,18 @@ Sized for a closed beta, and deliberately small:
 - **One region.** The input lead covers a one-way trip of up to 100 ms
   (`MAX_ONE_WAY_S`).
 
+**What one match needs**, for sizing the box: under half a core of main thread
+with the native kernels built (§7) plus the bots' worker thread; about 600 MB
+of memory (the §7 probe's peak, on the editor binary with the HUD and the arena
+built); and 16 KB/s of upload a human client
+(`docs/performance-findings.md`), so 1.3 Mbps for ten humans. The tick is one
+thread, so dedicated cores matter more than many cores: a neighbour taking the
+core is dilated physics for every client in the match.
+
 A managed fleet is worth its cost once concurrent matches outgrow one box.
-Vendors and prices have not been compared.
+Hathora, one of the two obvious ones, ended its game hosting in May 2026, which
+is the argument for keeping the server a plain Linux process that boots from a
+config: it moves to another host in an afternoon.
 
 ## 6. Phases
 
