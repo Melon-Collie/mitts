@@ -25,6 +25,9 @@ const TIGHT_SPOTS: Array[Vector2] = [Vector2(0.0, 3.0), Vector2(0.0, 3.6), Vecto
 const TIGHT_DRIVE_M_S: float = 8.5
 const DRIVE_FROM_M: float = 14.0
 const PART_NAMES: Array[String] = ["STICK", "PAD", "BLOCKER", "CHEST", "GLOVE", "MASK"]
+# Where a carrier sets in tight: metres out, and across.
+const SET_OUT_M: Array[float] = [2.0, 2.5, 3.0, 3.5]
+const SET_ACROSS_M: Array[float] = [0.0, 0.8, 1.5]
 
 var _s: RefCounted = null
 var _h: RefCounted = null
@@ -260,3 +263,44 @@ func _stage_kind(kind: int, spot: Vector2) -> Vector3:
 		2:
 			return _s.stage_feed(at, Vector3(spot.x - 5.0, 0.0, at.z), 16.0)
 	return _s.stage_set(at)
+
+
+# The lifted shots against a carrier set in tight, released as the keeper
+# settles for him: LOW and HIGH post to post (G clean, o in off him, s save,
+# w wide), the goals of the cell, and the parts that made its saves. What his
+# hands cover where they are held, a shot from there being on him before they
+# answer it.
+func test_set_in_tight() -> void:
+	var lines: PackedStringArray = ["spot (across, out) speed | LOW post to post | HIGH post to post | goals | saved by"]
+	var total: int = 0
+	for out: float in SET_OUT_M:
+		for x: float in SET_ACROSS_M:
+			for speed: float in [20.0, 28.6]:
+				var goals: int = 0
+				var by: Dictionary = {}
+				var rows: String = ""
+				for loft: int in [ShotMechanics.ELEVATION_LOW, ShotMechanics.ELEVATION_HIGH]:
+					var lanes: String = ""
+					for i: int in Stager.AIM_POINTS:
+						var at: Vector3 = _s.stage_set(Vector3(x, 0.0, GOAL_Z + out))
+						var r: int = _fire(at, Vector3(Stager.aim_x(i), 0.0, GOAL_Z), loft, speed, false)
+						var touched: bool = _h.last_part >= 0
+						var c: String = "w"
+						if r == Harness.GOAL and not touched:
+							c = "G"
+						elif touched and (r == Harness.GOAL or _h.rebound_goal):
+							c = "o"
+						elif touched:
+							c = "s"
+							var part: String = PART_NAMES[_h.last_part]
+							by[part] = int(by.get(part, 0)) + 1
+						if c == "G" or c == "o":
+							goals += 1
+						lanes += c
+					rows += " | " + lanes
+				total += goals
+				lines.append("(%.1f, %.1f) %4.1f%s | %2d | %s" % [x, out, speed, rows, goals, str(by)])
+	lines.append("%d in" % total)
+	gut.p("\n" + "\n".join(lines))
+	assert_true(true)
+

@@ -131,6 +131,7 @@ const NOT_ON_WIRE: Array[String] = [
 	"KeeperGlide.t_push_speed", "KeeperGlide.c_cut_speed", "KeeperGlide.shuffle_speed", "KeeperGlide.accel",
 	"KeeperLowReady._low", "KeeperLowReady._ready", "KeeperLowReady._skel",
 	"KeeperPadOut.out_s", "KeeperPadOut._down", "KeeperPadOut._out",
+	"KeeperHandsLow.speed_m_s",
 	"KeeperReach._down", "KeeperReach._out", "KeeperReach._pads_to", "KeeperReach._pads_back",
 	"KeeperReach._built_mirrored", "KeeperReach._hit",
 	"KeeperDrop.drop_s", "KeeperDrop.rise_s", "KeeperDrop._up", "KeeperDrop._low", "KeeperDrop._skel",

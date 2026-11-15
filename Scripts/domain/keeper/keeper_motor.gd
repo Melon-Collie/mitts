@@ -45,6 +45,7 @@ var save_move := KeeperSaveMove.new()
 var glide := KeeperGlide.new()
 var low_ready := KeeperLowReady.new()
 var pad_out := KeeperPadOut.new()
+var hands_low := KeeperHandsLow.new()
 # The share of a drop's time a low save cut in now takes to fall: from his feet
 # as far as he has sunk into the low ready; between his feet and the ice, a fall
 # from rest over the height he has left (its root), no shorter than the low
@@ -228,6 +229,7 @@ func save(low: int, side: float) -> void:
 	save_move.fall = fall
 	low_ready.cut()
 	pad_out.cut()
+	hands_low.cut()
 	save_move.start(_cut, low, side, Vector2(x, z), _velocity)
 	footwork.set_still()
 	lead = 0.0
@@ -320,6 +322,8 @@ func _step_mover(dt: float) -> void:
 	var gathers: bool = _mover == Mover.NONE and pad_out.share > 0.0 and _next_takes_the_leg(pad_out.side)
 	pad_out.step(dt, _pad_free() and not gathers
 			and not (_mover == Mover.NONE and pad_out.asked != 0.0 and _next_takes_the_leg(pad_out.asked)))
+	hands_low.step(dt, rest == Rest.DOWN and not _frozen and pad_out.share <= 0.0
+			and (_mover == Mover.NONE or _mover == Mover.KNEES), drops())
 	if gathers:
 		slide.step(dt)
 		return
@@ -501,14 +505,15 @@ func moving() -> Vector2:
 	return _velocity
 
 
-# Whether he is on his way down as he skated (`_drop_carrying`).
+# Whether he is on his way down: dropped as he skated (`_drop_carrying`), or
+# from standing.
 func drops() -> bool:
-	return _mover == Mover.SAVE and _landing
+	return (_mover == Mover.SAVE and _landing) or (_mover == Mover.DROP and drop.state == KeeperDrop.State.DROPPING)
 
 
-# Whether the speed he dropped with is still sliding him.
+# Whether the speed he dropped with as he skated is still sliding him.
 func carries() -> bool:
-	return drops() and save_move.velocity != Vector2.ZERO
+	return _mover == Mover.SAVE and _landing and save_move.velocity != Vector2.ZERO
 
 
 # Landed from a glide and still sliding on his pads: whether the slide is
@@ -699,6 +704,7 @@ func pose(p: KeeperPose) -> void:
 	_pose_mover(p)
 	low_ready.lay_over(p, _mover == Mover.NONE and rest == Rest.FEET and footwork.is_settled())
 	pad_out.lay_over(p)
+	hands_low.lay_over(p)
 	if lead != 0.0:
 		KeeperPoses.turn_trunk(p, lead)
 
@@ -750,6 +756,7 @@ func wire(w: KeeperWire) -> void:
 	glide.wire(w)
 	low_ready.wire(w)
 	pad_out.wire(w)
+	hands_low.wire(w)
 	fall = w.s16(fall, KeeperWire.FRACTION)
 	_wire_queue(w)
 	_goal = w.bit(_goal)

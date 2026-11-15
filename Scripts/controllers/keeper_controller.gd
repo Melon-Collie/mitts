@@ -231,6 +231,7 @@ func _tier() -> void:
 	save.drop_s = _profile.butterfly_drop_s
 	motor.save_move.drop_s = _profile.butterfly_drop_s
 	motor.pad_out.out_s = _profile.butterfly_drop_s
+	motor.hands_low.speed_m_s = minf(_profile.glove_react_max_speed_mps, _profile.blocker_react_max_speed_mps)
 	cover.glove_speed_m_s = _profile.glove_react_max_speed_mps
 
 
@@ -310,6 +311,7 @@ func _play(delta: float) -> void:
 	_cover_the_puck(delta, in_net)
 	if _ticks % PLANNER_EVERY == 0:
 		_reach_wide()
+		_set_hands()
 	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering and not _squaring:
 		_read_receivers()
 		if _at_feet:
@@ -343,6 +345,20 @@ func _reach_wide() -> void:
 	var mirrored: bool = _keeper.skeleton.mirrored
 	var side: float = reach.plan(play.puck, motor, mirrored, _keeper.skeleton.world_side(out.side))
 	out.asked = KeeperReach.own_side(side, mirrored)
+
+
+# His hands set for a carrier of theirs he is down against (KeeperHandsLow),
+# before any shot: no higher than a puck from where it is can be lifted by the
+# time it gets to him. Through a shot he is reading they stay as asked.
+func _set_hands() -> void:
+	if read.reading():
+		return
+	var hands: KeeperHandsLow = motor.hands_low
+	hands.asked = KeeperHandsLow.highest()
+	if not (play.theirs and not play.loose) or not (motor.rest == KeeperRoute.Rest.DOWN or motor.drops()):
+		return
+	hands.asked = GameRules.PUCK_COLLISION_HALF_HEIGHT \
+			+ PlayerAttributes.steepest_loft_tan() * play.puck.distance_to(Vector2(motor.x, motor.z))
 
 
 # A poke check at the puck an opposing carrier drives at him with (KeeperPoke):
