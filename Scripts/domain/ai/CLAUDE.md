@@ -511,9 +511,11 @@ it is worth: a man at the slot's top keeps the net front's ice worth holding
 while the carrier works the wall, and their D standing inside is a man to move.
 A net-front station is held by what it is (`RoleDecision.station_key`: the
 shot it is in front of, and how), wherever its shooter has taken it since.
-NET_FRONT's one station, while the carrier has a shot, is the crease top on
-that shot's line (`AIRoleFinisher.TIP_STATION_DIST_M` out), so it moves only
-with the shooter's angle. Three stations a couple of metres apart sent him
+NET_FRONT's stations, while the carrier has a shot, are on that shot's line,
+so they move only with the shooter's angle: the crease top
+(`AIRoleFinisher.TIP_STATION_DIST_M` out) and, a stride or more further out,
+the depth the screen field measured that release's screen worth most at
+(`AIScreenField.best_station_along`), each held by its key. Three stations a couple of metres apart sent him
 between them about twice a second, and the best point along the whole line ran
 between the crease and the screen's depth, so neither held him.
 Never hold one by its place: the ice worth holding moves with the play, and

@@ -950,6 +950,29 @@ has a shot, `TIP_STATION_DIST_M` out, moving only with the shooter's angle.
 He holds the net front. The press still fires on 5% of the ticks he holds it:
 their man stands on the spot 8% of the time.
 
+### 4g. The screen's depth beside the crease top (`b4fa282`)
+
+Decided with the user: on a high-slot shot he should step out to screen. While
+the carrier has a shot, NET_FRONT's stations are the crease top and, when the
+screen field measured that release's screen worth most a stride further out
+(`AIScreenField.best_station_along`; 5 m, the grid's deepest, for releases 9.5
+to 15 m out down the middle), that depth too, each held by its key. Both are
+priced alike, by what he adds in front. From the slot's top the deeper spot
+screens more (0.23 against 0.17 of the keeper's saves turned into goals) but
+plays less of the rebound, and the crease top still prices higher (0.278
+against 0.249 in `test_role_finisher.gd`'s fixture). J=11, 576:
+
+| | the crease top | + the screen's depth |
+|---|---|---|
+| NET_FRONT at the screen's depth | — | 4% of the time we carry |
+| shots screened | 3–5% | 5% |
+| first touch ours on rebounds | 26–28% | 26% |
+| xG / possession | 0.041 ± 0.006 | 0.038 ± 0.006 |
+
+It changes nothing measurable: the rebound he plays from the crease is worth
+more than the screen he adds out there. The screen field is measured only out
+to 5 m, so a deeper screen is unpriced.
+
 ---
 
 ## Step 5 — Tips
