@@ -587,7 +587,7 @@ here whenever you bump, in the same format.
 # v109: the keeper's wire set (KeeperWireTail) grows by the pad he has out
 #      (KeeperPadOut: the side asked, the side out and how far, three s16)
 #      and his hands set low (KeeperHandsLow: the height asked and the one
-#      each hand is set for, three s16), and two of its fields gain a value: his mover a scoot on his knees
+#      they are set for, two s16), and two of its fields gain a value: his mover a scoot on his knees
 #      (KeeperMotor.Mover.KNEES) and his route's first move the same
 #      (KeeperRoute.Do.KNEE_SHUFFLE). A v108 client would read a blob of the
 #      wrong length and fall back to drawing him interpolated, and a v108

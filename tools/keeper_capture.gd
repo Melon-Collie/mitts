@@ -153,7 +153,7 @@ static func _hands_low(p: KeeperPose) -> void:
 	var hands := KeeperHandsLow.new()
 	hands.asked = 0.0
 	for i: int in 180:
-		hands.step(1.0 / 90.0, true, false)
+		hands.step(1.0 / 90.0, true)
 	hands.lay_over(p)
 
 

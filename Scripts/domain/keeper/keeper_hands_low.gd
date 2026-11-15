@@ -14,20 +14,25 @@ extends RefCounted
 # the arm reaches.
 const GLOVE_FROM_CHEST := Vector3(-0.38, -0.19, -0.41)
 const GLOVE_FINGERS := Vector3(-0.15, -1.0, -0.1)
+# How far his trunk leans on over his knees with his hands all the way down:
+# as far as rests them on his pads, which kneeling tall his arms do not reach.
+const LEAN_RAD: float = 0.20
 
 # How fast his hands move (m/s): the tier's slower hand.
 var speed_m_s: float = GoalieSkillProfile.hard().blocker_react_max_speed_mps
 # The height (m off the ice) his hands are asked to be set for, and the one
-# each is set for now (the glove, which starts down as he drops, and the
-# blocker, which waits for the stick to be down); `highest()`, as the
-# butterfly holds them.
+# they are set for now; `highest()`, as the butterfly holds them.
 var asked: float = 0.0
 var set_m: float = 0.0
-var blocker_m: float = 0.0
+# Where the stance under them holds the stick, solved to bring the fist down
+# from there.
+var _skel := KeeperSkeleton.new()
 
-# How much of the way down the blocker's arm can take it he sets it: short of
-# straight, where the elbow would snap.
-const BLOCKER_DROP_SHARE: float = 0.85
+# Within this of where they are going his hands slow into place: the last of
+# the way down straightens the blocker's arm, and at full speed the elbow
+# would snap.
+const SETTLE_M: float = 0.10
+const SETTLE_SPEED_SHARE: float = 0.2
 const STEPS: int = 16
 
 # Measured once off the butterfly: where its grip is; how far the blocker
@@ -41,7 +46,6 @@ static var _tops: Array[PackedFloat32Array] = []
 func _init() -> void:
 	asked = highest()
 	set_m = asked
-	blocker_m = asked
 
 
 # The height above which the hands are as the butterfly holds them.
@@ -56,34 +60,39 @@ static func lowest() -> float:
 	return minf(_tops[0][STEPS], _tops[1][STEPS])
 
 
-# `kneels`: down with nothing else for his hands or his body to do.
-# `drops`: on his way down for a carrier, when the glove goes with him.
-func step(dt: float, kneels: bool, drops: bool) -> void:
-	var want: float = clampf(asked, lowest(), highest())
-	set_m = move_toward(set_m, want if kneels or drops else highest(), speed_m_s * dt)
-	blocker_m = move_toward(blocker_m, want if kneels else highest(), speed_m_s * dt)
+# `free`: down, or on his way down for a carrier, with nothing else for his
+# hands or his body to do.
+func step(dt: float, free: bool) -> void:
+	var want: float = clampf(asked, lowest(), highest()) if free else highest()
+	var slowed: float = clampf(absf(want - set_m) / SETTLE_M, SETTLE_SPEED_SHARE, 1.0)
+	set_m = move_toward(set_m, want, speed_m_s * slowed * dt)
 
 
 # Taken into the pose a save cuts in from: nothing more of it to lay over.
 func cut() -> void:
 	set_m = highest()
-	blocker_m = highest()
 
 
-# `p`, the butterfly, with each hand as far down as brings its top to the
-# height they are set for.
+# `p`, the butterfly or his fall into it, with each hand as far down as brings
+# its top to the height they are set for: the fist from wherever `p` holds the
+# stick.
 func lay_over(p: KeeperPose) -> void:
-	if set_m >= highest() and blocker_m >= highest():
+	if set_m >= highest() or p.blocker_reach:
 		return
-	_lower(p, _share(0, set_m), _share(1, blocker_m))
+	_skel.pose(p)
+	_lower(p, _share(0, set_m), _share(1, set_m), _skel.grip)
 
 
-static func _lower(p: KeeperPose, glove: float, blocker: float) -> void:
+static func _lower(p: KeeperPose, glove: float, blocker: float, grip: Vector3) -> void:
+	var lean: float = LEAN_RAD * maxf(glove, blocker)
+	p.lumbar_rot.x -= lean * 0.5
+	p.chest_rot.x -= lean * 0.5
+	p.neck_rot.x += lean
 	p.glove_hand += (GLOVE_FROM_CHEST - KeeperPoses.GLOVE_FROM_CHEST) * glove
 	p.glove_fingers = p.glove_fingers.lerp(GLOVE_FINGERS, glove)
 	if blocker > 0.0:
 		p.blocker_reach = true
-		p.blocker_grip = _grip + Vector3.DOWN * (_blocker_drop * blocker)
+		p.blocker_grip = grip + Vector3.DOWN * (_blocker_drop * blocker)
 
 
 # How far down hand `h` (0 the glove, 1 the blocker) is set for `height`,
@@ -104,15 +113,16 @@ static func _measure() -> void:
 	KeeperPoses.butterfly(p)
 	skel.pose(p)
 	_grip = skel.grip
-	# As far down as the arm takes the fist with the stick still through it.
-	p.blocker_reach = true
-	p.blocker_grip = _grip + Vector3.DOWN * KeeperAnatomy.BLOCKER_HEIGHT_M
+	# As far down as the arm takes the fist, leant on over his knees, with the
+	# stick still through it.
+	_blocker_drop = KeeperAnatomy.BLOCKER_HEIGHT_M
+	_lower(p, 1.0, 1.0, _grip)
 	skel.pose(p)
-	_blocker_drop = (_grip.y - skel.grip.y) * BLOCKER_DROP_SHARE
+	_blocker_drop = _grip.y - skel.grip.y
 	var tops: Array[PackedFloat32Array] = [PackedFloat32Array(), PackedFloat32Array()]
 	for i: int in STEPS + 1:
 		KeeperPoses.butterfly(p)
-		_lower(p, float(i) / STEPS, float(i) / STEPS)
+		_lower(p, float(i) / STEPS, float(i) / STEPS, _grip)
 		skel.pose(p)
 		tops[0].append(_top(skel, KeeperGear.Part.GLOVE))
 		tops[1].append(_top(skel, KeeperGear.Part.BLOCKER))
@@ -134,4 +144,3 @@ static func _top(skel: KeeperSkeleton, part: int) -> float:
 func wire(w: KeeperWire) -> void:
 	asked = w.s16(asked, KeeperWire.MM)
 	set_m = w.s16(set_m, KeeperWire.MM)
-	blocker_m = w.s16(blocker_m, KeeperWire.MM)

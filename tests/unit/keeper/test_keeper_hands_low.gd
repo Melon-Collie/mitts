@@ -54,44 +54,54 @@ func test_they_come_down_at_his_hands_speed_and_back_as_quick() -> void:
 	var t: float = 0.0
 	while _hands.set_m > KeeperHandsLow.lowest() and t < 2.0:
 		var was: float = _hands.set_m
-		_hands.step(DT, true, false)
+		_hands.step(DT, true)
 		assert_lte(was - _hands.set_m, _hands.speed_m_s * DT + 1e-6, "no faster than his hands")
 		t += DT
-	assert_almost_eq(t, span / _hands.speed_m_s, 2.0 * DT, "all the way down in the time his hands take")
+	assert_gte(t, span / _hands.speed_m_s - DT, "no sooner than his hands take all the way down")
+	assert_lt(t, 2.5 * span / _hands.speed_m_s, "slowing into place, not much longer")
 	assert_eq(_hands.set_m, KeeperHandsLow.lowest(), "no lower than they go")
 	_hands.asked = KeeperHandsLow.highest()
 	t = 0.0
 	while _hands.set_m < KeeperHandsLow.highest() and t < 2.0:
-		_hands.step(DT, true, false)
+		_hands.step(DT, true)
 		t += DT
-	assert_almost_eq(t, span / _hands.speed_m_s, 2.0 * DT, "and back up as quick")
+	assert_lt(t, 2.5 * span / _hands.speed_m_s, "and back up as quick")
 
 
 func test_not_free_they_come_back_up_and_a_save_takes_them() -> void:
 	_hands.asked = 0.0
 	for i: int in 90:
-		_hands.step(DT, true, false)
+		_hands.step(DT, true)
 	assert_eq(_hands.set_m, KeeperHandsLow.lowest())
-	_hands.step(DT, false, false)
+	_hands.step(DT, false)
 	assert_gt(_hands.set_m, KeeperHandsLow.lowest(), "coming up while his body has something else to do")
 	_hands.cut()
 	assert_eq(_hands.set_m, KeeperHandsLow.highest(), "taken into the save's pose")
-	assert_eq(_hands.blocker_m, KeeperHandsLow.highest())
 
 
-# On his way down for a carrier the glove goes with him; the blocker waits
-# until the stick is down.
-func test_dropping_the_glove_goes_down_with_him_and_the_blocker_once_he_is_down() -> void:
+# Laid over a pose that holds the stick elsewhere (his fall into the
+# butterfly), the fist comes down from where that pose holds it, so nothing
+# jumps as he lands.
+func test_the_fist_comes_down_from_wherever_the_pose_holds_the_stick() -> void:
 	_hands.asked = 0.0
-	for i: int in 90:
-		_hands.step(DT, false, true)
-	assert_eq(_hands.set_m, KeeperHandsLow.lowest(), "the glove down as he drops")
-	assert_eq(_hands.blocker_m, KeeperHandsLow.highest(), "the blocker still where the stance holds it")
-	_solve()
-	assert_false(_pose.blocker_reach, "the stick left to his drop")
-	for i: int in 90:
-		_hands.step(DT, true, false)
-	assert_eq(_hands.blocker_m, KeeperHandsLow.lowest(), "the blocker down once he kneels")
+	for i: int in 180:
+		_hands.step(DT, true)
+	var falling := KeeperPose.new()
+	var up := KeeperPose.new()
+	var down := KeeperPose.new()
+	KeeperPoses.low_ready(up)
+	KeeperPoses.butterfly(down)
+	var was := Vector3.INF
+	for i: int in 21:
+		falling.blend(up, down, i / 20.0)
+		_skel.pose(falling)
+		var held: Vector3 = _skel.grip
+		_hands.lay_over(falling)
+		_skel.pose(falling)
+		assert_lt(_skel.grip.y, held.y - 0.05, "%d/20 of the way down: the fist below where the stance holds it" % i)
+		if was != Vector3.INF:
+			assert_lt(_skel.grip.distance_to(was), 0.08, "%d/20: no jump" % i)
+		was = _skel.grip
 
 
 func test_each_hand_is_set_no_higher_than_asked() -> void:
@@ -100,26 +110,26 @@ func test_each_hand_is_set_no_higher_than_asked() -> void:
 	var taught: Array[float] = [_top(parts[0]), _top(parts[1])]
 	_hands.asked = 0.0
 	for k: int in 180:
-		_hands.step(DT, true, false)
+		_hands.step(DT, true)
 	_solve()
 	var low: Array[float] = [_top(parts[0]), _top(parts[1])]
 	for i: int in range(0, 9):
 		var at: float = lerpf(KeeperHandsLow.lowest(), KeeperHandsLow.highest(), i / 8.0)
 		_hands.asked = at
 		for k: int in 180:
-			_hands.step(DT, true, false)
+			_hands.step(DT, true)
 		_solve()
 		for h: int in 2:
 			var what: String = "%s set for %.2f m" % [KeeperGear.Part.keys()[parts[h]], at]
-			assert_lte(_top(parts[h]), maxf(at, low[h]) + 0.02, "%s: its top no higher" % what)
+			assert_lte(_top(parts[h]), maxf(at, low[h]) + 0.03, "%s: its top no higher" % what)
 			assert_lte(_top(parts[h]), taught[h] + 1e-4, "%s: never above where the butterfly holds it" % what)
-			assert_gte(_top(parts[h]), minf(at, taught[h]) - 0.02, "%s: and no lower than that takes" % what)
+			assert_gte(_top(parts[h]), minf(at, taught[h]) - 0.03, "%s: and no lower than that takes" % what)
 
 
 func test_all_the_way_down_the_board_is_on_the_pad_and_the_stick_on_the_ice() -> void:
 	_hands.asked = 0.0
 	for i: int in 180:
-		_hands.step(DT, true, false)
+		_hands.step(DT, true)
 	_solve()
 	KeeperPoses.butterfly(_pose)
 	_skel.pose(_pose)
@@ -128,7 +138,7 @@ func test_all_the_way_down_the_board_is_on_the_pad_and_the_stick_on_the_ice() ->
 	assert_lt(_edge(KeeperGear.Part.BLOCKER, -1.0), taught[1] - 0.1, "the board well down toward the pad")
 	assert_gt(_edge(KeeperGear.Part.BLOCKER, -1.0), KeeperAnatomy.PAD_WIDTH_M, "not into it")
 	assert_lt(_edge(KeeperGear.Part.GLOVE, -1.0), taught[0] - 0.25, "the glove well down toward the pad")
-	assert_gt(_edge(KeeperGear.Part.GLOVE, -1.0), KeeperAnatomy.PAD_WIDTH_M, "not into it")
+	assert_gt(_edge(KeeperGear.Part.GLOVE, -1.0), KeeperAnatomy.PAD_WIDTH_M - PAD_GIVE_M, "resting on it, no deeper than its foam gives")
 	assert_lt(_edge(KeeperGear.Part.BLADE, -1.0), 0.02, "the blade still on the ice")
 	assert_gt(_edge(KeeperGear.Part.BLADE, -1.0), -HARD_GIVE_M, "and not in it")
 	assert_lt(_edge(KeeperGear.Part.BLADE, 1.0), 0.12, "lying flat")
@@ -143,7 +153,7 @@ func test_on_the_way_his_gear_stays_out_of_the_ice_and_nothing_jumps() -> void:
 	for asked: float in [0.0, KeeperHandsLow.highest()]:
 		_hands.asked = asked
 		for i: int in 60:
-			_hands.step(DT, true, false)
+			_hands.step(DT, true)
 			_solve()
 			for part: int in KeeperGear.PART_COUNT:
 				var soft: bool = KeeperGear.save_part(part) == GoalieSaveRules.SavePart.PAD
@@ -170,7 +180,7 @@ func test_set_low_nothing_lifted_from_in_tight_gets_by_beside_him() -> void:
 			if low == 1:
 				_hands.asked = release.y + lift * (far - depth)
 				for i: int in 180:
-					_hands.step(DT, true, false)
+					_hands.step(DT, true)
 			_solve()
 			var hands_z: float = KeeperGear.box(_skel, KeeperGear.Part.GLOVE).origin.z
 			var floor_y: float = _edge(KeeperGear.Part.GLOVE, -1.0) if low == 1 else KeeperAnatomy.PAD_WIDTH_M

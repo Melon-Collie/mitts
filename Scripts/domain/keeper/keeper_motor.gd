@@ -322,8 +322,8 @@ func _step_mover(dt: float) -> void:
 	var gathers: bool = _mover == Mover.NONE and pad_out.share > 0.0 and _next_takes_the_leg(pad_out.side)
 	pad_out.step(dt, _pad_free() and not gathers
 			and not (_mover == Mover.NONE and pad_out.asked != 0.0 and _next_takes_the_leg(pad_out.asked)))
-	hands_low.step(dt, rest == Rest.DOWN and not _frozen and pad_out.share <= 0.0
-			and (_mover == Mover.NONE or _mover == Mover.KNEES), drops())
+	hands_low.step(dt, drops() or (rest == Rest.DOWN and not _frozen and pad_out.share <= 0.0
+			and (_mover == Mover.NONE or _mover == Mover.KNEES)))
 	if gathers:
 		slide.step(dt)
 		return
