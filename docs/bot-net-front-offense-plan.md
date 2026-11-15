@@ -1202,6 +1202,23 @@ to 5 m, so a deeper screen is unpriced.
   four is tipped (a short trace put 29 of 69 shots as rips), where `tip_ev`
   prices the tipper's stick on it on most.
 
+  **The contact read** (`f51f93a`): `tip_ev` priced the tipper's stick on the
+  rip by the lane defender's race (his lateral close at half his top speed),
+  which read contact at ~1.0 for a man 3–4 m off the line. It now reads his tip's
+  own gate, his blade on the tip point before the puck on his arrival clock
+  (`AIArrival.reach_eta`, from his velocity). That did not mend it: J=11, 576,
+  the carrier took 146 rips, 26 tipped (18%), priced at the tip happening 0.70
+  of the time; shots 0.427, slot shots 0.056, xG 0.027 ± 0.004, below the
+  read off. The untipped rips find the tipper in the loose-puck chase on 56 of
+  120 (3c sends the elected chaser, usually the net-front man, to the rebound
+  while the shot flies, and a teammate's shot on his line reads as a feed to
+  chase), and in positioning a median 3.75 m off the puck on the rest.
+
+  **Taken back out** (the carrier's shot is the direct one only). The
+  tipper's fixes (`1f2f242`) and the honest contact read stay: the finisher
+  prices his stations by `tip_ev`. What a rip for a tip needs first is a tipper
+  who plays it: the chase must not take him off a teammate's shot he can tip.
+
 - **Order.** If 2c shows a tip on the shot line still scores ~0, the carrier's
   half stays out, and only the finisher's station pricing moves to the measured
   value.
