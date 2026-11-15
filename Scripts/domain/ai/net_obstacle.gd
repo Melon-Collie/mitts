@@ -144,44 +144,59 @@ static func carry_path_enters_own_keep_out(from: Vector3, to: Vector3,
 # `horizon_s` (the blade's time to take the puck clear of it).
 static func carried_puck_in_own_mouth(target: Vector3, self_velocity: Vector3,
 		own_goal_dir: float, horizon_s: float) -> bool:
-	var near_z: float = own_goal_dir * (GameRules.GOAL_LINE_Z - OWN_MOUTH_DEPTH_M)
-	var far_z: float = own_goal_dir * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH)
-	var to_x: float = target.x + self_velocity.x * horizon_s
-	var to_z: float = target.z + self_velocity.z * horizon_s
-	return _segment_crosses_aabb_xz(target.x, target.z, to_x, to_z,
-			-OWN_MOUTH_HALF_WIDTH_M, OWN_MOUTH_HALF_WIDTH_M,
-			minf(near_z, far_z), maxf(near_z, far_z))
+	return _crosses_own_mouth(target, target + self_velocity * horizon_s, own_goal_dir)
 
 
 # A carrier's blade target kept out of our own goal mouth. The puck is not at
 # the cursor but where the carry holds it, no nearer than the floor
 # (`floor_band`: the carry's floor standing and under its skating fold) along
-# the cursor's bearing, or along `facing` with the cursor on his centre — which
-# is where a cursor parked on the body (a cradle) puts it. Held in the mouth, or
-# dragged through it by the body's travel within `horizon_s`, the target goes
-# out wide of the post on the body's own side, at the held depth unless the
-# floor would pull it back in from there, when it goes up the ice from the body
-# until the floor is met. Any other target returns unchanged.
+# the cursor's bearing, or along `facing` with the cursor on his centre; and on
+# its way there it is wherever the blade has it now (`puck_at`). Three ways in:
+#
+#   - held in the mouth, or dragged through it by the body's travel within
+#     `horizon_s`: the target goes out wide of the post on the body's own side,
+#     at the held depth unless the floor would pull it back in from there, when
+#     it goes up the ice from the body until the floor is met;
+#   - the puck in the mouth already, or dragged into it: the same;
+#   - the puck's way from where it is to the target crossing the mouth (round
+#     the cage from in front of the line to behind it, say): the target is the
+#     way round the post on the puck's side, wide of the cage at the target's
+#     depth, until the straight way on is clear.
+#
+# Any other target returns unchanged.
 static func own_mouth_safe_blade_target(self_pos: Vector3, self_velocity: Vector3,
 		facing: Vector2, target: Vector3, floor_band: Vector2, own_goal_dir: float,
-		horizon_s: float) -> Vector3:
+		horizon_s: float, puck_at: Vector3) -> Vector3:
 	var offset := Vector2(target.x - self_pos.x, target.z - self_pos.z)
 	var near: Vector2 = CarryPostureRules.held_out_along(offset, facing, floor_band.x)
 	var far: Vector2 = CarryPostureRules.held_out_along(offset, facing, floor_band.y)
-	if not carried_puck_in_own_mouth(Vector3(self_pos.x + near.x, 0.0, self_pos.z + near.y),
+	var held_in: bool = carried_puck_in_own_mouth(
+			Vector3(self_pos.x + near.x, 0.0, self_pos.z + near.y),
 			self_velocity, own_goal_dir, horizon_s) \
-			and not carried_puck_in_own_mouth(
-					Vector3(self_pos.x + far.x, 0.0, self_pos.z + far.y),
-					self_velocity, own_goal_dir, horizon_s):
-		return target
-	var side: float = signf(self_pos.x)
-	if side == 0.0:
-		side = signf(self_velocity.x) if self_velocity.x != 0.0 else 1.0
-	var dx: float = side * OWN_MOUTH_EXIT_HALF_WIDTH_M - self_pos.x
-	var dz: float = near.y
-	if dx * dx + dz * dz < floor_band.y * floor_band.y:
-		dz = -own_goal_dir * sqrt(maxf(floor_band.y * floor_band.y - dx * dx, 0.0))
-	return Vector3(self_pos.x + dx, 0.0, self_pos.z + dz)
+			or carried_puck_in_own_mouth(Vector3(self_pos.x + far.x, 0.0, self_pos.z + far.y),
+					self_velocity, own_goal_dir, horizon_s)
+	if held_in or carried_puck_in_own_mouth(puck_at, self_velocity, own_goal_dir, horizon_s):
+		var side: float = signf(self_pos.x)
+		if side == 0.0:
+			side = signf(self_velocity.x) if self_velocity.x != 0.0 else 1.0
+		var dx: float = side * OWN_MOUTH_EXIT_HALF_WIDTH_M - self_pos.x
+		var dz: float = near.y
+		if dx * dx + dz * dz < floor_band.y * floor_band.y:
+			dz = -own_goal_dir * sqrt(maxf(floor_band.y * floor_band.y - dx * dx, 0.0))
+		return Vector3(self_pos.x + dx, 0.0, self_pos.z + dz)
+	if _crosses_own_mouth(puck_at, target, own_goal_dir):
+		var puck_side: float = signf(puck_at.x) if puck_at.x != 0.0 else signf(self_pos.x)
+		return Vector3((puck_side if puck_side != 0.0 else 1.0) * OWN_MOUTH_EXIT_HALF_WIDTH_M,
+				0.0, target.z)
+	return target
+
+
+static func _crosses_own_mouth(from: Vector3, to: Vector3, own_goal_dir: float) -> bool:
+	var near_z: float = own_goal_dir * (GameRules.GOAL_LINE_Z - OWN_MOUTH_DEPTH_M)
+	var far_z: float = own_goal_dir * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH)
+	return _segment_crosses_aabb_xz(from.x, from.z, to.x, to.z,
+			-OWN_MOUTH_HALF_WIDTH_M, OWN_MOUTH_HALF_WIDTH_M,
+			minf(near_z, far_z), maxf(near_z, far_z))
 
 
 # Own-DZ slot danger zone. True iff the pass segment crosses the

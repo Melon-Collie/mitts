@@ -24,10 +24,14 @@ func _line_z() -> float:
 	return OWN * GameRules.GOAL_LINE_Z
 
 
+# `puck_at` is where the blade has the puck now; INF reads it as already where
+# the target holds it.
 func _safe(body: Vector3, vel: Vector3, facing: Vector2, target: Vector3,
-		own: float = OWN) -> Vector3:
+		own: float = OWN, puck_at: Vector3 = Vector3.INF) -> Vector3:
+	if not puck_at.is_finite():
+		puck_at = _held(body, facing, target, FLOOR.x)
 	return AINetObstacle.own_mouth_safe_blade_target(body, vel, facing, target, FLOOR, own,
-			HORIZON_S)
+			HORIZON_S, puck_at)
 
 
 # Where the carry holds a puck aimed at `target`, at either end of the floor.
@@ -168,7 +172,7 @@ func _tick_carrier(s: WorldSnapshot) -> InputState:
 	var agent := SkaterAgent.new()
 	agent.setup(SELF_ID, 0, TeamBrain.new(0, _team_map), _team_map, false)
 	var input: InputState = null
-	for i: int in 4:
+	for i: int in 12:
 		input = agent.tick(s, 1.0 / 90.0, float(i) / 90.0)
 	assert_eq(agent.get_state(), SkaterAgentStateMachine.State.CARRY)
 	return input
@@ -281,3 +285,60 @@ func test_a_rolled_move_ends_where_it_first_goes_deeper_into_the_keep_out() -> v
 		if reach < AICarryRollout.SAMPLES:
 			cut += 1
 	assert_gt(cut, 0, "skating up past his post, some move cuts across the mouth")
+
+
+# ── Where the puck is, and the way it goes ──────────────────────────────────
+
+func test_a_puck_already_in_the_mouth_is_taken_out_whatever_the_target() -> void:
+	var body := Vector3(1.8, 0.0, _line_z() - OWN * 0.3)
+	var target := Vector3(3.5, 0.0, _line_z() - OWN * 1.0)
+	var out: Vector3 = _safe(body, Vector3.ZERO, Vector2(1.0, 0.0), target, OWN,
+			Vector3(0.8, 0.0, _line_z() - OWN * 0.6))
+	assert_almost_eq(out.x, AINetObstacle.OWN_MOUTH_EXIT_HALF_WIDTH_M, 1e-4,
+			"swept out wide of the post on his side")
+
+
+func test_a_puck_taken_round_our_cage_goes_round_the_post_not_through_the_mouth() -> void:
+	# Measured: behind our net at the back corner, the puck ridden round the
+	# post onto the front of the line, the target behind the cage. Straight
+	# there, the blade drags it along the front of the mouth and over the line.
+	var body := Vector3(-1.23, 0.0, _line_z() + OWN * 1.48)
+	var puck := Vector3(-1.37, 0.0, _line_z() - OWN * 0.22)
+	var target := Vector3(-0.65, 0.0, _line_z() + OWN * 1.63)
+	var out: Vector3 = _safe(body, Vector3.ZERO, Vector2(0.0, -OWN), target, OWN, puck)
+	assert_almost_eq(out.x, -AINetObstacle.OWN_MOUTH_EXIT_HALF_WIDTH_M, 1e-4,
+			"round the post on the puck's side")
+	assert_almost_eq(out.z, target.z, 1e-4, "at the target's depth")
+	var on: Vector3 = _safe(body, Vector3.ZERO, Vector2(0.0, -OWN), target, OWN, out)
+	assert_eq(on, target, "and from there straight on behind the cage")
+
+
+func test_a_carrier_behind_our_net_never_takes_the_puck_through_the_mouth() -> void:
+	var me_pos := Vector3(-1.23, 0.0, _line_z() + OWN * 1.48)
+	var facing := Vector2(-0.01, -OWN).normalized()
+	var s: WorldSnapshot = _carrying_beside_our_goalie(me_pos, Vector3(1.9, 0.0, OWN * 3.1),
+			facing, 0.0)
+	var puck := Vector3(-1.37, 0.0, _line_z() - OWN * 0.22)
+	s.puck_state.position = puck
+	s.skater_states[SELF_ID].blade_contact_world = puck
+	var agent := SkaterAgent.new()
+	agent.setup(SELF_ID, 0, TeamBrain.new(0, _team_map), _team_map, false)
+	for i: int in 20:
+		var input: InputState = agent.tick(s, 1.0 / 90.0, float(i) / 90.0)
+		var m: Vector3 = input.mouse_world_pos
+		assert_false(AINetObstacle.carried_puck_in_own_mouth(m, Vector3.ZERO, OWN, 0.0),
+				"tick %d: cursor at %s" % [i, m])
+		# The blade follows the cursor; the puck rides it.
+		s.skater_states[SELF_ID].blade_contact_world = m
+
+
+func test_beside_our_goalie_the_puck_goes_on_the_far_side_of_him() -> void:
+	var me_pos := Vector3(1.73, 0.0, _line_z() - OWN * 0.32)
+	var facing := Vector2(0.03, OWN).normalized()
+	var s: WorldSnapshot = _carrying_beside_our_goalie(me_pos, Vector3(1.3, 0.0, OWN * 2.0),
+			facing, 0.3)
+	var input: InputState = _tick_carrier(s)
+	var goalie := Vector3(0.3, 0.0, _line_z() - OWN * 0.5)
+	assert_gt(input.mouse_world_pos.distance_to(goalie), me_pos.distance_to(goalie),
+			"the cursor is past him from our goalie: %s" % input.mouse_world_pos)
+	_assert_held_clear(me_pos, facing, input.mouse_world_pos, "beside our goalie")

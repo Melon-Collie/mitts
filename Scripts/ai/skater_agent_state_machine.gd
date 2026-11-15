@@ -2996,12 +2996,16 @@ func _step_mouse_internal(target: Vector3, mode: int,
 		max_speed: float, arc_rate: float) -> Vector3:
 	# A carried puck never goes into our own net, whatever placed the target: the
 	# carry aim, a cradle, a pocket or a wind-up (AINetObstacle
-	# .own_mouth_safe_blade_target, over the blade's time to sweep it clear).
+	# .own_mouth_safe_blade_target, over the blade's time to sweep it clear). The
+	# puck rides on our own blade, read live (proprioception), not the snapshot's.
 	if _current_snapshot != null and _current_self_state != null \
 			and _current_snapshot.real_puck_carrier_peer_id == _peer_id:
+		var puck_at: Vector3 = _current_self_state.blade_contact_world
+		if puck_at == Vector3.ZERO and _current_snapshot.puck_state != null:
+			puck_at = _current_snapshot.puck_state.position
 		target = AINetObstacle.own_mouth_safe_blade_target(_current_self_pos,
 				_current_self_state.velocity, _current_self_state.facing.normalized(), target,
-				_carry_floor_band, _own_goal_dir, _own_mouth_clear_s())
+				_carry_floor_band, _own_goal_dir, _own_mouth_clear_s(), puck_at)
 	# Cache the FINAL un-shaped target, mode and rates so skipped ticks re-shape
 	# fresh every physics frame, or a swing would take dispatch-period× too long.
 	_cached_aim_target = target

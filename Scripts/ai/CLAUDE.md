@@ -152,11 +152,17 @@ rather than stripping it, so nothing in the physics stops a carrier dragging it
 over his own goal line. Every cursor step a carrier takes — the carry aim, a
 cradle, a pocket, a wind-up — goes through `AINetObstacle
 .own_mouth_safe_blade_target` in `_step_mouse_internal`. It reads the puck
-where the carry holds it, no nearer than the floor
-(`AISkaterCaps.carry_reach_min_m`, straight ahead for a cursor parked on the
-body, which is where the goalie cradle parks it), never the cursor itself: held
-in our mouth, or dragged through it by the body's travel in the blade's time to
-sweep it clear, it goes out wide of the post on the body's own side. That is
+three ways, never the cursor alone: where the carry will hold it, no nearer
+than the floor (`AISkaterCaps.carry_reach_min_m`); where it is now, on our own
+blade (`blade_contact_world`); and the way the blade takes it from there to the
+target. Held in our mouth, in it already, or dragged into it by the body's
+travel in the blade's time to sweep it clear, it goes out wide of the post on
+the body's own side; taken through the mouth on its way (round the cage from in
+front of the line), it goes round the post on its own side. Beside our own
+goalie the cursor holds the puck on the far side of the body from him: parked
+on the body, as beside theirs, the puck trailed behind the carrier along a
+bearing the lagging cursor made, into the goalie's pads, whose gear swept it
+back over the line (`.claude/hooks/stage-own-goals.sh` staged it). That is
 the backstop; what keeps it from being needed is the route. A carrier's body
 keeps a carry ring off our mouth (`AINetObstacle.own_mouth_keep_out_depth`):
 his rolled moves end where they would take him deeper into it, his route round
