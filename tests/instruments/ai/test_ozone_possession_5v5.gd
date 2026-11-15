@@ -113,6 +113,7 @@ func _run(duel: Object) -> Dictionary:
 	var r: Dictionary = {"end": "timeout", "t": SECS, "low_s": 0.0, "passes": 0, "shot": {},
 			"pass_log": [], "battle_s": 0.0, "screen": 0.0}
 	_last_spot.clear()
+	_spot_age.clear()
 	var passing: bool = false
 	var last_pass: Dictionary = {}
 	var last_pass_t: float = 0.0
@@ -319,12 +320,30 @@ const AT_SPOT_M: float = 0.75
 # A spot that moves further than this in a tick was re-picked, not carried.
 const FLIP_M: float = 0.5
 var _last_spot: Dictionary = {}
+var _spot_age: Dictionary = {}
 
 
 func _count_screen(duel: Object, r: Dictionary) -> void:
 	var carrier: int = duel.carrier_id
 	if carrier == -1 or duel.team_map.get(carrier, -1) != 0:
 		return
+	var holder: int = -1
+	for sk: Object in duel.skaters:
+		if sk.team_id == 0 and duel.brains[0].get_slot(sk.peer_id) == AIRoleSlots.Slot.NET_FRONT:
+			holder = sk.peer_id
+	r["nf_slot_s"] = r.get("nf_slot_s", 0.0) + Duel.DT
+	if holder != -1 and r.get("nf_holder", -1) != -1 and holder != r["nf_holder"]:
+		r["nf_handovers"] = r.get("nf_handovers", 0.0) + 1.0
+		var to_spot: float = INF
+		var h: Object = duel._skater(holder)
+		var dec: RoleDecision = h.agent._cached_role_decision
+		if dec != null and dec.battle_spot.is_finite():
+			to_spot = Vector2(dec.battle_spot.x - h.pos.x, dec.battle_spot.z - h.pos.z).length()
+		if is_finite(to_spot):
+			r["nf_handover_m"] = r.get("nf_handover_m", 0.0) + to_spot
+			r["nf_handover_n"] = r.get("nf_handover_n", 0.0) + 1.0
+	if holder != -1:
+		r["nf_holder"] = holder
 	var snap: WorldSnapshot = null
 	for sk: Object in duel.skaters:
 		if sk.team_id != 0 or sk.agent == null:
@@ -340,6 +359,8 @@ func _count_screen(duel: Object, r: Dictionary) -> void:
 			var jump: float = Vector2(spot.x - _last_spot[sk.peer_id].x,
 					spot.z - _last_spot[sk.peer_id].z).length()
 			r["jump_m"] = r.get("jump_m", 0.0) + jump
+			_spot_age[sk.peer_id] = 0.0 if jump > FLIP_M \
+					else _spot_age.get(sk.peer_id, 0.0) + Duel.DT
 			if jump > FLIP_M:
 				r["flip_m"] = r.get("flip_m", 0.0) + jump
 				r["flip_n"] = r.get("flip_n", 0.0) + 1.0
@@ -383,6 +404,8 @@ func _count_screen(duel: Object, r: Dictionary) -> void:
 			else:
 				r["close_ms"] = r.get("close_ms", 0.0) + Duel.DT * Vector2(sk.vel.x, sk.vel.z) \
 						.dot(to / maxf(mine, 0.001))
+		if cat == "far" and who == "nf_":
+			_split_far(duel, r, sk, spot, mine)
 		r["cat_" + cat] = r.get("cat_" + cat, 0.0) + Duel.DT
 		r[who + "cat_" + cat] = r.get(who + "cat_" + cat, 0.0) + Duel.DT
 
@@ -403,6 +426,42 @@ func _print_flip(r: Dictionary, peer: int) -> void:
 			ft.reach[c], ft.reach[inc] if inc >= 0 else 0.0,
 			ft.tip[c], ft.tip[inc] if inc >= 0 else 0.0])
 	r["flips_logged"] = r.get("flips_logged", 0) + 1
+
+
+# A net-front tick their man is nearer his spot than he is, not touching him,
+# split by why: "enroute" closing on it at a stride's pace, "blocked" leaning on
+# another body, "stalled" neither. Also how far each stands off the spot, how
+# long it has been his, and whether their man stands on it.
+func _split_far(duel: Object, r: Dictionary, sk: Object, spot: Vector3, mine: float) -> void:
+	var to := Vector2(spot.x - sk.pos.x, spot.z - sk.pos.z)
+	var closing: float = Vector2(sk.vel.x, sk.vel.z).dot(to / maxf(mine, 0.001))
+	var man: Object = null
+	var his: float = INF
+	for o: Object in duel.skaters:
+		if o.team_id == 0:
+			continue
+		var d: float = Vector2(spot.x - o.pos.x, spot.z - o.pos.z).length()
+		if d < his:
+			his = d
+			man = o
+	var touching_other: bool = false
+	for o: Object in duel.skaters:
+		if o == sk or o == man:
+			continue
+		if AIPressRead.gap_m(sk.pos, o.pos) <= 0.1:
+			touching_other = true
+	var sub: String = "enroute" if closing > 1.0 else ("blocked" if touching_other else "stalled")
+	r["nff_" + sub] = r.get("nff_" + sub, 0.0) + Duel.DT
+	r["nff_n"] = r.get("nff_n", 0.0) + Duel.DT
+	r["nff_mine"] = r.get("nff_mine", 0.0) + Duel.DT * mine
+	r["nff_his"] = r.get("nff_his", 0.0) + Duel.DT * his
+	r["nff_gap"] = r.get("nff_gap", 0.0) + Duel.DT * AIPressRead.gap_m(sk.pos, man.pos)
+	r["nff_age"] = r.get("nff_age", 0.0) + Duel.DT * _spot_age.get(sk.peer_id, 0.0)
+	r["nff_speed"] = r.get("nff_speed", 0.0) + Duel.DT * Vector2(sk.vel.x, sk.vel.z).length()
+	if his < 0.8:
+		r["nff_on_spot"] = r.get("nff_on_spot", 0.0) + Duel.DT
+		if AIPressRead.gap_m(sk.pos, man.pos) < SkaterAgentPress.CLOSE_IN_M:
+			r["nff_close_in"] = r.get("nff_close_in", 0.0) + Duel.DT
 
 
 # The screen every other body gives a release at `at` (AIScreenField.best_uplift,
@@ -577,7 +636,8 @@ func _sweep(label: String) -> void:
 			gut.p("OZSCREEN|%d|%.2f|%.2f|%.2f" % [g, r.get("pub_s", 0.0), r.get("contest_s", 0.0),
 					r.get("mine_m", 0.0) / maxf(r.get("pub_s", 0.0), 0.001)])
 			gut.p("OZCHAIN|%d|%s" % [g, JSON.stringify(r.keys().filter(
-					func(k: String) -> bool: return k.begins_with("cat_") or k.begins_with("nf_") or k.begins_with("fi_") or k in [
+					func(k: String) -> bool: return (k.begins_with("cat_") or k.begins_with("nf_") or k.begins_with("fi_")
+						or k.begins_with("nff_")) and k != "nf_holder" or k in [
 						"jump_m", "flip_m", "flip_n", "moved_m", "moved_n", "close_ms", "pub_s"]).map(
 					func(k: String) -> String: return "%s=%.3f" % [k, r[k]]))])
 			gut.p("OZRUN|%d|%s|%s|%.4f|%d|%.2f%s|%.2f|%.3f" % [g, r["end"],
