@@ -547,9 +547,31 @@ static func _head_start_from(lead_v: float, caps: AISkaterCaps, self_v: float,
 
 # An attacker's distance from our net less the ground he gains on us while we
 # build to his pace — "behind me" as a race, since a man level with a standing
-# station at speed is past it by the time it moves.
+# station at speed is past it by the time it moves. We race him on the better of
+# our two retreats from where we face (standing_cushion_m's): backpedalling at
+# the backward caps, or turned to skate, each after turning there. A station on
+# the point faces up the ice, so priced square to our net the race read a man
+# breaking past it as level until he was beyond it.
 static func race_depth_to_net(ctx: RoleContext, pid: int) -> float:
-	return race_depth_on(ctx, pid, ctx.self_velocity, ctx.self_max_speed, ctx.self_max_accel)
+	var s: SkaterNetworkState = ctx.snapshot.skater_states.get(pid)
+	if s == null:
+		return INF
+	var our_net: Vector3 = ctx.defending_goal_pos
+	var d: float = AIRoleReads.xz_distance(s.position, our_net)
+	if d < 0.001:
+		return 0.0
+	var dir_net := Vector3((our_net.x - s.position.x) / d, 0.0,
+			(our_net.z - s.position.z) / d)
+	var facing: Vector2 = _self_facing(ctx, -dir_net)
+	var v_along: float = ctx.self_velocity.x * dir_net.x + ctx.self_velocity.z * dir_net.z
+	var finish: float = AIZoneCoverage.HOUSE_TOP_DEPTH_M
+	var backpedal: float = _threat_gain(ctx, dir_net, s.velocity, d, pid, finish,
+			retreat_max_speed(ctx, false), retreat_max_accel(ctx, false),
+			_turn_s(ctx, facing, -dir_net), v_along)
+	var turned: float = _threat_gain(ctx, dir_net, s.velocity, d, pid, finish,
+			retreat_max_speed(ctx, true), retreat_max_accel(ctx, true),
+			_turn_s(ctx, facing, dir_net), v_along)
+	return maxf(d - minf(backpedal, turned), 0.0)
 
 
 # race_depth_to_net against any body of ours: one moving at `body_vel` with
