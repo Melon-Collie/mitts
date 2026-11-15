@@ -353,6 +353,23 @@ within 0.7 m of the middle, the nearest defender of any off-puck attacker,
   there is shut on 52–64% of reads (median 0), and the defenders in front take
   more again. The middle wins on partly open lanes (median 0.45–0.74).
 
+**What each guard buys** (each switched off in turn, locally; J=11, 576; the
+slow tier's counter layer and spacing fixtures):
+
+| | both (today) | no `_help_free` | no station lift | neither |
+|---|---|---|---|---|
+| counter layer at 2 s, beaten | +0.9 m, 4 of 12 | +0.9 m, 4 | +0.9 m, 4 | +0.9 m, 4 |
+| shots / possession | 0.247 ± 0.018 | 0.271 ± 0.019 | 0.243 | 0.269 |
+| slot shots / possession | 0.090 | 0.101 | 0.092 | 0.099 |
+| xG (set read) / possession | 0.0345 | 0.0362 | 0.0358 | 0.0359 |
+| HIGH_SLOT depth, the four spacing fixtures | 9.9 / 9.1 / 6.1 / 10.6 | 8.9 / 9.1 / 6.1 / 10.6 | as today | as no `_help_free` |
+
+Neither guard measurably buys or costs anything now: the counter layer reads
+the same with both off, which is not what it read when `_help_free` was added
+(-1.2 m, before the net-front man held the front and the body check was
+priced honestly). He still stands about 9 m out because his pick jumps: free to
+go lower, he picks 5.5 m on a third of reads and 7.5, 9.5 or 11 m on the rest.
+
 ---
 
 ## Step 2 — Measure the net front (instruments only, no behaviour change)
