@@ -2,7 +2,7 @@ class_name AINetObstacle
 
 # Segment tests on the ice plane against the two cages and our own slot: what
 # a pass, a carry or a blade target may not pass through. A leaf (GameRules,
-# CreaseRules and CarryPostureRules only).
+# CreaseRules, CarryPostureRules and AIBotMechanics only).
 
 # ── The net as a CARRY / BLADE obstacle ──────────────────────────────────────
 # The carry model sees the cage the way the body steering does
@@ -97,6 +97,46 @@ const OWN_MOUTH_DEPTH_M: float = CreaseRules.ARC_RADIUS
 # a post, whose pipe strips the puck.
 const OWN_MOUTH_EXIT_HALF_WIDTH_M: float = GameRules.NET_BACK_HALF_WIDTH \
 		+ BLADE_NET_CLEAR_MARGIN_M
+
+
+# How far a carrier's BODY keeps off that mouth: the puck rides out to the carry
+# ring ahead of him (AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M) and his stick
+# swings it anywhere round him, so nearer than that the puck can be in it. The
+# routes he plans skate round this (AICarryRollout.reach_short_of_net, the
+# waypoints round our cage, the walkouts), which is what keeps him wide of our
+# posts and off our net front; own_mouth_safe_blade_target is the backstop.
+const OWN_MOUTH_KEEP_OUT_M: float = AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
+
+
+# How far a carrier's body at `p` stands inside the keep-out of our own mouth
+# (m; ≤ 0 outside it): the keep-out less his distance to the mouth's front —
+# the span between the posts from the goal line to the top of the crease, the
+# one way in. Only in front of the line: behind it the cage stands between him
+# and the mouth, so he may hug the back of it, and the keep-out is where he
+# comes out past the post.
+static func own_mouth_keep_out_depth(p: Vector3, own_goal_dir: float) -> float:
+	var in_front: float = GameRules.GOAL_LINE_Z - p.z * own_goal_dir
+	if in_front < 0.0:
+		return in_front
+	var out_x: float = maxf(absf(p.x) - OWN_MOUTH_HALF_WIDTH_M, 0.0)
+	return OWN_MOUTH_KEEP_OUT_M \
+			- Vector2(out_x, maxf(in_front - OWN_MOUTH_DEPTH_M, 0.0)).length()
+
+
+# Whether a carrier skating straight from `from` to `to` takes his body deeper
+# into our own mouth's keep-out than `from` stands, sampled every
+# KEEP_OUT_STEP_M along the line: a route that must go round it.
+const KEEP_OUT_STEP_M: float = 0.25
+static func carry_path_enters_own_keep_out(from: Vector3, to: Vector3,
+		own_goal_dir: float) -> bool:
+	var start: float = maxf(own_mouth_keep_out_depth(from, own_goal_dir), 0.0)
+	var length: float = Vector2(to.x - from.x, to.z - from.z).length()
+	var steps: int = ceili(length / KEEP_OUT_STEP_M)
+	for i: int in range(1, steps + 1):
+		var p: Vector3 = from.lerp(to, float(i) / float(steps))
+		if own_mouth_keep_out_depth(p, own_goal_dir) > start:
+			return true
+	return false
 
 
 # Whether the carried puck, aimed at `target` while the body travels at

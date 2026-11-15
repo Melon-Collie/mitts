@@ -2441,7 +2441,9 @@ func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 # straight lane to the strong half-wall winger. The boards are the open lane:
 # rimmed round the corner, the puck reaches the winger before anybody of theirs.
 
-func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
+# `wall_sealed`: a second forechecker up the near wall, so the wide carry up the
+# boards away from the man on his hip is shut as well as the lane.
+func _rim_breakout_ctx(lane_blocked: bool, wall_sealed: bool = false) -> RoleContext:
 	var self_pos := Vector3(3.0, 0, GameRules.GOAL_LINE_Z + 1.35)
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos],
@@ -2451,6 +2453,8 @@ func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
 	]
 	if lane_blocked:
 		skaters.append([4, 1, Vector3(7.0, 0, GameRules.GOAL_LINE_Z - 5.65)])   # in the straight lane
+	if wall_sealed:
+		skaters.append([6, 1, Vector3(6.5, 0, GameRules.GOAL_LINE_Z - 1.5)])    # up the near wall
 	return _make_ctx(self_pos, skaters)
 
 
@@ -2488,11 +2492,11 @@ func test_a_rim_is_fired_as_soft_as_the_race_allows() -> void:
 
 
 func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:
-	var ctx := _rim_breakout_ctx(true)
+	var ctx := _rim_breakout_ctx(true, true)
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP,
-			"pinned on his own goal line with the lane cut, he rims it")
+			"pinned on his own goal line with the lane and the wall cut, he rims it")
 	assert_eq(c.pass_target_peer_id, c._phase_best_pass_peer, "…to the receiver it was priced to")
 	assert_eq(c.dump_launch_speed, c._phase_best_pass_rim_pace, "…at its searched pace")
 	var puck: Vector3 = ctx.snapshot.puck_state.position

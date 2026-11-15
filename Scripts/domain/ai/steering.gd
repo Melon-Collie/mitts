@@ -519,8 +519,8 @@ static func _crease_repel(self_pos: Vector3) -> Vector2:
 # (the repel's extended one) if it braked now — its straight-line stop
 # (ARRIVAL_BRAKE_DECEL_M_S2, plus the engage margin) reaches the paint from the
 # rink side while closing on the goal centre. The crease repel only steers: it
-# sheds no momentum, so a body driving at our net reaches the paint at speed
-# with the puck, or onto a loose one there, and the line is a stride behind it.
+# sheds no momentum, so a carrier driving at our net reaches the paint at speed
+# with the puck, and the line is a stride behind it.
 # Below ARRIVAL_BRAKE_MIN_SPEED_M_S the repel settles it.
 static func stops_in_own_crease(self_pos: Vector3, velocity_xz: Vector2,
 		own_goal_dir: float) -> bool:

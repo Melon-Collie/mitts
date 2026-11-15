@@ -138,12 +138,18 @@ func sample(move: int, k: int) -> Vector3:
 	return samples[move * SAMPLES + k]
 
 
-# How many of `move`'s samples come before its path reaches a crease or passes
-# |z| = `max_abs_z`: SAMPLES for the whole move, 0 for none of it.
-func reach_short_of_net(move: int, max_abs_z: float) -> int:
+# How many of `move`'s samples, skated from `from`, come before its path reaches
+# a crease, passes |z| = `max_abs_z`, or takes the body further inside our own
+# mouth's keep-out than `from` stands (AINetObstacle.own_mouth_keep_out_depth):
+# SAMPLES for the whole move, 0 for none of it. A carrier already in it may
+# skate out of it, and along it, never deeper.
+func reach_short_of_net(move: int, max_abs_z: float, from: Vector3,
+		own_goal_dir: float) -> int:
+	var keep_out: float = maxf(AINetObstacle.own_mouth_keep_out_depth(from, own_goal_dir), 0.0)
 	for k: int in SAMPLES:
 		var s: Vector3 = sample(move, k)
-		if absf(s.z) > max_abs_z or CreaseRules.is_in_crease(Vector2(s.x, s.z)):
+		if absf(s.z) > max_abs_z or CreaseRules.is_in_crease(Vector2(s.x, s.z)) \
+				or AINetObstacle.own_mouth_keep_out_depth(s, own_goal_dir) > keep_out:
 			return k
 	return SAMPLES
 

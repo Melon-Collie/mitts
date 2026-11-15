@@ -1171,11 +1171,6 @@ reaches back into what remains.
   ("Forecheck or set up").
 
 - **Loose-puck retrieval is two reads, not one** (`AILoosePuckChase`).
-  - **A loose puck at our own keeper's feet is his** (`AIGoalieModel
-    .covers_at_feet`, his own `KeeperCover.at_feet`): the team's election is
-    dead for it (`GameManager._enrich_snapshot_for_ai`), so our skaters play
-    their men around him while he covers or clears it. A stick of ours stabbing
-    at it in our crease is how it goes in off us.
   - The **election** names exactly one chaser per team: momentum-aware
     intercept, incumbent hysteresis, per-build top-speed caps, and the friction +
     board-aware path walk for every loose puck. Race times are solved to the
@@ -1445,8 +1440,10 @@ reaches back into what remains.
   moves with him: the best read sat a step ahead each time, and a lower tier's
   re-plan came a couple of metres past it.
   A destination across a cage is skated at the arrival clock's waypoint round it
-  (`AIArrival.cage_waypoint`). A move whose path reaches a crease, or the goal
-  line from in front, ends at its last sample short of it and is priced there
+  (`AIArrival.cage_waypoint`), round our own cage at the edge of our mouth's
+  keep-out, and so is one past our own posts nearer than it. A move whose path
+  reaches a crease, the goal line from in front, or deeper into that keep-out
+  ends at its last sample short of it and is priced there
   (`AICarryRollout.reach_short_of_net`): the carrier re-plans many times a
   horizon, so a drive at the net is a release on the way in. Never prune it
   whole — at pace in tight that leaves only the brake and the cut back.

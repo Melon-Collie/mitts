@@ -189,3 +189,95 @@ func test_a_carrier_walking_out_past_his_post_keeps_it_out_of_his_net() -> void:
 	var input: InputState = _tick_carrier(_carrying_beside_our_goalie(me_pos,
 			Vector3(-2.2, 0.0, -1.1 * OWN), facing, -0.9))
 	_assert_held_clear(me_pos, facing, input.mouse_world_pos, "at the post")
+
+
+# ── The keep-out: a carrier's routes stay wide of our own posts ─────────────
+
+func _depth(p: Vector3, own: float = OWN) -> float:
+	return AINetObstacle.own_mouth_keep_out_depth(p, own)
+
+
+func test_the_keep_out_is_a_carry_ring_off_the_mouth_and_round_the_post_behind_it() -> void:
+	var k: float = AINetObstacle.OWN_MOUTH_KEEP_OUT_M
+	var w: float = AINetObstacle.OWN_MOUTH_HALF_WIDTH_M
+	assert_almost_eq(_depth(Vector3(0.0, 0.0, _line_z() - OWN * 1.0)), k, 1e-4, "in the crease")
+	assert_almost_eq(_depth(Vector3(w + k, 0.0, _line_z() - OWN * 0.5)), 0.0, 1e-4,
+			"a carry ring past the post, in front of the line")
+	assert_almost_eq(_depth(Vector3(0.0, 0.0,
+			_line_z() - OWN * (AINetObstacle.OWN_MOUTH_DEPTH_M + k))), 0.0, 1e-4,
+			"a carry ring above the crease")
+	assert_lte(_depth(Vector3(w + 0.3, 0.0, _line_z() + OWN * 0.3)), 0.0,
+			"behind the line the cage shields the mouth: he may hug it")
+	assert_gt(_depth(Vector3(w + 0.3, 0.0, _line_z() - OWN * 0.1)), 0.0,
+			"coming out past the post tight to it")
+	assert_lt(_depth(Vector3(0.0, 0.0, -_line_z() + OWN * 1.0)), 0.0, "never their mouth")
+
+
+func test_a_route_hugging_our_post_enters_the_keep_out_and_a_wide_one_does_not() -> void:
+	var behind := Vector3(2.0, 0.0, _line_z() + OWN * 1.6)
+	var up_tight := Vector3(1.8, 0.0, _line_z() - OWN * 3.0)
+	var up_wide := Vector3(5.0, 0.0, _line_z() - OWN * 3.0)
+	assert_true(AINetObstacle.carry_path_enters_own_keep_out(behind, up_tight, OWN))
+	assert_false(AINetObstacle.carry_path_enters_own_keep_out(behind, up_wide, OWN))
+	assert_false(AINetObstacle.carry_path_enters_own_keep_out(
+			Vector3(2.0, 0.0, -behind.z), Vector3(1.8, 0.0, -up_tight.z), OWN),
+			"at their net it is no keep-out of ours")
+	var inside := Vector3(1.5, 0.0, _line_z() - OWN * 1.0)
+	assert_false(AINetObstacle.carry_path_enters_own_keep_out(inside, up_wide, OWN),
+			"one already in it may skate out")
+
+
+func test_a_carrier_round_our_cage_takes_the_waypoints_at_the_keep_out() -> void:
+	var cases: Array = [
+		[Vector3(-2.5, 0.0, _line_z() + OWN * 1.5), Vector3(4.0, 0.0, _line_z() - OWN * 6.0)],
+		[Vector3(3.0, 0.0, _line_z() + OWN * 0.6), Vector3(-3.0, 0.0, _line_z() + OWN * 0.6)],
+		[Vector3(-3.0, 0.0, _line_z() - OWN * 1.0), Vector3(3.0, 0.0, _line_z() - OWN * 1.0)],
+	]
+	for c: Array in cases:
+		var from: Vector3 = c[0]
+		var to: Vector3 = c[1]
+		var wp: Vector3 = AIArrival.cage_waypoint(from, to, Vector3.ZERO, 8.0, 5.0, 1.0, OWN)
+		assert_lte(_depth(wp), 1e-3, "%s -> %s: waypoint %s outside the keep-out" % [from, to, wp])
+		var theirs: Vector3 = AIArrival.cage_waypoint(Vector3(from.x, 0.0, -from.z),
+				Vector3(to.x, 0.0, -to.z), Vector3.ZERO, 8.0, 5.0, 1.0, OWN)
+		assert_eq(theirs, AIArrival.cage_waypoint(Vector3(from.x, 0.0, -from.z),
+				Vector3(to.x, 0.0, -to.z), Vector3.ZERO, 8.0, 5.0, 1.0),
+				"round their cage the route is the usual one")
+
+
+func test_a_walkout_from_behind_our_net_is_wide_of_our_posts() -> void:
+	var ctx := RoleContext.new()
+	ctx.own_goal_dir = OWN
+	ctx.attacking_goal_pos = Vector3(0.0, 0.0, -_line_z())
+	ctx.defending_goal_pos = Vector3(0.0, 0.0, _line_z())
+	ctx.team_size = 3
+	ctx.self_pos = Vector3(0.5, 0.0, _line_z() + OWN * 1.8)
+	var ours := AICarrierDestinations.new()
+	ours.fill(ctx)
+	ctx.self_pos = Vector3(0.5, 0.0, -_line_z() - OWN * 1.8)
+	var theirs := AICarrierDestinations.new()
+	theirs.fill(ctx)
+	for kind: int in [AICarrierDestinations.Kind.WALKOUT_LEFT,
+			AICarrierDestinations.Kind.WALKOUT_RIGHT]:
+		var spot: Vector3 = ours.spots[ours.kinds.find(kind)]
+		assert_lte(_depth(spot), 1e-3, "ours at %s" % spot)
+		var tight: Vector3 = theirs.spots[theirs.kinds.find(kind)]
+		assert_almost_eq(absf(tight.x), GameRules.NET_HALF_WIDTH
+				+ AICarrierDestinations.WALKOUT_POST_CLEARANCE_M, 1e-4,
+				"behind their net he walks out tight to the post")
+
+
+func test_a_rolled_move_ends_where_it_first_goes_deeper_into_the_keep_out() -> void:
+	var roll := AICarryRollout.new()
+	var from := Vector3(1.9, 0.0, _line_z() + OWN * 0.8)
+	roll.roll_all(from, Vector3(-1.0, 0.0, -OWN * 5.0), Vector2(-0.2, -OWN).normalized(),
+			Vector2(-0.4, -OWN).normalized(), AISkaterCaps.new(), true)
+	var start: float = maxf(_depth(from), 0.0)
+	var cut: int = 0
+	for m: int in AICarryRollout.MOVE_COUNT:
+		var reach: int = roll.reach_short_of_net(m, INF, from, OWN)
+		for k: int in reach:
+			assert_lte(_depth(roll.sample(m, k)), start + 1e-6, "move %d sample %d" % [m, k])
+		if reach < AICarryRollout.SAMPLES:
+			cut += 1
+	assert_gt(cut, 0, "skating up past his post, some move cuts across the mouth")

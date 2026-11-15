@@ -988,7 +988,7 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	_dispatch_skip_counter = dispatch_span - 1
 	full_dispatch_count += 1
 
-	var plays_the_puck: bool = _state == State.CARRY or _state == State.CHASE_PUCK
+	var carrying: bool = _state == State.CARRY
 	match _state:
 		State.OFF_PUCK:
 			_state_off_puck(input, snapshot, self_pos, have_puck)
@@ -1002,10 +1002,10 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 			_state_pass_pressed(input, snapshot, self_pos, have_puck)
 		State.ONE_TIMER_PRESSED:
 			_state_one_timer_pressed(input, snapshot, self_pos, have_puck)
-	# A carrier, or a chaser going for a loose puck, never skates his momentum
-	# into our own crease: the puck on his stick, or the one he is about to
-	# collect, goes over the line with him.
-	if plays_the_puck and self_state != null and AISteering.stops_in_own_crease(self_pos,
+	# A carrier never skates his momentum into our own crease: the puck on his
+	# stick goes over the line with him. A chaser does: a loose puck in our
+	# crease is the one most worth getting to.
+	if carrying and self_state != null and AISteering.stops_in_own_crease(self_pos,
 			Vector2(self_state.velocity.x, self_state.velocity.z), _own_goal_dir):
 		input.brake = true
 		input.stance_held = false
