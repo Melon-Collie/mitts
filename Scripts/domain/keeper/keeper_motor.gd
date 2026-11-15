@@ -46,6 +46,7 @@ var glide := KeeperGlide.new()
 var low_ready := KeeperLowReady.new()
 var pad_out := KeeperPadOut.new()
 var hands_low := KeeperHandsLow.new()
+var knee_shuffle := KeeperKneeShuffle.new()
 # The share of a drop's time a low save cut in now takes to fall: from his feet
 # as far as he has sunk into the low ready; between his feet and the ice, a fall
 # from rest over the height he has left (its root), no shorter than the low
@@ -229,6 +230,7 @@ func save(low: int, side: float) -> void:
 	save_move.fall = fall
 	low_ready.cut()
 	pad_out.cut()
+	knee_shuffle.cut()
 	hands_low.cut()
 	save_move.start(_cut, low, side, Vector2(x, z), _velocity)
 	footwork.set_still()
@@ -310,6 +312,8 @@ func step(dt: float) -> void:
 			or _mover == Mover.FOOTWORK and footwork.move == KeeperFootwork.Move.SHUFFLE
 	low_ready.step(dt, rest == Rest.FEET and (_mover == Mover.NONE or with_play))
 	_velocity = (Vector2(x, z) - was) / maxf(dt, 1e-6)
+	var steps: bool = _mover == Mover.KNEES and pad_out.share <= 0.0
+	knee_shuffle.step(dt, _turned(Vector2(x, z) - was, -yaw).x if steps else 0.0)
 	fall = maxf(sqrt(1.0 - drop.down), KeeperLowReady.fall_share_at(1.0)) if _mover == Mover.DROP else low_ready.fall_share()
 	# What a slide from his feet would fall from, for the route to price it.
 	if _mover != Mover.SLIDE:
@@ -715,6 +719,7 @@ func pose(p: KeeperPose) -> void:
 	_pose_mover(p)
 	low_ready.lay_over(p, _mover == Mover.NONE and rest == Rest.FEET and footwork.is_settled())
 	pad_out.lay_over(p)
+	knee_shuffle.lay_over(p)
 	hands_low.lay_over(p)
 	if lead != 0.0:
 		KeeperPoses.turn_trunk(p, lead)
@@ -767,6 +772,7 @@ func wire(w: KeeperWire) -> void:
 	glide.wire(w)
 	low_ready.wire(w)
 	pad_out.wire(w)
+	knee_shuffle.wire(w)
 	hands_low.wire(w)
 	fall = w.s16(fall, KeeperWire.FRACTION)
 	_wire_queue(w)

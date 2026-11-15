@@ -241,8 +241,8 @@ func test_down_pushes_follow_one_another() -> void:
 
 
 # Down, a goal within his knees' reach he scoots to in the butterfly, no faster
-# than his knees shuffle and with nothing committed: a goal that moves he
-# follows, a low save can cut in, and one moved past his reach he pushes for.
+# than his knees shuffle, his knees stepping under him, and with nothing
+# committed: a goal that moves he follows, a low save can cut in, and one moved past his reach he pushes for.
 func test_down_he_scoots_on_his_knees_and_follows_his_goal() -> void:
 	_motor.z = -1.0
 	_motor.go_to(Vector2(0.0, -1.0), 0.0, R.DOWN)
@@ -251,6 +251,7 @@ func test_down_he_scoots_on_his_knees_and_follows_his_goal() -> void:
 	KeeperPoses.butterfly(butterfly)
 	_motor.go_to(Vector2(0.25, -1.0), 0.0, R.DOWN)
 	var was := Vector2(_motor.x, _motor.z)
+	var stepped: bool = false
 	for i: int in 8:
 		_motor.step(DT)
 		assert_eq(_motor._mover, KeeperMotor.Mover.KNEES, "scooting, tick %d" % i)
@@ -259,9 +260,11 @@ func test_down_he_scoots_on_his_knees_and_follows_his_goal() -> void:
 		assert_almost_eq(at.distance_to(was), KeeperSlide.KNEE_SHUFFLE_M_S * DT, 1e-6, "at his knees' pace, tick %d" % i)
 		was = at
 		_motor.pose(_pose)
-		for leg: int in 2:
-			assert_almost_eq(_pose.legs[leg].knee, butterfly.legs[leg].knee, Vector3.ONE * 1e-6,
-					"both pads down, tick %d" % i)
+		var up: Array[float] = [_pose.legs[0].knee.y - butterfly.legs[0].knee.y, _pose.legs[1].knee.y - butterfly.legs[1].knee.y]
+		assert_almost_eq(up[0], 0.0, 1e-6, "the trailing knee down, tick %d" % i)
+		assert_gte(up[1], 0.0, "the leading knee stepping, tick %d" % i)
+		stepped = stepped or up[1] > 1e-3
+	assert_true(stepped, "the knee on the side he goes comes off the ice to step")
 	_motor.go_to(Vector2(-0.1, -0.9), 0.0, R.DOWN)
 	_motor.step(DT)
 	assert_eq(_motor._mover, KeeperMotor.Mover.KNEES, "a goal moved the other way followed without stopping")
@@ -269,6 +272,11 @@ func test_down_he_scoots_on_his_knees_and_follows_his_goal() -> void:
 	_run_checked("to the moved goal")
 	assert_almost_eq(Vector2(_motor.x, _motor.z), Vector2(-0.1, -0.9), Vector2.ONE * KeeperRoute.THERE_M, "there")
 	assert_eq(_motor.rest, R.DOWN)
+	for i: int in ceili(KeeperKneeShuffle.SETTLE_S / DT) + 1:
+		_motor.step(DT)
+	_motor.pose(_pose)
+	for leg: int in 2:
+		assert_almost_eq(_pose.legs[leg].knee, butterfly.legs[leg].knee, Vector3.ONE * 1e-6, "stopped: both pads down in the butterfly")
 	_motor.go_to(Vector2(0.8, -0.9), 0.0, R.DOWN)
 	_motor.step(DT)
 	_motor.step(DT)

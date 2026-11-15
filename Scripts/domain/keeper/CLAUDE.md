@@ -36,6 +36,7 @@ old one's place.
 | `keeper_fetch.gd` | going for a loose puck: one a push from him (in front, or beside the post below the goal line, never behind the cage), skated to where his glove lands on it, stopping short of his blade's reach, when no opponent at full sprint gets a stick on it before he is down on it, his read as the margin to set out |
 | `keeper_reach.gd` | reaching for a puck a carrier has wide of him before it is shot: whether the pad on the puck's side driven out along the ice (the butterfly extension) shows the puck less of the low net than the butterfly he is in, the lines the puck has along the ice and up to his pads' height counted against each shape as it would lie where he is; nothing counted while the lines to both posts cross inside his pads' ends; out, held while it shuts no fewer |
 | `keeper_pad_out.gd` | that pad out, laid over what his legs are doing on his knees (the butterfly at rest, a scoot, a slide or a rotation it leads): the extension's leg and the body that goes with it, out over the drop's time and back as quick; taken into the pose a save cuts in from |
+| `keeper_knee_shuffle.gd` | his knee shuffle's steps, laid over the butterfly while he scoots across (`KeeperKneeShuffle`): the pad on the side he goes lifted off the ice and set down a stride on, the other closed up after it, his hips rocking onto whichever knee is down; paced by how far he has gone, so a knee that is down does not slide; only his own sideways travel steps, and not with a pad out |
 | `keeper_hands_low.gd` | his hands set low while he is down with a carrier in tight, laid over the butterfly: the glove down beside his thigh with its fingers down, the blocker down at his hip with the stick still flat on the ice through his fist, his trunk leant on over his knees as far as rests them on his pads (`LEAN_RAD`), each as far down as brings its top to the height they are set for and no further than its arm takes it; at his hands' speed, slowing into place, and back as quick, both going down with him as he drops, the fist from wherever his fall holds the stick; each hand's height at every share of its way measured once off the stance |
 | `keeper_save_move.gd` | a low save's body: cut in from whatever pose he is in, into the save's stance in the drop's time, held, gathered into the stance he rests in, the speed it caught him at carried on (stopped by his edges on his feet unless dropped on purpose as he glides, `edges`, then by the pads' friction; dropped on purpose, his edges taking off as he goes down what does not take him to his spot, `hold_to`) |
 | `controllers/keeper_controller.gd` | him in a match, in the goalie's seat (below) |
@@ -372,6 +373,10 @@ all the way out, his gear out of the ice on the way),
 `tests/unit/controllers/test_keeper_reaches_wide.gd` (the live keeper and a
 real carrier in tight: the pad on the puck's side out before any shot when it
 is carried wide, back under him with the puck in front, none on his feet),
+`test_keeper_knee_shuffle.gd` (nothing at rest, the knee that is down still on
+the ice while the other steps over it, never closer than the butterfly has
+them nor more than a stride wider, and setting off, turning back and stopping
+with no jump),
 `test_keeper_hands_low.gd` (down at his hands' speed and back as quick, up
 when he is not free, the fist brought down from wherever his fall holds the
 stick with no jump,
@@ -556,7 +561,7 @@ down at once carrying his speed, the slide riding on to a goal behind him
 and let go short of it at a scoot's pace, a goal across him pushed for as he
 lands with the speed that was carrying him back edged off, asked down where
 he already is not slid on past it, a goal within his knees' reach
-scooted to in the butterfly and followed as it moves, a turn on his knees giving way to a push and a push not yet made to a goal where he is, a pad out riding a
+scooted to in the butterfly and followed as it moves, a turn on his knees giving way to a push and a push not yet made to a goal where he is, his knees stepping under a scoot, a pad out riding a
 scoot and a slide it leads and brought back in for a slide the other way or
 getting up, a save taking it into the pose it cuts in from, and down pushes one after another, the next
 going as soon as the last stops. `test_keeper_route.gd`

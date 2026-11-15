@@ -68,6 +68,7 @@ const SCENARIOS: Array = [
 	["cover_behind_blocker", Vector2(0.4, -0.35), COVER],
 	["save_tight_low", Vector2(0.2, 0.0), SAVE_TIGHT],
 	["pad_out", 0.0, PAD_OUT],
+	["knee_shuffle", 0.0, KNEE_SHUFFLE],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
@@ -121,6 +122,12 @@ const GOALS: int = -9
 # slide it leads and a scoot, gathered back for a slide the other way, and out
 # to the other side; drawn as SEQUENCE is.
 const PAD_OUT: int = -19
+# KeeperMotor down, scooting on his knees (KeeperKneeShuffle) after a goal kept
+# just ahead of him to his blocker side, then to his glove side, then stopped;
+# a frame every KNEE_SHUFFLE_FRAME_EVERY ticks, the bar blue while a knee is
+# off the ice.
+const KNEE_SHUFFLE: int = -20
+const KNEE_SHUFFLE_FRAME_EVERY: int = 3
 # The ready stance with its blade swept out past the blocker arm's reach (out
 # in front, round to his blocker side and behind him), so the stick is seen
 # brought to the hand: pivoting on its heel, sliding through the grip.
@@ -278,6 +285,8 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_goals()
 	if kind == PAD_OUT:
 		return _record_pad_out()
+	if kind == KNEE_SHUFFLE:
+		return _record_knee_shuffle()
 
 	if kind == STICK_REACH:
 		return _record_stick_reach()
@@ -682,6 +691,26 @@ func _record_pad_out() -> Array:
 	return out
 
 
+func _record_knee_shuffle() -> Array:
+	var motor := KeeperMotor.new()
+	motor.z = -1.1
+	motor.rest = KeeperRoute.Rest.DOWN
+	var out: Array = []
+	var tick: int = 0
+	for leg: Array in [[1.0, 0.5], [-1.0, 0.5], [0.0, 0.3]]:
+		for i: int in int(float(leg[1]) / DT):
+			motor.go_to(Vector2(motor.x + float(leg[0]) * 0.5 * KeeperRoute.KNEE_REACH_M, -1.1), 0.0, KeeperRoute.Rest.DOWN)
+			motor.step(DT)
+			tick += 1
+			if tick % KNEE_SHUFFLE_FRAME_EVERY == 0:
+				var p := KeeperPose.new()
+				motor.pose(p)
+				var stepping: bool = motor.knee_shuffle.share > 0.0 and sin(TAU * motor.knee_shuffle.phase) != 0.0
+				out.append([p, Vector3(motor.x, 0.0, motor.z), KeeperFootwork.Phase.PUSH if stepping else KeeperFootwork.Phase.SET,
+						motor.knee_shuffle.phase, tick * DT, motor.yaw])
+	return out
+
+
 # The RVH's frames, as _record's: PUSH on the way in (and through the slide
 # before it), GLIDE sealed, STOP on the way out, SET at rest.
 func _record_post(post_side: float, from_slide: bool) -> Array:
@@ -766,11 +795,11 @@ func _process(_delta: float) -> bool:
 		var kind: int = int(_scenarios[_scenario_i][2])
 		for post: Node3D in _posts:
 			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE \
-					or kind == RVH_PUSH_OFF or kind == SEQUENCE or kind == GOALS or kind == PAD_OUT or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT \
+					or kind == RVH_PUSH_OFF or kind == SEQUENCE or kind == GOALS or kind == PAD_OUT or kind == KNEE_SHUFFLE or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT \
 					or kind == SAVE_FAR or kind == COVER
 		_frames = _record(spot, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
-		if kind == SEQUENCE or kind == GOALS or kind == PAD_OUT or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT or kind == SAVE_FAR \
+		if kind == SEQUENCE or kind == GOALS or kind == PAD_OUT or kind == KNEE_SHUFFLE or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT or kind == SAVE_FAR \
 				or kind == COVER:
 			_views = [_views[0], _views[2]]
 		_shots = []
