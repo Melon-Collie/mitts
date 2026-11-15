@@ -334,7 +334,8 @@ func _after_their_touch(duel: Object) -> String:
 	var margin: float = NAN
 	var fc: Dictionary = {"f1_min": INF, "f1_reach_t": -1.0, "blade_min": INF,
 			"blade_reach_t": -1.0, "release_t": -1.0, "release": "-", "f1_state": "-",
-			"f1_blade_min": INF, "strips": duel.strips, "strip_next": "", "after_strip": false}
+			"f1_blade_min": INF, "strips": duel.strips, "strip_next": "", "after_strip": false,
+			"f1_gate": "-"}
 	var counts := Vector4(duel.strips, duel.lifts, duel.hit_strips, duel.contests)
 	var releases: int = duel.releases.size()
 	var end: String = "held"
@@ -353,10 +354,10 @@ func _after_their_touch(duel: Object) -> String:
 			end = "out %.2f" % t
 			break
 	var d := Vector4(duel.strips, duel.lifts, duel.hit_strips, duel.contests) - counts
-	gut.p("OZFC|%d|%s|%s|f1 %.2f@%.2f %s|blade %.2f@%.2f|release %s@%.2f|strip %d lift %d hit %d contest %d|f1blade %.2f|next%s" % [
+	gut.p("OZFC|%d|%s|%s|f1 %.2f@%.2f %s|blade %.2f@%.2f|release %s@%.2f|strip %d lift %d hit %d contest %d|f1blade %.2f %s|next%s" % [
 			_run_index, shape, end, fc["f1_min"], fc["f1_reach_t"], fc["f1_state"], fc["blade_min"],
 			fc["blade_reach_t"], fc["release"], fc["release_t"], d.x, d.y, d.z, d.w,
-			fc["f1_blade_min"], fc["strip_next"]])
+			fc["f1_blade_min"], fc["f1_gate"], fc["strip_next"]])
 	return "%s|%.2f|%s" % [shape, margin, end]
 
 
@@ -402,8 +403,13 @@ func _fc_tick(duel: Object, fc: Dictionary, t: float, releases: int) -> void:
 			fc["blade_min"] = bd
 		if bd <= GameRules.POKE_RADIUS_M and fc["blade_reach_t"] < 0.0:
 			fc["blade_reach_t"] = t
-		if duel.brains[0].get_slot(sk.peer_id) == AIRoleSlots.Slot.F1_PRESSURE:
-			fc["f1_blade_min"] = minf(fc["f1_blade_min"], bd)
+		if duel.brains[0].get_slot(sk.peer_id) == AIRoleSlots.Slot.F1_PRESSURE \
+				and bd < fc["f1_blade_min"]:
+			fc["f1_blade_min"] = bd
+			# What might keep his stick off the puck there.
+			fc["f1_gate"] = "hit%d lift%d tied%d down%d check%d" % [int(sk.hit_active),
+					int(sk.lifted_until > duel.ticks), int(sk.tied_with != -1),
+					int(sk.knockdown > 0.0), sk.check_phase]
 		if duel.brains[0].get_slot(sk.peer_id) != AIRoleSlots.Slot.F1_PRESSURE \
 				or c == -1 or duel.team_map[c] != 1:
 			continue
