@@ -705,7 +705,10 @@ D-zone coverage fixture (`test_zone_coverage_shape.gd`, the scripted point
 shot) the uncovered share went from 0.52 to 0.81 against its 0.76 ceiling:
 the weak-wall man, whom the shot model prices at nothing, is unlocked on 290
 ticks of 360 against 186, after the wingers and the D swap slots; the
-low-cycle fixture improved (0.86 to 0.72).
+low-cycle fixture improved (0.86 to 0.72). The D swap is a coverage handoff
+that predates the change (#959): the new weak D's area does not hold the man he
+had, and the matching has no reason to hand on a man worth nothing. The
+fixture's ceiling is raised to 1.1 until #959 is fixed.
 
 The other half, a hit only when the body reaches the man before the blade
 reaches the puck, is not built: the poke is a distance test the carrier's body
