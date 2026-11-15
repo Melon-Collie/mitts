@@ -571,6 +571,8 @@ func step() -> void:
 				rec["decision"] = c.agent.debug_last_decision
 				rec["intent"] = c.agent._carrier.intended_action
 				rec["pass_peer"] = c.agent._carrier.debug_pass_peer_id
+				rec["tip_peer"] = c.agent._carrier.debug_tip_peer_id \
+						if c.agent._carrier._shot_sample_is_tip else -1
 				rec["pass_score"] = c.agent._carrier.debug_pass_score
 				rec["carry_score"] = c.agent._carrier.debug_carry_score
 				var read: Vector4 = c.agent._carrier._pass.debug_completion

@@ -267,10 +267,12 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 	var shooter: int = int(released["peer"])
 	var release: Vector3 = released.get("pass_puck", released["pos"])
 	var tips_before: int = duel.tips
+	var rip: Dictionary = _rip_priced(duel, released, release, goal)
 	for _k: int in int(FLIGHT_MAX_S / Duel.DT):
 		if _out(duel.puck_pos) <= 0.0:
 			break
 		duel.step()
+		_rip_tick(duel, rip)
 		var by: int = duel.carrier()
 		if duel.tips > tips_before:
 			by = duel.last_tip_peer
@@ -288,6 +290,11 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 			res["tip_xg"] = AITipField.odds(release, goal, duel.last_tip_at, duel.last_tip_level)
 			return res
 		break
+	if not rip.is_empty():
+		gut.p("OZTR|%d|%s|priced %.3f contact %.2f lane %.2f redirect %.3f|tipped %d|min %.2f st %d held %d" % [
+				_run_index, rip["slot"], rip["ev"], rip["contact"], rip["lane"], rip["redirect"],
+				int(duel.tips > tips_before and duel.last_tip_peer == rip["peer"]), rip["min"],
+				rip["state"], rip["held"]])
 	if not res["tipped"]:
 		if o == AIReboundField.Outcome.GOAL or o == AIReboundField.Outcome.COVERED \
 				or o == AIReboundField.Outcome.REBOUND_GOAL:
@@ -522,6 +529,49 @@ func _high_parts(duel: Object, ht: AIHighSlotTrace, k: int) -> String:
 	var odds: float = AIShotValue.feed(carrier, spot, speed, goal, keeper, true)
 	var rest: float = ht.score[k] / (lane * odds) if lane * odds > 0.0 else -1.0
 	return "lane %.2f odds %.3f rest %.2f" % [lane, odds, rest]
+
+
+# A rip the carrier released for a teammate to tip (the release's tip_peer):
+# what AIActionScoring.tip_ev priced it at from the release, and its parts (the
+# tipper's stick on it, the lane to him, the tip field's odds). Empty for any
+# other shot. _rip_tick then follows the tipper's blade through the flight.
+func _rip_priced(duel: Object, released: Dictionary, release: Vector3,
+		goal: Vector3) -> Dictionary:
+	var pid: int = int(released.get("tip_peer", -1))
+	if pid == -1:
+		return {}
+	var tipper: Object = duel._skater(pid)
+	var caps: AISkaterCaps = duel.caps_by_peer.get(pid)
+	var speed: float = Vector2(duel.puck_vel.x, duel.puck_vel.z).length()
+	var keeper: Vector3 = _goalie.global_position
+	keeper.y = 0.0
+	var opps: Array[Vector3] = []
+	for sk: Object in duel.skaters:
+		if sk.team_id == 1:
+			opps.append(sk.pos)
+	var to_goal := Vector3(goal.x - release.x, 0.0, goal.z - release.z)
+	var h: Vector3 = to_goal.normalized()
+	var along: float = (tipper.pos - release).dot(h)
+	var tip_pt: Vector3 = release + h * along
+	var contact: float = AIPuckLane.lane_block_at(release.x, release.z, h.x * speed, h.z * speed,
+			along / maxf(speed, 1.0), tipper.pos.x, tipper.pos.z, 0.0, 0.0, caps.stick_reach,
+			AIPuckLane.LANE_LATERAL_FRACTION * caps.max_speed)
+	return {"peer": pid, "slot": AIRoleSlots.label(duel.brains[0].slot_assignments.get(pid, 0)),
+			"ev": AIActionScoring.tip_ev(release, tipper.pos, goal, keeper, opps, speed, [], caps),
+			"contact": contact, "lane": AIPuckLane.lane_clear(release, tip_pt, opps, speed),
+			"redirect": AITipField.best_odds(release, goal, tip_pt), "min": INF, "state": -1,
+			"held": 0}
+
+
+func _rip_tick(duel: Object, rip: Dictionary) -> void:
+	if rip.is_empty():
+		return
+	var tipper: Object = duel._skater(rip["peer"])
+	var d: float = Vector2(tipper.blade.x - duel.puck_pos.x, tipper.blade.z - duel.puck_pos.z).length()
+	if d < rip["min"]:
+		rip["min"] = d
+		rip["state"] = tipper.agent._state
+		rip["held"] = int(tipper.input.stick_lift_held)
 
 
 # How many of ours fight for the net front this tick: Ctrl held with the spot

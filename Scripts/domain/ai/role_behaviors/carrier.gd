@@ -332,6 +332,8 @@ var _decision: RoleDecision = RoleDecision.new()
 var debug_shoot_score: float = 0.0
 var debug_pass_score: float = 0.0
 var debug_pass_peer_id: int = 0
+# The teammate the winning shoot read is a rip for (_tip_read), else -1.
+var debug_tip_peer_id: int = -1
 var debug_carry_score: float = 0.0
 var debug_carry_pos: Vector3 = Vector3.ZERO
 
@@ -696,6 +698,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 			shoot_now_hold = hold
 
 	_shot_sample_is_tip = false
+	debug_tip_peer_id = -1
 	if not shot_unavailable:
 		_tip_read(ctx, self_pos, horizontal_velocity, attacking_goal, goalie_now)
 
@@ -1041,6 +1044,7 @@ func _tip_read(ctx: RoleContext, self_pos: Vector3, horizontal_velocity: Vector3
 			_shot_sample_share = _field.holds.share[k]
 			shoot_now_hold = hold
 			_shot_sample_is_tip = true
+			debug_tip_peer_id = pid
 
 
 # The committed pass's hold: the pocket the search priced it from (so the carry
