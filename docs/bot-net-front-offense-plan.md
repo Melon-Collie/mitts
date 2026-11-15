@@ -469,11 +469,11 @@ keeper): about 3.5% per tip, from shots worth nothing. From the crease top
 The stick has to be placed: 45–85 cm of cursor puts a tip on net, and the
 crossing moves ~15 cm per 5 cm of cursor.
 
-The O-zone sweep cannot measure tips in play: the duel harness models only a
-puck coming off a blade too fast to hold, not the deliberate tip
-(`Puck.apply_blade_deflect`'s `deflect_intent`, `PuckCollisionRules.tip_turn`),
-and the sweep reads shots' outcomes from the rebound field rather than
-playing them at the keeper.
+The O-zone sweep plays tips but not the keeper's answer to them: the duel
+tips a puck on the ice met by a blade held to deflect as the puck does
+(`duel_harness.gd:tip_velocity`, held by `test_duel_tip_mirrors.gd`; a raised
+shot flies over every blade there), and the rebound sweep flies each shot to
+the goal line and prices a tip of ours from the tip field (step 5).
 
 ### 2d. The O-zone instrument goes past the first shot
 
