@@ -597,6 +597,22 @@ While our shot is in flight, the election races the measured rebound
 distribution for that release instead of a path through the cage, so bodies
 start moving at the release.
 
+**Status: built (`50c6775`), no measurable effect.** A loose puck released at
+a shot's pace into a net's mouth is raced to where the rebound field's
+rebounds of that release first sit playable
+(`AILoosePuckChase.rebound_point`, `crash_point_into`), by both teams'
+elections, and the elected chaser skates there while it flies. The walk it
+replaces ran through the cage to the end boards. J=11, 576:
+
+| | before | the rebound raced |
+|---|---|---|
+| first touch ours on live rebounds | 26–28% ± 4% | 23% ± 4% |
+| their first touch, median after the save | 0.28–0.30 s | 0.27 s |
+| 2nd shots / shot | 0.106–0.114 | 0.092 |
+| xG / possession | 0.038–0.041 ± 0.006 | 0.038 ± 0.005 |
+
+Their defence races it too, from nearer the net.
+
 ### 3d. A second man on an O-zone loose puck (#924, #604)
 
 Today one chaser goes and everyone else holds. In their zone that loses every
