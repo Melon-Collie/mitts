@@ -285,16 +285,13 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 		res["touched_by"] = "-" if by == -2 else ("ours:" + AIRoleSlots.label(
 				duel.brains[0].slot_assignments.get(by, 0)) if ours else "theirs")
 		if ours and duel.tips > tips_before and duel.carrier() == -1:
+			_print_rip(duel, rip, tips_before)
 			res["touched_by"] = "tip:" + AIRoleSlots.label(duel.brains[0].slot_assignments.get(by, 0))
 			res["tip_level"] = duel.last_tip_level
 			res["tip_xg"] = AITipField.odds(release, goal, duel.last_tip_at, duel.last_tip_level)
 			return res
 		break
-	if not rip.is_empty():
-		gut.p("OZTR|%d|%s|priced %.3f contact %.2f lane %.2f redirect %.3f|tipped %d|min %.2f st %d held %d" % [
-				_run_index, rip["slot"], rip["ev"], rip["contact"], rip["lane"], rip["redirect"],
-				int(duel.tips > tips_before and duel.last_tip_peer == rip["peer"]), rip["min"],
-				rip["state"], rip["held"]])
+	_print_rip(duel, rip, tips_before)
 	if not res["tipped"]:
 		if o == AIReboundField.Outcome.GOAL or o == AIReboundField.Outcome.COVERED \
 				or o == AIReboundField.Outcome.REBOUND_GOAL:
@@ -553,14 +550,24 @@ func _rip_priced(duel: Object, released: Dictionary, release: Vector3,
 	var h: Vector3 = to_goal.normalized()
 	var along: float = (tipper.pos - release).dot(h)
 	var tip_pt: Vector3 = release + h * along
-	var contact: float = AIPuckLane.lane_block_at(release.x, release.z, h.x * speed, h.z * speed,
-			along / maxf(speed, 1.0), tipper.pos.x, tipper.pos.z, 0.0, 0.0, caps.stick_reach,
-			AIPuckLane.LANE_LATERAL_FRACTION * caps.max_speed)
+	var contact: float = 1.0 if AIArrival.reach_eta(tipper.pos, tip_pt, tipper.vel, caps.max_speed,
+			caps.max_accel, caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M) \
+			<= along / maxf(speed, 1.0) else 0.0
 	return {"peer": pid, "slot": AIRoleSlots.label(duel.brains[0].slot_assignments.get(pid, 0)),
-			"ev": AIActionScoring.tip_ev(release, tipper.pos, goal, keeper, opps, speed, [], caps),
+			"ev": AIActionScoring.tip_ev(release, tipper.pos, goal, keeper, opps, speed, [], caps,
+					tipper.vel),
 			"contact": contact, "lane": AIPuckLane.lane_clear(release, tip_pt, opps, speed),
 			"redirect": AITipField.best_odds(release, goal, tip_pt), "min": INF, "state": -1,
 			"held": 0}
+
+
+func _print_rip(duel: Object, rip: Dictionary, tips_before: int) -> void:
+	if rip.is_empty():
+		return
+	gut.p("OZTR|%d|%s|priced %.3f contact %.2f lane %.2f redirect %.3f|tipped %d|min %.2f st %d held %d" % [
+			_run_index, rip["slot"], rip["ev"], rip["contact"], rip["lane"], rip["redirect"],
+			int(duel.tips > tips_before and duel.last_tip_peer == rip["peer"]), rip["min"],
+			rip["state"], rip["held"]])
 
 
 func _rip_tick(duel: Object, rip: Dictionary) -> void:

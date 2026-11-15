@@ -1036,9 +1036,10 @@ func _tip_read(ctx: RoleContext, self_pos: Vector3, horizontal_velocity: Vector3
 		if (slot != AIRoleSlots.Slot.FINISHER and slot != AIRoleSlots.Slot.NET_FRONT) \
 				or ctx.snapshot.is_out_of_play(pid):
 			continue
-		var s: float = AIActionScoring.tip_ev(release, ctx.snapshot.skater_states[pid].position,
-				attacking_goal, goalie_now, _field.opponents_release, speed,
-				_field.opponent_caps, ctx.caps_by_peer.get(pid)) * _field.holds.keep[k]
+		var mate: SkaterNetworkState = ctx.snapshot.skater_states[pid]
+		var s: float = AIActionScoring.tip_ev(release, mate.position, attacking_goal, goalie_now,
+				_field.opponents_release, speed, _field.opponent_caps, ctx.caps_by_peer.get(pid),
+				mate.velocity) * _field.holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_share = _field.holds.share[k]

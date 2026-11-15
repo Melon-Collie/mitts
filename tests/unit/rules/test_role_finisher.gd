@@ -448,8 +448,9 @@ func _dead_offices_target() -> Vector3:
 func test_finisher_stages_for_a_tip_when_offices_die_and_goalie_sits_deep() -> void:
 	# Every one-timer feed is dead, so the staging argmax stages for the tip of
 	# the point blast (tip_ev): where he stands is worth its tip, not its feed,
-	# and no less a tip than the TIP/SCREEN station on the carrier→net line at
-	# crease-edge depth. Which spot wins is the shot field's read.
+	# and, skated there, no less a tip than the TIP/SCREEN station on the
+	# carrier→net line at crease-edge depth. Which spot wins is the shot field's
+	# read.
 	var ctx: RoleContext = _dead_offices_ctx()
 	var target: Vector3 = AIRoleFinisher.decide(ctx).target_position
 	var goal: Vector3 = ctx.attacking_goal_pos
@@ -466,8 +467,11 @@ func test_finisher_stages_for_a_tip_when_offices_die_and_goalie_sits_deep() -> v
 	var feed: float = AIActionScoring.score_pass_value(TIP_CARRIER, target, goal, goalie, opps,
 			AIPuckLane.expected_pass_speed(TIP_CARRIER, target), ctx.scratch_opp_caps, true)
 	assert_gt(tip.call(target), feed, "staged for the tip, not a feed; got %s" % target)
-	assert_gte(tip.call(target), tip.call(station) - 1e-6,
-			"no worse a tip than the shot-line post; got %s" % target)
+	var skated := func(at: Vector3) -> float:
+		return tip.call(at) * AIActionScoring.delay_discount(AIArrival.time_to_arrive(
+				ctx.self_pos, at, ctx.self_velocity, ctx.self_max_speed))
+	assert_gte(skated.call(target), skated.call(station) - 1e-6,
+			"skated there, no worse a tip than the shot-line post; got %s" % target)
 
 
 func test_finisher_stays_off_a_covered_feed_lane() -> void:

@@ -106,8 +106,9 @@ static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 # whatever its pace (PuckCollisionRules.deflect_velocity), and the outcome is a
 # NEW release from the tip point. Three independent events compose:
 #   P(rip reaches the tipper)   — lane_clear over release→tip vs the DEFENDERS
-# × P(blade contacts the puck)  — the same reach/reaction race a lane defender
-#                                 runs (_lane_block_at)
+# × his blade on the puck       — his tip goes only when his blade can be on the
+#                                 tip point before the puck (AIArrival.reach_eta,
+#                                 the read AIRoleFinisher tips on), 1 or 0
 # × the redirect: the tip field's odds at the tip point, tipped at the height
 #                                 that scores most (AITipField.best_odds), or
 #                                 the empty net's with the keeper out of his
@@ -130,7 +131,8 @@ static func tip_ev(
 		opponents: Array[Vector3],
 		shot_speed_m_s: float,
 		opponent_caps: Array = [],
-		tip_caps: AISkaterCaps = null) -> float:
+		tip_caps: AISkaterCaps = null,
+		tip_vel: Vector3 = Vector3.ZERO) -> float:
 	if shot_speed_m_s < TIP_MIN_SPEED_M_S:
 		return 0.0
 	# Shot line: release → net centre (the reactive tip steps ONTO this line,
@@ -156,17 +158,16 @@ static func tip_ev(
 	if AIFeedReception.arrival_closing_speed(release, tip_pt, shot_speed_m_s, Vector3.ZERO) \
 			<= AIFeedReception.RECEIVE_HOLD_CEILING_M_S:
 		return 0.0
-	# P(blade contacts): the tipper's real stick reach + lateral close.
-	var stick: float = AIPuckLane.LANE_DEFENDER_REACH_M
-	var close: float = AIPuckLane.LANE_DEFENDER_CLOSE_SPEED_M_S
-	if tip_caps != null:
-		stick = tip_caps.stick_reach
-		close = AIPuckLane.LANE_LATERAL_FRACTION * tip_caps.max_speed
+	# His blade on it: on his own arrival clock, at his build's reach and pace.
 	var speed: float = maxf(shot_speed_m_s, 1.0)
-	var p_contact: float = AIPuckLane.lane_block_at(
-			release.x, release.z, hx * speed, hz * speed, along / speed,
-			tip_man.x, tip_man.z, 0.0, 0.0, stick, close)
-	if p_contact <= 0.0:
+	var reach: float = AIBotMechanics.BLADE_REACH_M
+	var vmax: float = AIArrival.SKATER_REF_SPEED_M_S
+	var accel: float = AIArrival.SHED_ACCEL_DEFAULT_M_S2
+	if tip_caps != null:
+		reach = tip_caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M
+		vmax = tip_caps.max_speed
+		accel = tip_caps.max_accel
+	if AIArrival.reach_eta(tip_man, tip_pt, tip_vel, vmax, accel, reach) > along / speed:
 		return 0.0
 	# P(rip reaches him): the defenders' lane over the release→tip segment.
 	var lane: float = AIPuckLane.lane_clear(release, tip_pt, opponents, speed, EMPTY_VEC3, opponent_caps)
@@ -177,7 +178,7 @@ static func tip_ev(
 			else AIShotValue.deflection(release, tip_pt, speed, attacking_goal, goalie_pos)
 	if redirect <= 0.0:
 		return 0.0
-	return p_contact * lane * redirect * _shot_defender_terms(tip_pt, attacking_goal,
+	return lane * redirect * _shot_defender_terms(tip_pt, attacking_goal,
 			goalie_pos if goalie_pos.is_finite() else attacking_goal, opponents, speed,
 			opponent_caps)
 

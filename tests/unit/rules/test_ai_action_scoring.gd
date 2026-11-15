@@ -1362,11 +1362,24 @@ func _tip_fixture(tip_man: Vector3, pace: float,
 
 
 func test_tip_needs_a_blade_the_shot_line_actually_crosses() -> void:
-	# A man 5 m off the line can't reach the flight in time (the same
-	# reach/reaction race a lane defender runs) — no tip outcome exists.
+	# A man 5 m off the line can't get his blade to it before the puck (his
+	# own arrival clock, AIArrival.reach_eta) — no tip outcome exists.
 	var none: Array[Vector3] = []
 	assert_eq(_tip_fixture(Vector3(5.0, 0.0, 24.0), 33.0, none), 0.0,
 			"an unreachable flight is not tippable")
+
+
+func test_the_tippers_own_momentum_decides_whether_his_blade_gets_there() -> void:
+	# 3.5 m off the line, past his blade's reach: standing he is not there
+	# before the rip; already skating onto the line, he is.
+	var none: Array[Vector3] = []
+	var tip_man := Vector3(3.5, 0.0, 24.0)
+	var standing: float = AIActionScoring.tip_ev(Vector3(0.0, 0.0, 10.0), tip_man, GOAL,
+			Vector3(0.0, 0.0, 25.5), none, 33.0)
+	var skating: float = AIActionScoring.tip_ev(Vector3(0.0, 0.0, 10.0), tip_man, GOAL,
+			Vector3(0.0, 0.0, 25.5), none, 33.0, [], null, Vector3(-6.0, 0.0, 0.0))
+	assert_eq(standing, 0.0, "standing, the rip is past before his blade")
+	assert_gt(skating, 0.0, "skating onto the line, his blade is on it")
 
 
 func test_tip_needs_shot_pace() -> void:
