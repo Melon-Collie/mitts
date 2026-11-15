@@ -664,6 +664,19 @@ half of. The rest is their collector settled with the puck at their net: a
 forecheck on him that wins it back 11% of the time, or the set shape (#924's
 §2) that wins it back 9%.
 
+**Why the forecheck rarely wins it back** (the sweep's OZFC lines, J=11, the 37
+FORECHECK windows). F1 is not late: he is within a stick of their collector in
+46% of them, a median 0.14 s after their touch. But at his blade's closest
+approach to the puck he is holding Ctrl in 28 of the 37, and a committed body
+check takes the stick off the ice (`PuckController`'s poke gate, which the duel
+mirrors). Within a poke of the puck, he stripped it 6 times in 6 without Ctrl
+and once in 8 with it, and his checks stripped nothing (0 hit strips). The
+button is the role's own commit (`AIRolePressure` → `AIBodyCheck.evaluate`,
+attributed in a J=3 run), which commits whenever the predicted shoulder would
+rock the carrier and never weighs what the stick would have taken. After a
+strip their next man was nearer the loose puck than ours (3.6 m against 4.6 m),
+and it went to them 5 times in 9.
+
 ### Tests
 
 - A unit test that the rebound credit rises with our bodies at the net and
