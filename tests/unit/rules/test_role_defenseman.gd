@@ -664,37 +664,6 @@ func test_high_slot_stays_home_while_the_strong_point_only_sinks() -> void:
 			"F3 keeps the high slot; got %s" % d.target_position)
 
 
-func test_high_slot_stays_the_help_while_a_man_of_theirs_is_above_him() -> void:
-	# Our carrier low on the wall, both D on the line, and a man of theirs
-	# floating high in their zone: a turnover now sends him the other way, and F3
-	# is the help between him and our points. He stays at the top of the slot or
-	# above, whatever a deeper one-timer is worth; with nobody up there, he may
-	# take the deeper ice.
-	var ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -18.0), [
-		[2, TEAM_ID, Vector3(6.0, 0.0, -9.5)],
-		[3, TEAM_ID, Vector3(-6.0, 0.0, -9.5)],
-		[5, TEAM_ID, Vector3(10.0, 0.0, -23.0)],         # our carrier, low
-	], 5)
-	ctx.self_is_defense = false
-	var strategy := StubStrategy.new()
-	strategy.slots = {1: AIRoleSlots.Slot.HIGH_SLOT, 2: AIRoleSlots.Slot.POINT_STRONG,
-			3: AIRoleSlots.Slot.POINT_WEAK, 5: AIRoleSlots.Slot.CARRIER}
-	ctx.team_brain = strategy
-	var help := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + AIRoleHighSlot.REST_DEPTH_M)
-	var mates: Array[Vector3] = [Vector3(6.0, 0.0, -9.5), Vector3(-6.0, 0.0, -9.5),
-			Vector3(10.0, 0.0, -23.0)]
-	ctx.rush_read.attacker_leads.clear()
-	assert_true(AIRoleHighSlot._help_free(ctx, help, mates), "nobody of theirs above him")
-	ctx.rush_read.attacker_leads.append(Vector3(0.0, 0.0, -13.0))
-	assert_false(AIRoleHighSlot._help_free(ctx, help, mates), "a man of theirs above the help")
-	mates[2] = Vector3(-3.0, 0.0, -13.0)
-	assert_true(AIRoleHighSlot._help_free(ctx, help, mates),
-			"a forward of ours already as high is the help")
-	var d: RoleDecision = AIRoleHighSlot.decide(ctx)
-	assert_gte(d.target_position.z + GameRules.GOAL_LINE_Z, AIRoleHighSlot.REST_DEPTH_M - 0.01,
-			"F3 holds the top of the slot or above; got %s" % d.target_position)
-
-
 func test_point_reads_a_rim_still_coming_around_the_end_boards() -> void:
 	# Fired around the end boards from behind their net: it is not on the side
 	# wall yet, but its path comes up the +x wall to the line. The straight

@@ -370,6 +370,10 @@ the same with both off, which is not what it read when `_help_free` was added
 priced honestly). He still stands about 9 m out because his pick jumps: free to
 go lower, he picks 5.5 m on a third of reads and 7.5, 9.5 or 11 m on the rest.
 
+`_help_free` is removed (decided with the user): the counter layer reads +0.9 m
+and 4 of 12 without it, and stays the gate if a lower F3 brings the old
+regression back.
+
 ---
 
 ## Step 2 — Measure the net front (instruments only, no behaviour change)

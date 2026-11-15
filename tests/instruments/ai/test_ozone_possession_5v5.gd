@@ -460,7 +460,7 @@ func _watch_loose(duel: Object, loose: Dictionary, carrier: int) -> void:
 	loose["second_m"] = second
 
 
-# The high-slot man's last read: OZHS | run | may he leave the slot's top |
+# The high-slot man's last read: OZHS | run |
 # where he stands (depth, weak x) and his nearest defender | the spot he chose
 # (depth, weak x, score) | the best central (|weak x| <= 2) and wide (>= 4)
 # spots' scores | how many spots priced above zero.
@@ -487,8 +487,7 @@ func _print_high(duel: Object) -> void:
 	var pick: String = "post/held" if ht.chosen < 0 else "%.1f,%+.1f,%.3f" % [
 			ht.depth[ht.chosen], ht.weak_u[ht.chosen], ht.score[ht.chosen]]
 	var target: Vector3 = duel._skater(ht.peer).agent._cached_role_decision.target_position
-	gut.p("OZHS|%d|%d|%.1f,%+.1f,%.1f|%s|%.3f|%.3f|%d|%.1f,%+.1f|%s|%s" % [_run_index,
-			int(ht.deep_ok), _out(me), weak * me.x, near, pick, central, wide, positive,
+	gut.p("OZHS|%d|%.1f,%+.1f,%.1f|%s|%.3f|%.3f|%d|%.1f,%+.1f|%s|%s" % [_run_index, _out(me), weak * me.x, near, pick, central, wide, positive,
 			_out(target), weak * target.x, _high_parts(duel, ht, ht.chosen),
 			_high_parts(duel, ht, _best_wide(ht))])
 
