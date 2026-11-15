@@ -327,21 +327,65 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 
 # What follows their first touch of a rebound, for AFTER_TOUCH_S: our shape a
 # brain tick on (with its forecheck margin), and whether we have the puck back,
-# it has left their zone, or it is still theirs in it.
+# it has left their zone, or it is still theirs in it. Prints an OZFC line: the
+# chase of their puck by our F1 and by any stick of ours (see _fc_line).
 func _after_their_touch(duel: Object) -> String:
 	var shape: String = "-"
 	var margin: float = NAN
+	var fc: Dictionary = {"f1_min": INF, "f1_reach_t": -1.0, "blade_min": INF,
+			"blade_reach_t": -1.0, "release_t": -1.0, "release": "-", "f1_state": "-"}
+	var counts := Vector4(duel.strips, duel.lifts, duel.hit_strips, duel.contests)
+	var releases: int = duel.releases.size()
+	var end: String = "held"
 	for k: int in int(AFTER_TOUCH_S / Duel.DT):
 		duel.step()
+		var t: float = (k + 1) * Duel.DT
 		if k == Duel.BRAIN_PERIOD_TICKS:
 			shape = AIPossessionState.State.keys()[duel.brains[0].state]
 			margin = duel.brains[0].forecheck_margin_s
+		_fc_tick(duel, fc, t, releases)
 		var c: int = duel.carrier()
 		if c != -1 and duel.team_map[c] == 0:
-			return "%s|%.2f|back %.2f" % [shape, margin, (k + 1) * Duel.DT]
+			end = "back %.2f" % t
+			break
 		if duel.puck_pos.z > -GameRules.BLUE_LINE_Z:
-			return "%s|%.2f|out %.2f" % [shape, margin, (k + 1) * Duel.DT]
-	return "%s|%.2f|held" % [shape, margin]
+			end = "out %.2f" % t
+			break
+	var d := Vector4(duel.strips, duel.lifts, duel.hit_strips, duel.contests) - counts
+	gut.p("OZFC|%d|%s|%s|f1 %.2f@%.2f %s|blade %.2f@%.2f|release %s@%.2f|strip %d lift %d hit %d contest %d" % [
+			_run_index, shape, end, fc["f1_min"], fc["f1_reach_t"], fc["f1_state"], fc["blade_min"],
+			fc["blade_reach_t"], fc["release"], fc["release_t"], d.x, d.y, d.z, d.w])
+	return "%s|%.2f|%s" % [shape, margin, end]
+
+
+# One tick of their puck after their touch: how near our F1's body gets to
+# their carrier (and when within a stick), how near any blade of ours gets to
+# the puck (and when within a poke), and when their first release goes.
+func _fc_tick(duel: Object, fc: Dictionary, t: float, releases: int) -> void:
+	var c: int = duel.carrier()
+	if duel.releases.size() > releases and fc["release_t"] < 0.0 \
+			and int(duel.releases[releases]["team"]) == 1:
+		fc["release_t"] = t
+		fc["release"] = str(duel.releases[releases].get("intent", "?"))
+	var p := Vector2(duel.puck_pos.x, duel.puck_pos.z)
+	for sk: Object in duel.skaters:
+		if sk.team_id != 0:
+			continue
+		var bd: float = Vector2(sk.blade.x, sk.blade.z).distance_to(p)
+		if bd < fc["blade_min"]:
+			fc["blade_min"] = bd
+		if bd <= GameRules.POKE_RADIUS_M and fc["blade_reach_t"] < 0.0:
+			fc["blade_reach_t"] = t
+		if duel.brains[0].get_slot(sk.peer_id) != AIRoleSlots.Slot.F1_PRESSURE \
+				or c == -1 or duel.team_map[c] != 1:
+			continue
+		var cp: Vector3 = duel.skater_pos(c)
+		var d: float = Vector2(sk.pos.x - cp.x, sk.pos.z - cp.z).length()
+		if d < fc["f1_min"]:
+			fc["f1_min"] = d
+			fc["f1_state"] = SkaterAgentStateMachine.State.keys()[sk.agent._state]
+		if d <= AIBotMechanics.BLADE_REACH_M and fc["f1_reach_t"] < 0.0:
+			fc["f1_reach_t"] = t
 
 
 # The loose puck of the rebound window, tick by tick until someone has it: our
