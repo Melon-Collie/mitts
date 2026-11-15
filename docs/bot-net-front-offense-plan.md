@@ -849,6 +849,23 @@ He is on the rebound twice as fast, from in front of the puck, and screens
 less (the slot-top man's line is no longer his). Their man is still nearer
 his spot, out of reach, 52% of the time.
 
+**The counter layer, again** (`c6e7374`, `d278495`). With the net-front man in
+front of the puck the slow tier's counter layer read -1.1 m. Traced: it had
+passed on a slot swap that sent the other D back, while the weak point held
+his stand 1.3 s into a break, because "behind me" (`race_depth_to_net`) raced
+him square to our net at full speed. A point faces up the ice. The race now
+charges each side its own turn, ours on the better of our two retreats
+(backpedal at the backward caps, or turned to skate), his to face our net,
+a facing unknown turning as ours. Slow tier green (counter layer +0.0 m, 6 of
+12; spacing holds); default 6,221.
+
+| (J=11, 576) | puck alone | + the turn race |
+|---|---|---|
+| first touch ours on live rebounds | 32% ± 4% | 31% ± 4% |
+| 2nd shots / shot | 0.125 | 0.141 |
+| net-front man first on | 22 | 23 |
+| xG / possession | 0.039 ± 0.005 | 0.042 ± 0.006 |
+
 ---
 
 ## Step 5 — Tips
