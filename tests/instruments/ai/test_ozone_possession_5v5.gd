@@ -49,6 +49,8 @@ const TRACE_EVERY_TICKS: int = 9
 const REBOUND_WINDOW_S: float = 3.0
 # Longer than any shot of ours takes to reach the goal line.
 const FLIGHT_MAX_S: float = 1.5
+# How long a rebound they touch first is followed on.
+const AFTER_TOUCH_S: float = 3.0
 # A jittered spawn behind the goal line keeps this far outside the post.
 const JITTER_NET_CLEAR_M: float = GameRules.NET_HALF_WIDTH + 0.6
 const OURS: Array[int] = [101, 102, 103, 104, 105]
@@ -317,9 +319,29 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 			break
 		if res["first"] == "theirs" or duel.puck_pos.z > -GameRules.BLUE_LINE_Z:
 			break
-	gut.p("OZLOOSE|%d|%s|%s|%d|%.2f|%.2f|%.2f" % [_run_index, res["first"], loose["elected"],
-			loose["chased"], loose["declined_s"], loose["ours_m"], loose["second_m"]])
+	var after: String = _after_their_touch(duel) if res["first"] == "theirs" else "-|-|-"
+	gut.p("OZLOOSE|%d|%s|%s|%d|%.2f|%.2f|%.2f|%s" % [_run_index, res["first"], loose["elected"],
+			loose["chased"], loose["declined_s"], loose["ours_m"], loose["second_m"], after])
 	return res
+
+
+# What follows their first touch of a rebound, for AFTER_TOUCH_S: our shape a
+# brain tick on (with its forecheck margin), and whether we have the puck back,
+# it has left their zone, or it is still theirs in it.
+func _after_their_touch(duel: Object) -> String:
+	var shape: String = "-"
+	var margin: float = NAN
+	for k: int in int(AFTER_TOUCH_S / Duel.DT):
+		duel.step()
+		if k == Duel.BRAIN_PERIOD_TICKS:
+			shape = AIPossessionState.State.keys()[duel.brains[0].state]
+			margin = duel.brains[0].forecheck_margin_s
+		var c: int = duel.carrier()
+		if c != -1 and duel.team_map[c] == 0:
+			return "%s|%.2f|back %.2f" % [shape, margin, (k + 1) * Duel.DT]
+		if duel.puck_pos.z > -GameRules.BLUE_LINE_Z:
+			return "%s|%.2f|out %.2f" % [shape, margin, (k + 1) * Duel.DT]
+	return "%s|%.2f|held" % [shape, margin]
 
 
 # The loose puck of the rebound window, tick by tick until someone has it: our
