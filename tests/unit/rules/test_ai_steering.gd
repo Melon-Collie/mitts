@@ -797,11 +797,33 @@ func test_arrival_brake_stays_off_with_room_to_stop() -> void:
 			"12 m of room from 9 m/s — no brake")
 
 
-func test_arrival_brake_ignores_slow_speeds() -> void:
-	# Below the speed floor, friction + the anchor deadband settle it.
+func test_arrival_brake_leaves_an_arrival_the_glide_settles() -> void:
+	# A crawl whose glide stops inside the margin past the anchor: friction
+	# settles it, no brake key.
 	assert_false(AISteering.should_arrival_brake(
-			Vector3.ZERO, Vector3(0, 0, 0.4), Vector2(0, 2), false),
-			"slow arrivals settle on friction, no brake key")
+			Vector3.ZERO, Vector3(0, 0, 0.4), Vector2(0, 0.6), false),
+			"a crawl settles on friction, no brake key")
+
+
+func test_arrival_brake_stops_a_side_step_into_a_stance() -> void:
+	# A receiver side-stepping into his stance at 2.8 m/s, 0.8 m short: the
+	# glide alone would carry him metres past it.
+	assert_gt(AISteering.glide_distance(2.8), 0.8 + AISteering.ARRIVAL_BRAKE_ENGAGE_MARGIN_M)
+	assert_true(AISteering.should_arrival_brake(
+			Vector3.ZERO, Vector3(0, 0, 0.8), Vector2(0, 2.8), false),
+			"brake into the stance")
+
+
+func test_the_glide_distance_is_the_movement_models() -> void:
+	# glide_distance against SkaterMovementRules' own glide, stepped.
+	var cfg := SkaterMovementRules.league_config()
+	var v: float = 3.0
+	var x: float = 0.0
+	var dt: float = 1.0 / 900.0
+	while v > 0.0:
+		x += v * dt
+		v = maxf(v - (cfg.friction + cfg.friction_drag * v) * dt, 0.0)
+	assert_almost_eq(AISteering.glide_distance(3.0), x, 0.05)
 
 
 func test_arrival_brake_ignores_receding_motion() -> void:

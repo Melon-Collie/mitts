@@ -85,7 +85,8 @@ const STANCE_RELEASE_FRACTION: float = 0.8
 const ARRIVAL_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 const ARRIVAL_BRAKE_ENGAGE_MARGIN_M: float = 0.5
 const ARRIVAL_BRAKE_RELEASE_MARGIN_M: float = 1.5
-const ARRIVAL_BRAKE_MIN_SPEED_M_S: float = 3.0
+# The league body's glide, which settles an arrival that needs no brake.
+static var _glide: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_config()
 
 # Offside brake (offside_brake). In ARCADE an attacking non-carrier whose body
 # is wholly past the attacking blue line before the puck is ghosted on that
@@ -666,23 +667,34 @@ static func _stance_out_turns(required_rate: float, speed: float,
 # body's momentum.
 static func should_arrival_brake(self_pos: Vector3, anchor: Vector3,
 		velocity_xz: Vector2, was_braking: bool) -> bool:
-	var speed: float = velocity_xz.length()
-	if speed < ARRIVAL_BRAKE_MIN_SPEED_M_S:
-		return false  # slow enough that friction + the deadband settle it
 	var to_anchor := Vector2(anchor.x - self_pos.x, anchor.z - self_pos.z)
 	var dist: float = to_anchor.length()
-	if dist < 0.001:
-		return true  # on top of the target at speed — stop
 	# Closing speed: the velocity component toward the anchor. Moving away
 	# or tangential → nothing to overshoot (reversals are the pivot
-	# brake's job).
-	var closing: float = velocity_xz.dot(to_anchor) / dist
+	# brake's job). On top of it, all of the speed is overshoot.
+	var closing: float = velocity_xz.length() if dist < 0.001 \
+			else velocity_xz.dot(to_anchor) / dist
 	if closing <= 0.0:
+		return false
+	# Gliding there stops inside the engage margin past it: friction settles
+	# it, no brake key. Never a speed floor: at 3 m/s the glide carries a body
+	# metres on, and a side-step into a reception stance blew through it.
+	if glide_distance(closing) <= dist + ARRIVAL_BRAKE_ENGAGE_MARGIN_M:
 		return false
 	var stop_dist: float = (closing * closing) / (2.0 * ARRIVAL_BRAKE_DECEL_M_S2)
 	var margin: float = ARRIVAL_BRAKE_RELEASE_MARGIN_M if was_braking \
 			else ARRIVAL_BRAKE_ENGAGE_MARGIN_M
 	return stop_dist + margin >= dist
+
+
+# How far (m) the league body glides from `speed` (m/s) to a stop: its glide
+# friction plus the drag on its speed (SkaterMovementRules.apply_movement).
+static func glide_distance(speed: float) -> float:
+	var f: float = _glide.friction
+	var k: float = _glide.friction_drag
+	if k < 0.0001:
+		return speed * speed / (2.0 * maxf(f, 0.0001))
+	return (speed - f / k * log(1.0 + k * speed / f)) / k
 
 
 # Hard body-level guard against skating offside. Returns `desired`
