@@ -677,6 +677,17 @@ rock the carrier and never weighs what the stick would have taken. After a
 strip their next man was nearer the loose puck than ours (3.6 m against 4.6 m),
 and it went to them 5 times in 9.
 
+**Why the checks strip nothing** (a J=11 run with every body contact and its
+delivered strip impulse logged, the harness instrumented locally). F1 holds
+Ctrl in 35 of the 37 windows, a median of about a second of each. His body
+meets a man of theirs in only 8, never their carrier, and the hardest delivered
+0.82 against the strip threshold's 1.35 (closing at 0.4–5.9 m/s). The commit
+read (`AIBodyCheck.evaluate`) prices the hit at his top speed toward the
+intercept (`_predicted_approach`'s `self_max_speed`) and the intercept as
+reachable at top speed: it does not see his own velocity or the stride ramp
+between, nor a carrier stepping out of the hunt, so it commits to hits that
+land soft or not at all, and the stick stays off the ice the whole while.
+
 ### Tests
 
 - A unit test that the rebound credit rises with our bodies at the net and
