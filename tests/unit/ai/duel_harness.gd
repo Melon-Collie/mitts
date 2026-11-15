@@ -27,7 +27,8 @@ extends RefCounted
 #     backhand stop, and the rest reach without purpose, chased at the hands'
 #     speed and acceleration.
 #   - The puck: pickups, catches, settles, bobbles (with their hop), deflections
-#     off a blade too fast to hold, contested pickups, pokes (with the pinch
+#     off a blade too fast to hold, a blade held to deflect tipping what it
+#     meets (test_duel_tip_mirrors.gd), contested pickups, pokes (with the pinch
 #     hop), stick lifts, ties, hit strips, every cooldown; releases through
 #     ShotMechanics on the controller's configs, a lofted one flying over the
 #     sticks, each with its follow-through; puckless one-timers swung through
@@ -36,8 +37,9 @@ extends RefCounted
 # What is APPROXIMATED (keep scenario assertions coarse because of these):
 #   - The arm leaves out the skating lean and the trunk's fold, and the boards
 #     do not limit its reach.
-#   - The puck is flat: an airborne one is touched by nothing, and a landing
-#     keeps its pace; shots take no body blocks.
+#   - The puck is flat: an airborne one is touched by nothing (a raised shot
+#     is never tipped down), and a landing keeps its pace; shots take no body
+#     blocks.
 #   - Board pins and the press's squeeze against the boards are absent, as is goalie
 #     BEHAVIOR (a static net-center keeper per team, or a goalie_provider's).
 #   - Puppets and scripted attackers skate their own simple policies.
@@ -92,6 +94,13 @@ const DEFLECT_TANGENTIAL_RETAIN: float = 0.85
 const BOBBLE_SPEED_M_S: float = 11.0
 const BOBBLE_COOLDOWN_TICKS: int = (_PhysicsConstants.PHYSICS_TICK * 12 + 50) / 100
 const DEFLECT_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 10
+# A deliberate tip (Puck.apply_blade_deflect, _tip_face): the most it turns the
+# puck, and the vertical launch each tip height gives it.
+const TIP_MAX_TURN_DEG: float = 25.0
+const TIP_LOW_LOFT_M_S: float = 2.9
+const TIP_MID_LOFT_M_S: float = 4.2
+const TIP_HIGH_LOFT_M_S: float = 5.5
+const TIP_DOWN_LOFT_M_S: float = 3.5
 # The hop a squeezed puck takes: a bobble off the face, and two blades pinching it
 # (a poke, a contested pickup) — PuckCollisionRules.squeeze_lift_speed's dials at
 # Puck's values.
@@ -289,6 +298,13 @@ var bobbles: int = 0
 var lifts: int = 0
 var hit_strips: int = 0
 var deflects: int = 0
+# Deliberate tips this run, and the last one: who, where his blade met it, at
+# which tip height, on which tick.
+var tips: int = 0
+var last_tip_peer: int = -1
+var last_tip_at: Vector3 = Vector3.INF
+var last_tip_level: int = ShotMechanics.ELEVATION_FLAT
+var last_tip_tick: int = -1
 var contests: int = 0
 # Per-team incumbent for the snapshot's chase election (hysteresis feed).
 var _prev_chase_by_team: Dictionary = {}
@@ -675,6 +691,12 @@ func step() -> void:
 		puck_pos = stepped.origin
 		puck_vel = stepped.basis.x
 		for s: SimSkater in skaters:
+			if _deflecting(s):
+				if _can_play(s) and PuckInteractionRules.check_deflect(prev_puck, puck_pos,
+						s.prev_blade, s.blade, PICKUP_RADIUS, DeflectReachRules.VERTICAL_REACH_M):
+					_tip(s)
+					break
+				continue
 			if not _can_play(s) or not PuckInteractionRules.check_pickup(
 					prev_puck, puck_pos, s.prev_blade, s.blade, PICKUP_RADIUS):
 				continue
@@ -734,6 +756,50 @@ func step() -> void:
 			s.settle_until = ticks + roundi(PuckReceptionRules.settle_time(catch_load,
 					AIFeedReception.SETTLE_CLEAN_LOAD, AIFeedReception.SETTLE_MAX_S) / DT)
 			break
+
+
+# Q held without the puck (SkaterController._wants_deflect): the blade redirects
+# what it meets instead of corralling it (PuckController._check_interactions).
+func _deflecting(s: SimSkater) -> bool:
+	return s.input.stick_lift_held and carrier_id != s.peer_id
+
+
+func _tip(s: SimSkater) -> void:
+	var out: Vector3 = tip_velocity(puck_vel, s.blade - s.pos, s.input.elevation_level)
+	puck_vel = Vector3(out.x, 0.0, out.z)
+	_hop(out.y)
+	_release_grace[s.peer_id] = ticks + (BOBBLE_COOLDOWN_TICKS
+			if out.length() < BOBBLE_SPEED_M_S else DEFLECT_COOLDOWN_TICKS)
+	tips += 1
+	last_tip_peer = s.peer_id
+	last_tip_at = s.blade
+	last_tip_level = s.input.elevation_level
+	last_tip_tick = ticks
+	loose_released_by = -1
+
+
+# Puck.apply_blade_deflect for a deliberate tip of a puck on the ice at
+# `puck_velocity`: off the face that turns it toward the side the blade is held
+# on (`body_to_blade`), then lifted at `level`'s launch with its pace kept.
+static func tip_velocity(puck_velocity: Vector3, body_to_blade: Vector3, level: int) -> Vector3:
+	var turn: float = PuckCollisionRules.tip_turn(puck_velocity, body_to_blade,
+			deg_to_rad(TIP_MAX_TURN_DEG))
+	var face: Vector3 = PuckCollisionRules.aimed_face_normal(puck_velocity, turn,
+			AIFeedReception.DEFLECT_NORMAL_RESTITUTION,
+			AIFeedReception.DEFLECT_NORMAL_RESTITUTION_MIN, DEFLECT_TANGENTIAL_RETAIN,
+			AIFeedReception.DEFLECT_SPEED_REF_M_S)
+	var out: Vector3 = PuckCollisionRules.deflect_velocity(puck_velocity, face,
+			AIFeedReception.DEFLECT_NORMAL_RESTITUTION,
+			AIFeedReception.DEFLECT_NORMAL_RESTITUTION_MIN, DEFLECT_TANGENTIAL_RETAIN,
+			AIFeedReception.DEFLECT_SPEED_REF_M_S)
+	var vy: float = PuckCollisionRules.deflect_loft_speed(level, TIP_LOW_LOFT_M_S,
+			TIP_MID_LOFT_M_S, TIP_HIGH_LOFT_M_S, TIP_DOWN_LOFT_M_S, false)
+	var pace: float = out.length()
+	if is_zero_approx(vy) or pace <= 0.001:
+		return out
+	var flat: Vector3 = Vector3(out.x, 0.0, out.z).normalized()
+	return Vector3(flat.x, ShotMechanics.loft_y(pace, absf(vy)) * signf(vy), flat.z) \
+			.normalized() * pace
 
 
 # The knockdown's clock (SkaterController._apply_movement): true while he is down,
