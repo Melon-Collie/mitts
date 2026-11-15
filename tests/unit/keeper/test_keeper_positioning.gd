@@ -967,24 +967,82 @@ func test_a_cut_across_from_the_post_is_slid_with_on_his_knees() -> void:
 
 
 # Out of tight, a carrier of theirs holding the puck out to one side: he
-# squares to the puck where it is, its angle line through the net's centre,
-# either side alike, on his feet.
-func test_out_of_tight_he_squares_to_the_puck() -> void:
+# faces the puck where it is, and stands off its angle line toward the
+# carrier's body by a share of what a pull across would leave him short,
+# nearer the puck's line than the body's, either side alike. A puck held in
+# front of the body, one wound up to shoot, or one with no carrier he reads,
+# he stands square on.
+func test_out_of_tight_he_squares_to_the_puck_and_keeps_a_little_for_the_pull() -> void:
+	var body := Vector2(0.0, -6.3)
 	for held: float in [0.9, -0.9, 0.0]:
-		_brain = KeeperPositioning.new()
-		_brain.play = KeeperPlayRead.new()
-		_brain.play.theirs = true
-		_brain.play.loose = false
-		_motor = KeeperMotor.new()
-		var puck := Vector2(held, -6.0)
-		_brain.decide(puck, Vector2.ZERO, _motor)
-		var spot: Vector2 = _motor.route.spot
-		assert_eq(_motor.route.rest, R.FEET, "%+.1f held: on his feet" % held)
-		assert_almost_eq(absf(spot.normalized().cross(puck.normalized())), 0.0, 1e-4,
-				"%+.1f held: on the puck's angle line" % held)
-		assert_gt(spot.dot(puck), 0.0, "%+.1f held: out toward it" % held)
-		assert_almost_eq(_forward(_motor.route.facing).dot((puck - spot).normalized()), 1.0, 1e-4,
-				"%+.1f held: square to the puck" % held)
+		for winding: bool in [false, true]:
+			for carried: bool in [true, false]:
+				_brain = KeeperPositioning.new()
+				_brain.play = KeeperPlayRead.new()
+				_brain.play.theirs = true
+				_brain.play.loose = false
+				_brain.play.winding_up = winding
+				if carried:
+					_brain.play.carrier = body
+				_motor = KeeperMotor.new()
+				_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+				var puck := Vector2(held, -6.0)
+				var what: String = "%+.1f held%s%s" % [held, ", wound up" if winding else "", "" if carried else ", no body read"]
+				_brain.decide(puck, Vector2.ZERO, _motor)
+				var spot: Vector2 = _motor.route.spot
+				assert_eq(_motor.route.rest, R.FEET, "%s: on his feet" % what)
+				assert_gt(spot.dot(puck), 0.0, "%s: out toward it" % what)
+				assert_almost_eq(_forward(_motor.route.facing).dot((puck - spot).normalized()), 1.0, 1e-4,
+						"%s: facing the puck" % what)
+				var off_puck: float = absf(spot.normalized().cross(puck.normalized()))
+				if held == 0.0 or winding or not carried:
+					assert_almost_eq(off_puck, 0.0, 1e-4, "%s: on the puck's angle line" % what)
+					continue
+				var off_body: float = absf(spot.normalized().cross(body.normalized()))
+				assert_gt(off_puck, 1e-3, "%s: off the puck's line" % what)
+				assert_lt(off_puck, off_body, "%s: nearer it than the body's" % what)
+				assert_eq(signf(spot.x), signf(held), "%s: on the puck's side of his body" % what)
+				assert_lt(absf(spot.x), absf(_stood_on(puck).x), "%s: toward the body from where the puck alone puts him" % what)
+
+
+# Where the brain stands him for a carrier of theirs' puck at `puck` with no
+# body read.
+func _stood_on(puck: Vector2) -> Vector2:
+	var brain := KeeperPositioning.new()
+	brain.play = KeeperPlayRead.new()
+	brain.play.theirs = true
+	brain.play.loose = false
+	var motor := KeeperMotor.new()
+	motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	brain.decide(puck, Vector2.ZERO, motor)
+	return motor.route.spot
+
+
+# The hedge is a share of an even split: with time after his read to make up
+# the whole of a pull, none; with none, HEDGE_SHARE of the way to the body's
+# line; never past the body.
+func test_the_hedge_is_what_he_could_not_make_up_of_a_pull() -> void:
+	_brain.play = KeeperPlayRead.new()
+	_brain.play.theirs = true
+	_brain.play.loose = false
+	_brain.play.carrier = Vector2(0.0, -6.3)
+	_motor.z = -1.8
+	var puck := Vector2(0.9, -6.0)
+	_brain.play.delay_s = 10.0
+	var slow: Vector2 = _brain._hedged(puck, _motor)
+	assert_almost_eq(slow.x, puck.x * (1.0 - KeeperPositioning.HEDGE_SHARE), 1e-4, "no time to make any of it up: the whole share")
+	assert_almost_eq(slow.y, puck.y, 1e-4, "across his body only")
+	_brain.play.delay_s = 0.0
+	_motor.footwork.shuffle_speed = 100.0
+	_motor.footwork.accel = 10000.0
+	assert_almost_eq(_brain._hedged(puck, _motor).x, puck.x, 1e-4, "quick enough to make all of it up: none")
+	_motor = KeeperMotor.new()
+	_motor.z = -1.8
+	_brain.play.delay_s = GoalieSkillProfile.hard().reaction_delay_s
+	var hard: float = _brain._hedged(puck, _motor).x
+	_brain.play.delay_s = GoalieSkillProfile.easy().reaction_delay_s
+	assert_lte(_brain._hedged(puck, _motor).x, hard, "a slower read keeps no less for the pull")
+	assert_gt(hard, 0.0, "never past the body")
 
 
 # A carrier of theirs in tight in front of him, the puck held anywhere across

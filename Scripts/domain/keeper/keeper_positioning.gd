@@ -88,6 +88,11 @@ const TIGHT_M: float = 2.0 * GameRules.DEFAULT_STICK_LENGTH_M
 # Rounds of solving a spot that hangs on itself: the seal squared to the
 # carrier from where it puts him.
 const SEAL_ROUNDS: int = 4
+# How much of an even split between the shot a carrier has now and the one a
+# pull across his body gives him the keeper stands off the puck's line for
+# (`_hedged`). Measured from 4 m at 0.3: a plain shot saved 83% (88% with
+# none), one straight off a drag across 62% (50%); past it both fall.
+const HEDGE_SHARE: float = 0.3
 # Near the seal, he drops where he is: within half a pad's width of it his pad
 # still meets the post. Down, he pushes again only once his spot has moved on
 # by as much.
@@ -139,7 +144,8 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var comes: float = -velocity.dot(puck.normalized()) if puck.length() > 1e-4 else 0.0
 	var down_within: float = down_range(comes, motor.save_move.drop_s * motor.low_ready.fall_share())
 	kept_down = tight and not planted and puck.length() <= down_within + (MARGIN_M if kept_down else 0.0) \
-			and (kept_down or motor.rest != KeeperRoute.Rest.FEET or motor.drops() or _covers(me, _spot(puck, motor)))
+			and (kept_down or motor.rest != KeeperRoute.Rest.FEET or motor.drops()
+					or _covers(me, _spot(_hedged(puck, motor), motor)))
 	if planted or kept_down:
 		_racing = false
 		post_side = 0.0
@@ -162,8 +168,8 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 		return
 	# His spot moves with the puck: the same spot a look ahead along its
 	# motion, which the motor skates him with.
-	var spot: Vector2 = _spot(puck, motor)
-	var ahead: Vector2 = _spot(puck + velocity * LOOK_AHEAD_S, motor)
+	var spot: Vector2 = _spot(_hedged(puck, motor), motor)
+	var ahead: Vector2 = _spot(_hedged(puck + velocity * LOOK_AHEAD_S, motor), motor)
 	if meeting:
 		ahead = spot
 	if zone == Zone.FRONT:
@@ -365,6 +371,30 @@ func _skates_onto_post(post: Vector2, side: float, puck: Vector2, motor: KeeperM
 		return false
 	motor.go_to(spot, turn, KeeperRoute.Rest.FEET, Vector2.ZERO, true)
 	return true
+
+
+# The puck his angle line goes through on his feet for one at `puck`: the puck
+# itself, unless a carrier of theirs holds it off to one side of his body, not
+# wound up to shoot. He can have it as far the other side as fast as a blade
+# crosses him, and of that the keeper makes up only what his feet cover after
+# his read. Standing half of what he could not make up toward the body would
+# leave him as far off the shot that can come now as off the one the pull
+# gives; he takes HEDGE_SHARE of that, since at the depth he plays he has
+# nothing to spare and every step off the puck's line opens its post.
+func _hedged(puck: Vector2, motor: KeeperMotor) -> Vector2:
+	if play == null or not play.theirs or play.loose or play.winding_up or play.carrier == KeeperPlayRead.NO_CARRIER \
+			or play.carrier.length() < 1e-4 or puck.length() < 1e-4:
+		return puck
+	var across: Vector2 = play.carrier.normalized().orthogonal()
+	var held: float = clampf((puck - play.carrier).dot(across), -KeeperPlayRead.CARRIER_REACH_M, KeeperPlayRead.CARRIER_REACH_M)
+	var pull: float = 2.0 * absf(held)
+	# What the pull moves his own spot by, on the puck's line where he is.
+	var moves: float = pull * Vector2(motor.x, motor.z).length() / puck.length()
+	if moves < 1e-4:
+		return puck
+	var made_up: float = GoaliePushRules.cruise_reach(motor.footwork.shuffle_speed, motor.footwork.accel,
+			pull / KeeperPlayRead.BLADE_M_S - play.delay_s)
+	return puck - across * held * clampf(1.0 - made_up / moves, 0.0, 1.0) * HEDGE_SHARE
 
 
 # His spot on his feet for the puck at `puck`, in its zone.
