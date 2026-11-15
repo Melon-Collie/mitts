@@ -1542,6 +1542,16 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 			var approach_len: float = approach.length()
 			if approach_len > AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M:
 				target -= approach * (AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M / approach_len)
+		# A puck beside or behind our net, clear of our mouth, is come to round the
+		# keep-out of it, as a carrier skates it: straight in past our post at pace,
+		# the pickup carries the puck across our goal line with the body. One in
+		# the mouth is gone straight for: that is the puck most worth getting to.
+		if carrier_pid == -1 and self_state2 != null \
+				and not AINetObstacle.carried_puck_in_own_mouth(puck_pos, Vector3.ZERO,
+						_own_goal_dir, 0.0) \
+				and AINetObstacle.carry_path_enters_own_keep_out(self_pos, target, _own_goal_dir):
+			target = AIArrival.cage_waypoint(self_pos, target, self_vel_3d, _self_max_speed,
+					_chase_max_accel, _self_lateral_grip, _own_goal_dir)
 		# Every target above is built off the PUCK, whose path can ride ice a
 		# skater's centre never reaches (the contested overshoot can even land
 		# inside the glass), and steering at it grinds the body into the boards.
@@ -2028,7 +2038,21 @@ func _arc_step_mouse_target(self_pos: Vector3, final_target: Vector3,
 		if signf(back) == signf(step):
 			step = signf(step) * minf(absf(step), maxf(absf(back) - TURN_ROUND_BACK_MARGIN_RAD, 0.0))
 	var stepped_angle: float = current_angle + step
-	return self_pos + Vector3(sin(stepped_angle), 0.0, cos(stepped_angle)) * ring_radius
+	var stepped: Vector3 = self_pos + Vector3(sin(stepped_angle), 0.0, cos(stepped_angle)) \
+			* ring_radius
+	# A carrier swings the puck round the side away from our own mouth: either
+	# way round reaches the target, and the one through the mouth drags the puck
+	# along our goal line (AINetObstacle.carried_puck_in_own_mouth).
+	if step != 0.0 and _current_snapshot != null \
+			and _current_snapshot.real_puck_carrier_peer_id == _peer_id \
+			and AINetObstacle.carried_puck_in_own_mouth(stepped, Vector3.ZERO, _own_goal_dir, 0.0):
+		var other_angle: float = current_angle - step
+		var other: Vector3 = self_pos + Vector3(sin(other_angle), 0.0, cos(other_angle)) \
+				* ring_radius
+		if not AINetObstacle.carried_puck_in_own_mouth(other, Vector3.ZERO, _own_goal_dir, 0.0):
+			_arc_protect_sign = -signf(step)
+			return other
+	return stepped
 
 
 # FACE-mode cursor placement: a point on the body ring straight at the target.

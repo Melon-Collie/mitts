@@ -174,8 +174,13 @@ our cage and past our posts is skated at its edge (`AIArrival.cage_waypoint`
 with his own goal, `carry_path_enters_own_keep_out`), and he walks out from
 behind our net that wide. And a carrier whose stop would run into our own
 crease brakes (`AISteering.stops_in_own_crease`, after the dispatch): the repel
-steers but sheds no momentum. A loose-puck chaser does not: a puck loose in our
-crease is the one most worth getting to. `test_own_goal_guards.gd` replays the
+steers but sheds no momentum. A loose-puck chaser does not brake: a puck loose
+in our crease is the one most worth getting to, and is gone straight for. One
+beside or behind our net, clear of the mouth, is come to round the keep-out
+(`_state_chase_puck`, the same cage waypoint): straight in past our post at
+pace, the pickup carries the puck across our line with the body. And a
+carrier's cursor swinging round his body takes the way that keeps out of our
+mouth (`_arc_step_mouse_target`). `test_own_goal_guards.gd` replays the
 own goals `tools/own_goal_hunt.gd` caught.
 
 **A charged release comes from a listed spot, and is loaded before the press.**

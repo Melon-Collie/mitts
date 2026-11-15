@@ -372,3 +372,33 @@ func test_a_release_through_our_own_mouth_is_refused_and_others_are_not() -> voi
 			Vector3(1.0, 0.0, 0.0), OWN), "behind the cage: it meets the back of it")
 	assert_false(AINetObstacle.release_into_own_net(Vector3(0.0, 0.0, -line + OWN * 1.0),
 			Vector3(0.0, 0.0, -OWN), OWN), "at their net it is a shot")
+
+
+func test_a_loose_puck_beside_our_post_is_come_to_round_the_keep_out() -> void:
+	# Measured: from the corner at pace straight to a puck just behind our post,
+	# the pickup carried it on across our goal line with the body.
+	var puck := Vector3(1.3, 0.0, _line_z() + OWN * 0.2)
+	var me := Vector3(5.0, 0.0, _line_z() - OWN * 3.0)
+	var vel: Vector3 = (puck - me).normalized() * 5.0
+	var s := WorldSnapshot.new()
+	s.skater_states[SELF_ID] = _skater(me, vel, Vector2(vel.x, vel.z).normalized())
+	s.skater_states[OPP_ID] = _skater(Vector3(-4.0, 0.0, 0.0), Vector3.ZERO, Vector2(0.0, OWN))
+	s.puck_state = PuckNetworkState.new()
+	s.puck_state.position = puck
+	s.puck_state.carrier_peer_id = -1
+	s.real_puck_carrier_peer_id = -1
+	s.teammate_ids_by_team[0] = [SELF_ID]
+	s.teammate_ids_by_team[1] = [OPP_ID]
+	s.closest_to_puck_by_team[0] = SELF_ID
+	s.closest_to_puck_by_team[1] = OPP_ID
+	var agent := SkaterAgent.new()
+	agent.setup(SELF_ID, 0, TeamBrain.new(0, _team_map), _team_map, false)
+	var input: InputState = null
+	for i: int in 3:
+		input = agent.tick(s, 1.0 / 90.0, float(i) / 90.0)
+	assert_eq(agent.get_state(), SkaterAgentStateMachine.State.CHASE_PUCK)
+	var move := Vector3(input.move_vector.x, 0.0, input.move_vector.y)
+	var straight: Vector3 = (puck - me).normalized()
+	var wide: Vector3 = (AIArrival.cage_waypoint(me, puck, vel, 8.0, 5.0, 1.0, OWN) - me).normalized()
+	assert_gt(move.dot(wide), move.dot(straight),
+			"steering for the wide way round: move %s, wide %s, straight %s" % [move, wide, straight])
