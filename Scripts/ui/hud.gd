@@ -219,23 +219,21 @@ func _spectator_controls_hint() -> String:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var menu_open: bool = _confirm_dialog.visible or _pause_menu.visible or _side_menu.visible
-	# Pad ping: the rebindable pad button (PlayerPrefs.pad_button). Only fires — and
-	# only consumes — when no menu owns the screen, so the D-pad still navigates an
-	# open menu (which the GUI would have consumed before this anyway).
-	var pad_ping: bool = InputDeviceTracker.is_gamepad_active() and not menu_open \
-			and event is InputEventJoypadButton and event.pressed \
+	# Smart ping: down previews the call, up sends it (GameManager owns the
+	# gating). A menu taking the screen calls a held one off, and the pad's
+	# button (rebindable, PlayerPrefs.pad_button) is left to the menu while one
+	# is open: the D-pad navigates it.
+	var pad_ping: bool = InputDeviceTracker.is_gamepad_active() \
+			and event is InputEventJoypadButton \
 			and (event as InputEventJoypadButton).button_index == PlayerPrefs.pad_button("smart_ping")
-	if pad_ping:
-		GameManager.try_send_smart_ping()
-		get_viewport().set_input_as_handled()
-		return
-	if event.is_action_pressed(&"smart_ping"):
-		# Context-sensitive team ping (chat bubble + bot directive). Resolution
-		# and all gating (spectator/replay/cooldown/no-op contexts) live in
-		# GameManager.try_send_smart_ping; the HUD only swallows the press when
-		# a menu owns the screen.
+	if event.is_action_released(&"smart_ping") or (pad_ping and not event.is_pressed()):
+		GameManager.end_smart_ping(not menu_open)
+		if not (pad_ping and menu_open):
+			get_viewport().set_input_as_handled()
+			return
+	elif event.is_action_pressed(&"smart_ping") or (pad_ping and not menu_open):
 		if not menu_open:
-			GameManager.try_send_smart_ping()
+			GameManager.begin_smart_ping()
 		get_viewport().set_input_as_handled()
 		return
 	# Save the goal clip as a GIF: F (keyboard) or pad X. Consumes the press only

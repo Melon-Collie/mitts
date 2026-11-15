@@ -29,6 +29,9 @@ enum Type {
 # key and the display seam localizes it (tr() in GameManager's ping handler),
 # which also keeps the wire carrying only the enum int. English/Spanish copy
 # lives in locale/translations.csv.
+# The obeying bot's answer (see acknowledges).
+const ACK_MESSAGE_KEY: String = "PING_ACK"
+
 const _MESSAGE_KEYS: Array[String] = [
 	"PING_PASS_TO_ME",
 	"PING_IM_OPEN",
@@ -169,6 +172,13 @@ static func choose_obeyer(type: int, target_peer: int, world_pos: Vector3,
 			return _nearest_bot(world_pos, bot_peers, skater_positions,
 					pinger_peer, carrier_peer_id)
 	return -1
+
+
+# Whether the bot `choose_obeyer` picked answers the ping out loud. Only an
+# order he will carry out: a shot call is a bias the carrier's own read can
+# still refuse, and an answer followed by no shot would be a lie.
+static func acknowledges(type: int, obeyer_peer: int) -> bool:
+	return obeyer_peer != -1 and type != Type.SHOOT
 
 
 # The translation key for a ping type's bubble text; "" for an out-of-range

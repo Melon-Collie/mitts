@@ -33,6 +33,8 @@ const _LINK_ALPHA: float = 0.75
 # between two things this close.
 const _LINK_SOURCE_GAP_M: float = 0.9
 const _LINK_MIN_M: float = 0.8
+# A held marker is a ping not sent yet: fainter than one that was, and still.
+const _HELD_ALPHA: float = 0.8
 
 var _follow: Node3D = null
 var _follows: bool = false
@@ -40,6 +42,8 @@ var _source: Node3D = null
 var _hold_s: float = 0.0
 var _age: float = 0.0
 var _outer_r: float = _SPOT_OUTER_R
+var _held: bool = false
+var _held_scale: float = 1.0
 
 var _ring_root: Node3D = null
 var _ripple: MeshInstance3D = null
@@ -67,6 +71,35 @@ static func on_node(follow: Node3D, source: Node3D, hold_s: float) -> PingMarker
 	marker._follows = true
 	marker._build(source, hold_s, _TARGET_INNER_R, _TARGET_OUTER_R, false)
 	return marker
+
+
+# A marker with no life of its own. Its owner aims it every frame it is shown
+# (aim_at_spot / aim_at_node) and frees it.
+static func held() -> PingMarker:
+	var marker := PingMarker.new()
+	marker._held = true
+	marker._build(null, INF, _TARGET_INNER_R, _TARGET_OUTER_R, false)
+	return marker
+
+
+func aim_at_spot(pos: Vector3) -> void:
+	_follow = null
+	_follows = false
+	_held_scale = _SPOT_OUTER_R / _TARGET_OUTER_R
+	global_position = Vector3(pos.x, 0.0, pos.z)
+	_animate()
+
+
+func aim_at_node(node: Node3D) -> void:
+	_follow = node
+	_follows = true
+	_held_scale = 1.0
+	_animate()
+
+
+# The ring's outer radius as a held marker draws it.
+func held_radius() -> float:
+	return _TARGET_OUTER_R * _held_scale
 
 
 func _build(source: Node3D, hold_s: float, inner_r: float, outer_r: float,
@@ -103,6 +136,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _held:
+		return
 	_age += delta
 	if _age >= _hold_s + _FADE_S or NetworkManager.is_replay_mode() \
 			or (_follows and not is_instance_valid(_follow)):
@@ -113,8 +148,13 @@ func _process(delta: float) -> void:
 
 func _animate() -> void:
 	if _follows:
-		var at: Vector3 = _ground_of(_follow)
+		var at: Vector3 = ground_of(_follow)
 		global_position = Vector3(at.x, 0.0, at.z)
+	if _held:
+		_ring_root.scale = Vector3(_held_scale, 1.0, _held_scale)
+		_accent_mat.albedo_color.a = _HELD_ALPHA
+		_rim_mat.albedo_color.a = MenuStyle.HUD_OPACITY * _HELD_ALPHA
+		return
 	var fade: float = 1.0 - clampf((_age - _hold_s) / _FADE_S, 0.0, 1.0)
 	var drop_t: float = clampf(_age / _DROP_S, 0.0, 1.0)
 	var eased: float = 1.0 - (1.0 - drop_t) * (1.0 - drop_t)
@@ -138,7 +178,7 @@ func _place_link(alpha: float) -> void:
 	if not is_instance_valid(_source):
 		_link.visible = false
 		return
-	var from: Vector3 = _ground_of(_source)
+	var from: Vector3 = ground_of(_source)
 	var to: Vector3 = global_position
 	var span := Vector3(to.x - from.x, 0.0, to.z - from.z)
 	var length: float = span.length() - _LINK_SOURCE_GAP_M - _outer_r
@@ -155,7 +195,7 @@ func _place_link(alpha: float) -> void:
 
 # Where `node` is DRAWN this frame, which for a skater or the puck is between
 # ticks.
-static func _ground_of(node: Node3D) -> Vector3:
+static func ground_of(node: Node3D) -> Vector3:
 	var skater := node as Skater
 	if skater != null:
 		return skater.render_transform().origin

@@ -2500,6 +2500,7 @@ func _wire_sound_signals() -> void:
 		func(pos: Vector3, spd: float) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, pos, _puck_speed_volume(spd), 0.06))
 	NetworkManager.body_check_landed.connect(_on_body_check_landed)
 	NetworkManager.smart_ping_received.connect(_on_smart_ping_received)
+	NetworkManager.smart_ping_acknowledged.connect(_on_smart_ping_acknowledged)
 	NetworkManager.stick_lift_received.connect(
 		func(pos: Vector3, spd: float) -> void:
 			SoundManager.play_world(SoundManager.Sound.STICK_LIFT, pos, _puck_speed_volume(spd), 0.06)
@@ -6435,9 +6436,10 @@ func get_players() -> Dictionary[int, PlayerRecord]:
 
 
 # ── Smart ping (context-sensitive team message) ──────────────────────────────
-# HUD input → try_send_smart_ping resolves the local cursor context
-# (PingRules.resolve on the pinger's rendered world) and hands the tiny
-# resolved payload to NetworkManager's vote-shaped relay. Every peer's
+# HUD input → begin_smart_ping previews the call while the key is down, and
+# end_smart_ping resolves the local cursor context (PingRules.resolve on the
+# pinger's rendered world) and hands the tiny resolved payload to
+# NetworkManager's vote-shaped relay. Every peer's
 # smart_ping_received then lands in _on_smart_ping_received: teammates see
 # the bubble / marker, and the host routes the bot directive into the
 # pinger's TeamBrain.
@@ -6445,30 +6447,70 @@ func get_players() -> Dictionary[int, PlayerRecord]:
 # A marker on a skater or the puck stands as long as the words over the pinger.
 const _PING_MARKER_HOLD_S: float = 2.4
 const _PING_TAP_GAP_S: float = 0.11
+const _PING_ACK_DELAY_S: float = 0.35
 
-func try_send_smart_ping() -> void:
-	if NetworkManager.is_replay_mode() or is_local_spectator():
+var _ping_preview: PingPreview = null
+
+# The ping key down: the call it would make is previewed until it comes up.
+func begin_smart_ping() -> void:
+	var scene_root: Node = get_tree().current_scene
+	if scene_root == null:
 		return
+	if not is_instance_valid(_ping_preview):
+		_ping_preview = PingPreview.new()
+		_ping_preview.setup(_resolve_local_ping,
+				func(res: PingRules.Resolution) -> Node3D:
+					return _ping_subject(res.type, res.target_peer))
+		scene_root.add_child(_ping_preview)
+	_ping_preview.open()
+
+
+# The ping key up. `send` false calls it off (a menu took the screen), and a
+# release that no press here began is not a ping.
+func end_smart_ping(send: bool) -> void:
+	if not is_instance_valid(_ping_preview) or not _ping_preview.is_open():
+		return
+	_ping_preview.close()
+	if not send:
+		return
+	var res: PingRules.Resolution = _resolve_local_ping()
+	if res != null:
+		NetworkManager.send_smart_ping(res.type, res.target_peer, res.world_pos)
+
+
+# What the local player's ping would say right now, on this machine's view of
+# the play; null when he cannot ping or it would say nothing.
+func _resolve_local_ping() -> PingRules.Resolution:
+	if _registry == null or NetworkManager.is_replay_mode() or is_local_spectator():
+		return null
 	var rec: PlayerRecord = get_local_player()
 	if rec == null or rec.skater == null:
-		return
+		return null
 	var lc := rec.controller as LocalController
 	if lc == null:
-		return
+		return null
 	var input: InputState = lc.get_current_input()
 	if input == null:
-		return
+		return null
 	var my_team: int = _registry.team_id_by_peer.get(rec.peer_id, -1)
 	if my_team == -1:
-		return
-	var res: PingRules.Resolution = PingRules.resolve(
+		return null
+	return PingRules.resolve(
 			input.mouse_world_pos, rec.peer_id, my_team,
 			_collect_skater_positions(), _registry.team_id_by_peer,
 			get_puck_carrier_peer_id(),
 			puck.global_position if puck != null else Vector3.ZERO)
-	if res == null:
-		return
-	NetworkManager.send_smart_ping(res.type, res.target_peer, res.world_pos)
+
+
+# The skater or puck a ping marks, null when it marks a spot or nothing.
+func _ping_subject(ping_type: int, target_peer_id: int) -> Node3D:
+	var target_rec: PlayerRecord = _registry.get_record(target_peer_id) \
+			if target_peer_id != -1 else null
+	if target_rec != null and target_rec.skater != null:
+		return target_rec.skater
+	if ping_type == PingRules.Type.GET_PUCK:
+		return puck
+	return null
 
 
 func _on_smart_ping_received(sender_peer_id: int, ping_type: int,
@@ -6490,7 +6532,8 @@ func _on_smart_ping_received(sender_peer_id: int, ping_type: int,
 	# Display is team-only: a ping is a team message, and hiding it from the
 	# opponents keeps "Pass to me!" from telegraphing the play.
 	var local_team: int = _registry.team_id_by_peer.get(NetworkManager.local_peer_id(), -1)
-	if local_team == sender_team and not NetworkManager.is_replay_mode():
+	if local_team == sender_team and not NetworkManager.is_replay_mode() \
+			and _shows_pings_from(sender_peer_id):
 		_draw_ping(sender_peer_id, ping_type, target_peer_id, world_pos)
 		_play_ping_taps()
 
@@ -6514,6 +6557,31 @@ func _on_smart_ping_received(sender_peer_id: int, ping_type: int,
 			bot_peers, positions)
 	_ai_coordinator.queue_ping(
 			sender_team, ping_type, sender_peer_id, target_peer_id, obeyer, world_pos)
+	if PingRules.acknowledges(ping_type, obeyer):
+		NetworkManager.send_smart_ping_ack(obeyer, sender_peer_id)
+
+
+func _shows_pings_from(pinger_peer_id: int) -> bool:
+	return PlayerPrefs.teammate_pings_enabled \
+			or pinger_peer_id == NetworkManager.local_peer_id()
+
+
+# The obeying bot answers a beat after the call, as a man would, and with one
+# rap of the stick to the call's two.
+func _on_smart_ping_acknowledged(obeyer_peer_id: int, pinger_peer_id: int) -> void:
+	if _registry == null or NetworkManager.is_replay_mode() \
+			or not _shows_pings_from(pinger_peer_id):
+		return
+	var local_team: int = _registry.team_id_by_peer.get(NetworkManager.local_peer_id(), -1)
+	if local_team == -1 or _registry.team_id_by_peer.get(obeyer_peer_id, -1) != local_team:
+		return
+	get_tree().create_timer(_PING_ACK_DELAY_S).timeout.connect(func() -> void:
+		var obeyer: PlayerRecord = _registry.get_record(obeyer_peer_id) \
+				if _registry != null else null
+		if obeyer == null or obeyer.skater == null or NetworkManager.is_replay_mode():
+			return
+		obeyer.skater.show_ping_bubble(tr(PingRules.ACK_MESSAGE_KEY))
+		SoundManager.play_ui(SoundManager.Sound.STICK_TAP))
 
 
 # Every skater a ping can name or order, by peer. One in the penalty box is
@@ -6547,16 +6615,12 @@ func _draw_ping(sender_peer_id: int, ping_type: int, target_peer_id: int,
 		return
 	var pinger: Skater = sender_rec.skater
 	pinger.show_ping_bubble(tr(PingRules.message_key_for(ping_type)))
-	var target_rec: PlayerRecord = _registry.get_record(target_peer_id) \
-			if target_peer_id != -1 else null
+	var subject: Node3D = _ping_subject(ping_type, target_peer_id)
 	if ping_type == PingRules.Type.GO_THERE:
 		scene_root.add_child(PingMarker.at_spot(world_pos, pinger,
 				PingRules.directive_duration_s(ping_type)))
-	elif target_rec != null and target_rec.skater != null:
-		scene_root.add_child(PingMarker.on_node(
-				target_rec.skater, pinger, _PING_MARKER_HOLD_S))
-	elif ping_type == PingRules.Type.GET_PUCK and puck != null:
-		scene_root.add_child(PingMarker.on_node(puck, pinger, _PING_MARKER_HOLD_S))
+	elif subject != null:
+		scene_root.add_child(PingMarker.on_node(subject, pinger, _PING_MARKER_HOLD_S))
 
 
 func get_period_duration() -> float:

@@ -48,8 +48,10 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "penalty_box_view_home", "stage": _STAGE_FREE_PLAY, "open": "_show_penalty_box_view", "arg": 0},
 	{"name": "penalty_box_view_away", "stage": _STAGE_FREE_PLAY, "open": "_show_penalty_box_view", "arg": 1},
 	{"name": "post_game_analytics", "stage": _STAGE_FREE_PLAY, "open": "_open_post_game_analytics"},
-	# Last in its stage: its puppets stay on the ice.
-	{"name": "hud_pings", "stage": _STAGE_FREE_PLAY, "open": "_show_pings"},
+	# Last in their stage: their puppets stay on the ice.
+	{"name": "hud_ping_preview", "stage": _STAGE_FREE_PLAY, "open": "_show_ping_preview"},
+	{"name": "hud_ping_target", "stage": _STAGE_FREE_PLAY, "open": "_show_ping", "arg": false},
+	{"name": "hud_ping_spot", "stage": _STAGE_FREE_PLAY, "open": "_show_ping", "arg": true},
 	{"name": "hud_tutorial", "stage": _STAGE_TUTORIAL, "open": "_open_nothing"},
 	{"name": "lobby", "stage": _STAGE_LOBBY, "open": "_open_nothing"},
 	# A tournament lobby opens on its bracket; these run in bracket order, each
@@ -87,6 +89,9 @@ const _MAX_DISMISS_PRESSES: int = 6
 const _TOURNAMENT_SEED: int = 7
 
 var _box_seat: PenaltyBoxCamera = null
+# The ping shots' puppets, spawned by the first of them.
+var _ping_opponent: PlayerRecord = null
+var _ping_teammate: PlayerRecord = null
 var _out_dir: String = ""
 var _stage: String = ""
 var _shot_ok: bool = true
@@ -511,29 +516,44 @@ func _leave_the_box_seat() -> void:
 		_box_seat = null
 
 
-# Both kinds of smart ping as a teammate's screen draws them: the player's call
-# on an opponent, and a teammate's on open ice. Emitted as NetworkManager hands
-# them over, so nothing here waits on a cooldown.
-func _show_pings() -> void:
+# The ping key held down: the call it would make, before it is sent.
+func _show_ping_preview() -> void:
 	_close_side_menu()
 	_leave_the_box_seat()
+	GameManager.begin_smart_ping()
+
+
+# The player's smart ping as his team's screens draw it, emitted as
+# NetworkManager hands it over so nothing here waits on a cooldown: a call on
+# an opponent, or (`spot`) one on open ice with a bot teammate answering it.
+func _show_ping(spot: bool) -> void:
+	_close_side_menu()
+	_leave_the_box_seat()
+	GameManager.end_smart_ping(false)
 	var me: PlayerRecord = GameManager.get_local_player()
 	if me == null or me.skater == null:
 		_fail("free play has no local skater")
 		return
 	var at: Vector3 = me.skater.global_position
-	var opponent: PlayerRecord = GameManager.spawn_tutorial_bot(
-			at + Vector3(3.5, 0.0, -2.5), 0, 1)
-	var teammate: PlayerRecord = GameManager.spawn_tutorial_bot(
-			at + Vector3(-4.0, 0.0, -1.0), 1, 0)
-	if opponent == null or teammate == null:
-		_fail("could not spawn the ping shot's puppets")
+	if _ping_opponent == null:
+		_ping_opponent = GameManager.spawn_tutorial_bot(at + Vector3(3.5, 0.0, -2.5), 0, 1)
+		_ping_teammate = GameManager.spawn_tutorial_bot(at + Vector3(-4.0, 0.0, -1.0), 1, 0)
+		await _settle(_SHOT_SETTLE_FRAMES, 0.3)
+	if _ping_opponent == null or _ping_teammate == null:
+		_fail("could not spawn the ping shots' puppets")
 		return
-	await _settle(_SHOT_SETTLE_FRAMES, 0.3)
-	NetworkManager.smart_ping_received.emit(me.peer_id, PingRules.Type.COVER_HIM,
-			opponent.peer_id, opponent.skater.global_position)
-	NetworkManager.smart_ping_received.emit(teammate.peer_id, PingRules.Type.GO_THERE,
-			-1, at + Vector3(-1.5, 0.0, -5.0))
+	for node: Node in get_tree().current_scene.get_children():
+		if node is PingMarker:
+			node.queue_free()
+	if spot:
+		NetworkManager.smart_ping_received.emit(me.peer_id, PingRules.Type.GO_THERE,
+				-1, at + Vector3(-1.5, 0.0, -5.0))
+		NetworkManager.smart_ping_acknowledged.emit(_ping_teammate.peer_id, me.peer_id)
+		# The answer comes a beat late and pops in: let it land.
+		await _settle(_SHOT_SETTLE_FRAMES, 1.0)
+	else:
+		NetworkManager.smart_ping_received.emit(me.peer_id, PingRules.Type.COVER_HIM,
+				_ping_opponent.peer_id, _ping_opponent.skater.global_position)
 
 
 func _open_post_game_analytics() -> void:

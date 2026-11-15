@@ -23,7 +23,7 @@ func _body_of(func_name: String) -> String:
 
 
 func test_the_send_path_resolves_against_the_carrier_this_machine_sees() -> void:
-	var body: String = _body_of("try_send_smart_ping")
+	var body: String = _body_of("_resolve_local_ping")
 	assert_true(body.contains("get_puck_carrier_peer_id()"),
 			"resolve through the peer-agnostic carrier")
 	assert_false(body.contains(".get_carrier_peer_id()"),

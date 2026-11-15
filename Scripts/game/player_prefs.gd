@@ -358,6 +358,9 @@ var self_beacon_mode: int = BEACON_MODE_SMART
 var carrier_ring_cue_enabled: bool = true
 var possession_pulse_enabled: bool = true
 var loose_puck_halo_enabled: bool = true
+# Whether other players' smart pings are drawn and heard here. The player's own
+# pings and a bot's answer to them always are, and bots obey either way.
+var teammate_pings_enabled: bool = true
 
 # Bot difficulty. Index matches BotSkillProfile.Difficulty and the OptionButton
 # ordering wherever the menu exposes it.
@@ -608,6 +611,7 @@ func save() -> void:
 	cfg.set_value("game", "carrier_ring_cue_enabled", carrier_ring_cue_enabled)
 	cfg.set_value("game", "possession_pulse_enabled", possession_pulse_enabled)
 	cfg.set_value("game", "loose_puck_halo_enabled", loose_puck_halo_enabled)
+	cfg.set_value("game", "teammate_pings_enabled", teammate_pings_enabled)
 	cfg.set_value("game", "screen_flash", screen_flash)
 	cfg.set_value("game", "screen_shake", screen_shake)
 	cfg.set_value("game", "camera_tilt_deg", camera_tilt_deg)
@@ -1239,6 +1243,7 @@ func _load() -> void:
 		carrier_ring_cue_enabled = bool(cfg.get_value("game", "carrier_ring_cue_enabled", cues_default))
 		possession_pulse_enabled = bool(cfg.get_value("game", "possession_pulse_enabled", cues_default))
 		loose_puck_halo_enabled = bool(cfg.get_value("game", "loose_puck_halo_enabled", cues_default))
+		teammate_pings_enabled = bool(cfg.get_value("game", "teammate_pings_enabled", true))
 		screen_flash = cfg.get_value("game", "screen_flash", true)
 		screen_shake = cfg.get_value("game", "screen_shake", true)
 		camera_tilt_deg = clampf(cfg.get_value("game", "camera_tilt_deg", CAMERA_TILT_DEFAULT), CAMERA_TILT_MIN, CAMERA_TILT_MAX)

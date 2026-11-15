@@ -27,6 +27,8 @@ const _TAIL_H: float = 0.16
 const _TAIL_HALF_W: float = 0.10
 const _EDGE: float = 0.03
 const _PLATE_ALPHA: float = 0.92
+# A held call is one not made yet, and drawn fainter than one that was.
+const _HELD_ALPHA: float = 0.8
 
 var _label: Label3D = null
 var _plate: MeshInstance3D = null
@@ -35,6 +37,7 @@ var _plate_mat: StandardMaterial3D = null
 var _edge_mat: StandardMaterial3D = null
 var _time_left: float = 0.0
 var _age: float = 0.0
+var _held: bool = false
 
 
 func _init() -> void:
@@ -64,6 +67,36 @@ func _init() -> void:
 
 
 func say(text: String) -> void:
+	_lay_out(text)
+	_held = false
+	_time_left = _HOLD_S + _FADE_S
+	_age = 0.0
+	visible = true
+	_apply(0.0)
+
+
+# Shows `text` with no time of its own, until dismissed or replaced.
+func hold(text: String) -> void:
+	if not _held or _label.text != text:
+		_lay_out(text)
+	_held = true
+	_time_left = 0.0
+	visible = true
+	scale = Vector3.ONE
+	_set_alpha(_HELD_ALPHA)
+
+
+func dismiss() -> void:
+	_held = false
+	_time_left = 0.0
+	visible = false
+
+
+func is_live() -> bool:
+	return _held or _time_left > 0.0
+
+
+func _lay_out(text: String) -> void:
 	_label.text = text
 	var text_px: Vector2 = MenuStyle.NAME_FONT.get_string_size(
 			text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, _FONT_SIZE)
@@ -73,19 +106,6 @@ func say(text: String) -> void:
 	_label.offset = Vector2(0.0, centre_y / _PIXEL_SIZE)
 	_plate.mesh = _bubble_mesh(half_w, half_h, centre_y, 0.0)
 	_edge.mesh = _bubble_mesh(half_w, half_h, centre_y, _EDGE)
-	_time_left = _HOLD_S + _FADE_S
-	_age = 0.0
-	visible = true
-	_apply(0.0)
-
-
-func dismiss() -> void:
-	_time_left = 0.0
-	visible = false
-
-
-func is_live() -> bool:
-	return _time_left > 0.0
 
 
 func _process(delta: float) -> void:
@@ -100,12 +120,15 @@ func _apply(delta: float) -> void:
 	if _time_left <= 0.0:
 		visible = false
 		return
-	var alpha: float = clampf(_time_left / _FADE_S, 0.0, 1.0)
+	_set_alpha(clampf(_time_left / _FADE_S, 0.0, 1.0))
+	var pop: float = _pop_scale(_age / _POP_S)
+	scale = Vector3(pop, pop, pop)
+
+
+func _set_alpha(alpha: float) -> void:
 	_label.modulate.a = alpha
 	_plate_mat.albedo_color.a = _PLATE_ALPHA * alpha
 	_edge_mat.albedo_color.a = alpha
-	var pop: float = _pop_scale(_age / _POP_S)
-	scale = Vector3(pop, pop, pop)
 
 
 # Out past full size and back: the overshoot is what catches the eye.

@@ -584,3 +584,8 @@ here whenever you bump, in the same format.
 #      its career row from the stats the host sends, so a v107 host would put
 #      two a minor into a v108 client's seconds, and mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged: no replay reader reads it.
+# v109: added notify_smart_ping_ack (reliable, host to all): the bot that took
+#      a smart ping as its order and the pinger, so every teammate's screen
+#      can show the bot answering. A new @rpc method shifts the rpc-config
+#      ordering, so mixed builds must be refused. Replay FORMAT_VERSION
+#      unchanged: pings are not recorded.
