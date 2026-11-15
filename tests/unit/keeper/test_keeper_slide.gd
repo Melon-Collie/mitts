@@ -356,6 +356,41 @@ func _butterfly() -> KeeperPose:
 	return p
 
 
+# A turn on his knees stopped part way: he turns no further, the push leg
+# folds back down in its own time, sooner than the turn would have ended, and
+# nothing jumps.
+func test_a_turn_on_his_knees_stops_where_it_has_got_to() -> void:
+	for off: float in [deg_to_rad(70.0), deg_to_rad(-70.0)]:
+		_slide = KeeperSlide.new()
+		_slide.rotate_to(off)
+		var what: String = "%+.0f°" % rad_to_deg(off)
+		var t: float = 0.0
+		while not (_slide.turns() and absf(_slide.yaw) > absf(off) * 0.3) and t < 2.0:
+			_slide.step(DT)
+			t += DT
+		assert_true(_slide.turns(), "%s: turning" % what)
+		var stopped_at: float = _slide.yaw
+		_slide.stop_turning()
+		_solve()
+		var was: Array[Vector3] = _bones()
+		var after: float = 0.0
+		while _slide.phase != KeeperSlide.Phase.DOWN and after < 2.0:
+			_slide.step(DT)
+			after += DT
+			_solve()
+			var at: Array[Vector3] = _bones()
+			for b: int in KeeperSkeleton.BONE_COUNT:
+				assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "%s %.3f s after bone %d" % [what, after, b])
+			was = at
+			assert_almost_eq(_slide.yaw, stopped_at, 1e-5, "%s: no further round" % what)
+		assert_true(_slide.is_settled(), "%s: down in the butterfly" % what)
+		assert_lte(after, KeeperSlide.FOLD_S + DT, "%s: in no longer than the leg takes to fold" % what)
+		assert_lt(t + after, _slide.rotate_time(off), "%s: sooner than the turn would have ended" % what)
+	_slide = KeeperSlide.new()
+	_slide.stop_turning()
+	assert_true(_slide.is_settled(), "at rest: nothing to stop")
+
+
 # Rotation on his knees: from the butterfly he turns to face where he is asked,
 # either way, in the rotation's time, staying on his spot, back in the
 # butterfly; the skate that drives it on the side he turns away from, planted

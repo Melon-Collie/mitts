@@ -354,6 +354,10 @@ func _step_mover(dt: float) -> void:
 			elif drop.state == KeeperDrop.State.DOWN:
 				_rest_on(Rest.DOWN)
 		Mover.SLIDE:
+			# A turn on his knees gives way to a goal he has to push for.
+			if slide.turns() and _goal and route.rest == Rest.DOWN \
+					and Vector2(x, z).distance_to(route.spot) > KeeperRoute.KNEE_REACH_M:
+				slide.stop_turning()
 			slide.step(dt)
 			x = slide.x
 			z = slide.z

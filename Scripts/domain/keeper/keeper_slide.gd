@@ -308,6 +308,23 @@ func leads_from_his_knees(side: float) -> bool:
 	return _from == From.BUTTERFLY and _side == side
 
 
+# Whether he is turning on his knees (`rotate_to`), the push leg coming back
+# down as he comes round.
+func turns() -> bool:
+	return _rotating and phase == Phase.TURN
+
+
+# The turn under way stopped where it has got to, the leg folding the rest of
+# the way down in its own time: a rotation commits him to nothing, and gives
+# way to a push the other way.
+func stop_turning() -> void:
+	if not turns():
+		return
+	_yaw_from = yaw
+	_yaw_to = yaw
+	_turn_s = FOLD_S
+
+
 # Down on his spot with the stop settled out of him: in the butterfly.
 # Down on his spot with the push leg folded back: the next move can go. The
 # lean back against the stop eases out of him over SETTLE_S whatever comes

@@ -302,6 +302,36 @@ func test_dropped_where_he_already_is_he_does_not_slide_on() -> void:
 			"a fraction of what his pads' friction alone would slide him")
 
 
+# Down and turning on his knees to a new facing, a goal he has to push for
+# stops the turn: the push starts sooner than the turn would have ended.
+func test_a_turn_on_his_knees_gives_way_to_a_push() -> void:
+	var started: Array[float] = []
+	for gives_way: bool in [false, true]:
+		_motor = KeeperMotor.new()
+		_motor.rest = R.DOWN
+		_motor.z = -1.0
+		_motor.go_to(Vector2(0.0, -1.0), deg_to_rad(80.0), R.DOWN)
+		var t: float = 0.0
+		while not _motor.slide.turns() and t < 1.0:
+			_motor.step(DT)
+			t += DT
+		assert_true(_motor.slide.turns(), "turning on his knees")
+		for i: int in 3:
+			_motor.step(DT)
+		if gives_way:
+			_motor.go_to(Vector2(-1.0, -1.0), 0.0, R.DOWN)
+		t = 0.0
+		while t < 2.0 and not (_motor.slides() and not _motor.slide.turns() and _motor.slide.phase != KeeperSlide.Phase.TURN \
+				and Vector2(_motor.x, _motor.z).distance_to(Vector2(0.0, -1.0)) > 0.05):
+			if not gives_way and _motor.is_idle():
+				_motor.go_to(Vector2(-1.0, -1.0), 0.0, R.DOWN)
+			_motor.step(DT)
+			t += DT
+			assert_eq(_motor.rest, R.DOWN, "on his knees throughout")
+		started.append(t)
+	assert_lt(started[1], started[0] - 2.0 * DT, "pushing sooner for having stopped the turn")
+
+
 # Dropped while he skates back, a goal across him rather than behind is a push
 # from where he lands: his edges take off the speed that was carrying him back
 # as he drops, and the push goes as he lands.
