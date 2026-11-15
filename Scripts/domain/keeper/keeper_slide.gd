@@ -325,6 +325,33 @@ func stop_turning() -> void:
 	_turn_s = FOLD_S
 
 
+# Whether he is loaded, or loading, for a push from the butterfly he has not
+# yet made.
+func loads() -> bool:
+	return phase == Phase.LOAD and _from == From.BUTTERFLY and not _rotating
+
+
+# Where the slide under way is going.
+func bound_for() -> Vector2:
+	return _origin + _heading * _target
+
+
+# The push he is loading for called off: turned as far as the load has
+# brought him, he comes round on the loaded skate to face `turn` instead, as a
+# rotation does, the leg folding down no quicker than it folds.
+func turn_instead(turn: float) -> void:
+	if not loads():
+		return
+	var off: float = wrapf(turn - yaw, -PI, PI)
+	_rotating = true
+	_yaw_from = yaw
+	_yaw_to = yaw + off
+	_turn_s = maxf(_turn_time(off), FOLD_S)
+	_origin = Vector2(x, z)
+	_target = 0.0
+	speed = 0.0
+
+
 # Down on his spot with the stop settled out of him: in the butterfly.
 # Down on his spot with the push leg folded back: the next move can go. The
 # lean back against the stop eases out of him over SETTLE_S whatever comes

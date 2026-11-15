@@ -302,6 +302,31 @@ func test_dropped_where_he_already_is_he_does_not_slide_on() -> void:
 			"a fraction of what his pads' friction alone would slide him")
 
 
+# Down and loading a push for a goal across from him, a goal that comes back to
+# where he is before the push is made calls it off: he turns to its facing on
+# his spot and is never pushed away from it.
+func test_a_push_not_yet_made_gives_way_to_a_goal_where_he_is() -> void:
+	_motor.rest = R.DOWN
+	_motor.z = -1.0
+	_motor.go_to(Vector2(0.9, -0.8), deg_to_rad(-20.0), R.DOWN)
+	var t: float = 0.0
+	while not _motor.slide.loads() and t < 1.0:
+		_motor.step(DT)
+		t += DT
+	assert_true(_motor.slide.loads(), "loading the push")
+	for i: int in 3:
+		_motor.step(DT)
+	_motor.go_to(Vector2(0.0, -1.0), deg_to_rad(30.0), R.DOWN)
+	t = 0.0
+	while not _motor.is_idle() and t < 3.0:
+		_motor.step(DT)
+		t += DT
+		assert_lt(Vector2(_motor.x, _motor.z).distance_to(Vector2(0.0, -1.0)), KeeperRoute.THERE_M, "never pushed off his spot")
+		assert_eq(_motor.rest, R.DOWN, "on his knees throughout")
+	assert_true(_motor.is_idle(), "at rest")
+	assert_almost_eq(_motor.yaw, deg_to_rad(30.0), KeeperRoute.DOWN_FACED_RAD, "turned to the goal's facing")
+
+
 # Down and turning on his knees to a new facing, a goal he has to push for
 # stops the turn: the push starts sooner than the turn would have ended.
 func test_a_turn_on_his_knees_gives_way_to_a_push() -> void:

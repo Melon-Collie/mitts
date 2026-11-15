@@ -391,6 +391,43 @@ func test_a_turn_on_his_knees_stops_where_it_has_got_to() -> void:
 	assert_true(_slide.is_settled(), "at rest: nothing to stop")
 
 
+# A push he is loading for called off before it is made: he never leaves his
+# spot, comes round from as far as the load had turned him to the facing asked
+# instead, and is down in the butterfly with nothing having jumped.
+func test_a_push_not_yet_made_is_called_off_for_a_turn() -> void:
+	for spot: Vector2 in [Vector2(0.1, 0.9), Vector2(-0.9, 0.2), Vector2(0.8, -0.1)]:
+		for asked: float in [deg_to_rad(35.0), 0.0, deg_to_rad(-50.0)]:
+			_slide = KeeperSlide.new()
+			var what: String = "to %s, asked %+.0f°" % [spot, rad_to_deg(asked)]
+			_slide.slide_to(spot)
+			assert_true(_slide.loads(), "%s: loading" % what)
+			assert_almost_eq(_slide.bound_for(), spot, Vector2.ONE * 1e-4, "%s: bound for it" % what)
+			for i: int in 5:
+				_slide.step(DT)
+			assert_true(_slide.loads(), "%s: still loading" % what)
+			_slide.turn_instead(asked)
+			assert_false(_slide.loads(), "%s: called off" % what)
+			_solve()
+			var was: Array[Vector3] = _bones()
+			var t: float = 0.0
+			while not _slide.is_settled() and t < 3.0:
+				_slide.step(DT)
+				t += DT
+				_solve()
+				var at: Array[Vector3] = _bones()
+				for b: int in KeeperSkeleton.BONE_COUNT:
+					assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "%s %.3f s bone %d" % [what, t, b])
+				was = at
+				assert_almost_eq(Vector2(_slide.x, _slide.z), Vector2.ZERO, Vector2.ONE * 1e-6, "%s: on his spot" % what)
+			assert_true(_slide.is_settled(), "%s: down in the butterfly" % what)
+			assert_almost_eq(wrapf(_slide.yaw - asked, -PI, PI), 0.0, 1e-4, "%s: facing as asked" % what)
+	_slide = KeeperSlide.new()
+	_slide.rotate_to(1.0)
+	_slide.turn_instead(0.0)
+	_run()
+	assert_almost_eq(_slide.yaw, 1.0, 1e-4, "a rotation is not a push to call off")
+
+
 # Rotation on his knees: from the butterfly he turns to face where he is asked,
 # either way, in the rotation's time, staying on his spot, back in the
 # butterfly; the skate that drives it on the side he turns away from, planted
