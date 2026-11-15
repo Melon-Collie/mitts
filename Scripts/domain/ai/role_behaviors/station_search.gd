@@ -117,6 +117,56 @@ static func fill_feed_values(ctx: RoleContext, carrier_pos: Vector3,
 				AIPuckLane.expected_pass_speed(carrier_pos, t), ctx.scratch_opp_caps, true))
 
 
+# Per defender (index-matched to the opponents fill_opened_values read), the
+# best feed to a teammate with him gone from the ice: what his leaving to cover a
+# man elsewhere opens. Refilled by fill_opened_values (one worker).
+static var _opened: Array[float] = []
+static var _opps_less: Array[Vector3] = []
+static var _caps_less: Array = []
+
+
+# What each of the defence's bodies holds shut in our carrier's feeds to
+# `teammates` (the one-timer off each, the carrier himself left out), read with
+# that body gone from the ice, into this file's scratch for drawn_open.
+# `opp_positions` and the context's scratch_opp_caps are the same men.
+static func fill_opened_values(ctx: RoleContext, carrier_pos: Vector3,
+		goalie_pos: Vector3, opp_positions: Array[Vector3],
+		teammates: Array[Vector3]) -> void:
+	_opened.clear()
+	for i: int in opp_positions.size():
+		_opps_less.clear()
+		_caps_less.clear()
+		for j: int in opp_positions.size():
+			if j == i:
+				continue
+			_opps_less.append(opp_positions[j])
+			_caps_less.append(ctx.scratch_opp_caps[j] if j < ctx.scratch_opp_caps.size() else null)
+		var best: float = 0.0
+		for t: Vector3 in teammates:
+			if Vector2(t.x - carrier_pos.x, t.z - carrier_pos.z).length() < 0.5:
+				continue
+			best = maxf(best, AIActionScoring.score_pass_value(carrier_pos, t,
+					ctx.attacking_goal_pos, goalie_pos, _opps_less,
+					AIPuckLane.expected_pass_speed(carrier_pos, t), _caps_less, true))
+		_opened.append(best)
+
+
+# What a man at `c` makes the defence give up elsewhere: the body nearest him
+# (of the `opp_positions` fill_opened_values read) is the one who comes to cover
+# him there, and his leaving opens the best feed without him. INF with nobody
+# to come.
+static func drawn_open(c: Vector3, opp_positions: Array[Vector3]) -> float:
+	var nearest: int = -1
+	var best_d2: float = INF
+	for i: int in mini(opp_positions.size(), _opened.size()):
+		var dx: float = c.x - opp_positions[i].x
+		var dz: float = c.z - opp_positions[i].z
+		if dx * dx + dz * dz < best_d2:
+			best_d2 = dx * dx + dz * dz
+			nearest = i
+	return _opened[nearest] if nearest >= 0 else INF
+
+
 # The best feed value (fill_feed_values) of a teammate within ONE_DEFENDER_SPAN_M
 # of `c`: what the carrier already has in the option a spot at `c` would share
 # with him. A spot is worth its own value less this. 0 with nobody in reach.

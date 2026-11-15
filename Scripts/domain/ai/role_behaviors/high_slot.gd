@@ -4,10 +4,10 @@ class_name AIRoleHighSlot
 # and docs/bot-net-front-offense-plan.md step 1 (the shape is the value's).
 #
 # He rotates up to a point either D has left (AIRoleDefenseman.rotate_up_to_point).
-# Otherwise he stands where the one-timer off the carrier's feed is worth most
-# (score_pass_value, the finisher's currency): anywhere from the bumper to the
-# circle tops and out to the weak flank, or down at the far post. The shared
-# station read (offensive_station_target) bounds the result.
+# Otherwise he stands where he adds most to the attack (_score): anywhere from the
+# bumper to the circle tops and out to the weak flank, or down at the far post,
+# and at the slot's top when no spot adds anything. The shared station read
+# (offensive_station_target) bounds the result.
 
 # The search grid: depths off the attacked goal line and weak-signed lateral
 # offsets (positive away from the puck's side — the seam is usually back across
@@ -54,14 +54,15 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	var teammates: Array[Vector3] = ctx.scratch_teammates
 	AIRoleReads.collect_teammates_excluding_self(ctx, teammates)
 	var goalie_pos: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
-	AIStationSearch.fill_feed_values(ctx, carrier_pos, goalie_pos, opp_positions, teammates)
+	AIStationSearch.fill_opened_values(ctx, carrier_pos, goalie_pos, opp_positions, teammates)
 
 	var weak: float = -ctx.strong_x
 	var tracing: bool = trace != null and trace.peer == ctx.peer_id
 	if tracing:
 		trace.clear()
+	# A spot worth nothing is no reason to leave the slot's top.
 	var best_pos: Vector3 = Vector3.INF
-	var best_score: float = -INF
+	var best_score: float = 0.0
 	for depth: float in GRID_DEPTHS_M:
 		for u: float in GRID_WEAK_U_M:
 			var c := Vector3(weak * u, 0.0, opp_net.z + own_dir * depth)
@@ -94,10 +95,11 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	return _through_station_read(ctx, d, best_pos)
 
 
-# What `c` adds: the one-timer off the carrier's feed there, less what a
-# teammate a defender could cover with it already offers
-# (AIStationSearch.shared_cover), plus the switch hysteresis; -INF where nobody
-# may stand.
+# What `c` adds to the attack: the defence either leaves him open there, which
+# concedes his one-timer off the carrier's feed, or sends the body nearest him to
+# cover him, which concedes what that body held shut (AIStationSearch
+# .drawn_open), so it concedes the lesser; plus the switch hysteresis. -INF where
+# nobody may stand.
 static func _score(ctx: RoleContext, c: Vector3, carrier_pos: Vector3,
 		goalie_pos: Vector3, opp_positions: Array[Vector3],
 		teammates: Array[Vector3]) -> float:
@@ -110,7 +112,7 @@ static func _score(ctx: RoleContext, c: Vector3, carrier_pos: Vector3,
 	var feed: float = AIActionScoring.score_pass_value(
 			carrier_pos, c, ctx.attacking_goal_pos, goalie_pos, opp_positions,
 			AIPuckLane.expected_pass_speed(carrier_pos, c), ctx.scratch_opp_caps, true)
-	return feed - AIStationSearch.shared_cover(c, teammates) \
+	return minf(feed, AIStationSearch.drawn_open(c, opp_positions)) \
 			+ AIStationSearch.incumbent_bonus(ctx, c)
 
 
