@@ -866,6 +866,25 @@ a facing unknown turning as ours. Slow tier green (counter layer +0.0 m, 6 of
 | net-front man first on | 22 | 23 |
 | xG / possession | 0.039 ± 0.005 | 0.042 ± 0.006 |
 
+**The arrival brake reads the glide** (`193d9ea`). Found by the reception
+measurement: a receiver side-stepping into his stance for a slow feed straight
+at him overshot it by 1.2 m, since under 3 m/s the brake assumed friction would
+settle him (the glide carries a body ~7.7 m from 2.8 m/s); past the stance the
+read gave the feed up and it slid by out of the zone. The brake now stands down
+only when the glide stops inside its margin of the anchor. It serves every
+station-keeping bot. J=11, 576:
+
+| | the turn race | + the glide brake |
+|---|---|---|
+| net-front man on his spot | 19% | 26% |
+| their man nearer, out of reach | 52% | 47% |
+| shots / possession | 0.307 | 0.325 |
+| slot shots / possession | 0.104 | 0.087 |
+| 2nd shots / shot | 0.141 | 0.139 |
+| xG / possession | 0.042 ± 0.006 | 0.037 ± 0.005 |
+
+The net front is held more often; the attack's numbers move within noise.
+
 ---
 
 ## Step 5 — Tips
