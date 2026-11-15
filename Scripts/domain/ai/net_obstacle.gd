@@ -225,6 +225,18 @@ static func release_into_own_net(from: Vector3, dir: Vector3, own_goal_dir: floa
 	return absf(at_x) < OWN_MOUTH_HALF_WIDTH_M
 
 
+# Whether the body's travel (`velocity`) carries the puck at `puck` over our goal
+# line inside our mouth within `horizon_s`: where the blade, held at its reach,
+# cannot take it out faster than the body takes it in.
+static func dragged_over_own_line(puck: Vector3, velocity: Vector3, own_goal_dir: float,
+		horizon_s: float) -> bool:
+	var in_front: float = (own_goal_dir * GameRules.GOAL_LINE_Z - puck.z) * own_goal_dir
+	var closing: float = velocity.z * own_goal_dir
+	if in_front < 0.0 or closing <= 0.0001 or in_front > closing * horizon_s:
+		return false
+	return absf(puck.x + velocity.x * (in_front / closing)) < OWN_MOUTH_HALF_WIDTH_M
+
+
 static func _crosses_own_mouth(from: Vector3, to: Vector3, own_goal_dir: float) -> bool:
 	var near_z: float = own_goal_dir * (GameRules.GOAL_LINE_Z - OWN_MOUTH_DEPTH_M)
 	var far_z: float = own_goal_dir * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH)

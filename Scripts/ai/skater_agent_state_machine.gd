@@ -1002,11 +1002,14 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 			_state_pass_pressed(input, snapshot, self_pos, have_puck)
 		State.ONE_TIMER_PRESSED:
 			_state_one_timer_pressed(input, snapshot, self_pos, have_puck)
-	# A carrier never skates his momentum into our own crease: the puck on his
-	# stick goes over the line with him. A chaser does: a loose puck in our
-	# crease is the one most worth getting to.
-	if carrying and self_state != null and AISteering.stops_in_own_crease(self_pos,
-			Vector2(self_state.velocity.x, self_state.velocity.z), _own_goal_dir):
+	# A carrier never skates his momentum into our own crease, nor drags the puck
+	# on his stick over our line with it: at its reach the blade cannot take the
+	# puck out faster than the body takes it in. A chaser does skate in: a loose
+	# puck in our crease is the one most worth getting to.
+	if carrying and self_state != null and (AISteering.stops_in_own_crease(self_pos,
+			Vector2(self_state.velocity.x, self_state.velocity.z), _own_goal_dir)
+			or AINetObstacle.dragged_over_own_line(_carried_puck_at(snapshot, self_state),
+					self_state.velocity, _own_goal_dir, _own_mouth_clear_s())):
 		input.brake = true
 		input.stance_held = false
 
@@ -2987,6 +2990,15 @@ func _step_mouse_face(target: Vector3) -> Vector3:
 	return _step_mouse_internal(target, _STEP_FACE, MOUSE_MAX_SPEED_M_S, MOUSE_ARC_RATE_RAD_S)
 
 
+# Where our carried puck is: on our own blade, read live (proprioception), or the
+# snapshot's puck before the controller has published the blade.
+func _carried_puck_at(snapshot: WorldSnapshot, self_state: SkaterNetworkState) -> Vector3:
+	var at: Vector3 = self_state.blade_contact_world
+	if at == Vector3.ZERO and snapshot.puck_state != null:
+		at = snapshot.puck_state.position
+	return at
+
+
 # The blade's time to sweep a carried puck across our whole goal mouth at its
 # slew: how far ahead the mouth guard reads the body's travel.
 func _own_mouth_clear_s() -> float:
@@ -3047,12 +3059,10 @@ func _step_mouse_internal(target: Vector3, mode: int,
 	# puck rides on our own blade, read live (proprioception), not the snapshot's.
 	if _current_snapshot != null and _current_self_state != null \
 			and _current_snapshot.real_puck_carrier_peer_id == _peer_id:
-		var puck_at: Vector3 = _current_self_state.blade_contact_world
-		if puck_at == Vector3.ZERO and _current_snapshot.puck_state != null:
-			puck_at = _current_snapshot.puck_state.position
 		target = AINetObstacle.own_mouth_safe_blade_target(_current_self_pos,
 				_current_self_state.velocity, _current_self_state.facing.normalized(), target,
-				_carry_floor_band, _own_goal_dir, _own_mouth_clear_s(), puck_at)
+				_carry_floor_band, _own_goal_dir, _own_mouth_clear_s(),
+				_carried_puck_at(_current_snapshot, _current_self_state))
 	# Cache the FINAL un-shaped target, mode and rates so skipped ticks re-shape
 	# fresh every physics frame, or a swing would take dispatch-period× too long.
 	_cached_aim_target = target

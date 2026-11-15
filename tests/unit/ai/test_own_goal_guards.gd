@@ -428,3 +428,18 @@ func test_a_loose_puck_behind_our_post_is_not_come_to_down_the_middle() -> void:
 		input = agent.tick(s, 1.0 / 90.0, float(i) / 90.0)
 	assert_lt(input.move_vector.x, -0.3,
 			"out toward the puck's post side, not down at the crease: %s" % input.move_vector)
+
+
+func test_a_carrier_whose_travel_drags_the_puck_over_our_line_brakes_and_others_do_not() -> void:
+	var line: float = _line_z()
+	# Measured: across the top of our crease at pace, the puck trailing his reach.
+	assert_true(AINetObstacle.dragged_over_own_line(Vector3(0.6, 0.0, line - OWN * 0.5),
+			Vector3(-3.7, 0.0, OWN * 3.6), OWN, HORIZON_S))
+	assert_false(AINetObstacle.dragged_over_own_line(Vector3(0.6, 0.0, line - OWN * 0.5),
+			Vector3(-3.7, 0.0, -OWN * 3.6), OWN, HORIZON_S), "skating it out of the crease")
+	assert_false(AINetObstacle.dragged_over_own_line(Vector3(2.5, 0.0, line - OWN * 0.3),
+			Vector3(0.0, 0.0, OWN * 4.0), OWN, HORIZON_S), "wide of the post")
+	assert_false(AINetObstacle.dragged_over_own_line(Vector3(0.6, 0.0, line - OWN * 4.0),
+			Vector3(0.0, 0.0, OWN * 4.0), OWN, HORIZON_S), "too far out to get there in time")
+	assert_false(AINetObstacle.dragged_over_own_line(Vector3(0.6, 0.0, -line + OWN * 0.5),
+			Vector3(0.0, 0.0, -OWN * 4.0), OWN, HORIZON_S), "at their net")
