@@ -333,7 +333,8 @@ func _after_their_touch(duel: Object) -> String:
 	var shape: String = "-"
 	var margin: float = NAN
 	var fc: Dictionary = {"f1_min": INF, "f1_reach_t": -1.0, "blade_min": INF,
-			"blade_reach_t": -1.0, "release_t": -1.0, "release": "-", "f1_state": "-"}
+			"blade_reach_t": -1.0, "release_t": -1.0, "release": "-", "f1_state": "-",
+			"f1_blade_min": INF, "strips": duel.strips, "strip_next": "", "after_strip": false}
 	var counts := Vector4(duel.strips, duel.lifts, duel.hit_strips, duel.contests)
 	var releases: int = duel.releases.size()
 	var end: String = "held"
@@ -352,10 +353,34 @@ func _after_their_touch(duel: Object) -> String:
 			end = "out %.2f" % t
 			break
 	var d := Vector4(duel.strips, duel.lifts, duel.hit_strips, duel.contests) - counts
-	gut.p("OZFC|%d|%s|%s|f1 %.2f@%.2f %s|blade %.2f@%.2f|release %s@%.2f|strip %d lift %d hit %d contest %d" % [
+	gut.p("OZFC|%d|%s|%s|f1 %.2f@%.2f %s|blade %.2f@%.2f|release %s@%.2f|strip %d lift %d hit %d contest %d|f1blade %.2f|next%s" % [
 			_run_index, shape, end, fc["f1_min"], fc["f1_reach_t"], fc["f1_state"], fc["blade_min"],
-			fc["blade_reach_t"], fc["release"], fc["release_t"], d.x, d.y, d.z, d.w])
+			fc["blade_reach_t"], fc["release"], fc["release_t"], d.x, d.y, d.z, d.w,
+			fc["f1_blade_min"], fc["strip_next"]])
 	return "%s|%.2f|%s" % [shape, margin, end]
+
+
+# Each strip, and who has the puck next: " ours"/" theirs" per strip, with how
+# far each side's second-nearest man stood from the puck as it came loose (the
+# nearest two being the poker and the man he stripped).
+func _fc_strip(duel: Object, fc: Dictionary, carrier: int) -> void:
+	if duel.strips > fc["strips"]:
+		fc["strips"] = duel.strips
+		fc["after_strip"] = true
+		var p := Vector2(duel.puck_pos.x, duel.puck_pos.z)
+		var near: Array[float] = [INF, INF]
+		var next: Array[float] = [INF, INF]
+		for sk: Object in duel.skaters:
+			var dd: float = Vector2(sk.pos.x, sk.pos.z).distance_to(p)
+			if dd < near[sk.team_id]:
+				next[sk.team_id] = near[sk.team_id]
+				near[sk.team_id] = dd
+			elif dd < next[sk.team_id]:
+				next[sk.team_id] = dd
+		fc["strip_next"] += " (%.1f/%.1f)" % [next[0], next[1]]
+	elif fc["after_strip"] and carrier != -1:
+		fc["after_strip"] = false
+		fc["strip_next"] += "ours" if duel.team_map[carrier] == 0 else "theirs"
 
 
 # One tick of their puck after their touch: how near our F1's body gets to
@@ -363,6 +388,7 @@ func _after_their_touch(duel: Object) -> String:
 # the puck (and when within a poke), and when their first release goes.
 func _fc_tick(duel: Object, fc: Dictionary, t: float, releases: int) -> void:
 	var c: int = duel.carrier()
+	_fc_strip(duel, fc, c)
 	if duel.releases.size() > releases and fc["release_t"] < 0.0 \
 			and int(duel.releases[releases]["team"]) == 1:
 		fc["release_t"] = t
@@ -376,6 +402,8 @@ func _fc_tick(duel: Object, fc: Dictionary, t: float, releases: int) -> void:
 			fc["blade_min"] = bd
 		if bd <= GameRules.POKE_RADIUS_M and fc["blade_reach_t"] < 0.0:
 			fc["blade_reach_t"] = t
+		if duel.brains[0].get_slot(sk.peer_id) == AIRoleSlots.Slot.F1_PRESSURE:
+			fc["f1_blade_min"] = minf(fc["f1_blade_min"], bd)
 		if duel.brains[0].get_slot(sk.peer_id) != AIRoleSlots.Slot.F1_PRESSURE \
 				or c == -1 or duel.team_map[c] != 1:
 			continue
