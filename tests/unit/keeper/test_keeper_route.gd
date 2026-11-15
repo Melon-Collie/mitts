@@ -206,8 +206,25 @@ func test_down_within_a_push_he_stays_down() -> void:
 	var far: float = _motor.slide.glide_reach(_motor.slide.push_speed) + 0.5
 	_motor.go_to(Vector2(-0.4 + far, -0.5), 0.0, R.DOWN)
 	_motor.time_to_goal()
-	assert_true(_motor.route.first == DO.RISE or _motor.route.first == DO.RECOVER,
-			"up for one past a push, not %s" % DO.keys()[_motor.route.first])
+	assert_true(_motor.route.first == DO.SLIDE or _motor.route.first == DO.ROTATE,
+			"pushed toward one past a push, not %s" % DO.keys()[_motor.route.first])
+
+
+# Down, a spot straight behind him further than his knees reach, where no slide
+# goes without turning him off the shot: scooted toward all the way, on his
+# knees throughout.
+func test_down_he_never_stands_up_for_a_spot_down() -> void:
+	_place(R.DOWN, Vector2(0.0, -1.3), 0.0)
+	var behind := Vector2(0.0, -1.3 + KeeperRoute.KNEE_REACH_M * 2.0)
+	_motor.go_to(behind, 0.0, R.DOWN)
+	_motor.time_to_goal()
+	assert_eq(_motor.route.first, DO.KNEE_SHUFFLE, "scooted toward, not %s" % DO.keys()[_motor.route.first])
+	var ticks: int = 0
+	while Vector2(_motor.x, _motor.z).distance_to(behind) > KeeperRoute.THERE_M and ticks < 400:
+		_motor.step(DT)
+		assert_eq(_motor.rest, R.DOWN, "on his knees at tick %d" % ticks)
+		ticks += 1
+	assert_almost_eq(_motor.z, behind.y, KeeperRoute.THERE_M, "there")
 
 
 # Sealed in the RVH, a post or a spot down across the crease he pushes off the

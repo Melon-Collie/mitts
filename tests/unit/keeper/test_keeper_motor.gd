@@ -217,7 +217,10 @@ func test_asked_down_while_skating_he_drops_carrying_his_speed() -> void:
 	assert_lte(landed, _motor.save_move.drop_s + 2.0 * DT, "in the butterfly in the drop's time, no stop first")
 	assert_gt(_motor.x - was, 0.5 * moving * landed, "his speed carried on")
 	assert_false(_motor.carries(), "the slide let go")
-	assert_lt(absf(_motor.x - goal.x), moving * 2.0 * DT, "where it brought him to his goal, not on by it")
+	assert_lt(_motor.x - goal.x, moving * 2.0 * DT, "not on by his goal")
+	var scoot: float = KeeperSlide.KNEE_SHUFFLE_M_S
+	assert_lt(goal.x - _motor.x, scoot * scoot / (2.0 * _motor.save_move.pad_friction) + moving * 2.0 * DT,
+			"short of it by no more than a slide slowed to a scoot leaves his knees")
 
 
 # Down, a push across and another the moment it stops: the second sets out as
@@ -273,8 +276,35 @@ func test_down_he_scoots_on_his_knees_and_follows_his_goal() -> void:
 	assert_true(_motor.slides())
 
 
+# Skating across with the play, asked down where he already is: his edges take
+# the speed off as he drops, and he is down there, not slid on past it.
+func test_dropped_where_he_already_is_he_does_not_slide_on() -> void:
+	_motor.z = -1.0
+	var spot := Vector2(0.0, -1.0)
+	var v := Vector2(2.0, 0.0)
+	for i: int in int(0.6 / DT):
+		spot += v * DT
+		_motor.go_to(spot, 0.0, R.FEET, v)
+		_motor.step(DT)
+	var moving: float = _motor.glide.velocity.length()
+	assert_gt(moving, 1.5, "skating with it")
+	var at := Vector2(_motor.x, _motor.z)
+	_motor.go_to(at, 0.0, R.DOWN)
+	var t: float = 0.0
+	while _motor.rest != R.DOWN and t < 1.0:
+		_motor.step(DT)
+		t += DT
+	assert_eq(_motor.rest, R.DOWN, "down")
+	var stop: float = moving * moving / (2.0 * _motor.save_move.edge_decel)
+	assert_lt(Vector2(_motor.x, _motor.z).distance_to(at), stop + moving * 2.0 * DT,
+			"no further on than his edges take to stop him")
+	assert_lt(Vector2(_motor.x, _motor.z).distance_to(at), 0.25 * moving * moving / (2.0 * _motor.save_move.pad_friction),
+			"a fraction of what his pads' friction alone would slide him")
+
+
 # Dropped while he skates back, a goal across him rather than behind is a push
-# from where he lands: the slide he dropped with is let go for it.
+# from where he lands: his edges take off the speed that was carrying him back
+# as he drops, and the push goes as he lands.
 func test_a_goal_across_him_ends_the_slide_he_dropped_with() -> void:
 	_motor.z = -1.6
 	var spot := Vector2(0.0, -1.6)
@@ -283,16 +313,19 @@ func test_a_goal_across_him_ends_the_slide_he_dropped_with() -> void:
 		spot += back * DT
 		_motor.go_to(spot, 0.0, R.FEET, back)
 		_motor.step(DT)
-	assert_gt(_motor.glide.velocity.y, 1.0, "backing in")
+	var backing: float = _motor.glide.velocity.y
+	assert_gt(backing, 1.0, "backing in")
+	var from_z: float = _motor.z
 	_motor.go_to(Vector2(0.9, _motor.z + 0.2), 0.0, R.DOWN)
 	var t: float = 0.0
-	while not _motor.save_move.is_set() and t < 1.0:
+	while not _motor.slides() and t < 1.0:
 		_motor.step(DT)
 		t += DT
-	_motor.step(DT)
-	assert_false(_motor.carries(), "landed: the slide let go, his goal across him")
-	_motor.step(DT)
-	assert_true(_motor.slides(), "and the push for it under way")
+	assert_true(_motor.slides(), "the push for it under way")
+	assert_lt(t, 2.0 * _motor.save_move.drop_s, "as he lands")
+	assert_false(_motor.carries(), "the slide he dropped with let go")
+	assert_lt(_motor.z - from_z, 0.5 * backing * backing / (2.0 * _motor.save_move.pad_friction),
+			"not carried on back by the speed he dropped with")
 
 
 # Down, a pad asked out goes out at rest, stays out through a scoot and a

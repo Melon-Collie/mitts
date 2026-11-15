@@ -369,12 +369,13 @@ func _step_mover(dt: float) -> void:
 				KeeperPost.State.BUTTERFLY:
 					_rest_on(Rest.DOWN)
 		Mover.SAVE:
+			if _landing and _goal:
+				save_move.hold_to(route.spot - Vector2(x, z), dt)
 			save_move.step(dt)
 			x = save_move.x
 			z = save_move.z
 			if _landing and save_move.is_set() and not _rides_on():
 				_landing = false
-				_rest_where_the_slide_left_him()
 				save_move.state = KeeperSaveMove.State.NONE
 				_rest_on(Rest.DOWN)
 			elif save_move.is_done():
@@ -495,28 +496,14 @@ func slides() -> bool:
 	return _mover == Mover.SLIDE
 
 
-# Whether the way to his goal from his knees starts by getting up.
-func stands_up_for_goal() -> bool:
-	if rest != Rest.DOWN or not _goal:
-		return false
-	var first: int = _plan()
-	return first == Do.RISE or first == Do.RECOVER
+# Whether he is on his way down as he skated (`_drop_carrying`).
+func drops() -> bool:
+	return _mover == Mover.SAVE and _landing
 
 
-# Whether the speed he dropped with is still sliding him (`_drop_carrying`).
+# Whether the speed he dropped with is still sliding him.
 func carries() -> bool:
-	return _mover == Mover.SAVE and _landing and save_move.velocity != Vector2.ZERO
-
-
-# The slide he dropped with let go, slowed to a scoot, short of a goal that is
-# not a push across his line from here: his goal is where it left him. On his
-# knees the route straight back or ahead would stand him up or spin him round.
-func _rest_where_the_slide_left_him() -> void:
-	if not _goal or route.rest != Rest.DOWN or save_move.velocity.length() > KeeperSlide.KNEE_SHUFFLE_M_S:
-		return
-	var local: Vector2 = _turned(route.spot - Vector2(x, z), -yaw)
-	if absf(local.y) > absf(local.x) * tan(KeeperSlide.MAX_OFF_LINE_RAD):
-		route.spot = Vector2(x, z)
+	return drops() and save_move.velocity != Vector2.ZERO
 
 
 # Landed from a glide and still sliding on his pads: whether the slide is

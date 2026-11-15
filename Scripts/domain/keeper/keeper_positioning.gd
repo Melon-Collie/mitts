@@ -139,7 +139,7 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var comes: float = -velocity.dot(puck.normalized()) if puck.length() > 1e-4 else 0.0
 	var down_within: float = down_range(comes, motor.save_move.drop_s * motor.low_ready.fall_share())
 	kept_down = tight and not planted and puck.length() <= down_within + (MARGIN_M if kept_down else 0.0) \
-			and (kept_down or motor.rest != KeeperRoute.Rest.FEET or _covers(me, _spot(puck, motor)))
+			and (kept_down or motor.rest != KeeperRoute.Rest.FEET or motor.drops() or _covers(me, _spot(puck, motor)))
 	if planted or kept_down:
 		_racing = false
 		post_side = 0.0
@@ -194,19 +194,20 @@ static func _covers(me: Vector2, spot: Vector2) -> bool:
 # carrier at `puck` moving at `velocity`, his pad's end sealing the post along
 # the ice and the other pad laid across the front of the crease, the way round
 # him: skated with the seal on his feet and dropped once near it, turned square
-# on the way down or after; down, pushed to it again once it has moved on.
+# on the way down or after; down, or on his way down from in front, pushed to
+# it on his knees.
 func _plant(post: Vector2, side: float, puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var ahead: Vector2 = _seal(post, side, puck + velocity * LOOK_AHEAD_S, motor)
 	var spot: Vector2 = _seal(post, side, puck, motor)
 	var at := Vector2(motor.x, motor.z)
 	var near: bool = at.distance_to(spot) <= SEAL_NEAR_M
-	if motor.rest == KeeperRoute.Rest.FEET and not near:
+	if motor.rest == KeeperRoute.Rest.FEET and not near and not motor.drops():
 		motor.go_to(spot, _seal_turn, KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, true)
 		return
 	if near:
 		motor.go_to(at, _seal_turn, KeeperRoute.Rest.DOWN)
 	else:
-		_kneel_to(spot, _seal_turn, motor)
+		motor.go_to(spot, _seal_turn, KeeperRoute.Rest.DOWN)
 
 
 # Down with the carrier in tight in front of him: on the puck's line where the
@@ -216,8 +217,8 @@ func _plant(post: Vector2, side: float, puck: Vector2, velocity: Vector2, motor:
 # short.
 func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var at := Vector2(motor.x, motor.z)
-	var gives: bool = motor.carries()
-	var to: Vector2 = _down_spot(puck, at, gives)
+	var back: float = _gives(puck, motor)
+	var to: Vector2 = _down_spot(puck, at, back)
 	var lands: Vector2 = puck
 	for i: int in SEAL_ROUNDS:
 		# Read on no further than level with the back of the paint: by there a
@@ -225,45 +226,48 @@ func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 		var ahead: float = motor.slide.time_to(at.distance_to(to))
 		if velocity.y > 1e-3:
 			ahead = minf(ahead, maxf(-DEPTH_FLOOR_M - puck.y, 0.0) / velocity.y)
-		lands = puck + velocity * ahead
+		lands = puck + velocity.normalized() * _committed(velocity.length(), ahead)
 		# A carrier whose way there runs into him stops on him, not past him.
 		if _passes(puck, lands, at) < GameRules.DEFAULT_STICK_LENGTH_M * 0.5:
 			lands = puck
-		to = _down_spot(lands, at, gives)
+		to = _down_spot(lands, at, back)
 	# A spot as near as half a pad's width to the one he is pushing for is no
 	# new push.
 	if motor.slides() and to.distance_to(motor.route.spot) <= SEAL_NEAR_M:
 		to = motor.route.spot
-	_kneel_to(to, facing(to, lands), motor)
+	motor.go_to(to, facing(to, lands), KeeperRoute.Rest.DOWN)
 
 
-# Down at `spot` turned `turn`, for a carrier in tight, without getting up for
-# it: where his quickest way there from his knees is by his feet, he makes for
-# it by what his knees reach instead, turned as he is. Standing up into a
-# carrier in tight shows him the whole net for longer than any push takes.
-static func _kneel_to(spot: Vector2, turn: float, motor: KeeperMotor) -> void:
-	motor.go_to(spot, turn, KeeperRoute.Rest.DOWN)
-	if motor.stands_up_for_goal():
-		var at := Vector2(motor.x, motor.z)
-		motor.go_to(at + (spot - at).limit_length(KeeperRoute.KNEE_REACH_M), motor.yaw, KeeperRoute.Rest.DOWN)
+# How far back along the line of a puck at `puck` he can go from his knees:
+# what they reach, since they have no push straight back, or as far as the
+# speed he dropped with still slides him along it on his pads.
+static func _gives(puck: Vector2, motor: KeeperMotor) -> float:
+	if not motor.carries() or puck.length() < 1e-4:
+		return KeeperRoute.KNEE_REACH_M
+	var along: float = maxf(-motor.save_move.velocity.dot(puck.normalized()), 0.0)
+	return maxf(KeeperRoute.KNEE_REACH_M, along * along / (2.0 * motor.save_move.pad_friction))
 
 
-# His spot down at `at` for a carrier's puck at `puck`: on its line, back
-# where he hides both posts from it, in tight at the furthest (he dropped
-# outside it to be down there), and no further out than he is, so a carrier
-# who comes on in or goes wide of him is not left below him. Sliding on the
-# speed he dropped with (`gives`), or where getting there takes him across the
-# puck's line at least as much as back along it (a slide, turned to the
-# carrier), that is where he goes; straight back he has only his knees, and
-# gives what they reach.
-static func _down_spot(puck: Vector2, at: Vector2, gives: bool) -> Vector2:
+# His spot down at `at` for a carrier's puck at `puck`: on its line, back from
+# the nearest of it to him by `back`, or by as much as a push across to the
+# line gives back at the furthest a slide goes off his line, so a carrier going
+# wide round him is pushed back to the post with on a diagonal. No further back
+# than hides both posts from the puck, in tight at the furthest (he dropped
+# outside it to be down there), and never further out than he is.
+static func _down_spot(puck: Vector2, at: Vector2, back: float) -> Vector2:
 	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
 	var deepest: float = minf(DEPTH_FLOOR_M, crease_edge(out))
 	var hides: float = clampf(closing_depth(out * minf(puck.length(), TIGHT_M)), deepest, maxf(at.length(), deepest))
-	var move: Vector2 = out * hides - at
-	if gives or absf(move.cross(out)) >= absf(move.dot(out)):
-		return out * hides
-	return out * maxf(hides, at.length() - KeeperRoute.KNEE_REACH_M)
+	var pushed: float = absf(at.cross(out)) * tan(KeeperSlide.MAX_OFF_LINE_RAD)
+	return out * maxf(hides, at.dot(out) - maxf(back, pushed))
+
+
+# How far a carrier skating at `speed` has to go in `time`: what stopping as
+# hard as a skater stops still carries him. Any further is his to choose, and a
+# push, which cannot be cut short, is not spent on a choice he has not made.
+static func _committed(speed: float, time: float) -> float:
+	var braked: float = minf(time, speed / GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2)
+	return speed * braked - 0.5 * GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2 * braked * braked
 
 
 # How near the way from `from` to `to` passes `at`.

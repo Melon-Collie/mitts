@@ -281,9 +281,9 @@ func _to_post(at: Vector2, turn: float, from: int, post_side: float) -> void:
 # knees where it is within their reach, or slid there, and rotated on his
 # knees to the facing; a slide off his line turning him as he loads, no
 # further off the facing than a slide goes; rotated first onto the slide's
-# line where it is the other side that has to lead, slid and rotated again; or
-# up, there on his feet and down again. Its time; its first move in _down_do,
-# _down_spot and _down_side.
+# line where it is the other side that has to lead, slid and rotated again.
+# Never up: a spot he has no push for he scoots toward too, as far as it is.
+# Its time; its first move in _down_do, _down_spot and _down_side.
 func _down_to_down(at: Vector2, turn: float) -> float:
 	_down_do = Do.NONE
 	_down_spot = spot
@@ -312,16 +312,8 @@ func _down_to_down(at: Vector2, turn: float) -> float:
 			best = rotated
 			_down_do = Do.ROTATE
 			_down_side = onto
-	var up: float = _ticks(_drop.rise_s) \
-			+ minf(_standing(at, turn), _settled(_on_feet(at, turn, spot)) + _rotate_s(turn)) + _ticks(_drop.drop_s)
-	if up < best:
-		best = up
-		var across: float = _local(spot - at, turn).x
-		_down_do = Do.RISE if absf(across) < THERE_M else Do.RECOVER
-		_down_spot = Vector2.ZERO
-		_down_side = signf(across)
 	var scooted: float = _ticks(d / KeeperSlide.KNEE_SHUFFLE_M_S) + _rotate_s(turn)
-	if d <= KNEE_REACH_M and scooted < best:
+	if (d <= KNEE_REACH_M or best == INF) and scooted < best:
 		best = scooted
 		_down_do = Do.KNEE_SHUFFLE
 		_down_spot = spot
