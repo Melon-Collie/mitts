@@ -283,11 +283,15 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 			duel.puck_vel = AIReboundField.sample_vel(row, 0, goal)
 			duel.loose_released_by = -1
 			duel.airborne_ticks = 0
+	var loose: Dictionary = {"chased": 0, "declined_s": 0.0, "elected": "-", "ours_m": -1.0,
+			"second_m": -1.0}
 	for k: int in int(REBOUND_WINDOW_S / Duel.DT):
 		var before: int = duel.releases.size()
 		duel.step()
 		var tt: float = (k + 1) * Duel.DT
 		var c: int = duel.carrier()
+		if res["first"] == "none":
+			_watch_loose(duel, loose, c)
 		if res["first"] == "none" and c != -1:
 			res["first"] = "ours" if duel.team_map[c] == 0 else "theirs"
 			res["t_first"] = tt
@@ -313,7 +317,35 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 			break
 		if res["first"] == "theirs" or duel.puck_pos.z > -GameRules.BLUE_LINE_Z:
 			break
+	gut.p("OZLOOSE|%d|%s|%s|%d|%.2f|%.2f|%.2f" % [_run_index, res["first"], loose["elected"],
+			loose["chased"], loose["declined_s"], loose["ours_m"], loose["second_m"]])
 	return res
+
+
+# The loose puck of the rebound window, tick by tick until someone has it: our
+# elected chaser, whether he chases it or declines, and once one of theirs
+# has it, how far from it our chaser and our nearest other man are.
+func _watch_loose(duel: Object, loose: Dictionary, carrier: int) -> void:
+	var elected: int = int(duel._prev_chase_by_team.get(0, -1))
+	if elected != -1:
+		loose["elected"] = AIRoleSlots.label(duel.brains[0].slot_assignments.get(elected, 0))
+		if duel._skater(elected).agent._state == SkaterAgentStateMachine.State.CHASE_PUCK:
+			loose["chased"] = 1
+		else:
+			loose["declined_s"] += Duel.DT
+	if carrier == -1 or duel.team_map[carrier] == 0:
+		return
+	var p := Vector2(duel.puck_pos.x, duel.puck_pos.z)
+	var second: float = INF
+	for sk: Object in duel.skaters:
+		if sk.team_id != 0:
+			continue
+		var d: float = Vector2(sk.pos.x, sk.pos.z).distance_to(p)
+		if sk.peer_id == elected:
+			loose["ours_m"] = d
+		else:
+			second = minf(second, d)
+	loose["second_m"] = second
 
 
 # How many of ours fight for the net front this tick: Ctrl held with the spot
