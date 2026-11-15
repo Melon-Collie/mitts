@@ -70,6 +70,9 @@ var _trace: bool = false
 # MITTS_OZ_TRACE_FRONT=1: the net-front man's positioning reads, and each
 # re-pick of his battle spot printed as OZFLIP|kind left|kind chosen|...
 var _front_trace: AIFinisherTrace = null
+# MITTS_OZ_TRACE_HIGH=1: the high-slot man's positioning read, an OZHS line every
+# TRACE_EVERY_TICKS while one of ours carries in the zone (_print_high).
+var _high_trace: AIHighSlotTrace = null
 var _front_kind: Dictionary = {}
 var _rebounds: bool = false
 
@@ -134,6 +137,12 @@ func _run(duel: Object) -> Dictionary:
 				if sk.team_id == 0 and duel.brains[0].get_slot(sk.peer_id) \
 						== AIRoleSlots.Slot.NET_FRONT:
 					_front_trace.peer = sk.peer_id
+		if _high_trace != null:
+			_high_trace.peer = -1
+			for sk: Object in duel.skaters:
+				if sk.team_id == 0 and duel.brains[0].get_slot(sk.peer_id) \
+						== AIRoleSlots.Slot.HIGH_SLOT:
+					_high_trace.peer = sk.peer_id
 		duel.step()
 		var t: float = (i + 1) * Duel.DT
 		var released: Dictionary = {}
@@ -147,6 +156,9 @@ func _run(duel: Object) -> Dictionary:
 			r["low_s"] += Duel.DT
 		if _trace and ours and i % TRACE_EVERY_TICKS == 0:
 			_print_trace(duel, c, t)
+		if _high_trace != null and ours and i % TRACE_EVERY_TICKS == 0 \
+				and _out(duel.puck_pos) <= POINT_OUT_M + 4.0:
+			_print_high(duel)
 		r["battle_s"] += Duel.DT * _battling(duel)
 		_count_screen(duel, r)
 		if not released.is_empty():
@@ -446,6 +458,36 @@ func _watch_loose(duel: Object, loose: Dictionary, carrier: int) -> void:
 		else:
 			second = minf(second, d)
 	loose["second_m"] = second
+
+
+# The high-slot man's last read: OZHS | run | may he leave the slot's top |
+# where he stands (depth, weak x) and his nearest defender | the spot he chose
+# (depth, weak x, score) | the best central (|weak x| <= 2) and wide (>= 4)
+# spots' scores | how many spots priced above zero.
+func _print_high(duel: Object) -> void:
+	var ht: AIHighSlotTrace = _high_trace
+	if ht.peer == -1 or ht.score.is_empty():
+		return
+	var me: Vector3 = duel.skater_pos(ht.peer)
+	var weak: float = -duel.brains[0]._strong_x
+	var near: float = INF
+	for sk: Object in duel.skaters:
+		if sk.team_id == 1:
+			near = minf(near, Vector2(sk.pos.x - me.x, sk.pos.z - me.z).length())
+	var central: float = -INF
+	var wide: float = -INF
+	var positive: int = 0
+	for k: int in ht.score.size():
+		if absf(ht.weak_u[k]) <= 2.0:
+			central = maxf(central, ht.score[k])
+		elif ht.weak_u[k] >= 4.0:
+			wide = maxf(wide, ht.score[k])
+		if ht.score[k] > 0.0:
+			positive += 1
+	var pick: String = "post/held" if ht.chosen < 0 else "%.1f,%+.1f,%.3f" % [
+			ht.depth[ht.chosen], ht.weak_u[ht.chosen], ht.score[ht.chosen]]
+	gut.p("OZHS|%d|%d|%.1f,%+.1f,%.1f|%s|%.3f|%.3f|%d" % [_run_index, int(ht.deep_ok), _out(me),
+			weak * me.x, near, pick, central, wide, positive])
 
 
 # How many of ours fight for the net front this tick: Ctrl held with the spot
@@ -753,6 +795,9 @@ func _sweep(label: String) -> void:
 	var shards: int = maxi(_env_int("MITTS_OZ_SHARDS", 1), 1)
 	var shard: int = _env_int("MITTS_OZ_SHARD", 0)
 	_trace = _env_int("MITTS_OZ_TRACE", 0) == 1
+	if _env_int("MITTS_OZ_TRACE_HIGH", 0) == 1:
+		_high_trace = AIHighSlotTrace.new()
+		AIRoleHighSlot.trace = _high_trace
 	if _env_int("MITTS_OZ_TRACE_FRONT", 0) == 1:
 		_front_trace = AIFinisherTrace.new()
 		AIRoleFinisher.trace = _front_trace

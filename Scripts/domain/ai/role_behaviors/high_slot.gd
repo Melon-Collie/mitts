@@ -29,6 +29,10 @@ const REST_DEPTH_M: float = 9.5
 # The two points, who stand above the help and are not it.
 const POINTS: int = 2
 
+# An instrument's record of one positioning read (AIHighSlotTrace), filled for
+# its peer only while one is held; null in play.
+static var trace: AIHighSlotTrace = null
+
 
 static func decide(ctx: RoleContext) -> RoleDecision:
 	# "D activates, F3 fills": either point.
@@ -61,6 +65,10 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 
 	var weak: float = -ctx.strong_x
 	var deep_ok: bool = _help_free(ctx, rest, teammates)
+	var tracing: bool = trace != null and trace.peer == ctx.peer_id
+	if tracing:
+		trace.clear()
+		trace.deep_ok = deep_ok
 	var best_pos: Vector3 = Vector3.INF
 	var best_score: float = -INF
 	for depth: float in GRID_DEPTHS_M:
@@ -69,15 +77,21 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		for u: float in GRID_WEAK_U_M:
 			var c := Vector3(weak * u, 0.0, opp_net.z + own_dir * depth)
 			var s: float = _score(ctx, c, carrier_pos, goalie_pos, opp_positions, teammates)
+			if tracing:
+				trace.record(depth, u, s)
 			if s > best_score:
 				best_score = s
 				best_pos = c
+				if tracing:
+					trace.chosen = trace.score.size() - 1
 	var far_post := Vector3(weak * FAR_POST_WIDE_M, 0.0, opp_net.z + own_dir * FAR_POST_OUT_M)
 	var s_post: float = _score(ctx, far_post, carrier_pos, goalie_pos, opp_positions,
 			teammates) if deep_ok else -INF
 	if s_post > best_score:
 		best_score = s_post
 		best_pos = far_post
+		if tracing:
+			trace.chosen = -1
 	if ctx.prev_role_target.is_finite() and (deep_ok or AIZoneCoverage.depth_of(
 			opp_net.z, ctx.prev_role_target) >= REST_DEPTH_M):
 		var s_prev: float = _score(ctx, ctx.prev_role_target, carrier_pos, goalie_pos,
@@ -85,6 +99,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		if s_prev > best_score:
 			best_score = s_prev
 			best_pos = ctx.prev_role_target
+			if tracing:
+				trace.chosen = -1
 	if not best_pos.is_finite():
 		best_pos = rest
 	return _through_station_read(ctx, d, best_pos)
