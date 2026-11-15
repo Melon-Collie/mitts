@@ -688,6 +688,30 @@ reachable at top speed: it does not see his own velocity or the stride ramp
 between, nor a carrier stepping out of the hunt, so it commits to hits that
 land soft or not at all, and the stick stays off the ice the whole while.
 
+**Priced at the hit he can land** (`3549a8c`): the contact on his arrival
+clock, the hit at the speed his stride builds by then. J=11, 576:
+
+| | before | the honest hit |
+|---|---|---|
+| FORECHECK windows won back | 4 of 37 (11%) | 10 of 26 (38%) |
+| F1 holding Ctrl at his closest approach | 28 of 37 | 3 of 26 |
+| shots / possession | 0.302 ± 0.019 | 0.247 ± 0.018 |
+| our carrier stripped | 0.302 | 0.340 ± 0.020 |
+| xG / possession | 0.038 ± 0.005 | 0.037 ± 0.005 |
+
+Their defenders read the same model, so they poke where they hunted hits,
+and our carriers lose more pucks before they shoot. In the slow tier's
+D-zone coverage fixture (`test_zone_coverage_shape.gd`, the scripted point
+shot) the uncovered share went from 0.52 to 0.81 against its 0.76 ceiling:
+the weak-wall man, whom the shot model prices at nothing, is unlocked on 290
+ticks of 360 against 186, after the wingers and the D swap slots; the
+low-cycle fixture improved (0.86 to 0.72).
+
+The other half, a hit only when the body reaches the man before the blade
+reaches the puck, is not built: the poke is a distance test the carrier's body
+does not block, so a stick 2 m long reaches a puck shielded 0.9 m behind him
+before any body contact, and the rule would end nearly every hit.
+
 ### Tests
 
 - A unit test that the rebound credit rises with our bodies at the net and
