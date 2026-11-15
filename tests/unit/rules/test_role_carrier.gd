@@ -2922,3 +2922,36 @@ func test_a_pass_leaves_from_the_ice_not_through_the_boards() -> void:
 	assert_gt(origin.z, at.z, "carried on toward the boards up to them")
 	ctx.self_velocity = Vector3(0.0, 0.0, -4.0)
 	assert_lt(AICarrierField.pass_origin(ctx).z, at.z, "skating away, carried on as before")
+
+
+# ─── shooting for a tip ─────────────────────────────────────────────────────
+
+# A carrier 8 m wide at the top of the circle, a teammate in `slot` on his line
+# to the net at the crease top, the keeper square on the carrier.
+func _point_with_tipper(slot: int) -> AIRoleCarrier:
+	var self_pos := Vector3(8.0, 0.0, OPP_NET_Z + 16.0)
+	var net := Vector3(0.0, 0.0, OPP_NET_Z)
+	var tipper: Vector3 = net + (self_pos - net).normalized() * AIRoleFinisher.TIP_STATION_DIST_M
+	var ctx := _make_ctx(self_pos, [[1, TEAM_ID, self_pos], [2, TEAM_ID, tipper]])
+	var brain := TeamBrain.new(TEAM_ID, ctx.team_id_by_peer)
+	brain.slot_assignments[2] = slot
+	ctx.team_brain = brain
+	var g := GoalieNetworkState.new()
+	var dir: Vector3 = (self_pos - net).normalized()
+	g.position_x = net.x + dir.x * 1.3
+	g.position_z = net.z + dir.z * 1.3
+	_place_keeper(ctx, g)
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	return c
+
+
+func test_a_net_front_man_on_his_line_makes_the_wide_rip_a_tip() -> void:
+	# From out wide the tip field measures a tip at the crease top scoring where
+	# the shot alone does not: the rip for him to tip is the shot read.
+	var tip := _point_with_tipper(AIRoleSlots.Slot.NET_FRONT)
+	var plain := _point_with_tipper(AIRoleSlots.Slot.HIGH_SLOT)
+	assert_true(tip._shot_sample_is_tip, "the rip is for his tip")
+	assert_gt(tip.debug_shoot_score, plain.debug_shoot_score,
+			"his tip is worth more than the shot alone")
+	assert_false(plain._shot_sample_is_tip, "a man who does not tip is not shot at")

@@ -1370,16 +1370,18 @@ func test_tip_needs_a_blade_the_shot_line_actually_crosses() -> void:
 
 
 func test_tip_needs_shot_pace() -> void:
-	# The tipper holds the deflect, so any pace tips — but under the pace the
-	# finisher reads as a shot (AIRoleFinisher.INCOMING_SHOT_SPEED_M_S) he never
-	# goes to tip it.
+	# Under the pace the finisher reads as a shot (AIRoleFinisher
+	# .INCOMING_SHOT_SPEED_M_S) he never goes to tip it, and one he can hold
+	# (AIFeedReception.RECEIVE_HOLD_CEILING_M_S at the tip) he receives instead.
 	var none: Array[Vector3] = []
 	var gate: float = AIActionScoring.TIP_MIN_SPEED_M_S
 	assert_eq(AIRoleFinisher.INCOMING_SHOT_SPEED_M_S, gate, "the tip is priced where it is played")
 	assert_eq(_tip_fixture(Vector3(0.0, 0.0, 24.0), gate - 1.0, none), 0.0,
 			"a soft feed is a pass, not a tip")
-	assert_gt(_tip_fixture(Vector3(0.0, 0.0, 24.0), 18.0, none), 0.0,
-			"a wrister under the old catch ceiling is tipped all the same")
+	assert_eq(_tip_fixture(Vector3(0.0, 0.0, 24.0), 18.0, none), 0.0,
+			"a wrister he can hold is received, not tipped")
+	assert_gt(_tip_fixture(Vector3(0.0, 0.0, 24.0), 33.0, none), 0.0,
+			"a rip too fast to hold is tipped")
 
 
 func test_lane_clear_accurate_never_reads_a_crossing_defender_clearer() -> void:

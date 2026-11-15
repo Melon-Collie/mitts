@@ -151,6 +151,11 @@ static func tip_ev(
 	if along <= TIP_MIN_ALONG_M or along >= line_len - 0.3:
 		return 0.0
 	var tip_pt := Vector3(release.x + hx * along, 0.0, release.z + hz * along)
+	# A rip he can hold he takes as a reception, and does not tip
+	# (AIRoleFinisher._try_reactive_decision).
+	if AIFeedReception.arrival_closing_speed(release, tip_pt, shot_speed_m_s, Vector3.ZERO) \
+			<= AIFeedReception.RECEIVE_HOLD_CEILING_M_S:
+		return 0.0
 	# P(blade contacts): the tipper's real stick reach + lateral close.
 	var stick: float = AIPuckLane.LANE_DEFENDER_REACH_M
 	var close: float = AIPuckLane.LANE_DEFENDER_CLOSE_SPEED_M_S
