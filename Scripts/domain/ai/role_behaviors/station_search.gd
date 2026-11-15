@@ -148,6 +148,9 @@ static var station_keys: Array[int] = []
 const AT_REBOUND: int = 0
 const ON_SCREEN_LINE: int = 1
 const ON_TIP_LINE: int = 2
+# Anywhere on the shot's line out from the crease: the net-front man's one
+# station, which slides with the shot.
+const ON_SHOT_LINE: int = 3
 static var _play_keeper: Array[Vector3] = []
 static var _play_weight: Array[float] = []
 static var _play_rebound: Array[AIReboundValue] = []
@@ -232,9 +235,9 @@ static func append_net_front_stations(ctx: RoleContext, candidates: Array[Vector
 
 # A station's identity: whose shot (`shooter`'s peer id, or a negative
 # stand-in) it is in front of, and `how` (AT_REBOUND, ON_SCREEN_LINE,
-# ON_TIP_LINE). Never -1, which is a place's.
+# ON_TIP_LINE, ON_SHOT_LINE). Never -1, which is a place's.
 static func station_key(shooter: int, how: int) -> int:
-	return (shooter + 2000) * 3 + how
+	return (shooter + 2000) * 4 + how
 
 
 # What a body at `c` adds to our attack in front of their net (fill_shot_plays),

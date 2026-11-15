@@ -758,14 +758,34 @@ func test_the_net_front_man_holds_his_station_where_the_play_takes_it() -> void:
 
 func test_the_net_front_man_reads_the_puck_not_a_teammates_shot() -> void:
 	# A teammate at the slot's top with an open lane adds no station of his own
-	# to the net-front man's read: the net-front man stands in front of the puck.
-	var ctx: RoleContext = _screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 6.0), true)
+	# to the net-front man's read: he stands on the carrier's shot line.
+	var carrier := Vector3(8.0, 0.0, OPP_NET_Z + 6.0)
+	var ctx: RoleContext = _screen_ctx(carrier, true)
 	var slots := SlotStub.new()
 	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
 	ctx.team_brain = slots
-	AIRoleFinisher.decide(ctx)
-	var carrier_peer: int = 2
-	for k: int in AIStationSearch.station_keys:
-		assert_true(k == AIStationSearch.station_key(carrier_peer, AIStationSearch.AT_REBOUND)
-				or k == AIStationSearch.station_key(carrier_peer, AIStationSearch.ON_SCREEN_LINE),
-				"every station is the carrier's; got key %d" % k)
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_eq(d.station_key, AIStationSearch.station_key(2, AIStationSearch.ON_SHOT_LINE))
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var line: Vector3 = (AIPuckLane.release_point_toward(carrier, goal) - goal).normalized()
+	var off: Vector3 = d.target_position - goal
+	assert_almost_eq(off.x * line.z - off.z * line.x, 0.0, 0.01,
+			"on the carrier's line; got %s" % d.target_position)
+
+
+func test_the_net_front_spot_slides_with_the_puck() -> void:
+	# The carrier at the slot's top skates half a metre across: the net-front
+	# man's spot moves with his line, a fraction of that, never a jump.
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	var ctx: RoleContext = _screen_ctx(Vector3(-1.0, 0.0, OPP_NET_Z + 11.0), false)
+	ctx.team_brain = slots
+	var first: RoleDecision = AIRoleFinisher.decide(ctx)
+	var moved: RoleContext = _screen_ctx(Vector3(-0.5, 0.0, OPP_NET_Z + 11.0), false)
+	moved.team_brain = slots
+	moved.prev_role_target = first.target_position
+	moved.prev_station_key = first.station_key
+	var next: RoleDecision = AIRoleFinisher.decide(moved)
+	assert_eq(next.station_key, first.station_key, "the same station")
+	assert_lt(next.target_position.distance_to(first.target_position), 0.5,
+			"slid with the line; got %s then %s" % [first.target_position, next.target_position])

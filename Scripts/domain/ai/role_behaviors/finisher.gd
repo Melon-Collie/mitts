@@ -46,6 +46,13 @@ const FEED_FLIGHT_MAX_S: float = 1.0
 # outside the crease arc (GameRules.CREASE_ARC_RADIUS) plus a body, where the
 # body screens and the blade reaches the point blast.
 const TIP_STATION_DIST_M: float = 2.5
+# The net-front man's line (_append_shot_line): out along the carrier's shot
+# from just clear of the crease to past the screen field's deepest station
+# (AIScreenFieldData.STATION_ALONG_M), at a step fine enough that the best
+# point on it slides with the puck rather than jumping.
+const SHOT_LINE_NEAR_M: float = 2.0
+const SHOT_LINE_FAR_M: float = 5.5
+const SHOT_LINE_STEP_M: float = 0.25
 
 # An instrument's record of one positioning read (AIFinisherTrace), filled for
 # its peer only while one is held; null in play.
@@ -114,6 +121,8 @@ static func _trace_kind(i: int, front_from: int, front_to: int, count: int,
 		held_at: int) -> int:
 	if i == held_at:
 		return AIFinisherTrace.Kind.INCUMBENT
+	if front_from == 0 and i < front_to:
+		return AIFinisherTrace.Kind.NET_FRONT
 	if i < AIFinisherTrace.Kind.TIP:
 		return i
 	if i < front_from:
@@ -122,6 +131,37 @@ static func _trace_kind(i: int, front_from: int, front_to: int, count: int,
 		return AIFinisherTrace.Kind.NET_FRONT
 	return AIFinisherTrace.Kind.INCUMBENT if i == count - 1 and count > front_to \
 			else AIFinisherTrace.Kind.NET_FRONT
+
+
+# How far out in front of their goal line the carrier's release is (0 behind it).
+static func _shot_line_reach(ctx: RoleContext, carrier_pos: Vector3) -> float:
+	var release: Vector3 = AIPuckLane.release_point_toward(carrier_pos, ctx.attacking_goal_pos)
+	if (release.z - ctx.attacking_goal_pos.z) * ctx.own_goal_dir <= 0.0:
+		return 0.0
+	return AIRoleReads.xz_distance(release, ctx.attacking_goal_pos)
+
+
+# The carrier's shot line out from the net, SHOT_LINE_NEAR_M to SHOT_LINE_FAR_M
+# at SHOT_LINE_STEP_M, into `candidates`; with `held`, also last read's point
+# (ctx.prev_role_target) carried onto the line at its distance out, whose index
+# is returned (-1: none).
+static func _append_shot_line(ctx: RoleContext, carrier_pos: Vector3,
+		candidates: Array[Vector3], held: bool) -> int:
+	var goal: Vector3 = ctx.attacking_goal_pos
+	var line: Vector3 = AIPuckLane.release_point_toward(carrier_pos, goal) - goal
+	line.y = 0.0
+	var reach: float = line.length()
+	var dir: Vector3 = line / reach
+	var along: float = SHOT_LINE_NEAR_M
+	while along <= minf(SHOT_LINE_FAR_M, reach - 0.5):
+		candidates.append(goal + dir * along)
+		along += SHOT_LINE_STEP_M
+	if not held or not ctx.prev_role_target.is_finite():
+		return -1
+	var was: float = clampf(AIRoleReads.xz_distance(ctx.prev_role_target, goal),
+			SHOT_LINE_NEAR_M, minf(SHOT_LINE_FAR_M, reach - 0.5))
+	candidates.append(goal + dir * was)
+	return candidates.size() - 1
 
 
 # ── Reactive (incoming shot) ─────────────────────────────────────────────────
@@ -309,20 +349,35 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	# its rebound.
 	AIStationSearch.fill_shot_plays(ctx, carrier_pos, goalie_pos, opp_positions,
 			teammate_positions, not holds_front)
-	AIStationSearch.append_net_front_stations(ctx, candidates)
+	var line_key: int = AIStationSearch.station_key(carrier_peer, AIStationSearch.ON_SHOT_LINE)
+	var line_held: int = -1
+	# His one station while the carrier has a shot: its line, each point of it
+	# priced as any station, so the best slides with the puck. Held by distance
+	# out: last read's point, carried onto the line where it is now. Behind
+	# their goal line there is no line, and he reads the stations.
+	var on_line: bool = holds_front and _shot_line_reach(ctx, carrier_pos) \
+			>= SHOT_LINE_NEAR_M + 0.5
+	if on_line:
+		candidates.clear()
+		tip_at = -1
+		front_from = 0
+		line_held = _append_shot_line(ctx, carrier_pos, candidates,
+				ctx.prev_station_key == line_key)
+	else:
+		AIStationSearch.append_net_front_stations(ctx, candidates)
 	var front_to: int = candidates.size()
 	# Switch-hysteresis (the pre-aim cursor snaps to this target). A net-front
 	# station is held by what it is: the same station, where its shot has taken
 	# it, takes the margin, and the place it stood last read is not a candidate
 	# (held there, he sat on ice the play had left).
-	var held_at: int = -1
-	if ctx.prev_station_key != -1:
+	var held_at: int = line_held
+	if ctx.prev_station_key != -1 and not on_line:
 		var k: int = AIStationSearch.station_keys.find(ctx.prev_station_key)
 		if k >= 0:
 			held_at = front_from + k
 		elif tip_at >= 0 and ctx.prev_station_key == tip_key:
 			held_at = tip_at
-	if held_at < 0:
+	if held_at < 0 and not on_line:
 		AIStationSearch.append_incumbent(ctx, candidates)
 
 	# The carrier's rip, for the tip term: his real wrister pace, released a
@@ -392,8 +447,11 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		if score > best_score:
 			best_score = score
 			best_pos = c
-			d.station_key = AIStationSearch.station_keys[i - front_from] \
-					if i >= front_from and i < front_to else (tip_key if i == tip_at else -1)
+			if on_line:
+				d.station_key = line_key
+			else:
+				d.station_key = AIStationSearch.station_keys[i - front_from] \
+						if i >= front_from and i < front_to else (tip_key if i == tip_at else -1)
 			if tracing:
 				trace.chosen = i
 

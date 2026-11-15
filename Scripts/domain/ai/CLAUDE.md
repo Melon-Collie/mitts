@@ -511,6 +511,11 @@ it is worth: a man at the slot's top keeps the net front's ice worth holding
 while the carrier works the wall, and their D standing inside is a man to move.
 A net-front station is held by what it is (`RoleDecision.station_key`: the
 shot it is in front of, and how), wherever its shooter has taken it since.
+NET_FRONT's one station, while the carrier has a shot, is that shot's line
+from the crease out (`AIRoleFinisher._append_shot_line`), each point priced
+as any station and the held one carried at its distance out, so the spot
+slides with the puck: three stations a couple of metres apart sent him
+between them about twice a second.
 Never hold one by its place: the ice worth holding moves with the play, and
 held where it stood it went stale, half as valuable, and he re-picked 2.3 m a
 time almost once a second.
