@@ -981,6 +981,15 @@ their man stands on the spot 8% of the time.
   where it goes. A cell is 37 tips, so 1–2 goals either way is noise: the
   height chosen between levels a goal apart is not a finding, and the field
   wants more placements a cell before the choice of height is trusted.
+
+  **In play, almost never.** With the duel tipping (2c) the 5v5 sweep (576
+  possessions) saw 1 tip of 178 shots, and 0 of 179 once the net front tips
+  only a shot too fast to hold (`caa71b2`, which also keeps him out of the
+  reception chase that took the shot from him); xG 0.039 then 0.041 ± 0.006.
+  A trace of 26 shots says why: 7 were his own, most of the rest came from
+  beside the net within 2 m of the goal line, where no shooter's line passes
+  him, and all 6 from range were raised, which the duel's flat puck flies over
+  every blade with. The tips are in the carrier's shot choice, the next bullet.
 - **Restore the carrier's shoot-for-tip** (the `_pick_fire_phase` block
   `0102aef` removed), priced by the new `tip_ev`, as `max` with the direct
   shot.
