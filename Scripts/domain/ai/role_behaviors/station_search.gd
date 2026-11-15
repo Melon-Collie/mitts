@@ -148,8 +148,8 @@ static var station_keys: Array[int] = []
 const AT_REBOUND: int = 0
 const ON_SCREEN_LINE: int = 1
 const ON_TIP_LINE: int = 2
-# Anywhere on the shot's line out from the crease: the net-front man's one
-# station, which slides with the shot.
+# The crease top on the shot's line: the net-front man's one station, which
+# moves with the shooter's angle.
 const ON_SHOT_LINE: int = 3
 static var _play_keeper: Array[Vector3] = []
 static var _play_weight: Array[float] = []
