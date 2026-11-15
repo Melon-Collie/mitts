@@ -452,6 +452,29 @@ keeper. It answers both of #736's questions: is the deflection physics right,
 and is the keeper too good against it. If the physics is wrong, that is a
 gameplay fix, raised separately before step 5.
 
+**Status: measured** (`tests/instruments/keeper/test_net_front_tips.gd`, on
+this branch's keeper). Shots from (0, 18) and (5, 16) at 24 and 32 m/s through
+a real stick held to deflect at four tip spots, the cursor swept across:
+
+| tip | tips | on net | goals | of those on net |
+|---|---|---|---|---|
+| flat | 592 | 33% | 10 | 5% |
+| low | 592 | 33% | 21 | 11% |
+| mid | 592 | 30% | 22 | 12% |
+| high | 592 | 31% | 23 | 12% |
+
+A tipped point shot scores where the shot alone does not (~0 against a set
+keeper): about 3.5% per tip, from shots worth nothing. From the crease top
+(0, 3), flat and low tips score 0% (his pads) and mid and high ones 15–29%.
+The stick has to be placed: 45–85 cm of cursor puts a tip on net, and the
+crossing moves ~15 cm per 5 cm of cursor.
+
+The O-zone sweep cannot measure tips in play: the duel harness models only a
+puck coming off a blade too fast to hold, not the deliberate tip
+(`Puck.apply_blade_deflect`'s `deflect_intent`, `PuckCollisionRules.tip_turn`),
+and the sweep reads shots' outcomes from the rebound field rather than
+playing them at the keeper.
+
 ### 2d. The O-zone instrument goes past the first shot
 
 `test_ozone_possession_5v5.gd` ends a possession at its first shot. Let it run
