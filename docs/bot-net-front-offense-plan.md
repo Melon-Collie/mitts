@@ -374,6 +374,31 @@ go lower, he picks 5.5 m on a third of reads and 7.5, 9.5 or 11 m on the rest.
 and 4 of 12 without it, and stays the gate if a lower F3 brings the old
 regression back.
 
+**A spot is worth what the defence must concede for it** (`08a6fa4`, the
+plan's "if the direct fix does not spread them"): the defence either leaves
+him open there, conceding his one-timer, or sends the body nearest him to
+cover him, conceding what that body held shut, the carrier's best feed to a
+teammate with him gone (`AIStationSearch.fill_opened_values`, `drawn_open`). A
+spot is worth the lesser, and one worth nothing leaves him at the slot's top;
+it replaces `shared_cover` for HIGH_SLOT. J=11, 576, against the trace's run
+with both guards:
+
+| | both guards, the one-timer | neither guard, the concession |
+|---|---|---|
+| HIGH_SLOT depth, median | 9.7 m | 8.8 m |
+| below 8 m | 19% | 36% |
+| 3 m or more off the middle | 29% | 31% |
+| nearest defender, median | 2.8 m | 2.6 m |
+| shots / possession | 0.247 ± 0.018 | 0.264 ± 0.018 |
+| slot shots / possession | 0.090 | 0.094 |
+| xG (set read) / possession | 0.0345 ± 0.0051 | 0.0396 ± 0.0057 |
+
+Counter layer +0.9 m, 4 of 12; four-high 0% in every spacing fixture. He
+plays lower, not wider: the body nearest a weak-flank spot is the winger on our
+weak point, and drawing him opens only a point shot, which is worth little.
+The station read still lifts his target (picks 5.5 m on 40% of reads, the
+target's median 9.5 m).
+
 ---
 
 ## Step 2 — Measure the net front (instruments only, no behaviour change)
