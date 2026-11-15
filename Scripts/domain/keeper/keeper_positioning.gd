@@ -249,6 +249,14 @@ func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var comes: float = maxf(-velocity.dot(lands.normalized()), 0.0)
 	var to: Vector2 = _down_spot(lands, at, maxf(KeeperRoute.KNEE_REACH_M, slides * slides / (2.0 * friction)),
 			lands.length() - comes * slides / friction)
+	# Still on his feet, a spot further off than his knees reach and his speed
+	# slides him he skates to and drops on: quicker than dropping where he is
+	# and pushing from his knees.
+	var carried: float = motor.moving().length()
+	if motor.rest == KeeperRoute.Rest.FEET and not motor.drops() \
+			and at.distance_to(to) > KeeperRoute.KNEE_REACH_M + carried * carried / (2.0 * friction):
+		motor.go_to(to, facing(to, lands), KeeperRoute.Rest.FEET, Vector2.ZERO, true)
+		return
 	# A spot as near as half a pad's width to the one he is pushing for is no
 	# new push.
 	if motor.slides() and to.distance_to(motor.route.spot) <= SEAL_NEAR_M:

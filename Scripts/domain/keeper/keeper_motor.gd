@@ -518,13 +518,16 @@ func carries() -> bool:
 
 # Landed from a glide and still sliding on his pads: whether the slide is
 # still his way to his goal down, which lies more along it than across it,
-# and still carries him faster than his knees would.
+# still carries him faster than his knees would, and will bring him within
+# their reach of it. One that dies short of that he lets go to push.
 func _rides_on() -> bool:
-	if save_move.velocity.length() <= KeeperSlide.KNEE_SHUFFLE_M_S or not _goal or route.rest != Rest.DOWN:
+	var speed: float = save_move.velocity.length()
+	if speed <= KeeperSlide.KNEE_SHUFFLE_M_S or not _goal or route.rest != Rest.DOWN:
 		return false
 	var to: Vector2 = route.spot - Vector2(x, z)
-	var way: Vector2 = save_move.velocity.normalized()
-	return to.dot(way) > absf(to.cross(way))
+	var way: Vector2 = save_move.velocity / speed
+	return to.dot(way) > absf(to.cross(way)) \
+			and speed * speed / (2.0 * save_move.pad_friction) >= to.length() - KeeperRoute.KNEE_REACH_M
 
 
 func _rest_on(r: int) -> void:

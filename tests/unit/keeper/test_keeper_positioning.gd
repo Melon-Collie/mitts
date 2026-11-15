@@ -699,6 +699,33 @@ func test_down_he_stays_down_until_the_puck_can_be_lifted_over_his_hands() -> vo
 	assert_false(KeeperPositioning._clears_his_hands(Vector2(0.0, -3.5), Vector2(0.0, -1.2)), "from just outside tight: not")
 
 
+# The live brain against a carrier of theirs sprinting across the front of
+# the crease from one wing to wide of the far post: he does not drop where he
+# is and get left there, but is across to the carrier's side of his net, down
+# or on his way down, by the time the carrier is beside that post.
+func test_a_carrier_sprinting_across_to_the_far_post_is_gone_with() -> void:
+	for side: float in [1.0, -1.0]:
+		_brain = KeeperPositioning.new()
+		_brain.play = KeeperPlayRead.new()
+		_motor = KeeperMotor.new()
+		_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+		var from := Vector2(-side * 7.0, -9.0)
+		var to := Vector2(side * 1.6, -1.5)
+		var velocity: Vector2 = (to - from).normalized() * 9.0
+		var body: Vector2 = from
+		var tick: int = 0
+		while body.distance_to(to) > 0.1:
+			body += velocity * DT
+			_brain.play.step(DT, body, velocity, false, body, true)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+			_motor.step(DT)
+			tick += 1
+		var what: String = "%+.0f" % side
+		assert_gt(side * _motor.x, 0.0, "%s: across to the carrier's side of his net" % what)
+		assert_true(_brain.kept_down or _brain.planted or _motor.rest != R.FEET, "%s: playing him down" % what)
+
+
 # The live brain against a carrier of theirs who sells one side and stops
 # there, braking as hard as a skater stops: skating across on a diagonal, and
 # driving in with the puck pulled wide of the post. Down for him, he is never
