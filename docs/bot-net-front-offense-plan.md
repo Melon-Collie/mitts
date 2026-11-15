@@ -885,6 +885,30 @@ station-keeping bot. J=11, 576:
 
 The net front is held more often; the attack's numbers move within noise.
 
+**Why their man is nearer** (J=2, the far ticks split): our man is skating to
+his spot 74–79% of them, 4 m off it at 2.7–3 m/s, the spot half a second old;
+stalled 21–26%; blocked by a body never. Their man stands on the spot 6–7% of
+the time. He is not losing battles: he is rarely in one.
+
+**One station, the shot's line** (`ec2a037`): NET_FRONT stands on the
+carrier's shot line from 2.0 to 5.5 m out, each point priced as any station,
+the held point carried at its distance out. J=11, 576:
+
+| | three stations (glide brake) | the shot line |
+|---|---|---|
+| the spot's motion | 1.5 m/s | 2.1 m/s |
+| its jumps (> 0.5 m a tick) | 0.51 / s, 1.9 m | 0.86 / s, 1.5 m |
+| NET_FRONT changes hands | 0.06 / s | 0.22 / s, the new man 6.8 m off |
+| net-front man on his spot | 26% | 19% |
+| shots screened | 4% | 9% |
+| first touch ours on rebounds | 30% ± 4% | 26% ± 4% |
+| xG / possession | 0.037 ± 0.005 | 0.044 ± 0.006 |
+
+The line moves with every step the carrier takes, and the best point on it
+runs between the crease and the screen distance, so the spot moves more, not
+less; standing out on the line, the net-front man is handed the slot by the
+election more often.
+
 ---
 
 ## Step 5 — Tips
