@@ -29,18 +29,21 @@ var _local_cursor: Callable = Callable()
 # order may not conscript.
 var _viewed_carrier_peer: Callable = Callable()
 var _host_carrier_peer: Callable = Callable()
+# (peer_id) -> bool: whether a bot is playing a role its brain can change.
+var _takes_orders: Callable = Callable()
 var _preview: PingPreview = null
 
 
 func setup(tree: SceneTree, registry: PlayerRegistry, get_puck: Callable,
 		local_cursor: Callable, viewed_carrier_peer: Callable,
-		host_carrier_peer: Callable) -> void:
+		host_carrier_peer: Callable, takes_orders: Callable) -> void:
 	_tree = tree
 	_registry = registry
 	_get_puck = get_puck
 	_local_cursor = local_cursor
 	_viewed_carrier_peer = viewed_carrier_peer
 	_host_carrier_peer = host_carrier_peer
+	_takes_orders = takes_orders
 
 
 # The ping key down: the call it would make is previewed until it comes up.
@@ -110,7 +113,8 @@ func _order_a_bot(team_id: int, pinger_peer_id: int, ping_type: int,
 	var players: Dictionary[int, PlayerRecord] = _registry.all()
 	for pid: int in players:
 		if players[pid].is_bot and positions.has(pid) \
-				and _registry.team_id_by_peer.get(pid, -1) == team_id:
+				and _registry.team_id_by_peer.get(pid, -1) == team_id \
+				and _takes_orders.call(pid):
 			bot_peers.append(pid)
 	var obeyer: int = PingRules.choose_obeyer(
 			ping_type, target_peer_id, world_pos, pinger_peer_id,

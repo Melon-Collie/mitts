@@ -2100,7 +2100,8 @@ func _wire_subsystems() -> void:
 	_pings.setup(get_tree(), _registry, get_puck, _local_cursor_on_ice,
 			get_puck_carrier_peer_id,
 			func() -> int: return puck_controller.get_carrier_peer_id() \
-					if puck_controller != null else -1)
+					if puck_controller != null else -1,
+			func(peer_id: int) -> bool: return not _ai_coordinator.is_excluded(peer_id))
 	_pings.bot_ordered.connect(_on_ping_bot_ordered)
 	_roster_announcer.announced.connect(roster_announced.emit)
 	_registry.player_added.connect(_on_registry_player_added)

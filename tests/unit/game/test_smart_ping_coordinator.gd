@@ -18,6 +18,7 @@ var _pings: SmartPingCoordinator = null
 var _cursor: Vector3 = Vector3.INF
 var _viewed_carrier: int = -1
 var _host_carrier: int = -1
+var _out_of_shape: Dictionary[int, bool] = {}
 var _orders: Array = []
 var _acks: Array = []
 var _was_host: bool = false
@@ -36,13 +37,15 @@ func before_each() -> void:
 	_cursor = Vector3.INF
 	_viewed_carrier = -1
 	_host_carrier = -1
+	_out_of_shape.clear()
 	_orders.clear()
 	_acks.clear()
 	_pings = SmartPingCoordinator.new()
 	_pings.setup(get_tree(), _registry, func() -> Node3D: return null,
 			func() -> Vector3: return _cursor,
 			func() -> int: return _viewed_carrier,
-			func() -> int: return _host_carrier)
+			func() -> int: return _host_carrier,
+			func(peer_id: int) -> bool: return not _out_of_shape.has(peer_id))
 	_pings.bot_ordered.connect(
 			func(team: int, type: int, _pinger: int, _target: int, obeyer: int,
 					_pos: Vector3) -> void: _orders.append([team, type, obeyer]))
@@ -118,6 +121,25 @@ func test_the_bot_with_the_puck_is_not_conscripted() -> void:
 	_host_carrier = BOT_NEAR
 	_pings.on_received(ME, PingRules.Type.GO_THERE, -1, SPOT)
 	assert_eq(_orders, [[0, PingRules.Type.GO_THERE, BOT_FAR]])
+
+
+func test_a_bot_out_of_its_teams_shape_is_passed_over() -> void:
+	# Hunting a man for a fight, or a scripted puppet: the brain gives him no
+	# role, so an order to him is one nobody carries out.
+	_out_of_shape[BOT_NEAR] = true
+	_pings.on_received(ME, PingRules.Type.GO_THERE, -1, SPOT)
+	assert_eq(_orders, [[0, PingRules.Type.GO_THERE, BOT_FAR]])
+	assert_eq(_acks, [[BOT_FAR, ME]])
+
+
+func test_an_order_no_bot_can_take_is_answered_by_nobody() -> void:
+	_out_of_shape[BOT_NEAR] = true
+	_out_of_shape[BOT_FAR] = true
+	_pings.on_received(ME, PingRules.Type.GO_THERE, -1, SPOT)
+	assert_eq(_orders, [[0, PingRules.Type.GO_THERE, -1]])
+	assert_eq(_acks, [])
+	_pings.on_received(ME, PingRules.Type.GET_OPEN, BOT_NEAR, Vector3.ZERO)
+	assert_eq(_acks, [], "named outright, he still cannot take it")
 
 
 func test_a_shot_call_is_ordered_but_not_answered() -> void:

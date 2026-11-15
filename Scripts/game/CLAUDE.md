@@ -109,7 +109,9 @@ Two structural rules replace locks. Every host-raised brain mutation — pings,
 carrier-flip re-ticks, tutorial spawn and despawn — is queued and applied *by the
 main thread* in the idle window before the next kick. And the two brain fields
 main reads every frame (the ping-elected chaser, and the possession / coverage
-flag) are published into plain mirrors at kick time.
+flag) are published into plain mirrors at kick time. Who is queued out of a
+brain is also kept as of the request (`is_excluded`), for a main-thread reader
+that cannot wait for the drain: the ping's election of the bot that obeys.
 
 The domain's static memos and scratch belong to the worker. A main-thread
 caller brings its own: the xG stat reads the shot field through its own
