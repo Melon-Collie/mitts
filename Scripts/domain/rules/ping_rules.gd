@@ -189,6 +189,15 @@ static func is_valid_type(type: int) -> bool:
 	return type >= 0 and type < _MESSAGE_KEYS.size()
 
 
+# Whether a ping off the wire can be shown and obeyed at all: a known type, a
+# finite position, and a target that is nobody or one of `skater_positions`.
+static func is_well_formed(type: int, target_peer: int, world_pos: Vector3,
+		skater_positions: Dictionary) -> bool:
+	if not is_valid_type(type) or not world_pos.is_finite():
+		return false
+	return target_peer == -1 or skater_positions.has(target_peer)
+
+
 static func _make(type: int, target_peer: int, world_pos: Vector3) -> Resolution:
 	var r := Resolution.new()
 	r.type = type

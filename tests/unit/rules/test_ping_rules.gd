@@ -180,3 +180,16 @@ func test_type_validation_bounds() -> void:
 	assert_true(PingRules.is_valid_type(PingRules.Type.GO_THERE))
 	assert_false(PingRules.is_valid_type(-1))
 	assert_false(PingRules.is_valid_type(PingRules.Type.size()))
+
+
+func test_a_ping_off_the_wire_must_name_a_real_spot_and_a_real_skater() -> void:
+	var here := Vector3(1.0, 0.0, 2.0)
+	assert_true(PingRules.is_well_formed(PingRules.Type.GO_THERE, -1, here, _positions))
+	assert_true(PingRules.is_well_formed(PingRules.Type.COVER_HIM, OPP_A, here, _positions))
+	assert_false(PingRules.is_well_formed(PingRules.Type.size(), -1, here, _positions))
+	assert_false(PingRules.is_well_formed(PingRules.Type.COVER_HIM, 99, here, _positions),
+			"a target nobody holds")
+	assert_false(PingRules.is_well_formed(PingRules.Type.GO_THERE, -1,
+			Vector3(NAN, 0.0, 0.0), _positions))
+	assert_false(PingRules.is_well_formed(PingRules.Type.GO_THERE, -1,
+			Vector3(INF, 0.0, 0.0), _positions))

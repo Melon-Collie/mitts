@@ -3651,9 +3651,8 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 		if puck_playable and team_id >= 0 and team_id < team_brains.size():
 			# Mirrored, not read live — the worker advances + expires the ping
 			# directives this comes from (see AICoordinator).
-			var pinged_chaser: int = _ai_coordinator.ping_chase_peer(team_id)
-			if pinged_chaser != -1 and ids.has(pinged_chaser):
-				best_pid = pinged_chaser
+			best_pid = AILoosePuckChase.with_order(best_pid,
+					_ai_coordinator.ping_chase_peer(team_id), ids, snap)
 		_prev_chase_by_team[team_id] = best_pid
 		snap.closest_to_puck_by_team[team_id] = best_pid
 
@@ -3691,6 +3690,12 @@ func get_puck_carrier() -> Skater:
 	if puck != null:
 		return puck.get_carrier()
 	return null
+
+
+# get_puck_carrier's peer, -1 when loose. PuckController.get_carrier_peer_id
+# is the host's alone and reads loose on every client.
+func get_puck_carrier_peer_id() -> int:
+	return _registry.resolve_peer_id(get_puck_carrier()) if _registry != null else -1
 
 
 func _get_puck_carrier_team_id() -> int:
@@ -6455,7 +6460,7 @@ func try_send_smart_ping() -> void:
 	var res: PingRules.Resolution = PingRules.resolve(
 			input.mouse_world_pos, rec.peer_id, my_team,
 			_collect_skater_positions(), _registry.team_id_by_peer,
-			puck_controller.get_carrier_peer_id() if puck_controller != null else -1,
+			get_puck_carrier_peer_id(),
 			puck.global_position if puck != null else Vector3.ZERO)
 	if res == null:
 		return
@@ -6464,8 +6469,16 @@ func try_send_smart_ping() -> void:
 
 func _on_smart_ping_received(sender_peer_id: int, ping_type: int,
 		target_peer_id: int, world_pos: Vector3) -> void:
-	if _registry == null or not PingRules.is_valid_type(ping_type):
+	if _registry == null:
 		return
+	# The payload is the pinger's own: the relay checked its type and nothing else.
+	var positions: Dictionary = _collect_skater_positions()
+	if not PingRules.is_well_formed(ping_type, target_peer_id, world_pos, positions):
+		return
+	if ping_type == PingRules.Type.GO_THERE:
+		var inside: Vector2 = GameRules.clamp_to_rink_inner(
+				Vector2(world_pos.x, world_pos.z))
+		world_pos = Vector3(inside.x, 0.0, inside.y)
 	var sender_team: int = _registry.team_id_by_peer.get(sender_peer_id, -1)
 	if sender_team == -1:
 		return  # unknown / spectator sender — nothing to show or obey
@@ -6488,11 +6501,10 @@ func _on_smart_ping_received(sender_peer_id: int, ping_type: int,
 		return
 	if sender_team < 0 or sender_team >= team_brains.size():
 		return
-	var positions: Dictionary = _collect_skater_positions()
 	var bot_peers: Array = []
 	var players: Dictionary[int, PlayerRecord] = get_players()
 	for pid: int in players:
-		if players[pid].is_bot \
+		if players[pid].is_bot and positions.has(pid) \
 				and _registry.team_id_by_peer.get(pid, -1) == sender_team:
 			bot_peers.append(pid)
 	var carrier_pid: int = puck_controller.get_carrier_peer_id() \
@@ -6505,12 +6517,14 @@ func _on_smart_ping_received(sender_peer_id: int, ping_type: int,
 			sender_team, ping_type, sender_peer_id, target_peer_id, obeyer, world_pos)
 
 
+# Every skater a ping can name or order, by peer. One in the penalty box is
+# neither: he is out of sight and can obey nothing.
 func _collect_skater_positions() -> Dictionary:
 	var positions: Dictionary = {}
 	var players: Dictionary[int, PlayerRecord] = get_players()
 	for pid: int in players:
 		var r: PlayerRecord = players[pid]
-		if r.skater != null:
+		if r.skater != null and not r.skater.in_box:
 			positions[pid] = r.skater.global_position
 	return positions
 

@@ -3405,8 +3405,10 @@ func _should_chase_loose_puck(snapshot: WorldSnapshot, self_pos: Vector3) -> boo
 	# Smart-ping GET_PUCK: an ordered bot chases regardless of the natural
 	# election and the race-lost decline below — an order is an order (the
 	# election override in GameManager._enrich_snapshot_for_ai keeps a second
-	# natural chaser from doubling up).
-	if _current_strategy != null and _current_strategy.ping_chase_peer() == _peer_id:
+	# natural chaser from doubling up). Not one who may not touch the puck: the
+	# election stands for him (AILoosePuckChase.with_order).
+	if _current_strategy != null and _current_strategy.ping_chase_peer() == _peer_id \
+			and not snapshot.is_out_of_play(_peer_id):
 		return true
 	# A free puck coming into your reach band is yours, election or not, and
 	# ahead of the race-lost decline (see Scripts/domain/ai/CLAUDE.md →

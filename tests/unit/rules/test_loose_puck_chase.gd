@@ -916,3 +916,29 @@ func test_the_passer_does_not_own_his_own_feed() -> void:
 	# The feed starts on his blade, leaving: that is not a puck coming to his stick.
 	assert_ne(AILoosePuckChase.elect(_feed_states(), [200, 300], FEED_FROM,
 			FEED_VEL, -1), 300)
+
+
+# ── A human's "Get the puck!" laid over the election ─────────────────────────
+
+func _feed_snapshot() -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	var states: Dictionary = _feed_states()
+	for pid: int in states:
+		snap.skater_states[pid] = states[pid]
+	return snap
+
+
+func test_an_ordered_bot_takes_the_chase_from_the_elected_one() -> void:
+	var snap: WorldSnapshot = _feed_snapshot()
+	assert_eq(AILoosePuckChase.with_order(100, 200, [100, 200, 300], snap), 200)
+	assert_eq(AILoosePuckChase.with_order(100, -1, [100, 200, 300], snap), 100,
+			"no order")
+
+
+func test_an_order_to_a_man_who_cannot_play_the_puck_leaves_the_election() -> void:
+	var snap: WorldSnapshot = _feed_snapshot()
+	snap.tag_up_peers[200] = true
+	assert_eq(AILoosePuckChase.with_order(100, 200, [100, 200, 300], snap), 100,
+			"owing a tag-up")
+	assert_eq(AILoosePuckChase.with_order(100, 999, [100, 200, 300], snap), 100,
+			"not on this team's ice")

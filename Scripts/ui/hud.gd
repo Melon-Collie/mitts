@@ -219,7 +219,7 @@ func _spectator_controls_hint() -> String:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var menu_open: bool = _confirm_dialog.visible or _pause_menu.visible or _side_menu.visible
-	# Pad ping: the rebindable pad button (D-pad Up by default). Only fires — and
+	# Pad ping: the rebindable pad button (PlayerPrefs.pad_button). Only fires — and
 	# only consumes — when no menu owns the screen, so the D-pad still navigates an
 	# open menu (which the GUI would have consumed before this anyway).
 	var pad_ping: bool = InputDeviceTracker.is_gamepad_active() and not menu_open \

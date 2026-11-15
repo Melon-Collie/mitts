@@ -172,6 +172,9 @@ func tick(delta: float, snapshot: WorldSnapshot) -> void:
 	if snapshot != null and snapshot.puck_state != null:
 		var carrier: int = snapshot.puck_state.carrier_peer_id
 		if carrier != _held_by:
+			if ping_directives.on_carrier_changed(
+					_held_by, carrier, team_id, _team_id_by_peer):
+				force_retick()
 			_held_by = carrier
 			_free_s = 0.0
 		elif AIForecheckRead.carrier_pressured(snapshot, team_id, _team_id_by_peer,
