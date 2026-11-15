@@ -192,6 +192,11 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 			-TIP_MAX_TURN_RAD, TIP_MAX_TURN_RAD)
 	var bearing: Vector2 = (-travel).rotated(-asin(turn / TIP_MAX_TURN_RAD))
 	var body: Vector2 = tip - bearing * TIP_BLADE_OUT_M
+	# A shot he can hold is received, not tipped: only one arriving in his frame
+	# faster than he holds a catch on the line goes off the face.
+	if AIFeedReception.arrival_closing_speed(puck_pos, Vector3(tip.x, 0.0, tip.y), puck_speed,
+			ctx.self_velocity) <= AIFeedReception.RECEIVE_HOLD_CEILING_M_S:
+		return null
 	# A tip his blade cannot be on before the puck crosses his line, stick out
 	# (AILoosePuckChase.reach_eta), is no tip: the crash is his play instead.
 	if AILoosePuckChase.reach_eta(ctx.self_pos, Vector3(tip.x, 0.0, tip.y), ctx.self_velocity,
@@ -201,6 +206,7 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	d.target_position = Vector3(body.x, 0.0, body.y)
 	d.aim_world_pos = Vector3(tip.x, 0.0, tip.y)
 	d.has_aim_override = true
+	d.tips_shot = true
 	# Hold the deflect, so the blade redirects the shot rather than catching it,
 	# from when the press can read the puck: it reads it once, and takes the
 	# blade to its height (DeflectReachRules.lift_to_meet). A raised shot is

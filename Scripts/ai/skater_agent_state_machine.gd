@@ -1019,6 +1019,7 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	_off_puck_stick_live = false
 	_off_puck_tie_live = false
 	_off_puck_yank_live = false
+	var tipping: bool = false
 
 	# Tag-up override: when ghosted or owing an NHL tag-up, bot must clear
 	# back across the blue line before doing anything else. Highest-priority
@@ -1089,6 +1090,7 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			# stretch the argmax cadence a second time.
 			_role_decision_cooldown -= _dispatch_armed_span_ticks
 			decision = _cached_role_decision
+		tipping = decision.tips_shot
 		# Smart-ping GO_THERE override: a live location order from a human
 		# teammate replaces the role's move target for its duration. The role
 		# keeps supplying aim / lift / one-timer readiness — only the skating
@@ -1186,6 +1188,10 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	# Transitions
 	if have_puck:
 		_set_state(State.CARRY)
+	elif tipping:
+		# A teammate's shot too fast to hold, set up to tip: neither received,
+		# one-timed nor chased.
+		pass
 	elif _is_one_timer_ready and not _one_timer_spent and _in_attacking_zone(self_pos) \
 			and (_one_timer.line_anchor(snapshot, self_pos, _attacking_goal_pos).is_finite()
 			or _puck_in_one_timer_zone(snapshot, self_pos)):

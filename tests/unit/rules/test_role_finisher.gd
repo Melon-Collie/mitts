@@ -105,6 +105,10 @@ func test_hold_when_no_puck_state() -> void:
 
 # ─── TIP: fast ground shot ────────────────────────────────────────────────
 
+# A hard wrister down the line the tip fixtures share: 30.6 m/s, faster than a
+# man standing on it holds a catch (AIFeedReception.RECEIVE_HOLD_CEILING_M_S).
+const SHOT_VEL := Vector3(-6.0, 0.0, -30.0)
+
 # Where the tip the decision sets up sends the puck: the turn the body→blade
 # bearing asks of PuckCollisionRules.tip_turn — the puck's own physics — applied
 # to its line at the blade, carried to the goal line.
@@ -127,23 +131,39 @@ func _assert_blade_on_the_path(d: RoleDecision, tip_x: float) -> void:
 
 func test_tip_puts_the_blade_on_the_path_and_turns_it_at_the_middle() -> void:
 	# Fast ground shot on net from a teammate at (2.3, 0, -15). Finisher
-	# (peer 1) is at (-2, 0, -22) — back door. Puck vel (-3, 0, -15) —
-	# speed ≈ 15 m/s, heading toward our offensive goal at -Z, crossing its
-	# line at x ≈ 0. Path crosses our z (-22) at t ≈ 0.467 s,
-	# x ≈ 2.3 + (-3)(0.467) ≈ 0.9.
+	# (peer 1) is at (0.5, 0, -22), a stride off its line. The puck heads toward our
+	# offensive goal at -Z, crossing its line at x ≈ 0, and our z (-22) at
+	# x ≈ 2.3 − 0.2 × 7 ≈ 0.9.
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
-	var vel := Vector3(-3.0, 0.0, -15.0)
+	var vel := SHOT_VEL
 	var ctx: RoleContext = _make_ctx(
-			Vector3(-2.0, 0.0, -22.0),
+			Vector3(0.5, 0.0, -22.0),
 			teammate_pos, vel,
 			[
-				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, false),  # not elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
 	_assert_blade_on_the_path(d, 0.9)
+	assert_true(d.tips_shot, "left to the tip, not received")
 	assert_almost_eq(_tipped_x_at_goal(d, vel), 0.0, 0.02,
 			"the tip goes at the middle of the net")
+
+
+func test_a_shot_he_can_hold_is_received_not_tipped() -> void:
+	# The same line at half the pace: he can hold it, so he takes it as a
+	# reception and the tip stands down.
+	var teammate_pos := Vector3(2.3, 0.0, -15.0)
+	var ctx: RoleContext = _make_ctx(
+			Vector3(-2.0, 0.0, -22.0),
+			teammate_pos, SHOT_VEL * 0.5,
+			[
+				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(2, TEAM_ID, teammate_pos, false),
+			])
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_false(d.tips_shot)
+	assert_false(d.deflect)
 
 
 func test_a_wide_shot_a_tip_can_bring_back_is_tipped_in() -> void:
@@ -152,7 +172,7 @@ func test_a_wide_shot_a_tip_can_bring_back_is_tipped_in() -> void:
 	# and as far as a tip turns it lands inside the mouth.
 	# He stands where his stick can be on it in time (from the back door's 4.6 m
 	# it is past before he could reach).
-	var vel := Vector3(-3.0, 0.0, -15.0)
+	var vel := SHOT_VEL
 	var ctx: RoleContext = _make_ctx(
 			Vector3(1.0, 0.0, -22.0),
 			Vector3(4.0, 0.0, -15.0), vel)
@@ -170,7 +190,7 @@ func test_a_shot_wider_than_a_tip_turns_is_not_tipped() -> void:
 	var anchor := Vector3(-2.0, 0.0, -22.0)
 	var ctx: RoleContext = _make_ctx(
 			anchor,
-			Vector3(8.0, 0.0, -15.0), Vector3(-1.0, 0.0, -15.0))
+			Vector3(8.0, 0.0, -15.0), Vector3(-2.0, 0.0, -30.0))
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
 	assert_false(d.has_aim_override, "no tip off a puck no tip brings back")
 	assert_false(d.deflect)
@@ -186,10 +206,10 @@ func test_an_elevated_shot_is_tipped_down() -> void:
 	# it down, off the plane the keeper read.
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
-			Vector3(-2.0, 0.0, -22.0),
-			teammate_pos, Vector3(-3.0, 0.0, -15.0),
+			Vector3(0.5, 0.0, -22.0),
+			teammate_pos, SHOT_VEL,
 			[
-				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, true),  # elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
@@ -203,10 +223,10 @@ func test_a_ground_shot_is_tipped_at_its_best_height() -> void:
 	# ice for a puck met there — at the height the tip field scores it most.
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
-			Vector3(-2.0, 0.0, -22.0),
-			teammate_pos, Vector3(-3.0, 0.0, -15.0),
+			Vector3(0.5, 0.0, -22.0),
+			teammate_pos, SHOT_VEL,
 			[
-				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, false),  # NOT elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
@@ -216,13 +236,13 @@ func test_a_ground_shot_is_tipped_at_its_best_height() -> void:
 
 
 func test_the_deflect_waits_for_the_press_to_read_the_shot() -> void:
-	# The same ground shot from twice as far: it reaches our z-plane past the
-	# press's read horizon, so the finisher sets up the tip without the
-	# deflect yet — held from there, the press would read nothing.
-	var teammate_pos := Vector3(5.1, 0.0, -1.0)
+	# The same ground shot from 32 m: it reaches our z-plane past the press's
+	# read horizon, so the finisher sets up the tip without the deflect yet —
+	# held from there, the press would read nothing.
+	var teammate_pos := Vector3(7.3, 0.0, 10.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
-			teammate_pos, Vector3(-3.0, 0.0, -15.0),
+			teammate_pos, SHOT_VEL,
 			[
 				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, false),
@@ -533,10 +553,10 @@ func test_reactive_fires_on_loose_shots_and_defers_while_the_puck_reads_held() -
 	# fast on-net puck reads loose.
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
-			Vector3(-2.0, 0.0, -22.0),
-			teammate_pos, Vector3(-3.0, 0.0, -15.0),  # fast ground shot
+			Vector3(0.5, 0.0, -22.0),
+			teammate_pos, SHOT_VEL,
 			[
-				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, false),
 			])
 	ctx.snapshot.puck_state.carrier_peer_id = 2

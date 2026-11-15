@@ -45,7 +45,7 @@ Adding a behaviour is four steps:
 
 | from | to | when |
 |---|---|---|
-| OFF_PUCK | CHASE_PUCK | a loose puck this bot may play (`_should_chase_loose_puck`), or a pass released its way |
+| OFF_PUCK | CHASE_PUCK | a loose puck this bot may play (`_should_chase_loose_puck`), or a pass released its way — unless he is set up to tip a teammate's shot too fast to hold (`RoleDecision.tips_shot`), which no one-timer press takes either |
 | OFF_PUCK, CHASE_PUCK | CARRY | it picks up the puck |
 | OFF_PUCK | ONE_TIMER_PRESSED | a ready one-timer man's feed is released on his line or reaches his zone (`_is_one_timer_ready`, `SkaterAgentOneTimer.line_anchor`, `_puck_in_one_timer_zone`) |
 | CHASE_PUCK | ONE_TIMER_PRESSED | a ready one-timer man's feed reaches his zone, or a feed he is chasing is worth redirecting (`_try_shot_reception`) |

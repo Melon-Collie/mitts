@@ -44,6 +44,9 @@ var has_aim_override: bool = false
 # nudge — and consumed by the state machine's OFF_PUCK handler.
 var deflect: bool = false
 var deflect_level: int = ShotMechanics.ELEVATION_FLAT
+# Set up to tip a teammate's shot too fast to hold: the agent leaves it to the
+# tip rather than going to receive it.
+var tips_shot: bool = false
 
 # Off-puck one-timer readiness — camped at the staging spot, pre-aimed at the
 # open net. The state machine forwards it to TeamBrain so the carrier can reward
