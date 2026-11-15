@@ -219,8 +219,8 @@ func _spectator_controls_hint() -> String:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var menu_open: bool = _confirm_dialog.visible or _pause_menu.visible or _side_menu.visible
-	# Smart ping: down previews the call, up sends it (GameManager owns the
-	# gating). A menu taking the screen calls a held one off, and the pad's
+	# Smart ping: down previews the call, up sends it (SmartPingCoordinator
+	# owns the gating). A menu taking the screen calls a held one off, and the pad's
 	# button (rebindable, PlayerPrefs.pad_button) is left to the menu while one
 	# is open: the D-pad navigates it.
 	var pad_ping: bool = InputDeviceTracker.is_gamepad_active() \

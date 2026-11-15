@@ -26,7 +26,7 @@ enum Type {
 
 # Translation keys for the chat-bubble text, indexed by Type. The domain stays
 # engine-free (no tr() here — that's an engine call): it hands back a stable
-# key and the display seam localizes it (tr() in GameManager's ping handler),
+# key and the display seam localizes it (SmartPingCoordinator, PingPreview),
 # which also keeps the wire carrying only the enum int. English/Spanish copy
 # lives in locale/translations.csv.
 # The obeying bot's answer (see acknowledges).

@@ -50,6 +50,10 @@ func _process(_delta: float) -> void:
 
 
 func _refresh() -> void:
+	# Whoever resolves the ping is the session's, and this node is the scene's.
+	if not _resolve.is_valid() or not _subject_of.is_valid():
+		close()
+		return
 	var res: PingRules.Resolution = _resolve.call() as PingRules.Resolution
 	if res == null:
 		_show_nothing()
