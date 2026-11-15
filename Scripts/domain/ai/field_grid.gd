@@ -13,6 +13,13 @@ static var weight := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 # The four spots round `x` across and `out` metres out on the grid of `grid_x`
 # by `grid_fwd`, into spot / weight.
 static func fill(grid_x: Array[float], grid_fwd: Array[float], x: float, out: float) -> void:
+	fill_into(grid_x, grid_fwd, x, out, spot, weight)
+
+
+# fill() into a caller's own corners (four of each). spot / weight are the AI
+# worker's: a reader on the main thread brings its own.
+static func fill_into(grid_x: Array[float], grid_fwd: Array[float], x: float, out: float,
+		spots: PackedInt32Array, weights: PackedFloat32Array) -> void:
 	var xi: int = _lower(grid_x, x)
 	var fi: int = _lower(grid_fwd, out)
 	var tx: float = _frac(grid_x, xi, x)
@@ -20,14 +27,14 @@ static func fill(grid_x: Array[float], grid_fwd: Array[float], x: float, out: fl
 	var nx: int = grid_x.size()
 	var xj: int = mini(xi + 1, nx - 1)
 	var fj: int = mini(fi + 1, grid_fwd.size() - 1)
-	spot[0] = fi * nx + xi
-	spot[1] = fi * nx + xj
-	spot[2] = fj * nx + xi
-	spot[3] = fj * nx + xj
-	weight[0] = (1.0 - tx) * (1.0 - tf)
-	weight[1] = tx * (1.0 - tf)
-	weight[2] = (1.0 - tx) * tf
-	weight[3] = tx * tf
+	spots[0] = fi * nx + xi
+	spots[1] = fi * nx + xj
+	spots[2] = fj * nx + xi
+	spots[3] = fj * nx + xj
+	weights[0] = (1.0 - tx) * (1.0 - tf)
+	weights[1] = tx * (1.0 - tf)
+	weights[2] = (1.0 - tx) * tf
+	weights[3] = tx * tf
 
 
 # The last grid index at or below `v`, clamped to the grid.

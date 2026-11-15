@@ -916,3 +916,57 @@ func test_the_passer_does_not_own_his_own_feed() -> void:
 	# The feed starts on his blade, leaving: that is not a puck coming to his stick.
 	assert_ne(AILoosePuckChase.elect(_feed_states(), [200, 300], FEED_FROM,
 			FEED_VEL, -1), 300)
+
+
+# ── A shot on net is raced to its rebound ───────────────────────────────────
+
+const _SHOT_NET := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+const _SHOT_FROM := Vector3(1.0, 0.0, -GameRules.GOAL_LINE_Z + 10.0)
+
+
+func _corners() -> Array:
+	return [PackedInt32Array([0, 0, 0, 0]), PackedFloat32Array([0.0, 0.0, 0.0, 0.0])]
+
+
+func _rebound(vel: Vector3) -> Vector3:
+	var c: Array = _corners()
+	return AILoosePuckChase.rebound_point(_SHOT_FROM, vel, _SHOT_FROM, c[0], c[1])
+
+
+func test_a_shot_on_net_is_played_where_its_rebound_sits() -> void:
+	var at: Vector3 = _rebound((_SHOT_NET - _SHOT_FROM).normalized() * 30.0)
+	assert_eq(at, AIReboundField.crash_point_at(_SHOT_FROM, false, _SHOT_NET),
+			"the rebound field's contest point for the release")
+
+
+func test_a_puck_that_is_not_a_shot_on_net_has_no_rebound() -> void:
+	var on: Vector3 = (_SHOT_NET - _SHOT_FROM).normalized()
+	assert_false(_rebound(on * 8.0).is_finite(), "too slow for a shot")
+	assert_false(_rebound(-on * 30.0).is_finite(), "heading away")
+	assert_false(_rebound((_SHOT_NET + Vector3(4.0, 0.0, 0.0) - _SHOT_FROM).normalized()
+			* 30.0).is_finite(), "wide of the mouth")
+
+
+func test_a_shot_on_net_elects_the_man_soonest_to_its_rebound() -> void:
+	# One man stands on the shot's line nearer the shooter, the other at the
+	# rebound: raced along the puck's path the first meets it; raced to the
+	# rebound, the second is there.
+	var vel: Vector3 = (_SHOT_NET - _SHOT_FROM).normalized() * 30.0
+	var at: Vector3 = _rebound(vel)
+	var in_lane: Vector3 = _SHOT_FROM + vel.normalized() * 2.0
+	var states := _states({100: _skater(in_lane), 101: _skater(at + Vector3(0.3, 0.0, 0.0))})
+	assert_eq(AILoosePuckChase.elect(states, [100, 101], _SHOT_FROM, vel, -1), 100,
+			"the path's own race")
+	assert_eq(AILoosePuckChase.elect(states, [100, 101], _SHOT_FROM, vel, -1, {}, true, [], [],
+			at), 101, "raced to the rebound")
+
+
+func test_the_rebound_read_off_the_worker_brings_its_own_corners() -> void:
+	# GameManager elects on the main thread while the AI worker reads the
+	# fields through AIFieldGrid's corners: its read must pass its own.
+	var src: String = FileAccess.get_file_as_string("res://Scripts/game/game_manager.gd")
+	assert_true(src.contains("AIReboundField.prepare()"),
+			"the field is built before either thread reads it")
+	assert_false(src.contains("AIFieldGrid.spot"),
+			"the main thread never fills the worker's corners")
+	assert_true(src.contains("_rebound_spots"), "it passes its own")

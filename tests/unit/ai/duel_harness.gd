@@ -1524,6 +1524,10 @@ func _build_snapshot() -> WorldSnapshot:
 	for s: SimSkater in skaters:
 		var arr: Array = snap.teammate_ids_by_team.get_or_add(s.team_id, [])
 		arr.append(s.peer_id)
+	var rebound_at: Vector3 = Vector3.INF
+	if carrier_id == -1 and loose_released_by != -1:
+		rebound_at = AILoosePuckChase.rebound_point(puck_pos, puck_vel,
+				_skater(loose_released_by).pos, AIFieldGrid.spot, AIFieldGrid.weight)
 	for tid: int in snap.teammate_ids_by_team:
 		# The camper filter is part of that enrichment too: a one-timer-ready
 		# bot has opted out of loose-puck work, so electing him froze the whole
@@ -1536,7 +1540,7 @@ func _build_snapshot() -> WorldSnapshot:
 		var elected: int = AILoosePuckChase.elect(
 				snap.skater_states, snap.teammate_ids_by_team[tid],
 				puck_pos, puck_vel, int(_prev_chase_by_team.get(tid, -1)),
-				caps_by_peer, true, [], camped)
+				caps_by_peer, true, [], camped, rebound_at)
 		snap.closest_to_puck_by_team[tid] = elected
 		_prev_chase_by_team[tid] = elected
 	# Static home keepers so shot scoring sees someone in each net (goalie

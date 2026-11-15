@@ -437,6 +437,9 @@ static func _segment_meet_fraction(a: Vector3, b: Vector3, pos: Vector3) -> floa
 #                    If the filters exclude EVERYONE the raw election runs
 #                    instead — someone must own the read, and the camper's
 #                    own veto still governs its behavior.
+#
+# `rebound_at` (rebound_point), when finite, is where a shot on net will be
+# played: the race is every body's arrival there, not the puck's path.
 static func elect(
 		skater_states: Dictionary,
 		teammate_ids: Array,
@@ -446,9 +449,13 @@ static func elect(
 		caps_by_peer: Dictionary = {},
 		puck_playable: bool = true,
 		human_ids: Array = [],
-		camped_ids: Array = []) -> int:
+		camped_ids: Array = [],
+		rebound_at: Vector3 = Vector3.INF) -> int:
 	if not puck_playable:
 		return -1
+	if rebound_at.is_finite():
+		return _elect_to(skater_states, teammate_ids, rebound_at, prev_elected, caps_by_peer,
+				human_ids, camped_ids)
 	var traj: Array[Vector3] = walk_race(puck_pos, puck_vel)
 	var step_dt: float = RACE_LOOKAHEAD_S / float(RACE_STEPS)
 	var margin: float = setup_margin(puck_vel)
@@ -485,6 +492,50 @@ static func elect(
 		return elect(skater_states, teammate_ids, puck_pos, puck_vel,
 				prev_elected, caps_by_peer)
 	return best_pid
+
+
+# elect's race to a fixed spot: each eligible body's arrival there, the same
+# hysteresis and tie-break. A human counts only once he skates at it.
+static func _elect_to(skater_states: Dictionary, teammate_ids: Array, at: Vector3,
+		prev_elected: int, caps_by_peer: Dictionary, human_ids: Array,
+		camped_ids: Array) -> int:
+	var best_pid: int = -1
+	var best_t: float = INF
+	for pid: int in teammate_ids:
+		var s: SkaterNetworkState = skater_states.get(pid)
+		if s == null or camped_ids.has(pid) \
+				or (human_ids.has(pid) and not committed_to_point(s, at)):
+			continue
+		var t: float = AIArrival.time_to_arrive(s.position, at, s.velocity,
+				race_vmax(caps_by_peer.get(pid)))
+		if pid != prev_elected:
+			t += HYSTERESIS_S
+		if t < best_t or (t == best_t and (best_pid == -1 or pid < best_pid)):
+			best_t = t
+			best_pid = pid
+	if best_pid == -1 and (not camped_ids.is_empty() or not human_ids.is_empty()):
+		return _elect_to(skater_states, teammate_ids, at, prev_elected, caps_by_peer, [], [])
+	return best_pid
+
+
+# Where a loose puck that is a shot on net will be played: released by a
+# skater now at `release` and untouched since (the caller's to know), at a
+# shot's pace and heading into a net's mouth, it is the save's rebound,
+# raced where the rebound field's rebounds of that release first sit playable
+# (AIReboundField.crash_point_into, through the caller's corners), not along a
+# path the walk runs through the cage. INF for any other puck.
+static func rebound_point(puck_pos: Vector3, puck_vel: Vector3, release: Vector3,
+		spots: PackedInt32Array, weights: PackedFloat32Array) -> Vector3:
+	var shot_pace: float = AIActionScoring.TIP_MIN_SPEED_M_S
+	if puck_vel.x * puck_vel.x + puck_vel.z * puck_vel.z < shot_pace * shot_pace \
+			or absf(puck_vel.z) < 0.001:
+		return Vector3.INF
+	var goal := Vector3(0.0, 0.0, signf(puck_vel.z) * GameRules.GOAL_LINE_Z)
+	var to_line: float = (goal.z - puck_pos.z) / puck_vel.z
+	if to_line <= 0.0 \
+			or absf(puck_pos.x + puck_vel.x * to_line) > GameRules.NET_ENTRY_HALF_WIDTH:
+		return Vector3.INF
+	return AIReboundField.crash_point_into(release, false, goal, spots, weights)
 
 
 # Raw best intercept time (seconds) among `ids` to the loose puck — the

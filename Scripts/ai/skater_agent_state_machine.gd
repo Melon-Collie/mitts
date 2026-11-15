@@ -1493,6 +1493,16 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 			self_vel_3d = self_state2.velocity
 		var target: Vector3 = _lead_intercept(
 				self_pos, self_vel_3d, puck_pos, snapshot.puck_state.velocity)
+		# A shot on net is played off its rebound: he goes where it will sit, as
+		# the election raced him there (AILoosePuckChase.rebound_point).
+		var rebound: Vector3 = Vector3.INF
+		if snapshot.puck_state.carrier_peer_id == -1 \
+				and snapshot.skater_states.has(snapshot.loose_puck_released_by):
+			rebound = AILoosePuckChase.rebound_point(puck_pos, snapshot.puck_state.velocity,
+					snapshot.skater_states[snapshot.loose_puck_released_by].position,
+					AIFieldGrid.spot, AIFieldGrid.weight)
+		if rebound.is_finite():
+			target = rebound
 		# Angle an opponent carrier (Scripts/ai/CLAUDE.md → Chase doctrine). A
 		# teammate carrier never reaches here (the chase ends on possession), so a
 		# carrier is an opponent. Without the angling read the bot chases straight.
@@ -1512,7 +1522,7 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 		# the play. Overshoot along the approach line instead, so our momentum
 		# weights the contested squirt our way
 		# (PuckCollisionRules.contested_pickup_velocity) and carries us through.
-		var contested: bool = carrier_pid == -1 \
+		var contested: bool = carrier_pid == -1 and not rebound.is_finite() \
 				and puck_speed_xz <= LOOSE_PUCK_TRACK_SPEED_M_S \
 				and _opponent_within_of(snapshot, puck_pos, ENGAGEMENT_PROXIMITY_M)
 		if contested:
@@ -1524,7 +1534,7 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 				# rather than driving the body through the frame.
 				if AINetObstacle.carry_path_blocked_by_net(puck_pos, target):
 					target = puck_pos
-		elif carrier_pid == -1:
+		elif carrier_pid == -1 and not rebound.is_finite():
 			# BLADE-FIRST pickup route: steer the BODY one carry cradle SHORT of the
 			# intercept, so the puck meets the blade a cradle ahead on the skating
 			# line (and lands at the carry spot) rather than the chest overrunning

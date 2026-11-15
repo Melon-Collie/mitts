@@ -84,20 +84,27 @@ static func crash_point(spot: int, late: bool, attacking_goal: Vector3) -> Vecto
 # rather than snapping to the next spot's as he crosses into it. INF when none
 # of the four has any.
 static func crash_point_at(release: Vector3, late: bool, attacking_goal: Vector3) -> Vector3:
+	return crash_point_into(release, late, attacking_goal, AIFieldGrid.spot, AIFieldGrid.weight)
+
+
+# crash_point_at through a caller's own corners (AIFieldGrid.fill_into), for a
+# reader off the AI worker; prepare() must have run on its thread first.
+static func crash_point_into(release: Vector3, late: bool, attacking_goal: Vector3,
+		spots: PackedInt32Array, weights: PackedFloat32Array) -> Vector3:
 	_build()
-	AIFieldGrid.fill(AIReboundFieldData.SPOT_X, AIReboundFieldData.SPOT_FWD, release.x,
-			_out_of(release, attacking_goal))
+	AIFieldGrid.fill_into(AIReboundFieldData.SPOT_X, AIReboundFieldData.SPOT_FWD, release.x,
+			_out_of(release, attacking_goal), spots, weights)
 	var w: float = 0.0
 	var x: float = 0.0
 	var out: float = 0.0
 	for k: int in 4:
-		var s: int = AIFieldGrid.spot[k]
+		var s: int = spots[k]
 		var cx: float = _late_x[s] if late else _crash_x[s]
-		if is_nan(cx) or AIFieldGrid.weight[k] <= 0.0:
+		if is_nan(cx) or weights[k] <= 0.0:
 			continue
-		w += AIFieldGrid.weight[k]
-		x += AIFieldGrid.weight[k] * cx
-		out += AIFieldGrid.weight[k] * (_late_out[s] if late else _crash_out[s])
+		w += weights[k]
+		x += weights[k] * cx
+		out += weights[k] * (_late_out[s] if late else _crash_out[s])
 	if w <= 0.0:
 		return crash_point(spot_of(release, attacking_goal), late, attacking_goal)
 	return Vector3(x / w, 0.0, attacking_goal.z - signf(attacking_goal.z) * out / w)
@@ -172,6 +179,12 @@ static func _nearest(grid: Array[float], v: float) -> int:
 		if absf(grid[i] - v) < absf(grid[best] - v):
 			best = i
 	return best
+
+
+# Builds the field, which every read does lazily: a thread reading it while
+# another may be first calls this before either starts.
+static func prepare() -> void:
+	_build()
 
 
 static func _build() -> void:
