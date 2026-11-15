@@ -97,6 +97,10 @@ const OWN_MOUTH_DEPTH_M: float = CreaseRules.ARC_RADIUS
 # a post, whose pipe strips the puck.
 const OWN_MOUTH_EXIT_HALF_WIDTH_M: float = GameRules.NET_BACK_HALF_WIDTH \
 		+ BLADE_NET_CLEAR_MARGIN_M
+# How far in front of the line it goes out, when the puck is in front: the
+# puck's radius and half a blade, so no part of it is over the line.
+const OWN_MOUTH_EXIT_FRONT_M: float = GameRules.PUCK_COLLISION_RADIUS \
+		+ 0.5 * GameRules.DEFAULT_BLADE_LENGTH_M
 
 
 # How far a carrier's BODY keeps off that mouth: the puck rides out to the carry
@@ -183,12 +187,33 @@ static func own_mouth_safe_blade_target(self_pos: Vector3, self_velocity: Vector
 		var dz: float = near.y
 		if dx * dx + dz * dz < floor_band.y * floor_band.y:
 			dz = -own_goal_dir * sqrt(maxf(floor_band.y * floor_band.y - dx * dx, 0.0))
-		return Vector3(self_pos.x + dx, 0.0, self_pos.z + dz)
+		var exit := Vector3(self_pos.x + dx, 0.0, self_pos.z + dz)
+		# A puck in front of the line goes out in front of it: the straight way to a
+		# spot behind it crosses the line inside the post. Round the cage after.
+		var line_z: float = own_goal_dir * GameRules.GOAL_LINE_Z
+		if (line_z - puck_at.z) * own_goal_dir > 0.0 \
+				and (line_z - exit.z) * own_goal_dir < OWN_MOUTH_EXIT_FRONT_M:
+			exit.z = line_z - own_goal_dir * OWN_MOUTH_EXIT_FRONT_M
+		return exit
 	if _crosses_own_mouth(puck_at, target, own_goal_dir):
 		var puck_side: float = signf(puck_at.x) if puck_at.x != 0.0 else signf(self_pos.x)
 		return Vector3((puck_side if puck_side != 0.0 else 1.0) * OWN_MOUTH_EXIT_HALF_WIDTH_M,
 				0.0, target.z)
 	return target
+
+
+# Whether a puck released from `from` in front of our goal line, along `dir`,
+# crosses the line inside our mouth (the posts, the puck and half a blade):
+# fired straight into our own cage. One released from behind the line meets the
+# back of the cage, and one going away from the line never reaches it.
+static func release_into_own_net(from: Vector3, dir: Vector3, own_goal_dir: float) -> bool:
+	var line_z: float = own_goal_dir * GameRules.GOAL_LINE_Z
+	var in_front: float = (line_z - from.z) * own_goal_dir
+	var closing: float = dir.z * own_goal_dir
+	if in_front < 0.0 or closing <= 0.0001:
+		return false
+	var at_x: float = from.x + dir.x * (in_front / closing)
+	return absf(at_x) < OWN_MOUTH_HALF_WIDTH_M
 
 
 static func _crosses_own_mouth(from: Vector3, to: Vector3, own_goal_dir: float) -> bool:

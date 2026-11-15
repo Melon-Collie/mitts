@@ -342,3 +342,33 @@ func test_beside_our_goalie_the_puck_goes_on_the_far_side_of_him() -> void:
 	assert_gt(input.mouse_world_pos.distance_to(goalie), me_pos.distance_to(goalie),
 			"the cursor is past him from our goalie: %s" % input.mouse_world_pos)
 	_assert_held_clear(me_pos, facing, input.mouse_world_pos, "beside our goalie")
+
+
+func test_a_puck_in_front_of_the_line_goes_out_in_front_of_it() -> void:
+	# Measured: the carrier behind the line, the puck in front of it in the
+	# mouth; sent out beside the net behind the line, the straight way there
+	# crossed the line inside the post.
+	var body := Vector3(-1.37, 0.0, _line_z() + OWN * 0.8)
+	var puck := Vector3(-0.56, 0.0, _line_z() - OWN * 0.76)
+	var target := Vector3(-0.8, 0.0, _line_z() + OWN * 0.3)
+	var out: Vector3 = _safe(body, Vector3(0.0, 0.0, OWN * 4.0), Vector2(1.0, 0.0), target, OWN,
+			puck)
+	assert_gte((_line_z() - out.z) * OWN, AINetObstacle.OWN_MOUTH_EXIT_FRONT_M - 1e-4,
+			"in front of the line: %s" % out)
+	assert_gte(absf(out.x), AINetObstacle.OWN_MOUTH_HALF_WIDTH_M, "and wide of the mouth")
+
+
+func test_a_release_through_our_own_mouth_is_refused_and_others_are_not() -> void:
+	var line: float = _line_z()
+	var at := Vector3(-0.34, 0.0, line - OWN * 0.66)
+	# Measured: a feed behind the net to the partner, let go from in the crease.
+	assert_true(AINetObstacle.release_into_own_net(at, Vector3(26.5, 0.0, OWN * 13.8).normalized(),
+			OWN))
+	assert_false(AINetObstacle.release_into_own_net(at, Vector3(1.0, 0.0, -OWN * 0.3).normalized(),
+			OWN), "up and across the ice")
+	assert_false(AINetObstacle.release_into_own_net(Vector3(3.0, 0.0, line - OWN * 1.0),
+			Vector3(0.3, 0.0, OWN).normalized(), OWN), "down the boards side, wide of the post")
+	assert_false(AINetObstacle.release_into_own_net(Vector3(-1.5, 0.0, line + OWN * 1.5),
+			Vector3(1.0, 0.0, 0.0), OWN), "behind the cage: it meets the back of it")
+	assert_false(AINetObstacle.release_into_own_net(Vector3(0.0, 0.0, -line + OWN * 1.0),
+			Vector3(0.0, 0.0, -OWN), OWN), "at their net it is a shot")

@@ -162,7 +162,11 @@ front of the line), it goes round the post on its own side. Beside our own
 goalie the cursor holds the puck on the far side of the body from him: parked
 on the body, as beside theirs, the puck trailed behind the carrier along a
 bearing the lagging cursor made, into the goalie's pads, whose gear swept it
-back over the line (`.claude/hooks/stage-own-goals.sh` staged it). That is
+back over the line (`.claude/hooks/stage-own-goals.sh` staged it). A pass or
+rim is priced from its pocket and fired from wherever the puck sits, so the
+release checks the line from there: one crossing our goal line inside our mouth
+(`AINetObstacle.release_into_own_net`) bails the press, as a man on the puck
+does, and the carry takes it out. That is
 the backstop; what keeps it from being needed is the route. A carrier's body
 keeps a carry ring off our mouth (`AINetObstacle.own_mouth_keep_out_depth`):
 his rolled moves end where they would take him deeper into it, his route round

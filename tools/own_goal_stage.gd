@@ -7,6 +7,7 @@ extends SceneTree
 #
 #   --team-size=<3|5>   (default 5)
 #   --side=<left|right|both>  which side of the net the puck goes (default both)
+#   --only=<text>       run just the trials whose label contains it
 const RUNNER: String = "res://tools/own_goal_stage_runner.gd"
 
 var _started: bool = false
@@ -22,6 +23,7 @@ func _on_frame() -> void:
 	_started = true
 	var team_size: int = 5
 	var sides: Array[float] = [1.0, -1.0]
+	var only: String = ""
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--team-size="):
 			team_size = int(a.trim_prefix("--team-size="))
@@ -29,6 +31,8 @@ func _on_frame() -> void:
 			sides = [-1.0]
 		elif a == "--side=right":
 			sides = [1.0]
+		elif a.begins_with("--only="):
+			only = a.trim_prefix("--only=")
 	var runner: Node = (load(RUNNER) as GDScript).new() as Node
 	root.add_child(runner)
-	runner.call("begin_staged", team_size, sides)
+	runner.call("begin_staged", team_size, sides, only)

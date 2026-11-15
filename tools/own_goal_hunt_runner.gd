@@ -75,8 +75,15 @@ func _describe(reg: PlayerRegistry, peer_id: int) -> String:
 			var mode_name: String = SkaterAgentCarryCursor.Mode.keys()[cursor.mode]
 			var input: InputState = agent.get("_scratch_input")
 			var m: Vector3 = input.mouse_world_pos
-			out += " state=%s mode=%s mouse=(%.2f,%.2f) intent=%s win=%s dec=%s" % [
-					state_name, mode_name, m.x, m.z, agent.debug_intent(), agent.debug_winner(),
+			var aim: Vector3 = sm.get("_cached_aim_target")
+			var blade: Vector3 = s.get_blade_contact_global()
+			var seen := Vector3.INF
+			var view: WorldSnapshot = (rec.controller as AIController).perceived_snapshot
+			if view != null and view.skater_states.has(peer_id):
+				seen = view.skater_states[peer_id].blade_contact_world
+			out += " state=%s mode=%s mouse=(%.2f,%.2f) aim=(%.2f,%.2f) blade=(%.2f,%.2f) seen_blade=(%.2f,%.2f) intent=%s win=%s dec=%s" % [
+					state_name, mode_name, m.x, m.z, aim.x, aim.z, blade.x, blade.z, seen.x, seen.z,
+					agent.debug_intent(), agent.debug_winner(),
 					agent.debug_last_decision().replace("\n", " / ")]
 	return out
 

@@ -2195,17 +2195,22 @@ func _retarget_release_dir(input: InputState, snapshot: WorldSnapshot,
 # un-normalized; off the body when the blade is unavailable).
 func _from_release_blade(snapshot: WorldSnapshot, self_pos: Vector3,
 		target: Vector3) -> Vector3:
+	var blade: Vector3 = _release_blade(snapshot, self_pos)
+	return Vector3(target.x - blade.x, 0.0, target.z - blade.z)
+
+
+# Where the puck leaves the blade at a release this tick.
+func _release_blade(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state == null:
-		return Vector3(target.x - self_pos.x, 0.0, target.z - self_pos.z)
+		return self_pos
 	var blade: Vector3 = self_state.blade_contact_world
 	if blade == Vector3.ZERO:
 		blade = self_pos
 	# The snapshot's blade is a tick old, and the puck leaves from it a tick on:
 	# through the charge it rides the body, so it has slid by the body's velocity.
 	# On a sharp angle that slide swings the crossing several times over.
-	blade += Vector3(self_state.velocity.x, 0.0, self_state.velocity.z) * _current_delta
-	return Vector3(target.x - blade.x, 0.0, target.z - blade.z)
+	return blade + Vector3(self_state.velocity.x, 0.0, self_state.velocity.z) * _current_delta
 
 
 # Pre-tilts aim_dir for the wind-up's lateral release offset: both endpoints sit
@@ -2339,6 +2344,17 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		if release_vec.length_squared() > 0.0001:
 			_pass_aim_dir_locked = release_vec.normalized()
 			input.bot_wrister_aim_dir = _pass_aim_dir_locked
+		# Priced from its pocket, fired from wherever the puck sits: a line from
+		# there through our own mouth is a goal against. Bail as for a man on it;
+		# the carry takes the puck out and the next re-plan looks again.
+		if AINetObstacle.release_into_own_net(_release_blade(snapshot, self_pos),
+				_pass_aim_dir_locked, _own_goal_dir):
+			input.slap_pressed = true
+			_pass_target_peer_id = -1
+			_pass_should_saucer = false
+			_dump_target = Vector3.INF
+			_set_state(State.CARRY)
+			return
 		input.shoot_held = false
 		_pass_target_peer_id = -1
 		_pass_should_saucer = false

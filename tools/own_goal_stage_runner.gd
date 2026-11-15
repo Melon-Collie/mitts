@@ -28,7 +28,8 @@ var _trial_own_goal: bool = false
 var _trial_goal_against: bool = false
 
 
-func begin_staged(team_size: int, sides: Array[float]) -> void:
+# `only`: run just the trials whose label contains it ("" for all).
+func begin_staged(team_size: int, sides: Array[float], only: String = "") -> void:
 	_team_size = team_size
 	_ring.resize(_RING_TICKS)
 	_ring.fill("")
@@ -39,6 +40,7 @@ func begin_staged(team_size: int, sides: Array[float]) -> void:
 	var carried: int = 0
 	var first_touch: Dictionary = {}
 	var trials: int = 0
+	var index: int = -1
 	var failures: Array[String] = []
 	for side: float in sides:
 		for px: float in PUCK_X:
@@ -48,10 +50,13 @@ func begin_staged(team_size: int, sides: Array[float]) -> void:
 						for pressure: bool in [false, true]:
 							# Each pair, alone and forechecked, at one team's net, the
 							# next pair at the other's.
-							var defending: int = (trials / 2) % 2
+							index += 1
+							var defending: int = (index / 2) % 2
 							var label: String = "team %d puck (%.1f, %.1f behind) D from (%.1f, %.1f) at %.0f m/s %s" % [
 									defending, side * px, behind, side * start.x, start.y, speed,
 									"forechecked" if pressure else "alone"]
+							if only != "" and not label.contains(only):
+								continue
 							await _wait_for_live_play()
 							var d_peer: int = _stage(defending, side, px, behind, start, speed, pressure)
 							if d_peer == -1:
