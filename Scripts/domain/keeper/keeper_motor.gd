@@ -496,6 +496,11 @@ func slides() -> bool:
 	return _mover == Mover.SLIDE
 
 
+# His speed over the ice, the stances' frame.
+func moving() -> Vector2:
+	return _velocity
+
+
 # Whether he is on his way down as he skated (`_drop_carrying`).
 func drops() -> bool:
 	return _mover == Mover.SAVE and _landing
