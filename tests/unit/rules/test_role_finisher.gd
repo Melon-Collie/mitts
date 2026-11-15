@@ -840,3 +840,34 @@ func test_the_net_front_spot_slides_with_the_puck() -> void:
 	assert_eq(next.station_key, first.station_key, "the same station")
 	assert_lt(next.target_position.distance_to(first.target_position), 0.5,
 			"slid with the line; got %s then %s" % [first.target_position, next.target_position])
+
+
+func test_the_tip_holds_through_the_contact() -> void:
+	# The puck a hair past his z-plane, inside his blade's catch radius: he is
+	# still tipping it. A metre past, it has gone by.
+	var vel := SHOT_VEL
+	var self_pos := Vector3(0.5, 0.0, -22.0)
+	var at_contact := Vector3(0.9 + vel.x * 0.006, 0.0, -22.0 + vel.z * 0.006)
+	var d: RoleDecision = AIRoleFinisher.decide(_make_ctx(self_pos, at_contact, vel))
+	assert_true(d.tips_shot and d.deflect, "on the contact, still the deflect")
+	var gone := Vector3(0.9 + vel.x * 0.04, 0.0, -22.0 + vel.z * 0.04)
+	assert_false(AIRoleFinisher.decide(_make_ctx(self_pos, gone, vel)).tips_shot,
+			"a metre past, no tip")
+
+
+func test_the_net_front_man_waits_on_no_one_timer() -> void:
+	# At his station he holds the front for the carrier's shot, never a feed: a
+	# teammate's release on his line is his tip, not his one-timer.
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	var carrier := Vector3(-1.0, 0.0, OPP_NET_Z + 11.0)
+	var ctx: RoleContext = _screen_ctx(carrier, false)
+	ctx.team_brain = slots
+	var first: RoleDecision = AIRoleFinisher.decide(ctx)
+	var there: RoleContext = _screen_ctx(carrier, false)
+	there.team_brain = slots
+	there.self_pos = first.target_position
+	there.snapshot.skater_states[1].position = first.target_position
+	var d: RoleDecision = AIRoleFinisher.decide(there)
+	assert_almost_eq(d.target_position.distance_to(there.self_pos), 0.0, 0.5, "at his station")
+	assert_false(d.is_one_timer_ready, "the net-front man is never one-timer ready")

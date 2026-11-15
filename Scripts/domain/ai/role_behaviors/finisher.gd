@@ -169,9 +169,11 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 		return null
 
 	# The tip point: where the puck's path crosses our z plane, short of the
-	# goal line.
+	# goal line. His blade meets it at that plane, so the tip holds until the puck
+	# is past it by the blade's catch radius (AIPuckLane.LANE_BLADE_CATCH_M):
+	# dropped on the crossing, the deflect is let go on the contact.
 	var t_to_my_z: float = (ctx.self_pos.z - puck_pos.z) / puck_vel.z
-	if t_to_my_z <= 0.0 or t_to_my_z > 2.0:
+	if t_to_my_z < -AIPuckLane.LANE_BLADE_CATCH_M / absf(puck_vel.z) or t_to_my_z > 2.0:
 		return null
 	if (opp_goal_z - ctx.self_pos.z) * puck_vel.z <= 0.0:
 		return null
@@ -205,7 +207,7 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	# A tip his blade cannot be on before the puck crosses his line, stick out
 	# (AILoosePuckChase.reach_eta), is no tip: the crash is his play instead.
 	if AILoosePuckChase.reach_eta(ctx.self_pos, Vector3(tip.x, 0.0, tip.y), ctx.self_velocity,
-			ctx.self_max_speed, ctx.self_max_accel, ctx.self_blade_reach) > t_to_my_z:
+			ctx.self_max_speed, ctx.self_max_accel, ctx.self_blade_reach) > maxf(t_to_my_z, 0.0):
 		return null
 	var d := RoleDecision.new()
 	d.target_position = Vector3(body.x, 0.0, body.y)
@@ -461,8 +463,10 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	if AIStationSearch.net_front_value(ctx, best_pos) > 0.0:
 		d.battle_spot = best_pos
 	# No separate quality gate: a weak spot scores low for the carrier too. Half
-	# a search step — nearer the chosen station than any neighbour.
-	if ctx.self_pos.distance_to(best_pos) < AIStationSearch.SEARCH_STEP_M * 0.5:
+	# a search step — nearer the chosen station than any neighbour. The net-front
+	# man is never fed (holds_front), so he waits on no one-timer: ready, a
+	# teammate's shot on his line would press one instead of his tip.
+	if not holds_front and ctx.self_pos.distance_to(best_pos) < AIStationSearch.SEARCH_STEP_M * 0.5:
 		d.is_one_timer_ready = true
 	return d
 
