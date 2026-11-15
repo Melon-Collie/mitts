@@ -443,3 +443,28 @@ func test_a_carrier_whose_travel_drags_the_puck_over_our_line_brakes_and_others_
 			Vector3(0.0, 0.0, OWN * 4.0), OWN, HORIZON_S), "too far out to get there in time")
 	assert_false(AINetObstacle.dragged_over_own_line(Vector3(0.6, 0.0, -line + OWN * 0.5),
 			Vector3(0.0, 0.0, -OWN * 4.0), OWN, HORIZON_S), "at their net")
+
+
+func test_a_puck_behind_the_line_goes_out_behind_it() -> void:
+	# Measured: behind our net, the puck held on the outside of the side twine,
+	# sent out wide in front of the line; the blade pulled it forward along the
+	# twine and the body dragged it round the post into the mouth.
+	var body := Vector3(-2.2, 0.0, _line_z() + OWN * 0.6)
+	var puck := Vector3(-0.99, 0.0, _line_z() + OWN * 0.4)
+	var out: Vector3 = _safe(body, Vector3(3.5, 0.0, OWN * 4.5), Vector2(0.4, -OWN).normalized(),
+			Vector3(-0.5, 0.0, _line_z() - OWN * 1.0), OWN, puck)
+	assert_lte((_line_z() - out.z) * OWN, -AINetObstacle.OWN_MOUTH_EXIT_FRONT_M + 1e-4,
+			"behind the line: %s" % out)
+
+
+func test_a_carrier_taking_his_puck_deeper_into_our_mouth_brakes() -> void:
+	var line: float = _line_z()
+	var twine := Vector3(-0.99, 0.0, line + OWN * 0.4)
+	assert_true(AINetObstacle.drags_deeper_into_own_mouth(twine, Vector3(3.5, 0.0, OWN * 4.5), OWN),
+			"behind the net, across toward the middle")
+	assert_false(AINetObstacle.drags_deeper_into_own_mouth(twine, Vector3(-3.5, 0.0, OWN * 1.0),
+			OWN), "away round the back of the cage")
+	assert_false(AINetObstacle.drags_deeper_into_own_mouth(Vector3(0.4, 0.0, line - OWN * 1.0),
+			Vector3(0.0, 0.0, -OWN * 4.0), OWN), "skating it out of the crease")
+	assert_false(AINetObstacle.drags_deeper_into_own_mouth(Vector3(3.0, 0.0, line - OWN * 1.0),
+			Vector3(-3.0, 0.0, 0.0), OWN), "not in the mouth")

@@ -1009,7 +1009,9 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	if carrying and self_state != null and (AISteering.stops_in_own_crease(self_pos,
 			Vector2(self_state.velocity.x, self_state.velocity.z), _own_goal_dir)
 			or AINetObstacle.dragged_over_own_line(_carried_puck_at(snapshot, self_state),
-					self_state.velocity, _own_goal_dir, _own_mouth_clear_s())):
+					self_state.velocity, _own_goal_dir, _own_mouth_clear_s())
+			or AINetObstacle.drags_deeper_into_own_mouth(_carried_puck_at(snapshot, self_state),
+					self_state.velocity, _own_goal_dir)):
 		input.brake = true
 		input.stance_held = false
 

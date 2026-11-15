@@ -197,12 +197,16 @@ static func own_mouth_safe_blade_target(self_pos: Vector3, self_velocity: Vector
 		if dx * dx + dz * dz < floor_band.y * floor_band.y:
 			dz = -own_goal_dir * sqrt(maxf(floor_band.y * floor_band.y - dx * dx, 0.0))
 		var exit := Vector3(self_pos.x + dx, 0.0, self_pos.z + dz)
-		# A puck in front of the line goes out in front of it: the straight way to a
-		# spot behind it crosses the line inside the post. Round the cage after.
+		# The puck goes out on its own side of the line: from in front to behind,
+		# the straight way crosses the line inside the post; from behind to in
+		# front, it wraps the post into the mouth. Round the cage after.
 		var line_z: float = own_goal_dir * GameRules.GOAL_LINE_Z
-		if (line_z - puck_at.z) * own_goal_dir > 0.0 \
-				and (line_z - exit.z) * own_goal_dir < OWN_MOUTH_EXIT_FRONT_M:
+		var puck_front: float = (line_z - puck_at.z) * own_goal_dir
+		var exit_front: float = (line_z - exit.z) * own_goal_dir
+		if puck_front > 0.0 and exit_front < OWN_MOUTH_EXIT_FRONT_M:
 			exit.z = line_z - own_goal_dir * OWN_MOUTH_EXIT_FRONT_M
+		elif puck_front <= 0.0 and exit_front > -OWN_MOUTH_EXIT_FRONT_M:
+			exit.z = line_z + own_goal_dir * OWN_MOUTH_EXIT_FRONT_M
 		return exit
 	if _crosses_own_mouth(puck_at, target, own_goal_dir):
 		var puck_side: float = signf(puck_at.x) if puck_at.x != 0.0 else signf(self_pos.x)
@@ -235,6 +239,17 @@ static func dragged_over_own_line(puck: Vector3, velocity: Vector3, own_goal_dir
 	if in_front < 0.0 or closing <= 0.0001 or in_front > closing * horizon_s:
 		return false
 	return absf(puck.x + velocity.x * (in_front / closing)) < OWN_MOUTH_HALF_WIDTH_M
+
+
+# Whether the body's travel takes the puck at `puck`, already in our mouth,
+# deeper into it: toward the middle of our goal line. A carrier skating it out of
+# the mouth is taking it the other way.
+static func drags_deeper_into_own_mouth(puck: Vector3, velocity: Vector3,
+		own_goal_dir: float) -> bool:
+	if not carried_puck_in_own_mouth(puck, Vector3.ZERO, own_goal_dir, 0.0):
+		return false
+	var to_middle := Vector2(-puck.x, own_goal_dir * GameRules.GOAL_LINE_Z - puck.z)
+	return to_middle.dot(Vector2(velocity.x, velocity.z)) > 0.0
 
 
 static func _crosses_own_mouth(from: Vector3, to: Vector3, own_goal_dir: float) -> bool:

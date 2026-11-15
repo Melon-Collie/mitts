@@ -176,8 +176,11 @@ behind our net that wide. And a carrier whose stop would run into our own
 crease brakes (`AISteering.stops_in_own_crease`, after the dispatch): the repel
 steers but sheds no momentum. So does one whose travel drags his puck over our
 line inside the mouth before the blade could sweep it clear
-(`AINetObstacle.dragged_over_own_line`): at its reach the blade cannot take the
-puck out faster than the body takes it in. A loose-puck chaser does not brake: a puck loose
+(`AINetObstacle.dragged_over_own_line`), or whose travel takes a puck already
+in our mouth deeper into it (`drags_deeper_into_own_mouth`): at its reach the
+blade cannot take the puck out faster than the body takes it in. The guard's
+exit keeps the puck on its own side of the line: from behind, out in front of
+it wraps the post into the mouth. A loose-puck chaser does not brake: a puck loose
 in our crease is the one most worth getting to, and is gone straight for. One
 beside or behind our net, clear of the mouth, is come to round the keep-out
 (`_state_chase_puck`): one behind our line past the post on its own side
