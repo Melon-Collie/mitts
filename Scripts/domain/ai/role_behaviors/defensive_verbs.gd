@@ -387,7 +387,10 @@ static func evaluate_body_check(ctx: RoleContext) -> AIBodyCheck.Result:
 	var victim_caps: AISkaterCaps = ctx.caps_by_peer.get(carrier_pid)
 	var victim_weight: float = victim_caps.weight if victim_caps != null \
 			else AIBodyCheck.LEAGUE_VICTIM_WEIGHT
+	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
+	var contact_m: float = (self_caps.body_radius if self_caps != null else AISkaterCaps.LEAGUE_BODY_RADIUS_M) \
+			+ (victim_caps.body_radius if victim_caps != null else AISkaterCaps.LEAGUE_BODY_RADIUS_M)
 	return AIBodyCheck.evaluate(
-			ctx.self_pos, ctx.self_max_speed, ctx.self_weight,
-			ctx.self_body_check_transfer, ctx.self_stagger_timer,
-			carrier.position, carrier.velocity, commit_threshold, victim_weight)
+			ctx.self_pos, ctx.self_velocity, ctx.self_max_speed, ctx.self_max_accel,
+			ctx.self_weight, ctx.self_body_check_transfer, ctx.self_stagger_timer,
+			carrier.position, carrier.velocity, contact_m, commit_threshold, victim_weight)

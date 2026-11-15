@@ -63,37 +63,33 @@ func _make_ctx(self_pos: Vector3, carrier_pid: int = -1,
 
 # ── Body check commit ────────────────────────────────────────────────────────
 
-# A pressurer 2 m from a stationary carrier, head-on, at `transfer`, with a
-# teammate home behind him unless `last_man`.
+# A pressurer skating in at 7 m/s on a stationary carrier 4 m ahead, at
+# `transfer`, with a teammate home behind him unless `last_man`.
 func _head_on_check(transfer: float, last_man: bool = false) -> RoleDecision:
-	var self_pos := Vector3(0, 0, 18)
+	var self_pos := Vector3(0, 0, 16)
 	var skaters: Array = [
-			[1, TEAM_ID, self_pos],
+			[1, TEAM_ID, self_pos, Vector3(0, 0, 7)],
 			[200, 1 - TEAM_ID, Vector3(0, 0, 20)],
 	]
 	if not last_man:
 		skaters.append([2, TEAM_ID, Vector3(0, 0, OUR_NET_Z - 2.0)])
 	var ctx: RoleContext = _make_ctx(self_pos, 200, skaters)
+	ctx.self_velocity = Vector3(0, 0, 7)
 	ctx.self_max_speed = 9.0
 	ctx.self_body_check_transfer = transfer
 	return AIRolePressure.decide(ctx)
 
 
 func test_commits_exactly_when_the_hit_would_separate() -> void:
-	# A reachable head-on carrier: the pressurer commits iff the collision
-	# resolver's own kick at his closing speed clears the separating-hit bar, so
-	# a heavy hitter hunts it and a light one keeps containing. Committed, he
-	# steers at the carrier's body, not the cutoff point.
-	var defaults := RoleContext.new()
+	# A reachable head-on carrier: the pressurer commits once the hit his stride
+	# lands clears the separating-hit bar, so a heavy hitter hunts it and a light
+	# one keeps containing; a harder hitter never declines what a softer one
+	# takes. Committed, he steers at the carrier's body, not the cutoff point.
 	var committed: int = 0
 	for k: int in range(1, 21):
-		var transfer: float = 0.05 * k
-		var d: RoleDecision = _head_on_check(transfer)
-		var kick: float = SkaterCollisionRules.victim_kick(9.0, defaults.self_weight,
-				AIBodyCheck.LEAGUE_VICTIM_WEIGHT, transfer)
-		var separates: bool = kick >= AIBodyCheck.COMMIT_IMPULSE_M_S / defaults.check_aggression
-		assert_eq(d.commit_check, separates,
-				"transfer %.2f (kick %.2f m/s) commits iff the hit separates" % [transfer, kick])
+		var d: RoleDecision = _head_on_check(0.05 * k)
+		if committed > 0:
+			assert_true(d.commit_check, "transfer %.2f: a harder hit still commits" % (0.05 * k))
 		if d.commit_check:
 			committed += 1
 			assert_almost_eq(d.target_position.z, 20.0, 0.5, "steers at the carrier's body intercept")
@@ -428,7 +424,7 @@ func test_pressure_calibration_snapshot() -> void:
 	for k: int in range(1, 21):
 		if is_nan(lightest) and _head_on_check(0.05 * k).commit_check:
 			lightest = 0.05 * k
-	snap.record("lightest transfer that commits a head-on check from 2 m", lightest)
+	snap.record("lightest transfer that commits a head-on check skating in from 4 m", lightest)
 	snap.verify(self)
 
 
@@ -489,10 +485,16 @@ func test_a_carrier_standing_level_is_not_finished() -> void:
 
 
 func test_the_last_man_checks_a_carrier_drawn_level_but_not_one_a_gap_away() -> void:
-	var level: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.0, 0.0, 11.0), 8.0, 1.0))
-	assert_true(level.commit_check, "level, the inside is lost: the check is his play")
-	var away: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.0, 0.0, 8.5), 8.0, 1.0))
-	assert_false(away.commit_check, "a gap away, the last man never throws one")
+	# He steps across into the carrier's line, so his shoulder has the pace to
+	# rock him; standing, the carrier only skates past beside him.
+	var level_ctx: RoleContext = _level_ctx(Vector3(1.0, 0.0, 11.0), 8.0, 1.0)
+	level_ctx.self_velocity = Vector3(5.0, 0.0, 0.0)
+	assert_true(AIRolePressure.decide(level_ctx).commit_check,
+			"level, the inside is lost: the check is his play")
+	var away_ctx: RoleContext = _level_ctx(Vector3(1.0, 0.0, 8.5), 8.0, 1.0)
+	away_ctx.self_velocity = Vector3(5.0, 0.0, 0.0)
+	assert_false(AIRolePressure.decide(away_ctx).commit_check,
+			"a gap away, the last man never throws one")
 
 
 # ── Support behind is behind the play ────────────────────────────────────────

@@ -142,8 +142,9 @@ var facing_drag_speed_braking: float = 10.0
 # How fast it winds a turn up, rad/s² (FacingRules.turn_rate).
 var facing_turn_accel_max: float = 300.0
 # The body's contact disc (girth-scaled): how close to the boards and the cage its
-# centre can get.
-var body_radius: float = 0.35
+# centre can get. LEAGUE_BODY_RADIUS_M is the unscaled build's.
+const LEAGUE_BODY_RADIUS_M: float = 0.35
+var body_radius: float = LEAGUE_BODY_RADIUS_M
 # A carrier on the boards squares up along them (BoardPlayRules
 # .board_shield_facing): the probe distance it starts at and the most it turns.
 var board_shield_probe: float = 1.1
