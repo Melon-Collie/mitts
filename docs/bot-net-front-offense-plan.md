@@ -909,6 +909,24 @@ runs between the crease and the screen distance, so the spot moves more, not
 less; standing out on the line, the net-front man is handed the slot by the
 election more often.
 
+**The crease top on the shot's line** (`51a8c01`): one point while the carrier
+has a shot, `TIP_STATION_DIST_M` out, moving only with the shooter's angle.
+
+| (J=11, 576) | three stations | the shot line | the crease top |
+|---|---|---|---|
+| net-front re-picks / s | 0.50 | 0.85 | 0.15 |
+| the spot's motion | 1.5 m/s | 2.1 m/s | 1.1 m/s |
+| on his spot | 26% | 19% | 41% |
+| their man nearer, out of reach | 47% | 50% | 39% |
+| our man off his spot | 2.6 m | 3.0 m | 2.2 m |
+| NET_FRONT changes hands | 0.06 / s | 0.22 / s | 0.07 / s |
+| shots screened | 4% | 9% | 3% |
+| 2nd shots / shot | 0.139 | 0.096 | 0.141 |
+| xG / possession | 0.037 ± 0.005 | 0.044 ± 0.006 | 0.041 ± 0.006 |
+
+He holds the net front. The press still fires on 5% of the ticks he holds it:
+their man stands on the spot 8% of the time.
+
 ---
 
 ## Step 5 — Tips
