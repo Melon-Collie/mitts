@@ -972,9 +972,13 @@ takes the whole class down and every static call on it from every file at once.
   - `screen_field.gd` (`AIScreenField`) — the generated screen field: what a
     body hiding the release from the live keeper adds to a shot from a spot,
     by how far out along the release's line it stands;
+  - `tip_field.gd` (`AITipField`) — the generated tip field: the odds a shot
+    on the ice tipped by a stick held to deflect on the release's line
+    scores against the live keeper, by how far out the tip is and its height;
   - `field_grid.gd` (`AIFieldGrid`) — a measured field's spot grid read
-    between its spots by bilinear weight. The rebound and screen fields place
-    bodies through it (`crash_point_at`, `best_station_along`, `uplift`):
+    between its spots by bilinear weight. The rebound, screen and tip fields
+    read through it (`crash_point_at`, `best_station_along`, `uplift`,
+    `AITipField.odds`):
     read at the nearest spot, a body's place snapped ~2.5 m as the carrier
     crossed into the next one, and the net front re-picked on every snap.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
@@ -995,7 +999,8 @@ reaches back into what remains.
 - **Shot value — the one shot model** (`AIShotValue`, `shot_value.gd`). Every
   "how good is a shot from here" asks it — the carrier's compete, the threat
   surfaces and coverage reads, a pass's worth to either side
-  (`score_pass_value`), tips (`deflection`, the line not picked) and the
+  (`score_pass_value`), a tip into an empty net (`deflection`; against a keeper
+  at home a tip reads the tip field) and the
   post-game xG stat (`now_at_spread`, at the shot's context spread) — so offence
   and defence price a chance alike, and the model behind it can be replaced in
   that file alone. It answers the odds of scoring on today's

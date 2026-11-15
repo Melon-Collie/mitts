@@ -39,11 +39,11 @@ var aim_world_pos: Vector3 = Vector3.ZERO
 var has_aim_override: bool = false
 
 # Hold the deliberate deflect (stick_lift_held) this tick, so the blade redirects
-# the puck it meets instead of catching it, tipped up or down (`deflect_up`).
-# Off-puck only — carrying, the button is the nudge — and consumed by the state
-# machine's OFF_PUCK handler.
+# the puck it meets instead of catching it, at the tip height `deflect_level`
+# (a ShotMechanics elevation). Off-puck only — carrying, the button is the
+# nudge — and consumed by the state machine's OFF_PUCK handler.
 var deflect: bool = false
-var deflect_up: bool = false
+var deflect_level: int = ShotMechanics.ELEVATION_FLAT
 
 # Off-puck one-timer readiness — camped at the staging spot, pre-aimed at the
 # open net. The state machine forwards it to TeamBrain so the carrier can reward

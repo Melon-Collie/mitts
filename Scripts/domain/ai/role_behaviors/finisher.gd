@@ -203,24 +203,26 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	d.has_aim_override = true
 	# Hold the deflect, so the blade redirects the shot rather than catching it,
 	# from when the press can read the puck: it reads it once, and takes the
-	# blade to its height (DeflectReachRules.lift_to_meet). The tip changes the
-	# plane the keeper read: a shot on the ice goes up, a raised one down.
+	# blade to its height (DeflectReachRules.lift_to_meet). A raised shot is
+	# knocked down off the plane the keeper read; one on the ice is tipped at the
+	# height the tip field measured scoring most from its shooter.
 	if t_to_my_z <= DeflectReachRules.TRACK_HORIZON_S:
 		d.deflect = true
-		d.deflect_up = not _last_shooter_is_elevated(ctx)
+		var shooter: SkaterNetworkState = _likely_shooter(ctx)
+		if shooter != null and shooter.elevation_level == ShotMechanics.ELEVATION_FLAT:
+			d.deflect_level = AITipField.best_level(shooter.position, ctx.attacking_goal_pos,
+					Vector3(tip.x, 0.0, tip.y))
 	return d
 
 
-# True when the likely shooter — our skater nearest the puck — has any loft
-# selected (elevation_level > 0), read off his replicated state.
-static func _last_shooter_is_elevated(ctx: RoleContext) -> bool:
-	if ctx.snapshot.puck_state == null:
-		return false
+# The likely shooter — our skater nearest the puck, other than the tipper — as
+# replicated, or null.
+static func _likely_shooter(ctx: RoleContext) -> SkaterNetworkState:
 	var puck_pos: Vector3 = ctx.snapshot.puck_state.position
 	var best_pid: int = 0
 	var best_d2: float = INF
 	for pid: int in ctx.snapshot.skater_states:
-		if ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
+		if pid == ctx.peer_id or ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
 			continue
 		var pos: Vector3 = ctx.snapshot.skater_states[pid].position
 		var dx: float = pos.x - puck_pos.x
@@ -230,8 +232,8 @@ static func _last_shooter_is_elevated(ctx: RoleContext) -> bool:
 			best_d2 = d2
 			best_pid = pid
 	if best_pid == 0:
-		return false
-	return ctx.snapshot.skater_states[best_pid].elevation_level > 0
+		return null
+	return ctx.snapshot.skater_states[best_pid]
 
 
 # ── Positioning (no incoming shot) ──────────────────────────────────────────

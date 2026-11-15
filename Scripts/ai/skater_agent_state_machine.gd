@@ -1112,12 +1112,10 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			# assumed (an uncommitted drive lands only the passive fraction).
 			input.hit_held = true
 		# FINISHER holds the deflect to tip an incoming shot; the loft level names
-		# the tip (Puck.apply_blade_deflect): LOW lifts a shot on the ice over the
-		# pad, FLAT knocks a raised one down.
+		# the tip (Puck.apply_blade_deflect).
 		input.stick_lift_held = decision.deflect
 		if decision.deflect:
-			input.elevation_level = ShotMechanics.ELEVATION_LOW if decision.deflect_up \
-					else ShotMechanics.ELEVATION_FLAT
+			input.elevation_level = decision.deflect_level
 		# Preserve one-timer readiness through pass flights: with no carrier,
 		# FINISHER can't score the feed and reports "not ready", though the stance
 		# hasn't moved — dropping the flag there would stop the trigger firing when

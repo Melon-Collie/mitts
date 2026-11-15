@@ -108,9 +108,10 @@ static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 #   P(rip reaches the tipper)   — lane_clear over release→tip vs the DEFENDERS
 # × P(blade contacts the puck)  — the same reach/reaction race a lane defender
 #                                 runs (_lane_block_at)
-# × the redirect (AIShotValue.deflection): a one-timer off the rip whose line
-#                                 is not picked, the keeper as he reads now.
-# The redirect is read off one-timer feed cells, which no staged tip backs (#736).
+# × the redirect: the tip field's odds at the tip point, tipped at the height
+#                                 that scores most (AITipField.best_odds), or
+#                                 the empty net's with the keeper out of his
+#                                 home range (AIShotValue.deflection).
 
 # The pace from which the finisher reads a loose puck heading at the net as a
 # shot and goes to tip it (AIRoleFinisher.INCOMING_SHOT_SPEED_M_S): a rip below
@@ -166,15 +167,20 @@ static func tip_ev(
 	var lane: float = AIPuckLane.lane_clear(release, tip_pt, opponents, speed, EMPTY_VEC3, opponent_caps)
 	if lane <= 0.0:
 		return 0.0
-	# The redirect: a new release at the tip point holding the incoming pace (a
-	# tip keeps the along-face glance), its line not picked.
-	var redirect: float = AIShotValue.deflection(release, tip_pt, speed, attacking_goal,
-			goalie_pos)
+	var redirect: float = AITipField.best_odds(release, attacking_goal, tip_pt) \
+			if _keeper_home(goalie_pos, attacking_goal) \
+			else AIShotValue.deflection(release, tip_pt, speed, attacking_goal, goalie_pos)
 	if redirect <= 0.0:
 		return 0.0
 	return p_contact * lane * redirect * _shot_defender_terms(tip_pt, attacking_goal,
 			goalie_pos if goalie_pos.is_finite() else attacking_goal, opponents, speed,
 			opponent_caps)
+
+
+# An unknown keeper reads as home, as AIShotValue reads him.
+static func _keeper_home(goalie_pos: Vector3, attacking_goal: Vector3) -> bool:
+	return not goalie_pos.is_finite() or Vector2(goalie_pos.x - attacking_goal.x,
+			goalie_pos.z - attacking_goal.z).length() <= AIGoalieModel.GOALIE_HOME_M
 
 
 # ── The rebound ──────────────────────────────────────────────────────────────

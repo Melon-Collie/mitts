@@ -195,12 +195,12 @@ func test_an_elevated_shot_is_tipped_down() -> void:
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
 	_assert_blade_on_the_path(d, 0.9)
 	assert_true(d.deflect, "an incoming shot is tipped, not caught")
-	assert_false(d.deflect_up, "a raised shot is tipped down")
+	assert_eq(d.deflect_level, ShotMechanics.ELEVATION_FLAT, "a raised shot is tipped down")
 
 
-func test_a_ground_shot_is_tipped_up() -> void:
+func test_a_ground_shot_is_tipped_at_its_best_height() -> void:
 	# A fast GROUND shot is deflected too — the press keeps the blade on the
-	# ice for a puck met there — and tipped up.
+	# ice for a puck met there — at the height the tip field scores it most.
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
@@ -211,7 +211,8 @@ func test_a_ground_shot_is_tipped_up() -> void:
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
 	assert_true(d.deflect, "an incoming shot is tipped, not caught")
-	assert_true(d.deflect_up, "a shot on the ice is tipped up")
+	assert_eq(d.deflect_level, AITipField.best_level(teammate_pos, ctx.attacking_goal_pos,
+			d.aim_world_pos), "a shot on the ice is tipped at its measured best height")
 
 
 func test_the_deflect_waits_for_the_press_to_read_the_shot() -> void:
