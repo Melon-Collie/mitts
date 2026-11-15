@@ -127,6 +127,15 @@ static func own_mouth_keep_out_depth(p: Vector3, own_goal_dir: float) -> float:
 			- Vector2(out_x, maxf(in_front - OWN_MOUTH_DEPTH_M, 0.0)).length()
 
 
+# Beside our cage on the side of `x`, at the edge of our mouth's keep-out and
+# half the cage's depth behind the goal line: the way past our post a puck
+# behind our line is come to, or taken round, wide of the mouth.
+static func own_post_side_waypoint(x: float, own_goal_dir: float) -> Vector3:
+	var side: float = signf(x) if x != 0.0 else 1.0
+	return Vector3(side * (OWN_MOUTH_HALF_WIDTH_M + OWN_MOUTH_KEEP_OUT_M), 0.0,
+			own_goal_dir * (GameRules.GOAL_LINE_Z + 0.5 * GameRules.NET_DEPTH))
+
+
 # Whether a carrier skating straight from `from` to `to` takes his body deeper
 # into our own mouth's keep-out than `from` stands, sampled every
 # KEEP_OUT_STEP_M along the line: a route that must go round it.

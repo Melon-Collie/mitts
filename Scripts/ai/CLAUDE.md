@@ -177,8 +177,10 @@ crease brakes (`AISteering.stops_in_own_crease`, after the dispatch): the repel
 steers but sheds no momentum. A loose-puck chaser does not brake: a puck loose
 in our crease is the one most worth getting to, and is gone straight for. One
 beside or behind our net, clear of the mouth, is come to round the keep-out
-(`_state_chase_puck`, the same cage waypoint): straight in past our post at
-pace, the pickup carries the puck across our line with the body. And a
+(`_state_chase_puck`): one behind our line past the post on its own side
+(`AINetObstacle.own_post_side_waypoint`), one in front at the carrier's cage
+waypoint. Straight in past our post at pace, the pickup carries the puck across
+our line with the body. And a
 carrier's cursor swinging round his body takes the way that keeps out of our
 mouth (`_arc_step_mouse_target`). `test_own_goal_guards.gd` replays the
 own goals `tools/own_goal_hunt.gd` caught.

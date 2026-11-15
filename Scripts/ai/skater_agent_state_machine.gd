@@ -1550,8 +1550,15 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 				and not AINetObstacle.carried_puck_in_own_mouth(puck_pos, Vector3.ZERO,
 						_own_goal_dir, 0.0) \
 				and AINetObstacle.carry_path_enters_own_keep_out(self_pos, target, _own_goal_dir):
-			target = AIArrival.cage_waypoint(self_pos, target, self_vel_3d, _self_max_speed,
-					_chase_max_accel, _self_lateral_grip, _own_goal_dir)
+			# Behind our line it is come to past the post on its own side, wide of the
+			# keep-out: the waypoint in front of our crease only lines the chase up
+			# to come straight down at our net.
+			if (puck_pos.z - _own_goal_dir * GameRules.GOAL_LINE_Z) * _own_goal_dir > 0.0:
+				target = AINetObstacle.own_post_side_waypoint(
+						puck_pos.x if puck_pos.x != 0.0 else self_pos.x, _own_goal_dir)
+			else:
+				target = AIArrival.cage_waypoint(self_pos, target, self_vel_3d, _self_max_speed,
+						_chase_max_accel, _self_lateral_grip, _own_goal_dir)
 		# Every target above is built off the PUCK, whose path can ride ice a
 		# skater's centre never reaches (the contested overshoot can even land
 		# inside the glass), and steering at it grinds the body into the boards.
