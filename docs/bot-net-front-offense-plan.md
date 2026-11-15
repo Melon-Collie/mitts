@@ -641,6 +641,29 @@ Tests: a unit test that the second man goes when his race is won and holds
 when it is lost or when he is the last layer; a slow-tier 5v5 cycle with a
 rebound off a point shot, counting our share of first touches on the squirt.
 
+**Measured first** (the sweep's OZLOOSE lines, J=11, 143 rebound windows, at
+`315a6ad`). Their side touches the rebound first in 107 of them (75%), and it
+is not a 50/50 lost:
+
+- Our elected chaser chases it in 97% of those; he declines for 0.01 s on
+  average. #604's decline does not fire here.
+- When their man has it, our chaser is a median 4.7 m off it (within 2 m in
+  17%), and our nearest other man 3.4 m (within 2 m 11%, within 4 m 55%).
+
+What follows their touch, over the next 3 s, by our shape a brain tick later:
+
+| our shape | rebounds | back to us | out of their zone | still theirs |
+|---|---|---|---|---|
+| OZONE (they did not hold it) | 35 | 19 | 7 | 9 |
+| FORECHECK | 37 | 4 | 15 | 18 |
+| TRANS_DEFENSE | 33 | 3 | 10 | 20 |
+| all | 107 | 27 (25%) | 33 (31%) | 47 (44%) |
+
+So the squirt the second man was for is the OZONE row, which we already win
+half of. The rest is their collector settled with the puck at their net: a
+forecheck on him that wins it back 11% of the time, or the set shape (#924's
+§2) that wins it back 9%.
+
 ### Tests
 
 - A unit test that the rebound credit rises with our bodies at the net and
