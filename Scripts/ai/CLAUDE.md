@@ -186,10 +186,14 @@ beside or behind our net, clear of the mouth, is come to round the keep-out
 (`_state_chase_puck`): one behind our line past the post on its own side
 (`AINetObstacle.own_post_side_waypoint`), one in front at the carrier's cage
 waypoint. Straight in past our post at pace, the pickup carries the puck across
-our line with the body. And a
-carrier's cursor swinging round his body takes the way that keeps out of our
-mouth (`_arc_step_mouse_target`). `test_own_goal_guards.gd` replays the
-own goals `tools/own_goal_hunt.gd` caught.
+our line with the body. A carrier's cursor swinging round his body takes the way
+that keeps out of our mouth (`_arc_step_mouse_target`). And a stick WITHOUT the
+puck never reaches over our own line inside the mouth
+(`AINetObstacle.own_line_safe_stick_target`, the same step): a pickup pins the
+puck on the blade, and a ready stance aimed through a loose puck at our post
+swept it up into the cage. A puck in the crease, or on the line, is still played
+from in front of it. `test_own_goal_guards.gd` replays the own goals
+`tools/own_goal_hunt.gd` and `.claude/hooks/stage-own-goals.sh` caught.
 
 **A charged release comes from a listed spot, and is loaded before the press.**
 A shot from a pocket, a reach to either side of its line or the snapshot out

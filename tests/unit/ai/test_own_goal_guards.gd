@@ -468,3 +468,35 @@ func test_a_carrier_taking_his_puck_deeper_into_our_mouth_brakes() -> void:
 			Vector3(0.0, 0.0, -OWN * 4.0), OWN), "skating it out of the crease")
 	assert_false(AINetObstacle.drags_deeper_into_own_mouth(Vector3(3.0, 0.0, line - OWN * 1.0),
 			Vector3(-3.0, 0.0, 0.0), OWN), "not in the mouth")
+
+
+# ── A stick without the puck ────────────────────────────────────────────────
+
+func test_a_stick_without_the_puck_never_reaches_over_our_line_in_the_mouth() -> void:
+	# Measured: a ready stance aimed 2 m through a loose puck at our post, the
+	# point inside our cage; the sweep picked the puck up and pinned it on the
+	# blade 3 cm short of the line inside the posts.
+	var line: float = _line_z()
+	var blade := Vector3(-0.9, 0.0, line - OWN * 1.2)
+	var into_cage := Vector3(-0.57, 0.0, line + OWN * 0.46)
+	var held: Vector3 = AINetObstacle.own_line_safe_stick_target(blade, into_cage, OWN)
+	assert_almost_eq((line - held.z) * OWN, AINetObstacle.OWN_MOUTH_EXIT_FRONT_M, 1e-4,
+			"stopped short of the line: %s" % held)
+	var t: float = (blade.z - held.z) / (blade.z - into_cage.z)
+	assert_almost_eq(held.x, lerpf(blade.x, into_cage.x, t), 1e-4, "on its way there")
+	var loose_on_line := Vector3(-0.4, 0.0, line - OWN * 0.1)
+	assert_almost_eq((line - AINetObstacle.own_line_safe_stick_target(blade, loose_on_line,
+			OWN).z) * OWN, AINetObstacle.OWN_MOUTH_EXIT_FRONT_M, 1e-4,
+			"a puck on the line is played from in front of it")
+	var crease := Vector3(-0.3, 0.0, line - OWN * 0.8)
+	assert_eq(AINetObstacle.own_line_safe_stick_target(blade, crease, OWN), crease,
+			"a puck in the crease is gone for")
+	var beside := Vector3(-2.5, 0.0, line + OWN * 0.6)
+	assert_eq(AINetObstacle.own_line_safe_stick_target(Vector3(-2.2, 0.0, line - OWN * 1.0),
+			beside, OWN), beside, "beside the net, wide of the posts")
+	var behind := Vector3(0.0, 0.0, line + OWN * 2.0)
+	assert_eq(AINetObstacle.own_line_safe_stick_target(Vector3(1.5, 0.0, line + OWN * 1.8),
+			behind, OWN), behind, "behind the cage")
+	var theirs := Vector3(0.0, 0.0, -line - OWN * 0.3)
+	assert_eq(AINetObstacle.own_line_safe_stick_target(Vector3(0.0, 0.0, -line + OWN * 2.0),
+			theirs, OWN), theirs, "their mouth is a shot's")

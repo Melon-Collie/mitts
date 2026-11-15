@@ -229,6 +229,30 @@ static func release_into_own_net(from: Vector3, dir: Vector3, own_goal_dir: floa
 	return absf(at_x) < OWN_MOUTH_HALF_WIDTH_M
 
 
+# A stick WITHOUT the puck, from where it is (`from`), kept from reaching over our
+# own goal line inside our mouth: its target goes no deeper than a puck's
+# clearance in front of the line along its way there. Whatever it sweeps
+# through on the way (a loose puck it picks up, a pass it deflects) leaves the
+# blade at the line, not behind it, and a pickup pins the puck on the blade
+# that far on. A stick behind the line is behind the cage, and one crossing the
+# line wide of the posts is beside it: both are left alone.
+static func own_line_safe_stick_target(from: Vector3, target: Vector3,
+		own_goal_dir: float) -> Vector3:
+	var line_z: float = own_goal_dir * GameRules.GOAL_LINE_Z
+	var from_front: float = (line_z - from.z) * own_goal_dir
+	var to_front: float = (line_z - target.z) * own_goal_dir
+	if from_front < 0.0 or to_front >= OWN_MOUTH_EXIT_FRONT_M:
+		return target
+	var t: float = 0.0
+	if from_front > OWN_MOUTH_EXIT_FRONT_M:
+		t = (from_front - OWN_MOUTH_EXIT_FRONT_M) / (from_front - to_front)
+	var at: Vector3 = from.lerp(target, t)
+	var at_line: Vector3 = from.lerp(target, from_front / maxf(from_front - to_front, 0.0001))
+	if absf(at_line.x) >= OWN_MOUTH_HALF_WIDTH_M:
+		return target
+	return Vector3(at.x, 0.0, line_z - own_goal_dir * OWN_MOUTH_EXIT_FRONT_M)
+
+
 # Whether the body's travel (`velocity`) carries the puck at `puck` over our goal
 # line inside our mouth within `horizon_s`: where the blade, held at its reach,
 # cannot take it out faster than the body takes it in.

@@ -3065,6 +3065,13 @@ func _step_mouse_internal(target: Vector3, mode: int,
 				_current_self_state.velocity, _current_self_state.facing.normalized(), target,
 				_carry_floor_band, _own_goal_dir, _own_mouth_clear_s(),
 				_carried_puck_at(_current_snapshot, _current_self_state))
+	elif _current_self_state != null:
+		# Without the puck the stick never reaches over our own line inside our
+		# mouth: a ready stance aimed through a loose puck at our post swept it up
+		# and pinned it on the blade a stride past, inside our posts.
+		var blade: Vector3 = _current_self_state.blade_contact_world
+		target = AINetObstacle.own_line_safe_stick_target(
+				blade if blade != Vector3.ZERO else _current_self_pos, target, _own_goal_dir)
 	# Cache the FINAL un-shaped target, mode and rates so skipped ticks re-shape
 	# fresh every physics frame, or a swing would take dispatch-period× too long.
 	_cached_aim_target = target
