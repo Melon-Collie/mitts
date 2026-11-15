@@ -234,7 +234,7 @@ func _run(duel: Object) -> Dictionary:
 func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 	var res: Dictionary = {"outcome": "-", "first": "none", "t_first": -1.0, "second": false,
 			"t_second": -1.0, "second_kind": "-", "down": false, "tipped": false,
-			"second_xg": 0.0, "first_slot": "-"}
+			"second_xg": 0.0, "first_slot": "-", "touched_by": "-"}
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	var spot: int = AIReboundField.spot_of(released["pos"], goal)
 	var rng := RandomNumberGenerator.new()
@@ -256,6 +256,10 @@ func _play_rebound(duel: Object, released: Dictionary) -> Dictionary:
 			duel.step()
 			if duel.carrier() != -1 or duel.loose_released_by != shooter:
 				res["tipped"] = true
+				var by: int = duel.carrier() if duel.carrier() != -1 else duel.loose_released_by
+				res["touched_by"] = "-" if by == -1 else ("ours:" + AIRoleSlots.label(
+						duel.brains[0].slot_assignments.get(by, 0)) if duel.team_map.get(by, -1) == 0
+						else "theirs")
 				break
 			duel.puck_pos = from + dir * speed * (k + 1) * Duel.DT
 			duel.puck_vel = dir * speed
@@ -630,9 +634,10 @@ func _sweep(label: String) -> void:
 			var reb: String = ""
 			if r.has("rebound"):
 				var rb: Dictionary = r["rebound"]
-				reb = "|%s|%s|%.2f|%d|%.2f|%s|%d|%d|%.4f|%s" % [rb["outcome"], rb["first"],
+				reb = "|%s|%s|%.2f|%d|%.2f|%s|%d|%d|%.4f|%s|%s" % [rb["outcome"], rb["first"],
 						rb["t_first"], int(rb["second"]), rb["t_second"], rb["second_kind"],
-						int(rb["down"]), int(rb["tipped"]), rb["second_xg"], rb["first_slot"]]
+						int(rb["down"]), int(rb["tipped"]), rb["second_xg"], rb["first_slot"],
+						rb["touched_by"]]
 			gut.p("OZSCREEN|%d|%.2f|%.2f|%.2f" % [g, r.get("pub_s", 0.0), r.get("contest_s", 0.0),
 					r.get("mine_m", 0.0) / maxf(r.get("pub_s", 0.0), 0.001)])
 			gut.p("OZCHAIN|%d|%s" % [g, JSON.stringify(r.keys().filter(
