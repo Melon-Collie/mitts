@@ -48,6 +48,8 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "penalty_box_view_home", "stage": _STAGE_FREE_PLAY, "open": "_show_penalty_box_view", "arg": 0},
 	{"name": "penalty_box_view_away", "stage": _STAGE_FREE_PLAY, "open": "_show_penalty_box_view", "arg": 1},
 	{"name": "post_game_analytics", "stage": _STAGE_FREE_PLAY, "open": "_open_post_game_analytics"},
+	# Last in its stage: its puppets stay on the ice.
+	{"name": "hud_pings", "stage": _STAGE_FREE_PLAY, "open": "_show_pings"},
 	{"name": "hud_tutorial", "stage": _STAGE_TUTORIAL, "open": "_open_nothing"},
 	{"name": "lobby", "stage": _STAGE_LOBBY, "open": "_open_nothing"},
 	# A tournament lobby opens on its bracket; these run in bracket order, each
@@ -507,6 +509,31 @@ func _leave_the_box_seat() -> void:
 		_box_seat.deactivate()
 		_box_seat.queue_free()
 		_box_seat = null
+
+
+# Both kinds of smart ping as a teammate's screen draws them: the player's call
+# on an opponent, and a teammate's on open ice. Emitted as NetworkManager hands
+# them over, so nothing here waits on a cooldown.
+func _show_pings() -> void:
+	_close_side_menu()
+	_leave_the_box_seat()
+	var me: PlayerRecord = GameManager.get_local_player()
+	if me == null or me.skater == null:
+		_fail("free play has no local skater")
+		return
+	var at: Vector3 = me.skater.global_position
+	var opponent: PlayerRecord = GameManager.spawn_tutorial_bot(
+			at + Vector3(3.5, 0.0, -2.5), 0, 1)
+	var teammate: PlayerRecord = GameManager.spawn_tutorial_bot(
+			at + Vector3(-4.0, 0.0, -1.0), 1, 0)
+	if opponent == null or teammate == null:
+		_fail("could not spawn the ping shot's puppets")
+		return
+	await _settle(_SHOT_SETTLE_FRAMES, 0.3)
+	NetworkManager.smart_ping_received.emit(me.peer_id, PingRules.Type.COVER_HIM,
+			opponent.peer_id, opponent.skater.global_position)
+	NetworkManager.smart_ping_received.emit(teammate.peer_id, PingRules.Type.GO_THERE,
+			-1, at + Vector3(-1.5, 0.0, -5.0))
 
 
 func _open_post_game_analytics() -> void:

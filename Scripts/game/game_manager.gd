@@ -6442,6 +6442,10 @@ func get_players() -> Dictionary[int, PlayerRecord]:
 # the bubble / marker, and the host routes the bot directive into the
 # pinger's TeamBrain.
 
+# A marker on a skater or the puck stands as long as the words over the pinger.
+const _PING_MARKER_HOLD_S: float = 2.4
+const _PING_TAP_GAP_S: float = 0.11
+
 func try_send_smart_ping() -> void:
 	if NetworkManager.is_replay_mode() or is_local_spectator():
 		return
@@ -6487,13 +6491,8 @@ func _on_smart_ping_received(sender_peer_id: int, ping_type: int,
 	# opponents keeps "Pass to me!" from telegraphing the play.
 	var local_team: int = _registry.team_id_by_peer.get(NetworkManager.local_peer_id(), -1)
 	if local_team == sender_team and not NetworkManager.is_replay_mode():
-		if ping_type == PingRules.Type.GO_THERE:
-			_spawn_ping_marker(world_pos, tr(PingRules.message_key_for(ping_type)))
-		else:
-			var sender_rec: PlayerRecord = _registry.get_record(sender_peer_id)
-			if sender_rec != null and sender_rec.skater != null:
-				sender_rec.skater.show_ping_bubble(tr(PingRules.message_key_for(ping_type)))
-		SoundManager.play_ui(SoundManager.Sound.UI_CLICK)
+		_draw_ping(sender_peer_id, ping_type, target_peer_id, world_pos)
+		_play_ping_taps()
 
 	# Bot obedience is host-only (bots are host-simulated; offline free play
 	# runs the full host path, so this covers solo too).
@@ -6529,11 +6528,35 @@ func _collect_skater_positions() -> Dictionary:
 	return positions
 
 
-func _spawn_ping_marker(pos: Vector3, text: String) -> void:
+# A call is heard as a player makes one: two raps of the stick on the ice. On
+# the UI pool, so a teammate the length of the rink away is heard as well.
+func _play_ping_taps() -> void:
+	SoundManager.play_ui(SoundManager.Sound.STICK_TAP)
+	get_tree().create_timer(_PING_TAP_GAP_S).timeout.connect(
+			func() -> void: SoundManager.play_ui(SoundManager.Sound.STICK_TAP))
+
+
+# A ping on this machine's screen: the words over the pinger, and a marker on
+# what he means — the spot, the loose puck, or the skater he named (himself,
+# when he is calling for it).
+func _draw_ping(sender_peer_id: int, ping_type: int, target_peer_id: int,
+		world_pos: Vector3) -> void:
 	var scene_root: Node = get_tree().current_scene
-	if scene_root == null:
+	var sender_rec: PlayerRecord = _registry.get_record(sender_peer_id)
+	if scene_root == null or sender_rec == null or sender_rec.skater == null:
 		return
-	scene_root.add_child(PingMarker.create(pos, text))
+	var pinger: Skater = sender_rec.skater
+	pinger.show_ping_bubble(tr(PingRules.message_key_for(ping_type)))
+	var target_rec: PlayerRecord = _registry.get_record(target_peer_id) \
+			if target_peer_id != -1 else null
+	if ping_type == PingRules.Type.GO_THERE:
+		scene_root.add_child(PingMarker.at_spot(world_pos, pinger,
+				PingRules.directive_duration_s(ping_type)))
+	elif target_rec != null and target_rec.skater != null:
+		scene_root.add_child(PingMarker.on_node(
+				target_rec.skater, pinger, _PING_MARKER_HOLD_S))
+	elif ping_type == PingRules.Type.GET_PUCK and puck != null:
+		scene_root.add_child(PingMarker.on_node(puck, pinger, _PING_MARKER_HOLD_S))
 
 
 func get_period_duration() -> float:
