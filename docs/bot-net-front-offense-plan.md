@@ -1177,6 +1177,31 @@ to 5 m, so a deeper screen is unpriced.
 - **Acceptance.** The 5v5 O-zone sweep must not regress to tips from the walls
   making up half the shots. Tips should come from spots where the table says
   they score.
+
+  **Status: built (`c44cc30`, `1f2f242`).** The rip for a FINISHER or
+  NET_FRONT teammate to tip competes with the direct shot by max
+  (`carrier.gd:_tip_read`, `tip_ev` on the tip field), and `tip_ev` prices no
+  tip of a rip he could hold. Its first sweep turned 5 of 215 shots into tips:
+  traced rip by rip, the net-front man pressed a one-timer on 11 of 29 rips
+  (he read as one-timer ready though never fed) and let the deflect go on the
+  contact on the near ones (the tip ended as the puck crossed his z-plane,
+  where his blade meets it). Both fixed (`1f2f242`). J=11, 576, the same code
+  with the carrier's tip read off and on:
+
+  | | no tip read | the tip read |
+  |---|---|---|
+  | shots / possession | 0.260 ± 0.018 | 0.373 ± 0.020 |
+  | slot shots / possession | 0.095 | 0.075 |
+  | "other" (perimeter) shots | 52 of 150 (35%) | 115 of 215 (53%) |
+  | tipped by ours | 2 | 23 (0.15 each by the tip field) |
+  | passes picked off | 0.260 | 0.205 |
+  | xG / possession (first + second) | 0.030 + 0.006 = 0.036 ± 0.006 | 0.031 + 0.007 = 0.038 ± 0.005 |
+
+  xG is unchanged within noise, and perimeter shots are now half of them: the
+  acceptance's failure shape, though no longer at a cost. About one rip in
+  four is tipped (a short trace put 29 of 69 shots as rips), where `tip_ev`
+  prices the tipper's stick on it on most.
+
 - **Order.** If 2c shows a tip on the shot line still scores ~0, the carrier's
   half stays out, and only the finisher's station pricing moves to the measured
   value.
