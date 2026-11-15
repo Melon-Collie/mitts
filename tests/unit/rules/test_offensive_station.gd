@@ -158,6 +158,24 @@ func test_a_body_level_with_the_point_is_not_behind_him() -> void:
 			"puckless coverage level with the point does not move him; got %s" % t)
 
 
+func test_a_man_level_with_the_point_is_behind_him_only_if_he_faces_our_net() -> void:
+	# Each side turns before it races: a winger covering the point faces the
+	# play as the point does, so the two turn alike and he is level; the same
+	# man already turned to break for our net, with our point still facing up
+	# the ice, has the turn on him and is past him in the race.
+	var stand := Vector3(6.71, 0.0, OPP_BLUE_Z - 2.0)
+	var man := Vector3(5.0, 0.0, OPP_BLUE_Z - 1.0)
+	var ctx: RoleContext = _ctx(stand, [[2, Vector3(8.0, 0.0, -22.0)]], [[10, man]], 2)
+	ctx.snapshot.skater_states[1].facing = Vector2(0.0, -1.0)       # up the ice
+	ctx.snapshot.skater_states[10].facing = Vector2(0.0, -1.0)      # the play
+	var level: float = AIRoleRushD.race_depth_to_net(ctx, 10)
+	ctx.snapshot.skater_states[10].facing = Vector2(0.0, 1.0)       # our net
+	var breaking: float = AIRoleRushD.race_depth_to_net(ctx, 10)
+	assert_lt(breaking, level, "turned for our net, he gains our turn on us")
+	assert_almost_eq(level, AIRoleReads.xz_distance(man, ctx.defending_goal_pos), 0.5,
+			"facing the play, he races us from where he stands")
+
+
 func test_an_offside_lurker_is_not_a_threat() -> void:
 	# An opponent already inside our zone ahead of the puck cannot legally
 	# receive, so he must not drag a station out of the play.

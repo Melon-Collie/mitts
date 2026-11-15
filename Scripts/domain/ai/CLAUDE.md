@@ -1365,7 +1365,10 @@ reaches back into what remains.
   forecheck line pair, F3, the high slot, the trailing valve — go through
   `offensive_station_target`: hold the forward stand (leashed to the play), or
   give it up — to `numbers_floor`, goal-side of the deepest attacker behind it,
-  while we still have the puck; to the retreat floor once we don't. *The two
+  while we still have the puck; to the retreat floor once we don't. "Behind" is
+  a race (`AIRoleRushD.race_depth_to_net`), each side turning first from where
+  it faces: a point faces up the ice and a man breaking for our net does not,
+  and raced square to our net he read as level until he was past. *The two
   NEUTRAL shapes* —
   3v3 FLANK and 5v5 DBACK — go through `neutral_station_target`: a slow loose
   puck is not a rush, so giving up the stand restores a **numbers layer**
