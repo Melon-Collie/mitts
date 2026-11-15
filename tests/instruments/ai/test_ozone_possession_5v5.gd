@@ -486,8 +486,43 @@ func _print_high(duel: Object) -> void:
 			positive += 1
 	var pick: String = "post/held" if ht.chosen < 0 else "%.1f,%+.1f,%.3f" % [
 			ht.depth[ht.chosen], ht.weak_u[ht.chosen], ht.score[ht.chosen]]
-	gut.p("OZHS|%d|%d|%.1f,%+.1f,%.1f|%s|%.3f|%.3f|%d" % [_run_index, int(ht.deep_ok), _out(me),
-			weak * me.x, near, pick, central, wide, positive])
+	var target: Vector3 = duel._skater(ht.peer).agent._cached_role_decision.target_position
+	gut.p("OZHS|%d|%d|%.1f,%+.1f,%.1f|%s|%.3f|%.3f|%d|%.1f,%+.1f|%s|%s" % [_run_index,
+			int(ht.deep_ok), _out(me), weak * me.x, near, pick, central, wide, positive,
+			_out(target), weak * target.x, _high_parts(duel, ht, ht.chosen),
+			_high_parts(duel, ht, _best_wide(ht))])
+
+
+# The best-scoring grid spot 4 m or more to the weak side, or -1.
+static func _best_wide(ht: AIHighSlotTrace) -> int:
+	var best: int = -1
+	for k: int in ht.score.size():
+		if ht.weak_u[k] >= 4.0 and (best == -1 or ht.score[k] > ht.score[best]):
+			best = k
+	return best
+
+
+# Spot `k`'s one-timer off the carrier's feed, in its parts: the lane, the
+# shot's odds with nobody in front, and what the defenders in front leave.
+func _high_parts(duel: Object, ht: AIHighSlotTrace, k: int) -> String:
+	var c: int = duel.carrier()
+	if k < 0 or c == -1:
+		return "-"
+	var weak: float = -duel.brains[0]._strong_x
+	var spot := Vector3(weak * ht.weak_u[k], 0.0, GOAL_Z + ht.depth[k])
+	var carrier: Vector3 = duel.skater_pos(c)
+	var goal := Vector3(0.0, 0.0, GOAL_Z)
+	var keeper: Vector3 = _goalie.global_position
+	keeper.y = 0.0
+	var opps: Array[Vector3] = []
+	for sk: Object in duel.skaters:
+		if sk.team_id == 1:
+			opps.append(sk.pos)
+	var speed: float = AIPuckLane.expected_pass_speed(carrier, spot)
+	var lane: float = AIPuckLane.lane_clear(carrier, spot, opps, speed)
+	var odds: float = AIShotValue.feed(carrier, spot, speed, goal, keeper, true)
+	var rest: float = ht.score[k] / (lane * odds) if lane * odds > 0.0 else -1.0
+	return "lane %.2f odds %.3f rest %.2f" % [lane, odds, rest]
 
 
 # How many of ours fight for the net front this tick: Ctrl held with the spot
