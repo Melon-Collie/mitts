@@ -143,7 +143,8 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var me := Vector2(motor.x, motor.z)
 	var comes: float = -velocity.dot(puck.normalized()) if puck.length() > 1e-4 else 0.0
 	var down_within: float = down_range(comes, motor.save_move.drop_s * motor.low_ready.fall_share())
-	kept_down = tight and not planted and puck.length() <= down_within + (MARGIN_M if kept_down else 0.0) \
+	var held: bool = kept_down and (puck.length() <= down_within + MARGIN_M or not _clears_his_hands(puck, me))
+	kept_down = tight and not planted and (held or puck.length() <= down_within) \
 			and (kept_down or motor.rest != KeeperRoute.Rest.FEET or motor.drops()
 					or _covers(me, _spot(_hedged(puck, motor), motor)))
 	if planted or kept_down:
@@ -186,6 +187,15 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 # tight rather than starting there. A carrier standing off it does not.
 static func down_range(coming: float, drop_s: float) -> float:
 	return TIGHT_M + maxf(coming, 0.0) * drop_s
+
+
+# Whether a puck at `puck` can be lifted over his hands by the time it gets to
+# him at `me`, down. Until it can, standing up covers nothing the butterfly
+# does not and shows the low net for as long as getting up takes, so down he
+# stays down.
+static func _clears_his_hands(puck: Vector2, me: Vector2) -> bool:
+	return GameRules.PUCK_COLLISION_HALF_HEIGHT + PlayerAttributes.steepest_loft_tan() * puck.distance_to(me) \
+			> KeeperHandsLow.highest()
 
 
 # Whether he at `me` covers what he would from `spot`: on its line from the

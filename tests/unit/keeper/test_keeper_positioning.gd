@@ -665,6 +665,40 @@ func test_a_carrier_going_round_him_is_pushed_back_to_the_post_with() -> void:
 		assert_gt(-side * _motor.yaw, 0.0, "%s: turned toward the carrier" % what)
 
 
+# Once he is down, he is not stood up while a puck from where the carrier has
+# it cannot be lifted over his hands: the live brain, down for a carrier in
+# tight who then backs out, stays on his knees until the carrier is far enough
+# off for that, well outside tight, and gets up once he is.
+func test_down_he_stays_down_until_the_puck_can_be_lifted_over_his_hands() -> void:
+	_brain.play = KeeperPlayRead.new()
+	_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	var body := Vector2(0.0, -8.0)
+	var tick: int = 0
+	var was_down: bool = false
+	var up_at: float = NAN
+	var lift: float = PlayerAttributes.steepest_loft_tan()
+	for phase: int in 2:
+		var velocity := Vector2(0.0, 5.0) if phase == 0 else Vector2(0.0, -2.0)
+		while (phase == 0 and body.y < -2.4) or (phase == 1 and body.y > -16.0 and is_nan(up_at)):
+			body += velocity * DT
+			_brain.play.step(DT, body, velocity, false, body, true)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+			_motor.step(DT)
+			tick += 1
+			was_down = was_down or _motor.rest == R.DOWN
+			var reach: float = GameRules.PUCK_COLLISION_HALF_HEIGHT + lift * body.distance_to(Vector2(_motor.x, _motor.z))
+			if was_down and phase == 1 and reach < 0.9 * KeeperHandsLow.highest():
+				assert_ne(_motor.route.rest, R.FEET, "the carrier %.1f m out, no lifting it over his hands: not asked up" % -body.y)
+			if was_down and _motor.rest == R.FEET and not _motor.drops() and is_nan(up_at):
+				up_at = -body.y
+	assert_true(was_down, "down for him in tight")
+	assert_false(is_nan(up_at), "up once he has backed right off")
+	assert_gt(up_at, KeeperPositioning.TIGHT_M + KeeperPositioning.MARGIN_M + 1.0, "not as soon as he is out of tight")
+	assert_true(KeeperPositioning._clears_his_hands(Vector2(0.0, -9.0), Vector2(0.0, -1.2)), "from the top of the circles: over his hands")
+	assert_false(KeeperPositioning._clears_his_hands(Vector2(0.0, -3.5), Vector2(0.0, -1.2)), "from just outside tight: not")
+
+
 # The live brain against a carrier of theirs who sells one side and stops
 # there, braking as hard as a skater stops: skating across on a diagonal, and
 # driving in with the puck pulled wide of the post. Down for him, he is never
