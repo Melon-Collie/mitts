@@ -46,6 +46,11 @@ const FEED_FLIGHT_MAX_S: float = 1.0
 # outside the crease arc (GameRules.CREASE_ARC_RADIUS) plus a body, where the
 # body screens and the blade reaches the point blast.
 const TIP_STATION_DIST_M: float = 2.5
+# The screen's depth is a second station only a stride further out than the
+# crease top (nearer, it is the same ice), and only two sticks' reach short of
+# the release: nearer the shooter it is his ice, in the lane his shot leaves by.
+const SCREEN_STEP_OUT_MIN_M: float = 1.0
+const SCREEN_SHOOTER_CLEAR_M: float = 2.0 * AIBotMechanics.BLADE_REACH_M
 
 # An instrument's record of one positioning read (AIFinisherTrace), filled for
 # its peer only while one is held; null in play.
@@ -328,24 +333,35 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	AIStationSearch.fill_shot_plays(ctx, carrier_pos, goalie_pos, opp_positions,
 			teammate_positions, not holds_front)
 	var line_key: int = AIStationSearch.station_key(carrier_peer, AIStationSearch.ON_SHOT_LINE)
+	var screen_key: int = AIStationSearch.station_key(carrier_peer,
+			AIStationSearch.ON_SCREEN_LINE)
 	var line_held: int = -1
-	# His one station while the carrier has a shot: the crease top on its line
-	# (TIP_STATION_DIST_M out), so the spot moves only with the shooter's angle.
-	# Priced along the line, the best point ran between the crease and the
-	# screen's depth and the spot moved more, not less. Behind their goal line
+	# While the carrier has a shot, his stations are on its line, so they move
+	# only with the shooter's angle: the crease top (TIP_STATION_DIST_M out),
+	# and where the screen field measured a screen of that release worth most
+	# (AIScreenField.best_station_along) when that is a step further out, each
+	# held by its key. Priced at every point along the line, the best ran
+	# between the two and the spot moved more, not less. Behind their goal line
 	# there is no line, and he reads the stations.
-	var on_line: bool = holds_front and _shot_line_reach(ctx, carrier_pos) \
-			> TIP_STATION_DIST_M + 0.5
+	var reach_out: float = _shot_line_reach(ctx, carrier_pos)
+	var on_line: bool = holds_front and reach_out > TIP_STATION_DIST_M + 0.5
 	if on_line:
 		candidates.clear()
 		tip_at = -1
 		front_from = 0
-		var line: Vector3 = AIPuckLane.release_point_toward(carrier_pos, ctx.attacking_goal_pos) \
-				- ctx.attacking_goal_pos
+		var release: Vector3 = AIPuckLane.release_point_toward(carrier_pos,
+				ctx.attacking_goal_pos)
+		var line: Vector3 = (release - ctx.attacking_goal_pos).normalized()
 		line.y = 0.0
-		candidates.append(ctx.attacking_goal_pos + line.normalized() * TIP_STATION_DIST_M)
+		candidates.append(ctx.attacking_goal_pos + line * TIP_STATION_DIST_M)
+		var screen_at: float = AIScreenField.best_station_along(release, ctx.attacking_goal_pos)
+		if screen_at >= TIP_STATION_DIST_M + SCREEN_STEP_OUT_MIN_M \
+				and screen_at <= reach_out - SCREEN_SHOOTER_CLEAR_M:
+			candidates.append(ctx.attacking_goal_pos + line * screen_at)
 		if ctx.prev_station_key == line_key:
 			line_held = 0
+		elif ctx.prev_station_key == screen_key and candidates.size() > 1:
+			line_held = 1
 	else:
 		AIStationSearch.append_net_front_stations(ctx, candidates)
 	var front_to: int = candidates.size()
@@ -431,7 +447,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 			best_score = score
 			best_pos = c
 			if on_line:
-				d.station_key = line_key
+				d.station_key = line_key if i == 0 else screen_key
 			else:
 				d.station_key = AIStationSearch.station_keys[i - front_from] \
 						if i >= front_from and i < front_to else (tip_key if i == tip_at else -1)

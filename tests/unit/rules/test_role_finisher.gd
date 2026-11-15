@@ -794,6 +794,36 @@ func test_the_net_front_man_reads_the_puck_not_a_teammates_shot() -> void:
 			"on the carrier's line; got %s" % d.target_position)
 
 
+func test_a_high_slot_shot_puts_the_screens_depth_beside_the_crease_top() -> void:
+	# The carrier at the slot's top, square to the net: the screen field
+	# measured a body further out on his line screening more than one at the
+	# crease, so the net-front man weighs both, on the line, and stands where
+	# what he adds in front is worth more.
+	var carrier := Vector3(0.0, 0.0, OPP_NET_Z + 11.0)
+	var ctx: RoleContext = _screen_ctx(carrier, false)
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	ctx.team_brain = slots
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var release: Vector3 = AIPuckLane.release_point_toward(carrier, goal)
+	var depth: float = AIScreenField.best_station_along(release, goal)
+	assert_gt(depth, AIRoleFinisher.TIP_STATION_DIST_M + AIRoleFinisher.SCREEN_STEP_OUT_MIN_M,
+			"the screen's best depth is out from the crease top")
+	var line: Vector3 = (release - goal).normalized()
+	var crease: Vector3 = goal + line * AIRoleFinisher.TIP_STATION_DIST_M
+	var screen: Vector3 = goal + line * depth
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	var screen_key: int = AIStationSearch.station_key(2, AIStationSearch.ON_SCREEN_LINE)
+	var line_key: int = AIStationSearch.station_key(2, AIStationSearch.ON_SHOT_LINE)
+	gut.p("crease %.3f screen %.3f, took %s" % [_front_at(ctx, carrier, crease),
+			_front_at(ctx, carrier, screen), d.target_position])
+	if d.station_key == screen_key:
+		assert_almost_eq(d.target_position.distance_to(screen), 0.0, 0.01)
+	else:
+		assert_eq(d.station_key, line_key)
+		assert_almost_eq(d.target_position.distance_to(crease), 0.0, 0.01)
+
+
 func test_the_net_front_spot_slides_with_the_puck() -> void:
 	# The carrier at the slot's top skates half a metre across: the net-front
 	# man's spot moves with his line, a fraction of that, never a jump.

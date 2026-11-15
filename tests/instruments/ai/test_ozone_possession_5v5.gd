@@ -363,6 +363,10 @@ func _count_screen(duel: Object, r: Dictionary) -> void:
 			r["nf_handover_n"] = r.get("nf_handover_n", 0.0) + 1.0
 	if holder != -1:
 		r["nf_holder"] = holder
+		var hd: RoleDecision = duel._skater(holder).agent._cached_role_decision
+		if hd != null and hd.station_key >= 0 \
+				and hd.station_key % 4 == AIStationSearch.ON_SCREEN_LINE:
+			r["nf_screen_s"] = r.get("nf_screen_s", 0.0) + Duel.DT
 	var snap: WorldSnapshot = null
 	for sk: Object in duel.skaters:
 		if sk.team_id != 0 or sk.agent == null:
