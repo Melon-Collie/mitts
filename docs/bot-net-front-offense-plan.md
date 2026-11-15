@@ -331,6 +331,28 @@ cycle) leaves its weak-dot and high-slot stations unreachable, so NET_FRONT
 never rotates up. It is left alone until step 4 prices the screen that would
 keep the net front manned.
 
+### Why he still stands high and central (the high-slot trace)
+
+`MITTS_OZ_TRACE_HIGH=1` records HIGH_SLOT's read every 0.1 s while we carry
+(`AIHighSlotTrace`: whether he may leave the slot's top, every grid spot's
+score, the pick). Measured at `7790693` (the spacing fixtures: 6–10.6 m out,
+within 0.7 m of the middle, the nearest defender of any off-puck attacker,
+2.1–3.0 m):
+
+- **The counter layer holds him at the top 53% of the time**
+  (`_help_free`): another forward of ours is not as high, and a man of theirs
+  is nearer our net than the slot's top. He picks 9.5–11 m, central or a
+  little strong-side.
+- **Free to go lower, he picks 7.5 m (median) and is sent to 9.5 m**: the shared
+  station read (`offensive_station_target`) lifts his target more than a metre
+  above his pick on 37% of those reads, goal-side of their men up at our
+  points. The two guards overlap.
+- **The weak flank prices at nothing because its lane is shut, not because its
+  shot is poor**: from 4–6 m weak-side the one-timer is worth 0.49–0.55 with
+  nobody in front (as good as or better than the middle), but the feed lane
+  there is shut on 52–64% of reads (median 0), and the defenders in front take
+  more again. The middle wins on partly open lanes (median 0.45–0.74).
+
 ---
 
 ## Step 2 — Measure the net front (instruments only, no behaviour change)
