@@ -1050,10 +1050,11 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		# flight outside it cannot arrive faster than it crosses the ring, so the
 		# throttled cadence loses nothing there. The ready-armed bypass rides the
 		# same ring: arming is positional, and its consumers run at the ~30 Hz
-		# argmax anyway.
+		# argmax anyway. A teammate's release is loose from when it leaves his
+		# stick, the clock the tip read and the one-timer press both read it on.
 		var finisher_puck_near: bool = is_finisher_slot \
 				and snapshot.puck_state != null \
-				and snapshot.puck_state.carrier_peer_id == -1 \
+				and _released_to_us(snapshot) \
 				and snapshot.puck_state.position.distance_squared_to(self_pos) \
 						<= FINISHER_FLIGHT_NEAR_M * FINISHER_FLIGHT_NEAR_M
 		var must_recompute: bool = _cached_role_decision == null \
@@ -1212,6 +1213,15 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		# the latter gets us into the squared reception setup before the fast puck
 		# arrives, rather than reacting only once it's on top of us.
 		_set_state(State.CHASE_PUCK)
+
+
+# Whether the puck is loose: the delayed carrier read, except that a teammate's
+# release is read when it leaves his stick (AIRoleFinisher's tip read).
+func _released_to_us(snapshot: WorldSnapshot) -> bool:
+	var holder: int = snapshot.puck_state.carrier_peer_id
+	if holder != -1 and _team_id_by_peer.get(holder, -1) == _team_id:
+		holder = snapshot.real_puck_carrier_peer_id
+	return holder == -1
 
 
 # Holds where a teammate's release left from while the puck is loose off him and
