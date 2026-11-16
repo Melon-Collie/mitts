@@ -617,11 +617,21 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# by the release, and it out-prices every real one.
 	var advanced: float = AICarrierArrivalShot.value(self, ctx, reached, arrive_vel,
 			start_s + t, regime_from, _drive_buf) * AIActionScoring.delay_discount(t)
-	# He lets it go where the drive's shot is best, not where it stops: read
-	# where it crosses each row the shot field is measured at, in shooting range.
-	var goal_sign: float = signf(ctx.attacking_goal_pos.z)
-	var from_out: float = (ctx.attacking_goal_pos.z - receiver_spot.z) * goal_sign
-	var end_out: float = (ctx.attacking_goal_pos.z - reached.z) * goal_sign
+	# He lets it go where the drive's shot is best, not where it stops. Where
+	# that is, is read off the set keeper at each row the shot field is measured
+	# at that the drive crosses in shooting range; the shot is then priced as the
+	# end's is there and a row further out, since his hands' hold lets it go
+	# later than he decides. Two full reads more, not one a row.
+	var goal: Vector3 = ctx.attacking_goal_pos
+	var goal_sign: float = signf(goal.z)
+	var from_out: float = (goal.z - receiver_spot.z) * goal_sign
+	var end_out: float = (goal.z - reached.z) * goal_sign
+	var release: Vector3 = Vector3.INF
+	var release_t: float = 0.0
+	var before: Vector3 = Vector3.INF
+	var before_t: float = 0.0
+	var took_last: bool = false
+	var set_best: float = AIShotValue.set_keeper(reached, goal) * AIActionScoring.delay_discount(t)
 	for row_out: float in AIShotOdds.rows_out():
 		if row_out <= end_out or row_out >= from_out \
 				or row_out > AICarrierArrivalShot.PATH_SHOT_RANGE_M:
@@ -630,12 +640,34 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 				(from_out - row_out) / (from_out - end_out))
 		var row_t: float = AIArrival.time_to_arrive(
 				receiver_spot, at_row, receiver_vel, recv_speed, recv_accel)
-		project_opponents(start_s + row_t, _drive_buf)
-		advanced = maxf(advanced, AICarrierArrivalShot.value(self, ctx, at_row,
-				(at_row - receiver_spot) / row_t if row_t > 0.001 else receiver_vel,
-				start_s + row_t, regime_from, _drive_buf) * AIActionScoring.delay_discount(row_t))
+		var set_here: float = AIShotValue.set_keeper(at_row, goal) \
+				* AIActionScoring.delay_discount(row_t)
+		if took_last:
+			before = at_row
+			before_t = row_t
+		took_last = set_here > set_best
+		if took_last:
+			set_best = set_here
+			release = at_row
+			release_t = row_t
+			before = Vector3.INF
+	if release.is_finite():
+		advanced = maxf(advanced, _drive_shot_at(ctx, receiver_spot, receiver_vel, release,
+				release_t, start_s, regime_from))
+	if before.is_finite():
+		advanced = maxf(advanced, _drive_shot_at(ctx, receiver_spot, receiver_vel, before,
+				before_t, start_s, regime_from))
 	drive_in_reached = reached
 	return advanced * keep - _drive_loss_cost(ctx, reached, 1.0 - keep, own_hands)
+
+
+# The shot a drive from `from` at `vel`, starting `start_s` from now, lets go
+# passing `at` `t` later, as of the drive's start.
+func _drive_shot_at(ctx: RoleContext, from: Vector3, vel: Vector3, at: Vector3, t: float,
+		start_s: float, regime_from: Vector3) -> float:
+	project_opponents(start_s + t, _drive_buf)
+	return AICarrierArrivalShot.value(self, ctx, at, (at - from) / t if t > 0.001 else vel,
+			start_s + t, regime_from, _drive_buf) * AIActionScoring.delay_discount(t)
 
 
 # A drive lost at `at` with probability `lost`, as a carry candidate's strip is

@@ -1435,9 +1435,12 @@ reaches back into what remains.
   into the keeper; read as he stands at the decision, a release a metre further
   in priced the keeper the drive had not yet dropped. A drive in, the carrier's
   own or a receiver's, is shot by the same read (`AICarrierArrivalShot.value`),
-  where it ends and where it crosses each row of the shot field in range: from
-  inside the zone it runs to the net, and one worth only its end's shot is
-  worth nothing from wherever that end is a spot the keeper has covered.
+  where it ends and where on the way the set keeper gives up most (the best of
+  the shot field's rows it crosses in range, and the row before it, the hands'
+  hold letting go later than he decides): from inside the zone it runs to the
+  net, and one worth only its end's shot is worth nothing from wherever that
+  end is a spot the keeper has covered. Two full reads more a drive, not one a
+  row: a receiver's drive is priced for every pass.
   A move is worth its best shot on the way as well as its end
   (`AICarrierArrivalShot.best_on_path`): the carrier plans where he releases.
   The plan is a point on the ice, kept until a re-plan finds one better by the

@@ -39,6 +39,9 @@ const ENTRY_WALL_INSET_M: float = 2.0
 # further.
 const DRIVE_MAX_M: float = 12.0
 const DRIVE_MIN_NET_DIST_M: float = 3.0
+# How far out a drive's shots on the way in are read from: the range the carrier
+# plans his own release in.
+const DRIVE_SHOT_RANGE_M: float = 8.0
 # Goalie halves memoized per fill (_goalie_half): a defence read prices the same
 # few spots against every candidate body. Round-robin past this many.
 const GOALIE_MEMO_CAP: int = 32
@@ -477,14 +480,25 @@ func _drive(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO) -> float
 	var from_out: float = (_goal.z - from.z) * signf(_goal.z)
 	var end_out: float = (_goal.z - reached.z) * signf(_goal.z)
 	for row_out: float in AIShotOdds.rows_out():
-		if row_out <= end_out or row_out >= from_out:
+		if row_out <= end_out:
 			continue
+		if row_out >= from_out or row_out > DRIVE_SHOT_RANGE_M:
+			break
 		var at_row: Vector3 = from.lerp(reached, (from_out - row_out) / (from_out - end_out))
-		var shot: float = _shot(at_row)
-		if shot <= _drive_shot:
+		# The keeper's half bounds the shot (the defence only lowers it, and the
+		# wait only decays it), so a row it cannot win on is read no further.
+		# Off the field, not through the memo: a drive's rows are its own.
+		var half: float = AIShotValue.set_keeper(at_row, _goal)
+		if half <= best:
 			continue
 		var row_s: float = start_s + AIArrival.time_to_arrive(from, at_row, vel)
-		var now: float = shot * AIActionScoring.delay_discount(row_s)
+		var decay: float = AIActionScoring.delay_discount(row_s)
+		if half * decay <= best:
+			continue
+		var shot: float = AIActionScoring.score_shoot_value(at_row, _goal, Vector3.INF, _defenders,
+				0.0, AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
+				_defender_caps, half)
+		var now: float = shot * decay
 		if now > best:
 			best = now
 			_drive_end = at_row
