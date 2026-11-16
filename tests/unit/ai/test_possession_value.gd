@@ -103,6 +103,36 @@ func test_a_man_skating_at_the_zone_is_worth_more_than_one_skating_away() -> voi
 	assert_lt(v.at(spot, 0.0, Vector3(0.0, 0.0, 7.0)), standing, "skating away")
 
 
+# The side with the puck reading its own possession: a defender in front of the
+# puck backing off toward his net is carried on no further than his stop takes,
+# so a later read never shows more ice than that behind him. One behind the
+# puck, or closing on it, keeps his momentum.
+func test_a_defender_backing_off_ahead_of_the_puck_is_not_carried_on() -> void:
+	var puck_z: float = -2.0
+	var backing_off := Vector3(1.0, 0.0, -9.0)
+	var chasing := Vector3(-3.0, 0.0, 4.0)
+	var closing := Vector3(4.0, 0.0, -12.0)
+	var defenders: Array[Vector3] = [backing_off, chasing, closing]
+	var vels: Array[Vector3] = [Vector3(0.5, 0.0, -6.0), Vector3(0.0, 0.0, -7.0), Vector3(0.0, 0.0, 5.0)]
+	var v := AIPossessionValue.new()
+	v.fill(GOAL, defenders, vels, [])
+	var carried: Vector3 = v._defence_at(2.0)[0]
+	assert_almost_eq(carried.z, backing_off.z - 12.0, 0.01, "not this side's puck: carried on as he moves")
+	v.read_from_puck(puck_z)
+	var stop: float = vels[0].length_squared() / (2.0 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2)
+	var was: float = 0.0
+	for t: float in [0.25, 0.5, 1.0, 2.0, 3.0]:
+		var at: Vector3 = v._defence_at(t)[0]
+		var gone: float = at.distance_to(backing_off)
+		assert_lte(gone, stop + 1e-4, "%.2f s: no further than his stop takes" % t)
+		assert_gte(gone, was - 1e-4, "%.2f s: and never back" % t)
+		was = gone
+		assert_almost_eq(v._defence_at(t)[1].z, chasing.z - 7.0 * t, 0.01, "%.2f s: behind the puck, he keeps coming" % t)
+		assert_almost_eq(v._defence_at(t)[2].z, closing.z + 5.0 * t, 0.01, "%.2f s: closing on it, he keeps coming" % t)
+	v.fill(GOAL, defenders, vels, [])
+	assert_almost_eq(v._defence_at(2.0)[0].z, backing_off.z - 12.0, 0.01, "filled again: the rule is off until asked for")
+
+
 func test_a_drive_is_worth_no_less_than_a_shot_it_passes() -> void:
 	# He can let it go anywhere on the way in: the drive is never worth less than
 	# the shot from a spot it passes, at the odds he keeps it and for the time it

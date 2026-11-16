@@ -145,6 +145,7 @@ func fill(ctx: RoleContext) -> void:
 	# In the zone the carrier reads our possession only of spots in it.
 	_ours.fill(ctx.attacking_goal_pos, opponents, opponent_vels, opponent_caps,
 			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
+	_ours.read_from_puck(ctx.self_pos.z)
 	_theirs.fill(ctx.defending_goal_pos, our_defenders, our_defender_vels, our_defender_caps)
 
 
@@ -202,10 +203,8 @@ func project_opponents(time_s: float, out_buf: Array[Vector3]) -> void:
 	for i: int in opponents.size():
 		var v: Vector3 = opponent_vels[i]
 		if _backing_off_ahead(opponents[i], v):
-			var speed: float = Vector2(v.x, v.z).length()
-			var slide: float = minf(speed * time_s,
-					speed * speed / (2.0 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2))
-			out_buf.append(opponents[i] + Vector3(v.x, 0.0, v.z) * (slide / speed))
+			out_buf.append(AITrajectory.predict_stopping(opponents[i], v, time_s,
+					AIArrival.REVERSAL_BRAKE_DECEL_M_S2))
 			continue
 		out_buf.append(AITrajectory.predict_at(opponents[i], v, time_s))
 

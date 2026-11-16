@@ -28,7 +28,8 @@ extends RefCounted
 #
 # Every shot is against a keeper who tracked the play: set and square
 # (AIShotValue.set_keeper). Not modelled: passes — one man carries — and where
-# the defence will be by the time he gets anywhere, beyond dead reckoning.
+# the defence will be by the time he gets anywhere, beyond dead reckoning
+# (read_from_puck: for the side with the puck, a man backing off ahead of it stops).
 
 # Where a side enters: a stride past the line, in the middle and in each wall lane.
 const ENTRY_LEAD_M: float = 3.0
@@ -95,6 +96,8 @@ var _opp_goal: Vector3 = Vector3.ZERO
 var _defenders: Array[Vector3] = []
 var _defender_vels: Array[Vector3] = []
 var _defender_caps: Array = []
+# The side's own puck, up the ice (read_from_puck); NAN: not this side's read.
+var _puck_z: float = NAN
 var _entry_spots: Array[Vector3] = []
 var _entry_worth: Array[float] = []   # < 0 until priced (_worth)
 # The most each entry's continuation can read (base_ceiling), its bound until
@@ -159,6 +162,7 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 	_defenders = defenders
 	_defender_vels = defender_vels
 	_defender_caps = defender_caps
+	_puck_z = NAN
 	_pushed = 0
 	_defence_gen += 1
 	_memo_from.clear()
@@ -185,6 +189,16 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 		_entry_opp_gen.append(-1)
 	if goal != _open_goal:
 		_price_open()
+
+
+# The read is the side's own, its puck at `puck_z` up the ice: a defender in
+# front of the puck backing off toward his net is carried on no further than
+# his stop takes (AICarrierField.project_opponents, the same man). Carried on at
+# his retreat, every later read shows ice he has left and waiting for it pays.
+# Until the next fill().
+func read_from_puck(puck_z: float) -> void:
+	_puck_z = puck_z
+	_defence_gen += 1
 
 
 # The puck at `pos` for the side fill() priced, its man there `start_s` from now
@@ -321,8 +335,14 @@ func _defence_at(t: float) -> Array[Vector3]:
 		_proj_next = (_proj_next + 1) % PROJECTION_MEMO
 	var out: Array[Vector3] = _proj[slot]
 	out.clear()
+	var toward_net: float = signf(_goal.z)
 	for k: int in _defenders.size():
-		out.append(AITrajectory.predict_at(_defenders[k], _defender_vels[k], t))
+		var at_k: Vector3 = _defenders[k]
+		var vel: Vector3 = _defender_vels[k]
+		if not is_nan(_puck_z) and vel.z * toward_net > 0.0 and (at_k.z - _puck_z) * toward_net > 0.0:
+			out.append(AITrajectory.predict_stopping(at_k, vel, t, AIArrival.REVERSAL_BRAKE_DECEL_M_S2))
+		else:
+			out.append(AITrajectory.predict_at(at_k, vel, t))
 	_proj_t[slot] = t
 	_proj_gen[slot] = _defence_gen
 	return out

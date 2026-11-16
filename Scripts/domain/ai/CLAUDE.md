@@ -1052,7 +1052,9 @@ reaches back into what remains.
   (`AICarrySpace._stopped_clearance`; a chaser behind only loses ground by it).
   The carrier's projected defence reads him the same way: backing off in front
   of the carrier, he gives up no more ice, in any direction, than his stop
-  takes (`AICarrierField.project_opponents`). Carried on, his retreat shows
+  takes (`AICarrierField.project_opponents`), and so does the carrier's read of
+  our possession (`AIPossessionValue.read_from_puck`), which prices where his
+  moves end. Carried on, his retreat shows
   every delay of the entry an emptier blue line and his drift across (which
   mirrors the carrier) the far lane opening, so the carrier pulls up to wait or
   flips lanes each time the drift reverses. Which lane the carry is FOR is held
