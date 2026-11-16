@@ -1036,8 +1036,9 @@ func _tip_read(ctx: RoleContext, self_pos: Vector3, horizontal_velocity: Vector3
 		var mate: SkaterNetworkState = ctx.snapshot.skater_states[pid]
 		var s: float = AIActionScoring.tip_ev(release, mate.position, attacking_goal, goalie_now,
 				_field.opponents_release, speed, _field.opponent_caps, ctx.caps_by_peer.get(pid),
-				mate.velocity, _field.opponent_vels, _field.opponent_blades_release) \
-				* _field.holds.keep[k]
+				mate.velocity, _field.opponent_vels, _field.opponent_blades_release,
+				mate.blade_contact_world if mate.blade_contact_world != Vector3.ZERO
+				else Vector3.INF) * _field.holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_share = _field.holds.share[k]

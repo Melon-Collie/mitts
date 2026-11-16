@@ -115,7 +115,10 @@ static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 #                                 since the rip is a pass to the tipper's stick
 # × his blade on the puck       — his tip goes only when his blade can be on the
 #                                 tip point before the puck (AIArrival.reach_eta,
-#                                 the read AIRoleFinisher tips on), 1 or 0
+#                                 the read AIRoleFinisher tips on), and, held
+#                                 where `tip_blade` is, his hands can swing it
+#                                 onto the rip's path once he reads the release
+#                                 before the puck gets there; 1 or 0
 # × the redirect: the tip field's odds at the tip point, tipped at the height
 #                                 that scores most (AITipField.best_odds), or
 #                                 the empty net's with the keeper out of his
@@ -141,7 +144,8 @@ static func tip_ev(
 		tip_caps: AISkaterCaps = null,
 		tip_vel: Vector3 = Vector3.ZERO,
 		opponent_vels: Array[Vector3] = [],
-		opponent_blades: Array[Vector3] = []) -> float:
+		opponent_blades: Array[Vector3] = [],
+		tip_blade: Vector3 = Vector3.INF) -> float:
 	if shot_speed_m_s < TIP_MIN_SPEED_M_S:
 		return 0.0
 	# Shot line: release → net centre (the reactive tip steps ONTO this line,
@@ -178,6 +182,9 @@ static func tip_ev(
 		accel = tip_caps.max_accel
 	if AIArrival.reach_eta(tip_man, tip_pt, tip_vel, vmax, accel, reach) > along / speed:
 		return 0.0
+	if tip_blade.is_finite() and _blade_late_to_path(release, hx, hz, speed, tip_blade,
+			tip_caps.blade_speed if tip_caps != null else AISkaterCaps.LEAGUE_BLADE_SPEED_M_S):
+		return 0.0
 	var lane: float = AIPuckLane.release_contest_clean(release, opponents, opponent_caps) \
 			* AIPuckLane.lane_clear(release, tip_pt, opponents, speed, opponent_vels,
 					opponent_caps, true, opponent_blades)
@@ -191,6 +198,20 @@ static func tip_ev(
 	return lane * redirect * _shot_defender_terms(tip_pt, attacking_goal,
 			goalie_pos if goalie_pos.is_finite() else attacking_goal, opponents, speed,
 			opponent_caps)
+
+
+# Whether a blade held at `blade` cannot be on a rip's path (from `release`
+# along (hx, hz) at `speed`) before the puck passes it: his read of the release
+# (AIPuckLane.LANE_REACTION_DELAY_S), then the swing onto the path at his hands'
+# pace, to within the blade's catch (AIPuckLane.LANE_BLADE_CATCH_M) of where the
+# path passes the blade.
+static func _blade_late_to_path(release: Vector3, hx: float, hz: float, speed: float,
+		blade: Vector3, blade_speed: float) -> bool:
+	var bx: float = blade.x - release.x
+	var bz: float = blade.z - release.z
+	var swing: float = maxf(absf(bx * hz - bz * hx) - AIPuckLane.LANE_BLADE_CATCH_M, 0.0)
+	return AIPuckLane.LANE_REACTION_DELAY_S + swing / maxf(blade_speed, 0.001) \
+			> (bx * hx + bz * hz) / speed
 
 
 # An unknown keeper reads as home, as AIShotValue reads him.

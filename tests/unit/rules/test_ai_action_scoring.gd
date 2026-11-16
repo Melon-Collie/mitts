@@ -1418,6 +1418,20 @@ func test_a_stick_held_in_the_rips_lane_takes_it() -> void:
 	assert_lt(stick_out, stick_at_body, "a blade reaching for the lane plays it")
 
 
+func test_a_short_rip_is_tipped_only_by_a_stick_that_can_swing_onto_it() -> void:
+	# From 6 m out the rip is at him in under 0.2 s: a stick already on its path
+	# tips it, one held out the far side of him cannot swing across in time.
+	var none: Array[Vector3] = []
+	var release := Vector3(0.0, 0.0, 18.0)
+	var tipper := Vector3(1.5, 0.0, 24.0)
+	var on_path: float = AIActionScoring.tip_ev(release, tipper, GOAL, Vector3(0.0, 0.0, 25.5),
+			none, 33.0, [], null, Vector3.ZERO, [], [], Vector3(0.3, 0.0, 23.5))
+	var far_side: float = AIActionScoring.tip_ev(release, tipper, GOAL, Vector3(0.0, 0.0, 25.5),
+			none, 33.0, [], null, Vector3.ZERO, [], [], Vector3(3.0, 0.0, 24.0))
+	assert_gt(on_path, 0.0, "his stick on its path")
+	assert_eq(far_side, 0.0, "his stick cannot get there in time")
+
+
 func test_tip_needs_shot_pace() -> void:
 	# Under the pace the finisher reads as a shot (AIRoleFinisher
 	# .INCOMING_SHOT_SPEED_M_S) he never goes to tip it, and one he can hold
