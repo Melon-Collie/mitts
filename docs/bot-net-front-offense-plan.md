@@ -1257,6 +1257,24 @@ to 5 m, so a deeper screen is unpriced.
   blade 0.5–0.9 m off it, his body about a metre from his target. The carrier's
   rip waits on the tipper playing the rip the carrier prices.
 
+  **The tipper plays the rip where it passes him** (`2a11d61`, `772130f`,
+  `5402125`). The 10 plain deflections were all in the chase, where the tip's
+  reach gate refused on every tick: the reactive tip put the tip point where the
+  shot crosses his z-plane, and these rips run across the crease from low on
+  the wall (~30 m/s across, 10–14 m/s at the net), crossing it 2–4 m to his
+  side while passing in reach. Read instead where the path comes nearest his
+  body, the point ran downstream as he skated to the spot it asked for (his
+  body stands a blade's ring back of it): 5 tips. Read where it comes nearest
+  his blade held up the tip's bearing, so that on his spot he reads the same
+  point, with a reach-out to the point nearest his body for a rip on him too
+  soon to set, J=11, 576, the carrier's tip read put back locally:
+
+  | | tip read off | tip read, the z-plane tip | tip read, the blade's tip |
+  |---|---|---|---|
+  | rips tipped | — | 14 of 44 | 36 of 44 |
+  | tipped by ours, all shots | 3 of 152 | 14 of 187 | 43 of 187 |
+  | xG / possession (first + second) | 0.032 + 0.006 = 0.038 ± 0.006 | 0.032 + 0.007 = 0.039 ± 0.005 | 0.039 + 0.007 = 0.046 ± 0.005 |
+
 - **Order.** If 2c shows a tip on the shot line still scores ~0, the carrier's
   half stays out, and only the finisher's station pricing moves to the measured
   value.
