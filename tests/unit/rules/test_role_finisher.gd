@@ -119,11 +119,19 @@ func _tipped_x_at_goal(d: RoleDecision, puck_vel: Vector3) -> float:
 	return d.aim_world_pos.x + out.x * (OPP_NET_Z - d.aim_world_pos.z) / out.y
 
 
-# The blade on the path at the tip point, the body a blade's ring back of it.
-func _assert_blade_on_the_path(d: RoleDecision, tip_x: float) -> void:
+# The blade on the path at the tip point, where the path comes nearest him in his
+# frame, the body a blade's ring back of it.
+func _assert_blade_on_the_path(d: RoleDecision, ctx: RoleContext) -> void:
 	assert_true(d.has_aim_override)
-	assert_almost_eq(d.aim_world_pos.x, tip_x, 0.05, "the blade waits on the path")
-	assert_almost_eq(d.aim_world_pos.z, -22.0, 0.001)
+	var puck: PuckNetworkState = ctx.snapshot.puck_state
+	var travel := Vector2(puck.velocity.x, puck.velocity.z).normalized()
+	var to_tip := Vector2(d.aim_world_pos.x - puck.position.x, d.aim_world_pos.z - puck.position.z)
+	assert_almost_eq(absf(travel.cross(to_tip)), 0.0, 0.01, "the blade waits on the path")
+	var rel := Vector2(puck.velocity.x - ctx.self_velocity.x, puck.velocity.z - ctx.self_velocity.z)
+	var t: float = to_tip.length() / Vector2(puck.velocity.x, puck.velocity.z).length()
+	var me_then := Vector2(ctx.self_pos.x + ctx.self_velocity.x * t, ctx.self_pos.z + ctx.self_velocity.z * t)
+	assert_almost_eq(rel.normalized().dot(Vector2(d.aim_world_pos.x, d.aim_world_pos.z) - me_then),
+			0.0, 0.01, "where it passes him nearest")
 	assert_almost_eq(Vector2(d.aim_world_pos.x - d.target_position.x,
 			d.aim_world_pos.z - d.target_position.z).length(),
 			AIRoleFinisher.TIP_BLADE_OUT_M, 0.001, "the body a ring back of it")
@@ -132,8 +140,8 @@ func _assert_blade_on_the_path(d: RoleDecision, tip_x: float) -> void:
 func test_tip_puts_the_blade_on_the_path_and_turns_it_at_the_middle() -> void:
 	# Fast ground shot on net from a teammate at (2.3, 0, -15). Finisher
 	# (peer 1) is at (0.5, 0, -22), a stride off its line. The puck heads toward our
-	# offensive goal at -Z, crossing its line at x ≈ 0, and our z (-22) at
-	# x ≈ 2.3 − 0.2 × 7 ≈ 0.9.
+	# offensive goal at -Z, crossing its line at x ≈ 0, and passing him nearest at
+	# about (0.9, -22.1).
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var vel := SHOT_VEL
 	var ctx: RoleContext = _make_ctx(
@@ -144,7 +152,7 @@ func test_tip_puts_the_blade_on_the_path_and_turns_it_at_the_middle() -> void:
 				_make_skater(2, TEAM_ID, teammate_pos, false),  # not elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	_assert_blade_on_the_path(d, 0.9)
+	_assert_blade_on_the_path(d, ctx)
 	assert_true(d.tips_shot, "left to the tip, not received")
 	assert_almost_eq(_tipped_x_at_goal(d, vel), 0.0, 0.02,
 			"the tip goes at the middle of the net")
@@ -177,7 +185,7 @@ func test_a_wide_shot_a_tip_can_bring_back_is_tipped_in() -> void:
 			Vector3(1.0, 0.0, -22.0),
 			Vector3(4.0, 0.0, -15.0), vel)
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	_assert_blade_on_the_path(d, 2.6)
+	_assert_blade_on_the_path(d, ctx)
 	assert_true(d.deflect)
 	assert_lt(absf(_tipped_x_at_goal(d, vel)), GameRules.NET_ENTRY_HALF_WIDTH,
 			"the tip puts it on net")
@@ -213,7 +221,7 @@ func test_an_elevated_shot_is_tipped_down() -> void:
 				_make_skater(2, TEAM_ID, teammate_pos, true),  # elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	_assert_blade_on_the_path(d, 0.9)
+	_assert_blade_on_the_path(d, ctx)
 	assert_true(d.deflect, "an incoming shot is tipped, not caught")
 	assert_eq(d.deflect_level, ShotMechanics.ELEVATION_FLAT, "a raised shot is tipped down")
 
@@ -890,10 +898,21 @@ func test_a_man_skating_with_the_shot_tips_it_where_it_catches_him() -> void:
 	ctx.self_velocity = Vector3(0.0, 0.0, -6.0)
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
 	assert_true(d.tips_shot, "the rip catches him as he skates")
-	assert_lt(d.aim_world_pos.z, self_pos.z - 1.0, "on the plane his skating takes him to")
-	assert_almost_eq(d.aim_world_pos.x, teammate_pos.x + rip.x
-			* (self_pos.z - teammate_pos.z) / (rip.z - ctx.self_velocity.z), 0.01,
-			"the blade on the puck's path there")
+	assert_lt(d.aim_world_pos.z, self_pos.z - 1.0, "further on, where his skating takes him")
+	_assert_blade_on_the_path(d, ctx)
+
+
+func test_a_rip_across_the_slot_is_tipped_where_it_passes_him() -> void:
+	# From low on the wall across the crease at the middle of the net: it crosses
+	# his z-plane 3.6 m to his side, but passes 1.5 m from him, inside his stick.
+	var teammate_pos := Vector3(9.0, 0.0, -23.0)
+	var self_pos := Vector3(4.73, 0.0, -23.3)
+	var rip := Vector3(-29.1, 0.0, -13.35)
+	var ctx: RoleContext = _make_ctx(self_pos, teammate_pos, rip,
+			[_make_skater(1, TEAM_ID, self_pos), _make_skater(2, TEAM_ID, teammate_pos)])
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_true(d.tips_shot, "his stick is on its path")
+	_assert_blade_on_the_path(d, ctx)
 
 
 func test_a_shot_he_is_set_up_to_tip_is_what_a_chase_gives_way_to() -> void:

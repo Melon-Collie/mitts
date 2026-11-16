@@ -174,22 +174,25 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	if absf(puck_vel.z) < 0.001:
 		return null
 
-	# The tip point: where the puck's path meets him, on the z plane his skating
-	# has carried him to by then (a man skating with the shot is caught further
-	# on), short of the goal line. His blade meets it at that plane, so the tip
-	# holds until the puck is past it in his frame by the blade's catch radius
-	# (AIPuckLane.LANE_BLADE_CATCH_M): dropped on the crossing, the deflect is let
-	# go on the contact.
-	var closing_z: float = puck_vel.z - ctx.self_velocity.z
-	if closing_z * puck_vel.z <= 0.0:
+	# The tip point: where the puck's path comes nearest him in his own frame (he
+	# skates while it flies), short of the goal line, the point the carrier's rip
+	# is priced at (AIActionScoring.tip_ev). Never where it crosses his z-plane: a
+	# rip across the slot crosses it metres to his side while passing in reach.
+	# The tip holds until the puck is past it in his frame by the blade's catch
+	# radius (AIPuckLane.LANE_BLADE_CATCH_M): dropped at the nearest point, the
+	# deflect is let go on the contact.
+	var rel_vx: float = puck_vel.x - ctx.self_velocity.x
+	var rel_vz: float = puck_vel.z - ctx.self_velocity.z
+	var rel_speed: float = sqrt(rel_vx * rel_vx + rel_vz * rel_vz)
+	if rel_speed < 0.001:
 		return null
-	var t_to_my_z: float = (ctx.self_pos.z - puck_pos.z) / closing_z
-	if t_to_my_z < -AIPuckLane.LANE_BLADE_CATCH_M / absf(closing_z) or t_to_my_z > 2.0:
+	var t_meet: float = ((ctx.self_pos.x - puck_pos.x) * rel_vx
+			+ (ctx.self_pos.z - puck_pos.z) * rel_vz) / (rel_speed * rel_speed)
+	if t_meet < -AIPuckLane.LANE_BLADE_CATCH_M / rel_speed or t_meet > 2.0:
 		return null
-	var meet_z: float = ctx.self_pos.z + ctx.self_velocity.z * maxf(t_to_my_z, 0.0)
-	if (opp_goal_z - meet_z) * puck_vel.z <= 0.0:
+	var tip := Vector2(puck_pos.x + puck_vel.x * t_meet, puck_pos.z + puck_vel.z * t_meet)
+	if (opp_goal_z - tip.y) * puck_vel.z <= 0.0:
 		return null
-	var tip := Vector2(puck_pos.x + puck_vel.x * t_to_my_z, meet_z)
 	var travel: Vector2 = Vector2(puck_vel.x, puck_vel.z) / puck_speed
 
 	# A tip turns the puck at most TIP_MAX_TURN_RAD, so a shot is tipped when
@@ -216,10 +219,10 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	if AIFeedReception.arrival_closing_speed(puck_pos, Vector3(tip.x, 0.0, tip.y), puck_speed,
 			ctx.self_velocity) <= AIFeedReception.RECEIVE_HOLD_CEILING_M_S:
 		return null
-	# A tip his blade cannot be on before the puck crosses his line, stick out
+	# A tip his blade cannot be on before the puck gets there, stick out
 	# (AILoosePuckChase.reach_eta), is no tip: the crash is his play instead.
 	if AILoosePuckChase.reach_eta(ctx.self_pos, Vector3(tip.x, 0.0, tip.y), ctx.self_velocity,
-			ctx.self_max_speed, ctx.self_max_accel, ctx.self_blade_reach) > maxf(t_to_my_z, 0.0):
+			ctx.self_max_speed, ctx.self_max_accel, ctx.self_blade_reach) > maxf(t_meet, 0.0):
 		return null
 	var d := RoleDecision.new()
 	d.target_position = Vector3(body.x, 0.0, body.y)
@@ -231,7 +234,7 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	# blade to its height (DeflectReachRules.lift_to_meet). A raised shot is
 	# knocked down off the plane the keeper read; one on the ice is tipped at the
 	# height the tip field measured scoring most from its shooter.
-	if t_to_my_z <= DeflectReachRules.TRACK_HORIZON_S:
+	if t_meet <= DeflectReachRules.TRACK_HORIZON_S:
 		d.deflect = true
 		var shooter: SkaterNetworkState = _likely_shooter(ctx)
 		if shooter != null and shooter.elevation_level == ShotMechanics.ELEVATION_FLAT:
