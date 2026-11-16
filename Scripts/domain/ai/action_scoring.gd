@@ -113,9 +113,9 @@ static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 #                                 his arrival clock from his momentum, his stick
 #                                 where he holds it, every one beaten in turn),
 #                                 since the rip is a pass to the tipper's stick
-# × his blade on the puck       — his tip goes only when his blade can be on the
-#                                 tip point before the puck (AIArrival.reach_eta,
-#                                 the read AIRoleFinisher tips on), and, held
+# × his blade on the puck       — at the point he tips it (AITipPoint, the solve
+#                                 AIRoleFinisher's tip plays), his blade on it
+#                                 before the puck (AIArrival.reach_eta), and, held
 #                                 where `tip_blade` is, his hands can swing it
 #                                 onto the rip's path once he reads the release
 #                                 before the puck gets there; 1 or 0
@@ -157,31 +157,26 @@ static func tip_ev(
 		return 0.0
 	var hx: float = dx / line_len
 	var hz: float = dz / line_len
-	# Tip point: where the tipper's blade meets the puck on the line. Must
-	# be a real mid-flight contact: past the shooter's own handle, short of
-	# the goal mouth.
-	var relx: float = tip_man.x - release.x
-	var relz: float = tip_man.z - release.z
-	var along: float = relx * hx + relz * hz
-	if along <= TIP_MIN_ALONG_M or along >= line_len - 0.3:
-		return 0.0
-	var tip_pt := Vector3(release.x + hx * along, 0.0, release.z + hz * along)
-	# A rip he can hold he takes as a reception, and does not tip
-	# (AIRoleFinisher._try_reactive_decision).
-	if AIFeedReception.arrival_closing_speed(release, tip_pt, shot_speed_m_s, Vector3.ZERO) \
-			<= AIFeedReception.RECEIVE_HOLD_CEILING_M_S:
-		return 0.0
-	# His blade on it: on his own arrival clock, at his build's reach and pace.
+	# Tip point: where he will tip it (AITipPoint, the solve his reactive tip
+	# plays), which holds it to a rip too fast to hold, his stick on it in time.
+	# Past the shooter's own handle, short of the goal mouth.
 	var speed: float = maxf(shot_speed_m_s, 1.0)
-	var reach: float = AIBotMechanics.BLADE_REACH_M
 	var vmax: float = AIArrival.SKATER_REF_SPEED_M_S
 	var accel: float = AIArrival.SHED_ACCEL_DEFAULT_M_S2
+	var reach: float = AIBotMechanics.BLADE_REACH_M
 	if tip_caps != null:
 		reach = tip_caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M
 		vmax = tip_caps.max_speed
 		accel = tip_caps.max_accel
-	if AIArrival.reach_eta(tip_man, tip_pt, tip_vel, vmax, accel, reach) > along / speed:
+	var rip := Vector3(hx * speed, 0.0, hz * speed)
+	var t_meet: float = AITipPoint.meet_time(release, rip, tip_man, tip_vel, vmax, accel, reach,
+			attacking_goal.z)
+	if is_nan(t_meet):
 		return 0.0
+	var along: float = speed * maxf(t_meet, 0.0)
+	if along <= TIP_MIN_ALONG_M or along >= line_len - 0.3:
+		return 0.0
+	var tip_pt := Vector3(release.x + hx * along, 0.0, release.z + hz * along)
 	if tip_blade.is_finite() and _blade_late_to_path(release, hx, hz, speed, tip_blade,
 			tip_caps.blade_speed if tip_caps != null else AISkaterCaps.LEAGUE_BLADE_SPEED_M_S):
 		return 0.0

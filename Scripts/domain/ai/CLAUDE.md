@@ -977,6 +977,9 @@ takes the whole class down and every static call on it from every file at once.
   - `tip_field.gd` (`AITipField`) — the generated tip field: the odds a shot
     on the ice tipped by a stick held to deflect on the release's line
     scores against the live keeper, by how far out the tip is and its height;
+  - `tip_point.gd` (`AITipPoint`) — where a man tips a shot coming at him:
+    the point his reactive tip plays and the shooter's rip is priced at, so
+    the two are one solve;
   - `field_grid.gd` (`AIFieldGrid`) — a measured field's spot grid read
     between its spots by bilinear weight. The rebound, screen and tip fields
     read through it (`crash_point_at`, `best_station_along`, `uplift`,

@@ -2927,11 +2927,13 @@ func test_a_pass_leaves_from_the_ice_not_through_the_boards() -> void:
 # ─── shooting for a tip ─────────────────────────────────────────────────────
 
 # A carrier 8 m wide at the top of the circle, a teammate in `slot` on his line
-# to the net at the crease top, the keeper square on the carrier.
+# to the net with his blade at the crease top (AITipPoint: his body a blade back
+# of where he tips it), the keeper square on the carrier.
 func _point_with_tipper(slot: int) -> AIRoleCarrier:
 	var self_pos := Vector3(8.0, 0.0, OPP_NET_Z + 16.0)
 	var net := Vector3(0.0, 0.0, OPP_NET_Z)
-	var tipper: Vector3 = net + (self_pos - net).normalized() * AIRoleFinisher.TIP_STATION_DIST_M
+	var tipper: Vector3 = net + (self_pos - net).normalized() \
+			* (AIRoleFinisher.TIP_STATION_DIST_M - AITipPoint.BLADE_OUT_M)
 	var ctx := _make_ctx(self_pos, [[1, TEAM_ID, self_pos], [2, TEAM_ID, tipper]])
 	var brain := TeamBrain.new(TEAM_ID, ctx.team_id_by_peer)
 	brain.slot_assignments[2] = slot

@@ -10,13 +10,8 @@ class_name AIRoleFinisher
 # pricing reads the same gate.
 const INCOMING_SHOT_SPEED_M_S: float = AIActionScoring.TIP_MIN_SPEED_M_S
 
-# The most a deliberate tip turns the puck (Puck.deflect_max_turn_deg, held by
-# test_bot_mirrors.gd), with the blade square beside the body.
-const TIP_MAX_TURN_RAD: float = deg_to_rad(25.0)
-# How far out from the body the tipper's blade sits: the ring the agent's FACE
-# cursor snaps to (AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M), so standing this
-# far back of the tip point along the blade's bearing puts the blade on it.
-const TIP_BLADE_OUT_M: float = AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
+const TIP_MAX_TURN_RAD: float = AITipPoint.MAX_TURN_RAD
+const TIP_BLADE_OUT_M: float = AITipPoint.BLADE_OUT_M
 
 # Weak-side staging bias for the SET CYCLE, where the cross-seam feed is the
 # highest-value look. Feel tunable; 0 = centered.
@@ -179,27 +174,16 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	if absf(puck_vel.z) < 0.001:
 		return null
 
-	# The tip point: where the puck's path comes nearest his blade in his own
-	# frame (he skates while it flies), the body TIP_BLADE_OUT_M back of it along
-	# the bearing, so that standing there he reads the same point; else, when his
-	# stick cannot be there in time, where it comes nearest his body, the stick
-	# reached out to it. Never where it crosses his z-plane: a rip across the slot
-	# crosses it metres to his side while passing in reach.
-	var rel_v := Vector2(puck_vel.x - ctx.self_velocity.x, puck_vel.z - ctx.self_velocity.z)
-	var rel_speed: float = rel_v.length()
-	if rel_speed < 0.001:
-		return null
-	var travel: Vector2 = Vector2(puck_vel.x, puck_vel.z) / puck_speed
-	var t_meet: float = _tip_meet_time(ctx, puck_pos, puck_vel, travel, rel_v, opp_goal_z,
-			TIP_BLADE_OUT_M)
-	if is_nan(t_meet):
-		t_meet = _tip_meet_time(ctx, puck_pos, puck_vel, travel, rel_v, opp_goal_z, 0.0)
+	# Where he tips it (AITipPoint, the point the carrier's rip is priced at).
+	var t_meet: float = AITipPoint.meet_time(puck_pos, puck_vel, ctx.self_pos, ctx.self_velocity,
+			ctx.self_max_speed, ctx.self_max_accel, ctx.self_blade_reach, opp_goal_z)
 	if is_nan(t_meet):
 		return null
 	var tip := Vector2(puck_pos.x + puck_vel.x * t_meet, puck_pos.z + puck_vel.z * t_meet)
 	# The blade goes on the path at the tip point, toward the puck, and the body
 	# stands TIP_BLADE_OUT_M back of it along the bearing.
-	var body: Vector2 = tip - _tip_bearing(travel, tip, opp_goal_z) * TIP_BLADE_OUT_M
+	var travel: Vector2 = Vector2(puck_vel.x, puck_vel.z) / puck_speed
+	var body: Vector2 = tip - AITipPoint.bearing(travel, tip, opp_goal_z) * TIP_BLADE_OUT_M
 	var d := RoleDecision.new()
 	d.target_position = Vector3(body.x, 0.0, body.y)
 	d.aim_world_pos = Vector3(tip.x, 0.0, tip.y)
@@ -217,60 +201,6 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 			d.deflect_level = AITipField.best_level(shooter.position, ctx.attacking_goal_pos,
 					Vector3(tip.x, 0.0, tip.y))
 	return d
-
-
-# When the puck's path meets his blade held `blade_out` up the tip's bearing in
-# his frame, if he can tip it there; NAN if not. The tip holds until the puck is
-# past that point in his frame by the blade's catch radius
-# (AIPuckLane.LANE_BLADE_CATCH_M): dropped at the meet, the deflect is let go on
-# the contact.
-static func _tip_meet_time(ctx: RoleContext, puck_pos: Vector3, puck_vel: Vector3,
-		travel: Vector2, rel_v: Vector2, opp_goal_z: float, blade_out: float) -> float:
-	var puck_at := Vector2(puck_pos.x, puck_pos.z)
-	var me := Vector2(ctx.self_pos.x, ctx.self_pos.z)
-	var w2: float = rel_v.length_squared()
-	var t_meet: float = (me - puck_at).dot(rel_v) / w2
-	if blade_out > 0.0:
-		# Re-read from the bearing the first read gives, then from its own.
-		for _pass: int in 2:
-			var at: Vector2 = puck_at + Vector2(puck_vel.x, puck_vel.z) * t_meet
-			t_meet = (me + _tip_bearing(travel, at, opp_goal_z) * blade_out - puck_at).dot(
-					rel_v) / w2
-	if t_meet < -AIPuckLane.LANE_BLADE_CATCH_M / sqrt(w2) or t_meet > 2.0:
-		return NAN
-	var tip := Vector2(puck_pos.x + puck_vel.x * t_meet, puck_pos.z + puck_vel.z * t_meet)
-	if (opp_goal_z - tip.y) * puck_vel.z <= 0.0:
-		return NAN
-	# A tip turns the puck at most TIP_MAX_TURN_RAD, so a shot is tipped when
-	# that reaches the mouth from the tip point: on net already, or wide by no
-	# more than that. A shot wider than a tip can bring back, or a teammate's
-	# pass running at the net, is left alone.
-	var mouth: float = GameRules.NET_ENTRY_HALF_WIDTH
-	var x_at_goal: float = puck_pos.x + puck_vel.x * ((opp_goal_z - puck_pos.z) / puck_vel.z)
-	if absf(x_at_goal) > mouth and absf(travel.angle_to(
-			Vector2(signf(x_at_goal) * mouth, opp_goal_z) - tip)) > TIP_MAX_TURN_RAD:
-		return NAN
-	# A shot he can hold is received, not tipped: only one arriving in his frame
-	# faster than he holds a catch on the line goes off the face.
-	var tip3 := Vector3(tip.x, 0.0, tip.y)
-	if AIFeedReception.arrival_closing_speed(puck_pos, tip3, Vector2(puck_vel.x, puck_vel.z).length(),
-			ctx.self_velocity) <= AIFeedReception.RECEIVE_HOLD_CEILING_M_S:
-		return NAN
-	# A tip his blade cannot be on before the puck gets there, stick out
-	# (AILoosePuckChase.reach_eta), is no tip: the crash is his play instead.
-	if AILoosePuckChase.reach_eta(ctx.self_pos, tip3, ctx.self_velocity, ctx.self_max_speed,
-			ctx.self_max_accel, ctx.self_blade_reach) > maxf(t_meet, 0.0):
-		return NAN
-	return t_meet
-
-
-# The body→blade bearing that tips a puck travelling `travel` at `tip` toward the
-# middle of the net, as far as a tip turns: PuckCollisionRules.tip_turn turns it
-# by TIP_MAX_TURN_RAD × the cross of the puck's travel with this bearing.
-static func _tip_bearing(travel: Vector2, tip: Vector2, opp_goal_z: float) -> Vector2:
-	var turn: float = clampf(travel.angle_to(Vector2(0.0, opp_goal_z) - tip),
-			-TIP_MAX_TURN_RAD, TIP_MAX_TURN_RAD)
-	return (-travel).rotated(-asin(turn / TIP_MAX_TURN_RAD))
 
 
 # The likely shooter — our skater nearest the puck, other than the tipper — as
