@@ -129,6 +129,7 @@ func _init() -> void:
 		var keep: PackedStringArray = only.split(",")
 		_stances.append_array(_REACHES.map(func(reach: Array) -> Array:
 			return [reach[0], func(p: KeeperPose) -> void: _reach(p, reach[1], reach[2])]))
+		_stances.append(["butterfly_hands_low", _hands_low])
 		_stances = _stances.filter(func(st: Array) -> bool: return String(st[0]) in keep)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 
@@ -143,6 +144,17 @@ const _REACHES: Array[Array] = [
 	["reach_glove_out", Vector3(-0.95, 1.30, -0.10), _NO_HAND],
 	["reach_both_high", Vector3(-0.55, 1.80, -0.15), Vector3(0.55, 1.80, -0.15)],
 ]
+
+
+# The butterfly with his hands set as low as they go (KeeperHandsLow), drawn
+# only when KEEPER_CAPTURE_STANCES names it.
+static func _hands_low(p: KeeperPose) -> void:
+	KeeperPoses.butterfly(p)
+	var hands := KeeperHandsLow.new()
+	hands.asked = 0.0
+	for i: int in 180:
+		hands.step(1.0 / 90.0, true)
+	hands.lay_over(p)
 
 
 static func _reach(p: KeeperPose, glove: Vector3, blocker: Vector3) -> void:

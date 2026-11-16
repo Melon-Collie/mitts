@@ -654,6 +654,25 @@ func _decided_twice(ctx: RoleContext) -> AIRoleCarrier:
 	return c
 
 
+# ─── alone outside the zone he carries it in ────────────────────────────────
+
+func test_alone_in_the_neutral_zone_at_pace_he_carries_on_over_the_line() -> void:
+	# Nobody near him and a set keeper: the only play is in. From every start a
+	# move's end, or the spot his hands' hold would let a shot go from at that
+	# end, falls on one side of the blue line or the other, and neither may read
+	# as worth less than standing where he is.
+	for speed: float in [3.0, 5.0, 7.0, 8.5]:
+		for z: float in [4.0, 1.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0]:
+			var self_pos := Vector3(0.0, 0.0, z)
+			var ctx: RoleContext = _set_keeper(_make_ctx(self_pos))
+			ctx.self_velocity = Vector3(0.0, 0.0, -speed)
+			ctx.snapshot.skater_states[1].velocity = ctx.self_velocity
+			var c: AIRoleCarrier = _decided(ctx)
+			var what: String = "z %.0f at %.1f m/s" % [z, speed]
+			assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY, "%s: carrying" % what)
+			assert_lt(c.last_carry_anchor.z, z - 0.5 * speed, "%s: on toward the line, not braked" % what)
+
+
 # ─── turnover costs are priced in the unit of the gains ─────────────────────
 
 func test_a_turnover_costs_the_opponents_possession_wherever_the_carrier_is() -> void:
@@ -1006,7 +1025,7 @@ func test_settling_carrier_holds_instead_of_firing() -> void:
 
 # The same pressured breakout, with the outlet in two different situations. Both
 # are legal passes that fire on tick one with no doubt; the strong one is worth
-# ~10x PASS_MIN_VALUE, the weak one ~0.9x. Boxed in, the carrier would lose the
+# ~10x PASS_MIN_VALUE, the weak one ~1.4x. Boxed in, the carrier would lose the
 # puck where he stands, so the bar's own PASS_MIN_VALUE is off it and what Normal
 # holds is under its doubt's raise (1.5x). The weak outlet is still sliding into
 # the far corner, so his drive up the wall has to brake that out first. Both
@@ -1028,7 +1047,7 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 # inside the slot is never priced (AINetObstacle.pass_crosses_own_slot).
 const _SETTLE_CARRIER := Vector3(4, 0, 20)
 const _STRONG_OUTLET := Vector3(12, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(10.0, 0, 22.5)  # deep below the dot
+const _MARGINAL_OUTLET := Vector3(10.0, 0, 26.5)  # in the corner, a stride off the goal line
 const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 0.5)   # …and still drifting into the corner
 
 
@@ -2442,7 +2461,9 @@ func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 # straight lane to the strong half-wall winger. The boards are the open lane:
 # rimmed round the corner, the puck reaches the winger before anybody of theirs.
 
-func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
+# `wall_sealed`: a second forechecker up the near wall, so the wide carry up the
+# boards away from the man on his hip is shut as well as the lane.
+func _rim_breakout_ctx(lane_blocked: bool, wall_sealed: bool = false) -> RoleContext:
 	var self_pos := Vector3(3.0, 0, GameRules.GOAL_LINE_Z + 1.35)
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos],
@@ -2452,6 +2473,8 @@ func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
 	]
 	if lane_blocked:
 		skaters.append([4, 1, Vector3(7.0, 0, GameRules.GOAL_LINE_Z - 5.65)])   # in the straight lane
+	if wall_sealed:
+		skaters.append([6, 1, Vector3(6.5, 0, GameRules.GOAL_LINE_Z - 1.5)])    # up the near wall
 	return _make_ctx(self_pos, skaters)
 
 
@@ -2489,11 +2512,11 @@ func test_a_rim_is_fired_as_soft_as_the_race_allows() -> void:
 
 
 func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:
-	var ctx := _rim_breakout_ctx(true)
+	var ctx := _rim_breakout_ctx(true, true)
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP,
-			"pinned on his own goal line with the lane cut, he rims it")
+			"pinned on his own goal line with the lane and the wall cut, he rims it")
 	assert_eq(c.pass_target_peer_id, c._phase_best_pass_peer, "…to the receiver it was priced to")
 	assert_eq(c.dump_launch_speed, c._phase_best_pass_rim_pace, "…at its searched pace")
 	var puck: Vector3 = ctx.snapshot.puck_state.position

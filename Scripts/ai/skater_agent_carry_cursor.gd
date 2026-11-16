@@ -186,16 +186,23 @@ static func reach_behind_net(self_pos: Vector3, attacking_goal: Vector3,
 func carry_aim(snapshot: WorldSnapshot, self_pos: Vector3, carrier: AIRoleCarrier,
 		attacking_goal: Vector3, own_goal_dir: float, blade_reach: float,
 		protects_the_puck: bool, delta: float) -> Vector3:
-	# Goalie cradle: within blade_reach of EITHER goalie, the forward aim would
-	# drive the blade into his gear, which only holds it off (GoalieGearCollision).
-	# Parking the cursor on the body holds the blade tight with zero extension;
-	# facing is held (zero direction), so the bot backs out facing the play.
+	# Goalie cradle: within blade_reach of a goalie, the forward aim would drive
+	# the blade into his gear, which only holds it off (GoalieGearCollision).
+	# Beside THEIR goalie the cursor is parked on the body, holding the blade
+	# tight; facing is held (zero direction), so the bot backs out facing the play.
 	var goalie_pos: Vector3 = _goalie(snapshot, 1 - _team_id, attacking_goal)
 	if self_pos.distance_to(goalie_pos) < blade_reach:
 		return self_pos
+	# Beside OUR goalie the puck goes on the far side of the body from him: a
+	# cursor parked on the body has no bearing, and the carry holds the puck out
+	# along whichever way it happens to lean — behind him as he skates, into his
+	# pads, whose gear sweeps a pressed puck back over his own line.
 	var own_goalie_pos: Vector3 = _goalie(snapshot, _team_id, Vector3.INF)
 	if own_goalie_pos.is_finite() and self_pos.distance_to(own_goalie_pos) < blade_reach:
-		return self_pos
+		var away := Vector3(self_pos.x - own_goalie_pos.x, 0.0, self_pos.z - own_goalie_pos.z)
+		if away.length_squared() < 0.0001:
+			away = Vector3(0.0, 0.0, -own_goal_dir)
+		return self_pos + away.normalized() * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 
 	var to_goal: Vector3 = attacking_goal - self_pos
 	to_goal.y = 0.0

@@ -15,7 +15,9 @@ signal possession_whistle(offending_team_id: int)
 # Host: the ledger changed and peers need it.
 signal ledger_changed
 # Host: a call was paid for, by a minor or by giving up a penalty shot.
-signal penalty_assessed(peer_id: int)
+# `minor_s` is a minor's length on this match's clock: what the call costs in
+# penalty time, served in full or not, and for a penalty shot too.
+signal penalty_assessed(peer_id: int, minor_s: float)
 # Every peer: a skater went into the box, or came out of it.
 signal skater_boxed(peer_id: int)
 signal skater_released(peer_id: int)
@@ -79,6 +81,11 @@ func on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
 		return
 	if hitter.skater.is_ghost or victim.skater.is_ghost:
 		return
+	var drive := Vector2(hit_dir.x, hit_dir.z)
+	var run_up: float = _velocity_before_contact(hitter).dot(drive)
+	var thrown: float = PenaltyRules.thrown_strength(force, hitter.skater.weight, run_up)
+	if thrown < HitRules.FULL_CHECK_IMPULSE:
+		return
 	var victim_pos: Vector3 = victim.skater.global_position
 	var puck: Puck = _puck_getter.call() as Puck
 	var puck_loose: bool = puck != null and puck.carrier == null
@@ -88,21 +95,21 @@ func on_opposing_contact(hitter_peer_id: int, victim_peer_id: int, force: float,
 				puck.global_position.z - victim_pos.z).length()
 	var eligible: bool = PenaltyRules.is_eligible_to_be_hit(victim_is_carrier,
 			seconds_since_victim_lost_puck, puck_loose, puck_dist)
-	var drive := Vector2(hit_dir.x, hit_dir.z)
 	var wall_out: Vector2 = BoardWallRules.wall_normal(victim_pos,
 			victim.skater.collision_radius(), PenaltyRules.BOARDING_ZONE_M)
 	var facing_before: Vector2 = _facing_before_contact(victim)
 	var into_boards: bool = PenaltyRules.is_driven_into_boards(drive, wall_out)
 	var from_behind: bool = PenaltyRules.is_hit_from_behind(facing_before, drive)
-	var foul: PenaltyRules.Foul = PenaltyRules.judge(force, attacker_committed,
+	var foul: PenaltyRules.Foul = PenaltyRules.judge(thrown, attacker_committed,
 			attacker_has_puck, eligible, into_boards, from_behind, puck_in_play)
 	if foul == PenaltyRules.Foul.NONE:
 		return
 	if not ledger.call_foul(hitter_peer_id, hitter.team.team_id, foul, victim_peer_id):
 		return
-	last_call_facts = "%s  force %.1f  into boards %s  from behind %s (facing·drive %.2f)" \
-			% [PenaltyRules.Foul.keys()[foul], force, into_boards, from_behind,
-				facing_before.dot(drive)] \
+	last_call_facts = "%s  thrown %.1f (contact %.1f, run-up %.1f m/s)" \
+			% [PenaltyRules.Foul.keys()[foul], thrown, force, run_up] \
+			+ "  into boards %s  from behind %s (facing·drive %.2f)" \
+			% [into_boards, from_behind, facing_before.dot(drive)] \
 			+ "  eligible %s (carrier %s, lost puck %.2fs ago, puck %.1fm, loose %s)" \
 			% [eligible, victim_is_carrier, seconds_since_victim_lost_puck, puck_dist, puck_loose]
 	foul_called.emit(hitter_peer_id, foul)
@@ -150,17 +157,17 @@ func on_goal(scoring_team_id: int, team_size: int) -> void:
 func assess_pending(period_duration: float, team_size: int) -> void:
 	if not ledger.has_pending():
 		return
+	var minor_s: float = PenaltyRules.minor_seconds(period_duration)
 	if PenaltyRules.awards_penalty_shot(team_size):
-		_stage_shot()
+		_stage_shot(minor_s)
 	else:
-		for peer_id: int in ledger.assess(PenaltyRules.minor_seconds(period_duration),
-				PenaltyRules.max_serving(team_size)):
-			penalty_assessed.emit(peer_id)
+		for peer_id: int in ledger.assess(minor_s, PenaltyRules.max_serving(team_size)):
+			penalty_assessed.emit(peer_id, minor_s)
 	apply_box_state()
 	ledger_changed.emit()
 
 
-func _stage_shot() -> void:
+func _stage_shot(minor_s: float) -> void:
 	var shooter: PlayerRecord = _registry.get_record(ledger.stage_shot())
 	if shooter == null or shooter.skater == null or shooter.team == null:
 		ledger.end_shot()  # the man fouled has left: nobody takes it
@@ -169,7 +176,7 @@ func _stage_shot() -> void:
 	_shot.max_wait_s = _SHOT_COLLECT_S
 	_shot.begin(attack_dir_z, attack_dir_z * GameRules.GOAL_LINE_Z, GameRules.NET_HALF_WIDTH)
 	_shot_saved = false
-	penalty_assessed.emit(ledger.shot_offender_peer_id())
+	penalty_assessed.emit(ledger.shot_offender_peer_id(), minor_s)
 
 
 func is_shot_on() -> bool:
@@ -304,10 +311,24 @@ func update_visibility(in_faceoff_prep: bool) -> void:
 
 
 func _facing_before_contact(victim: PlayerRecord) -> Vector2:
-	if _state_buffer != null and _state_buffer.is_ready():
-		_state_buffer.get_state_at(_state_buffer.newest_host_timestamp()
-				- PenaltyRules.BOARDING_TURN_GRACE_S, _rewind_scratch)
-		var before: SkaterNetworkState = _rewind_scratch.get_skater_state(victim.peer_id)
-		if before != null:
-			return before.facing
-	return victim.skater.get_facing()
+	var before: SkaterNetworkState = _state_before_contact(victim,
+			PenaltyRules.BOARDING_TURN_GRACE_S)
+	return before.facing if before != null else victim.skater.get_facing()
+
+
+# On the ice (XZ), RUN_UP_S before the contact.
+func _velocity_before_contact(hitter: PlayerRecord) -> Vector2:
+	var before: SkaterNetworkState = _state_before_contact(hitter, PenaltyRules.RUN_UP_S)
+	var v: Vector3 = before.velocity if before != null else hitter.skater.velocity
+	return Vector2(v.x, v.z)
+
+
+# The contact is the newest buffered tick (a claim is released once the buffer
+# covers it). Null with no buffer: the caller reads the live skater instead.
+# The result lives in `_rewind_scratch` until the next call.
+func _state_before_contact(record: PlayerRecord, seconds: float) -> SkaterNetworkState:
+	if _state_buffer == null or not _state_buffer.is_ready():
+		return null
+	_state_buffer.get_state_at(_state_buffer.newest_host_timestamp() - seconds,
+			_rewind_scratch)
+	return _rewind_scratch.get_skater_state(record.peer_id)

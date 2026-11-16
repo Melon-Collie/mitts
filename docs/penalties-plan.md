@@ -65,9 +65,21 @@ two are opponents, neither is ghosted or in the box, and the skaters are free
 to make contact (`PenaltyRules.judges_contact`: live play, a dropped faceoff,
 the celebration after a goal).
 
+**A foul is a check he threw** (`PenaltyRules.thrown_strength`, decided
+2026-11-13). Holding Ctrl to lean is the same commit as a check, so the man
+holding it is the checker in any contact, and the contact's strength is the
+two men's closing speed. Judged on that, a defender leaning in front of the net
+was called for every forward who skated into him. So every foul reads the
+contact's strength capped by the hitter's own run-up into the man: his velocity
+along the hit `RUN_UP_S` (0.25 s) before it, at his weight, from the state
+buffer. A man skated into while he stands or leans threw nothing, two men
+banging around the net from a shuffle never reach a full check, and a man who
+catches one skating away from him lands only their closing. The bots' foul read
+prices its own velocity as the run-up.
+
 **Boarding** — all of:
 
-- the check landed at full-check strength or more (`HitRules.FULL_CHECK_IMPULSE`,
+- the check was thrown at full-check strength or more (`HitRules.FULL_CHECK_IMPULSE`,
   the strength that strips and rocks);
 - the victim is within `BOARDING_ZONE_M` of the boards (proposed 1.5 m: the
   distance a man is thrown into them, wider than `BACKSTOP_MARGIN_M`) and the hit
@@ -81,14 +93,15 @@ turns his back as the hit arrives does not draw the call.
 
 **Interference** — all of:
 
-- the check landed at full-check strength or more. A bump, a lean and the press
-  never reach it, so a net-front battle is never whistled;
+- the check was thrown at full-check strength or more;
 - the victim is not *eligible to be hit*: not the carrier, not within
-  `HitRules.JUST_RELEASED_GRACE_S` of losing or releasing the puck, and not in a
-  loose-puck battle (the puck loose and within `INTERFERENCE_PUCK_REACH_M` of
-  him, proposed 2.0 m).
+  `PenaltyRules.FINISH_CHECK_GRACE_S` (1.0 s) of losing or releasing the puck,
+  and not in a loose-puck battle (the puck loose and within
+  `INTERFERENCE_PUCK_REACH_M` of him, proposed 2.0 m). The grace is the
+  referee's allowance for finishing a check, twice the half second in which the
+  hit stat credits one (`HitRules.JUST_RELEASED_GRACE_S`).
 
-**Roughing** is a check at full-check strength or more after the whistle, on
+**Roughing** is a check thrown at full-check strength or more after the whistle, on
 anyone: in the celebration after a goal, once `WHISTLE_GRACE_S` of it has gone
 (a check already on its way is let go). Where he stands and which way he
 faces do not enter it.
@@ -399,7 +412,9 @@ The bots learn each rule in the phase that adds it.
   (`TeamBrain.icing_enforced`, off `WorldSnapshot.short_handed_team_id`), so a
   dump or a rim down the ice is no longer priced as a whistle against them.
 - **The thresholds are the proposal's**, untested in play: the 1.5 m boarding
-  zone, the rear 90°, the 0.3 s turn grace, the 2 m loose-puck reach.
+  zone, the rear 90°, the 0.3 s turn grace, the 2 m loose-puck reach. The first
+  playtest moved two: a foul is judged on the hitter's run-up, and a check may
+  be finished up to 1.0 s after the pass (section 1).
 
 Known gaps, each small enough to leave for the playtest to rank:
 
@@ -424,10 +439,12 @@ Known gaps, each small enough to leave for the playtest to rank:
 
 ## Phase 6 as built
 
-- **A player's own stats** (`PlayerStats`, on the stats sync): `pim`, two a
-  minor he was assessed (a fight's included) and two a penalty shot his foul
-  gave up, counted when the stoppage makes him pay and never for a call a
-  goal washed out; `pp_goals` and `pp_assists` (their sum is his power-play
+- **A player's own stats** (`PlayerStats`, on the stats sync): `pim_seconds`,
+  his penalty time: a minor's length on this match's clock for each minor he
+  was assessed (a fight's included) and for each penalty shot his foul gave
+  up, served in full or not (decided 2026-11-13; it was two minutes a minor
+  whatever the minor lasted). Counted when the stoppage makes him pay and
+  never for a call a goal washed out. Shown as M:SS; `pp_goals` and `pp_assists` (their sum is his power-play
   points); `sh_goals`; `penalty_shot_goals`. A goal's situation is the
   strength as it goes in (`PenaltyRules.goal_situation`), read before the
   goal releases the minor. Four on four is even strength.
@@ -454,7 +471,11 @@ Known gaps, each small enough to leave for the playtest to rank:
   opportunities, and one less the goals against over opportunities. They
   slice by roster size like every other rate and read "—" until a game with
   a power play is on record. Penalty-shot goals have no career column.
-- **Steam stats**: `STAT_PIM`, `STAT_PP_GOALS`, `STAT_PP_POINTS`
+  Penalty time is the `pim_seconds` column
+  (`supabase/migrations/20261114120000_career_pim_seconds.sql`); a row
+  posted before it has only `pim`, two a minor, which `career_totals_for()`
+  converts at the minor's length on that row's own period.
+- **Steam stats**: `STAT_PIM` (penalty time in seconds), `STAT_PP_GOALS`, `STAT_PP_POINTS`
   (`steam/STATS.md`: each must be defined in Steamworks on both apps before a
   build that writes it goes out). No ladder reads them yet.
 - **Game Pucks**: Man Advantage (a power-play goal), Shorty (a short-handed
@@ -471,7 +492,8 @@ Known gaps, each small enough to leave for the playtest to rank:
   ending without a goal. No phase was added.
 - **Phase 6 (v106):** the stats sync's player record grows
   from 21 fields to 30, and its footer gains each team's power plays and
-  power-play goals.
+  power-play goals. **v108:** its penalty field is seconds, no longer two a
+  minor.
 
 ## Not in this plan
 

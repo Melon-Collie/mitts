@@ -160,6 +160,7 @@ func fill(ctx: RoleContext) -> void:
 	# In the zone the carrier reads our possession only of spots in it.
 	_ours.fill(ctx.attacking_goal_pos, opponents, opponent_vels, opponent_caps,
 			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
+	_ours.read_from_puck(ctx.self_pos.z)
 	_theirs.fill(ctx.defending_goal_pos, our_defenders, our_defender_vels, our_defender_caps)
 
 
@@ -234,10 +235,8 @@ func project_opponents(time_s: float, out_buf: Array[Vector3]) -> void:
 	for i: int in opponents.size():
 		var v: Vector3 = opponent_vels[i]
 		if _backing_off_ahead(opponents[i], v):
-			var speed: float = Vector2(v.x, v.z).length()
-			var slide: float = minf(speed * time_s,
-					speed * speed / (2.0 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2))
-			out_buf.append(opponents[i] + Vector3(v.x, 0.0, v.z) * (slide / speed))
+			out_buf.append(AITrajectory.predict_stopping(opponents[i], v, time_s,
+					AIArrival.REVERSAL_BRAKE_DECEL_M_S2))
 			continue
 		out_buf.append(AITrajectory.predict_at(opponents[i], v, time_s))
 
@@ -367,9 +366,11 @@ static func pass_origin(ctx: RoleContext, pull_s: float = 0.0,
 # before he could stand up (AIGoalieModel.GOALIE_RECOVERY_S); upright after it,
 # since when he chooses to rise is his read, not one the carrier can make. A shot
 # decided with the puck at `puck`, at the net at `goal`, in tight finds him down
-# (AIGoalieModel.down_in_tight): he plays a carrier there down as it comes.
-func keeper_stance_at(t: float, puck: Vector3 = Vector3.INF, goal: Vector3 = Vector3.ZERO) -> int:
-	if puck.is_finite() and AIGoalieModel.down_in_tight(puck, goal):
+# (AIGoalieModel.down_in_tight): he plays a carrier there down as it comes, the
+# sooner the faster it comes at the net (`closing_speed_m_s`).
+func keeper_stance_at(t: float, puck: Vector3 = Vector3.INF, goal: Vector3 = Vector3.ZERO,
+		closing_speed_m_s: float = 0.0) -> int:
+	if puck.is_finite() and AIGoalieModel.down_in_tight(puck, goal, closing_speed_m_s):
 		return AIShotOdds.Stance.DOWN
 	return keeper_stance if t < AIGoalieModel.GOALIE_RECOVERY_S else AIShotOdds.Stance.UPRIGHT
 
@@ -622,12 +623,21 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# Already tight to the net: no room to improve by driving.
 	if d <= RECEIVER_DRIVE_MIN_NET_DIST_M + 0.1:
 		return 0.0
-	var reach: float = minf(RECEIVER_DRIVE_MAX_M, d - RECEIVER_DRIVE_MIN_NET_DIST_M)
+	# In the zone he drives the net; from outside it, only as far as the horizon,
+	# where what he has is our possession of the spot (value_at).
+	var reach: float = d - RECEIVER_DRIVE_MIN_NET_DIST_M
+	if not AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
+		reach = minf(reach, RECEIVER_DRIVE_MAX_M)
 	var inv: float = 1.0 / d
 	var dir_x: float = to_net_x * inv
 	var dir_z: float = to_net_z * inv
 	var target := Vector3(
 			receiver_spot.x + dir_x * reach, 0.0, receiver_spot.z + dir_z * reach)
+	# The odds he keeps it are priced over the horizon; unstripped inside it, he
+	# goes on.
+	var horizon_reach: float = minf(RECEIVER_DRIVE_MAX_M, reach)
+	var horizon := Vector3(receiver_spot.x + dir_x * horizon_reach, 0.0,
+			receiver_spot.z + dir_z * horizon_reach)
 	if not AIStationSearch.is_legal_position(target) \
 			or AINetObstacle.carry_path_blocked_by_net(receiver_spot, target):
 		return 0.0
@@ -637,8 +647,8 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			else ctx.self_max_accel
 	# Momentum-honest: a man in stride carries his pace into the drive, one curling
 	# back brakes it out first. Never `reach / max_speed`.
-	var reach_time: float = AIArrival.time_to_arrive(
-			receiver_spot, target, receiver_vel, recv_speed, recv_accel)
+	var horizon_time: float = AIArrival.time_to_arrive(
+			receiver_spot, horizon, receiver_vel, recv_speed, recv_accel)
 	# A defender in the way drops keep and stops the drive where he covers it;
 	# apply_escape as for the carrier's own candidates.
 	var opps: Array[Vector3] = opponents
@@ -646,17 +656,18 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		project_opponents(start_s, _entry_buf)
 		opps = _entry_buf
 	var keep: float = AICarrySpace.carry_safety(
-			receiver_spot, target, reach_time,
+			receiver_spot, horizon, horizon_time,
 			opps, opponent_vels, opponent_caps, true)
 	var reached: Vector3 = AICarrySpace.carry_strip_point(
-			receiver_spot, target, reach_time,
+			receiver_spot, horizon, horizon_time,
 			opps, opponent_vels, opponent_caps, true, true)
 	if keep <= 0.0:
 		drive_in_reached = reached
 		return -_drive_loss_cost(ctx, reached, 1.0, own_hands)
-	var t: float = reach_time if reached == target \
-			else AIArrival.time_to_arrive(
-					receiver_spot, reached, receiver_vel, recv_speed, recv_accel)
+	if reached == horizon:
+		reached = target
+	var t: float = AIArrival.time_to_arrive(
+			receiver_spot, reached, receiver_vel, recv_speed, recv_accel)
 	project_opponents(start_s + t, _drive_buf)
 	# The keeper tracks the drive the whole way, so it arrives at him square and
 	# set — for the carrier's own drive and a receiver's alike.
@@ -667,10 +678,58 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# drive's end against a set keeper: in tight that is a shot he has dropped on
 	# by the release, and it out-prices every real one.
 	var advanced: float = AICarrierArrivalShot.value(self, ctx, reached, arrive_vel,
-			start_s + t, regime_from, _drive_buf)
+			start_s + t, regime_from, _drive_buf) * AIActionScoring.delay_discount(t)
+	# He lets it go where the drive's shot is best, not where it stops. Where
+	# that is, is read off the set keeper at each row the shot field is measured
+	# at that the drive crosses in shooting range; the shot is then priced as the
+	# end's is there and a row further out, since his hands' hold lets it go
+	# later than he decides. Two full reads more, not one a row.
+	var goal: Vector3 = ctx.attacking_goal_pos
+	var goal_sign: float = signf(goal.z)
+	var from_out: float = (goal.z - receiver_spot.z) * goal_sign
+	var end_out: float = (goal.z - reached.z) * goal_sign
+	var release: Vector3 = Vector3.INF
+	var release_t: float = 0.0
+	var before: Vector3 = Vector3.INF
+	var before_t: float = 0.0
+	var took_last: bool = false
+	var set_best: float = AIShotValue.set_keeper(reached, goal) * AIActionScoring.delay_discount(t)
+	for row_out: float in AIShotOdds.rows_out():
+		if row_out <= end_out or row_out >= from_out \
+				or row_out > AICarrierArrivalShot.PATH_SHOT_RANGE_M:
+			continue
+		var at_row: Vector3 = receiver_spot.lerp(reached,
+				(from_out - row_out) / (from_out - end_out))
+		var row_t: float = AIArrival.time_to_arrive(
+				receiver_spot, at_row, receiver_vel, recv_speed, recv_accel)
+		var set_here: float = AIShotValue.set_keeper(at_row, goal) \
+				* AIActionScoring.delay_discount(row_t)
+		if took_last:
+			before = at_row
+			before_t = row_t
+		took_last = set_here > set_best
+		if took_last:
+			set_best = set_here
+			release = at_row
+			release_t = row_t
+			before = Vector3.INF
+	if release.is_finite():
+		advanced = maxf(advanced, _drive_shot_at(ctx, receiver_spot, receiver_vel, release,
+				release_t, start_s, regime_from))
+	if before.is_finite():
+		advanced = maxf(advanced, _drive_shot_at(ctx, receiver_spot, receiver_vel, before,
+				before_t, start_s, regime_from))
 	drive_in_reached = reached
-	return advanced * keep * AIActionScoring.delay_discount(t) \
-			- _drive_loss_cost(ctx, reached, 1.0 - keep, own_hands)
+	return advanced * keep - _drive_loss_cost(ctx, reached, 1.0 - keep, own_hands)
+
+
+# The shot a drive from `from` at `vel`, starting `start_s` from now, lets go
+# passing `at` `t` later, as of the drive's start.
+func _drive_shot_at(ctx: RoleContext, from: Vector3, vel: Vector3, at: Vector3, t: float,
+		start_s: float, regime_from: Vector3) -> float:
+	project_opponents(start_s + t, _drive_buf)
+	return AICarrierArrivalShot.value(self, ctx, at, (at - from) / t if t > 0.001 else vel,
+			start_s + t, regime_from, _drive_buf) * AIActionScoring.delay_discount(t)
 
 
 # A drive lost at `at` with probability `lost`, as a carry candidate's strip is

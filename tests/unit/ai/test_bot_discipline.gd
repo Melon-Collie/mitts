@@ -109,5 +109,14 @@ func test_a_check_that_lands_just_after_the_pass_is_finished() -> void:
 
 func test_a_check_that_would_land_long_after_the_pass_is_let_up() -> void:
 	_watch_him_pass()
-	assert_false(_held_after(_snap(Vector3.ZERO, Vector2(-1.0, 0.0), -1, CLOSING, 0.45, 10.3)),
-			"0.3 s since the pass and 0.45 s to go is past the grace")
+	assert_false(_held_after(_snap(Vector3.ZERO, Vector2(-1.0, 0.0), -1, CLOSING, 0.45, 10.6)),
+			"0.6 s since the pass and 0.45 s to go is past the grace")
+
+
+func test_a_man_skating_into_us_is_met_and_not_let_up_on() -> void:
+	var snapshot: WorldSnapshot = _snap(Vector3.ZERO, Vector2(-1.0, 0.0), -1)
+	var me: SkaterNetworkState = snapshot.skater_states[SELF_ID]
+	var man: SkaterNetworkState = snapshot.skater_states[MAN_ID]
+	man.velocity = -me.velocity
+	me.velocity = Vector3.ZERO
+	assert_true(_held_after(snapshot), "standing our ground throws nothing")

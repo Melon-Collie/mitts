@@ -118,7 +118,7 @@ a baseline recorded with `--baseline`. No taught stance raises an arm, so
 `KEEPER_CAPTURE_STANCES` also takes its reaches (`reach_glove_high`,
 `reach_glove_out`, `reach_both_high`: a hand put where a save takes it), which
 is where his sleeves' hang shows. `.claude/hooks/render-keeper-strip.sh`
-draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recovery, the sink into the low ready and the drop from it, the butterfly slide and the rotation on his knees, the RVH's ways in and out and the push off the post, a whole sequence of them through `KeeperMotor`, goals given to it with the moves `KeeperRoute` picks, the first brain tracking a puck round the zone, his saves against a shot read as in a match, and a puck dribbling in to his feet covered) frame by frame (`tools/keeper_strip.gd`).
+draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recovery, the sink into the low ready and the drop from it, the butterfly slide and the rotation on his knees, the RVH's ways in and out and the push off the post, a whole sequence of them through `KeeperMotor`, goals given to it with the moves `KeeperRoute` picks, the first brain tracking a puck round the zone, his saves against a shot read as in a match, a puck dribbling in to his feet covered, a pad out through a slide it leads, and his knee shuffle's steps) frame by frame (`tools/keeper_strip.gd`).
 
 **To see the BODY's skin, render it.** `.claude/hooks/render-body.sh
 [--only=a,b]` runs pose_capture's poses on the skater's skin
@@ -208,6 +208,15 @@ step per frame and the tick, composed into the main thread at 90 fps, plus
 adds CPU render time and draw calls. No playtest needed, so it is the A/B for
 CPU-side performance work: compare runs on the same machine, never a run here
 against a number from someone else's machine.
+
+**To check the bots for own goals, stage them.** `.claude/hooks/stage-own-goals.sh
+[sizes]` plays an all-bot match headless and stages a loose puck behind and
+beside a net again and again (every puck spot, the defenseman's approach and
+pace, with and without a forechecker, both nets), printing each trial's outcome,
+who played the puck, a summary, and the per-tick trace of any own goal
+(`tools/own_goal_stage_runner.gd`; logs to `.preview/own_goal_stage/`).
+`tools/own_goal_hunt.gd` is its free-play sibling: a match left to run, every
+own goal traced.
 
 A render answers *how it reads*; it does not answer *whether two placements
 agree*. When the question is the second one — does the sleeve stay inside the

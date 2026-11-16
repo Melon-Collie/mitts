@@ -45,7 +45,7 @@ values via read-modify-write, not increments) — then **publish**.
 | `STAT_FACEOFF_WINS`    | INT  | faceoffs won (as centre)        |
 | `STAT_INTERCEPTIONS`   | INT  | retired: never written; read as takeaways |
 | `STAT_FIGHT_WINS`      | INT  | fights won (opponent put down)  |
-| `STAT_PIM`             | INT  | penalty minutes (2 a penalty)   |
+| `STAT_PIM`             | INT  | penalty time, seconds           |
 | `STAT_PP_GOALS`        | INT  | power-play goals                |
 | `STAT_PP_POINTS`       | INT  | power-play goals and assists    |
 

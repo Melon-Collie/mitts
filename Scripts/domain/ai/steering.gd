@@ -85,6 +85,9 @@ const STANCE_RELEASE_FRACTION: float = 0.8
 const ARRIVAL_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 const ARRIVAL_BRAKE_ENGAGE_MARGIN_M: float = 0.5
 const ARRIVAL_BRAKE_RELEASE_MARGIN_M: float = 1.5
+# Below this a body closing on our own crease is settled by the crease repel, not
+# braked (stops_in_own_crease).
+const OWN_CREASE_BRAKE_MIN_SPEED_M_S: float = 3.0
 # The league body's glide, which settles an arrival that needs no brake.
 static var _glide: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_config()
 
@@ -514,6 +517,32 @@ static func _crease_repel(self_pos: Vector3) -> Vector2:
 	var dir: Vector2 = CreaseRules.outward_direction(xz)
 	var falloff: float = 1.0 - (d_to_center / threshold)
 	return dir * (CREASE_REPEL_WEIGHT * falloff)
+
+
+# Whether a body travelling at `velocity_xz` would stop inside our own crease
+# (the repel's extended one) if it braked now — its straight-line stop
+# (ARRIVAL_BRAKE_DECEL_M_S2, plus the engage margin) reaches the paint from the
+# rink side while closing on the goal centre. The crease repel only steers: it
+# sheds no momentum, so a carrier driving at our net reaches the paint at speed
+# with the puck, and the line is a stride behind it.
+# Below OWN_CREASE_BRAKE_MIN_SPEED_M_S the repel settles it.
+static func stops_in_own_crease(self_pos: Vector3, velocity_xz: Vector2,
+		own_goal_dir: float) -> bool:
+	var speed: float = velocity_xz.length()
+	if speed < OWN_CREASE_BRAKE_MIN_SPEED_M_S:
+		return false
+	var centre := Vector2(0.0, own_goal_dir * GameRules.GOAL_LINE_Z)
+	var p := Vector2(self_pos.x, self_pos.z)
+	if velocity_xz.dot(centre - p) <= 0.0:
+		return false
+	var stop_dist: float = (speed * speed) / (2.0 * ARRIVAL_BRAKE_DECEL_M_S2) \
+			+ ARRIVAL_BRAKE_ENGAGE_MARGIN_M
+	var dir: Vector2 = velocity_xz / speed
+	var q: Vector2 = p + dir * clampf(dir.dot(centre - p), 0.0, stop_dist)
+	var radius: float = CreaseRules.ARC_RADIUS + CREASE_REPEL_EXTENSION
+	# The rink side of the goal line only: a stop behind the net is the detour's.
+	var in_front: bool = (q.y - centre.y) * -own_goal_dir >= 0.0
+	return in_front and q.distance_squared_to(centre) <= radius * radius
 
 
 # Lateral "round the post" force for a bot pinned behind a goal line.

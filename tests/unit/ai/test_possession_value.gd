@@ -46,13 +46,18 @@ func test_closer_to_the_zone_is_worth_more() -> void:
 func test_crossing_the_line_never_costs_the_puck_value() -> void:
 	# A man just inside the line can still skate to any entry a man just outside
 	# it would take, so stepping over the line on any lane never reads lower.
+	# Inside it he also has his own drive at the net, which down a wall lane is
+	# from a worse angle the deeper he starts: each spot inside is held against
+	# the last one outside, not against the spot before it.
 	var v: AIPossessionValue = _read(_none)
 	for x: float in [0.0, -4.0, -9.0, -12.0]:
-		var prev: float = 0.0
-		for z: float in [-5.0, -7.0, -7.5, -8.0, -9.0, -10.0]:
+		var outside: float = 0.0
+		for z: float in [-5.0, -7.0, -7.5]:
 			var here: float = v.at(Vector3(x, 0.0, z))
-			assert_gte(here, prev - 1e-6, "x %.0f, z %.0f" % [x, z])
-			prev = here
+			assert_gte(here, outside - 1e-6, "x %.0f, z %.0f" % [x, z])
+			outside = here
+		for z: float in [-8.0, -9.0, -10.0]:
+			assert_gte(v.at(Vector3(x, 0.0, z)), outside - 1e-6, "x %.0f, z %.0f" % [x, z])
 
 
 func test_a_body_on_his_stick_costs_him_the_puck_where_the_race_is_his() -> void:
@@ -98,10 +103,62 @@ func test_a_man_skating_at_the_zone_is_worth_more_than_one_skating_away() -> voi
 	assert_lt(v.at(spot, 0.0, Vector3(0.0, 0.0, 7.0)), standing, "skating away")
 
 
+# The side with the puck reading its own possession: a defender in front of the
+# puck backing off toward his net is carried on no further than his stop takes,
+# so a later read never shows more ice than that behind him. One behind the
+# puck, or closing on it, keeps his momentum.
+func test_a_defender_backing_off_ahead_of_the_puck_is_not_carried_on() -> void:
+	var puck_z: float = -2.0
+	var backing_off := Vector3(1.0, 0.0, -9.0)
+	var chasing := Vector3(-3.0, 0.0, 4.0)
+	var closing := Vector3(4.0, 0.0, -12.0)
+	var defenders: Array[Vector3] = [backing_off, chasing, closing]
+	var vels: Array[Vector3] = [Vector3(0.5, 0.0, -6.0), Vector3(0.0, 0.0, -7.0), Vector3(0.0, 0.0, 5.0)]
+	var v := AIPossessionValue.new()
+	v.fill(GOAL, defenders, vels, [])
+	var carried: Vector3 = v._defence_at(2.0)[0]
+	assert_almost_eq(carried.z, backing_off.z - 12.0, 0.01, "not this side's puck: carried on as he moves")
+	v.read_from_puck(puck_z)
+	var stop: float = vels[0].length_squared() / (2.0 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2)
+	var was: float = 0.0
+	for t: float in [0.25, 0.5, 1.0, 2.0, 3.0]:
+		var at: Vector3 = v._defence_at(t)[0]
+		var gone: float = at.distance_to(backing_off)
+		assert_lte(gone, stop + 1e-4, "%.2f s: no further than his stop takes" % t)
+		assert_gte(gone, was - 1e-4, "%.2f s: and never back" % t)
+		was = gone
+		assert_almost_eq(v._defence_at(t)[1].z, chasing.z - 7.0 * t, 0.01, "%.2f s: behind the puck, he keeps coming" % t)
+		assert_almost_eq(v._defence_at(t)[2].z, closing.z + 5.0 * t, 0.01, "%.2f s: closing on it, he keeps coming" % t)
+	v.fill(GOAL, defenders, vels, [])
+	assert_almost_eq(v._defence_at(2.0)[0].z, backing_off.z - 12.0, 0.01, "filled again: the rule is off until asked for")
+
+
+func test_a_drive_is_worth_no_less_than_a_shot_it_passes() -> void:
+	# He can let it go anywhere on the way in: the drive is never worth less than
+	# the shot from a spot it passes, at the odds he keeps it and for the time it
+	# takes to get there. Read at each row the shot field is measured at.
+	var v: AIPossessionValue = _read(_none)
+	for from: Vector3 in [Vector3(0.0, 0.0, -9.0), Vector3(0.0, 0.0, -14.0), Vector3(-7.0, 0.0, -12.0),
+			Vector3(9.0, 0.0, -17.0)]:
+		var drive: float = v._drive(from, 0.0)
+		var end: Vector3 = from + (GOAL - from) * (1.0 - AIPossessionValue.DRIVE_MIN_NET_DIST_M
+				/ from.distance_to(GOAL))
+		for row_out: float in AIShotOdds.rows_out():
+			var f: float = (from.z - GOAL.z - row_out) / (from.z - end.z)
+			if f <= 0.0 or f >= 1.0:
+				continue
+			var passed: Vector3 = from.lerp(end, f)
+			assert_gte(drive + 1e-6, v._shot(passed)
+					* AIActionScoring.delay_discount(AIArrival.time_to_arrive(from, passed, Vector3.ZERO)),
+					"from %s, passing %.1f m out" % [from, row_out])
+
+
 func test_his_speed_carries_the_drive_in() -> void:
 	var v: AIPossessionValue = _read(_none)
 	var corner := Vector3(-10.0, 0.0, -22.0)
-	assert_gt(v.at(corner, 0.0, Vector3(4.0, 0.0, -1.0)), v.at(corner),
+	# The drive itself: from the corner a skate back out to an entry can be worth
+	# more than it, and his speed toward the net is no help to that.
+	assert_gt(v._drive(corner, 0.0, Vector3(4.0, 0.0, -1.0)), v._drive(corner, 0.0),
 			"already moving toward the net, he gets there sooner")
 
 
@@ -227,8 +284,11 @@ func test_a_carrier_threatens_at_least_his_shot_and_his_possession() -> void:
 	var v: AIPossessionValue = _defence(none, [])
 	var slot := Vector3(0.0, 0.0, 18.0)
 	assert_gte(v.threat_of_carrier(slot, Vector3.ZERO, OUR_KEEPER), v.at(slot) - 1e-6)
+	# His shot is one he carried there: the keeper tracked him (History.CARRIED).
 	assert_gte(v.threat_of_carrier(slot, Vector3.ZERO, OUR_KEEPER),
-			AIActionScoring.score_shoot_value(slot, OUR_NET, OUR_KEEPER, none) - 1e-6)
+			AIActionScoring.score_shoot_value(slot, OUR_NET, OUR_KEEPER, none, 0.0,
+					AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [], -1.0, NAN,
+					false, AIShotOdds.History.CARRIED) - 1e-6)
 
 
 func test_a_body_on_the_lane_takes_the_feed() -> void:

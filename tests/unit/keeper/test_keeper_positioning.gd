@@ -10,7 +10,8 @@ extends GutTest
 # unbroken, to rest where it stops; and his depth answering the play: the top
 # of the crease against a still or slow puck, deeper against one coming at him
 # or swinging across him or with an open receiver across the slot, no deeper
-# than the floor. A pass he reads he skates to where its stick meets it, set
+# than the floor; a carrier of theirs met no further back than hides both posts
+# from the puck. A pass he reads he skates to where its stick meets it, set
 # there, turned to it. A carrier of theirs out of tight holding the puck out to
 # one side he squares to the puck, not the body, and one in tight he meets
 # down on the puck's line. In front of the net he sinks into the low ready once a
@@ -382,30 +383,438 @@ func test_his_depth_answers_how_the_puck_moves() -> void:
 			"a faster swing deeper")
 
 
-# A carrier of theirs reaches the crease as soon as he could skate there, from
-# the speed he has toward it: one stopped in tight still holds him in, no
-# further out than the C-cuts set him on the floor in that time, where a loose
-# puck lying there asks nothing; and the nearer the deeper.
-func test_a_carrier_stopped_in_tight_still_holds_him_in() -> void:
+# The lines from a puck `from_m` straight out to both posts, ice to bar: whether
+# every one meets his gear, set in the low ready `depth` out, square to it.
+func _hides_both_posts(from_m: float, depth: float) -> bool:
+	var pose := KeeperPose.new()
+	KeeperPoses.low_ready(pose)
+	var skel := KeeperSkeleton.new()
+	skel.pose(pose)
+	var out := SweptDiscOBB.Result.new()
+	var scratch := SweptDiscOBB.Result.new()
+	var release := Vector3(0.0, GameRules.PUCK_COLLISION_HALF_HEIGHT, depth - from_m)
+	var top: float = GameRules.NET_HEIGHT - GameRules.NET_POST_RADIUS - GameRules.PUCK_COLLISION_RADIUS
+	var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
+	while y <= top:
+		for side: float in [-1.0, 1.0]:
+			if KeeperGear.nearest(skel, release, Vector3(side * KeeperCoverage.MOUTH_HALF_M, y, depth),
+					GameRules.PUCK_COLLISION_RADIUS, out, scratch) < 0:
+				return false
+		y += 0.05
+	return true
+
+
+# A carrier of theirs he meets no further back than hides both posts from the
+# puck: one stopped in tight still holds him in, on that depth, where a loose
+# puck lying there asks nothing; the nearer the deeper, the top of the crease
+# from the slot, and deeper from well out to a side, where the mouth is
+# narrower to the puck.
+func test_a_carrier_is_met_where_he_hides_both_posts() -> void:
 	var skates := KeeperFootwork.new()
 	var top: float = KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
 	var floor_m: float = KeeperPositioning.DEPTH_FLOOR_M
 	var puck := Vector2(0.0, -2.5)
 	assert_almost_eq(KeeperPositioning.depth_for(puck, Vector2.ZERO, skates), top, 1e-6, "loose: the top")
 	var held: float = KeeperPositioning.depth_for(puck, Vector2.ZERO, skates, true)
-	var could: float = AIStrideRamp.time_to_cover(0.0, puck.length() - top, GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
-			GameRules.DEFAULT_SKATER_THRUST_M_S2)
-	assert_almost_eq(held, floor_m + GoaliePushRules.set_reach(skates.c_cut_speed, skates.accel, could), 1e-6,
-			"carried: on the floor in time for the drive he could make")
+	assert_almost_eq(held, KeeperPositioning.closing_depth(puck), 1e-6, "carried: the closing depth")
 	assert_lt(held, top - 0.5, "held in")
+	for r: float in [1.5, 2.0, 2.5, KeeperPositioning.TIGHT_M]:
+		var d: float = KeeperPositioning.depth_for(Vector2(0.0, -r), Vector2.ZERO, skates, true)
+		assert_true(_hides_both_posts(r, d), "both posts hidden from %.1f m" % r)
+		assert_false(_hides_both_posts(r, d - 0.3), "and not from 0.3 m further back (%.1f m)" % r)
 	var was: float = floor_m
-	for r: float in [2.5, 3.5, 4.5, 6.0]:
+	for r: float in [1.2, 2.5, 3.5, 4.5, 6.0]:
 		var d: float = KeeperPositioning.depth_for(Vector2(0.0, -r), Vector2.ZERO, skates, true)
 		assert_gte(d, was - 1e-6, "further out the further off (%.1f m)" % r)
 		was = d
 	assert_almost_eq(was, top, 1e-6, "from the slot: the top")
-	assert_lt(KeeperPositioning.depth_for(Vector2(0.0, -4.0), Vector2(0.0, 6.0), skates, true),
-			KeeperPositioning.depth_for(Vector2(0.0, -4.0), Vector2.ZERO, skates, true), "coming at him already: deeper")
+	var wide: Vector2 = Vector2(sin(deg_to_rad(55.0)), -cos(deg_to_rad(55.0))) * 3.0
+	assert_lt(KeeperPositioning.depth_for(wide, Vector2.ZERO, skates, true),
+			KeeperPositioning.depth_for(Vector2(0.0, -3.0), Vector2.ZERO, skates, true), "from well out to a side: deeper")
+	assert_gte(KeeperPositioning.depth_for(Vector2(0.0, -0.3), Vector2.ZERO, skates, true), floor_m - 1e-6,
+			"never past the floor")
+
+
+# A carrier coming at him backs him in ahead of himself: off the top of the
+# crease no sooner than leaves him time, no faster than his C-cuts, onto the
+# closing depth of where the carrier comes in tight and never past it, so a
+# shot on the way in finds him out, not on the floor; a faster carrier sooner.
+func test_a_carrier_coming_backs_him_in_to_where_he_comes_in_tight() -> void:
+	var skates := KeeperFootwork.new()
+	var top: float = KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	var tight_m: float = KeeperPositioning.TIGHT_M
+	var tight: float = KeeperPositioning.closing_depth(Vector2(0.0, -tight_m))
+	var speed: float = 8.5
+	var step_m: float = 0.05
+	var was: float = top
+	var r: float = 14.0
+	assert_almost_eq(KeeperPositioning.depth_for(Vector2(0.0, -r), Vector2(0.0, speed), skates, true), top, 1e-6,
+			"far off: the top")
+	while r > tight_m:
+		var d: float = KeeperPositioning.depth_for(Vector2(0.0, -r), Vector2(0.0, speed), skates, true)
+		assert_lte(d, was + 1e-6, "backed in as he comes (%.2f m)" % r)
+		assert_lte(was - d, skates.c_cut_speed * step_m / speed + 1e-6, "no faster than his C-cuts (%.2f m)" % r)
+		assert_gte(d, tight - 1e-6, "never past where he goes down (%.2f m)" % r)
+		was = d
+		r -= step_m
+	assert_almost_eq(was, tight, 0.02, "on the closing depth as the carrier comes in tight")
+	assert_lt(KeeperPositioning.depth_for(Vector2(0.0, -5.0), Vector2(0.0, 9.5), skates, true),
+			KeeperPositioning.depth_for(Vector2(0.0, -5.0), Vector2(0.0, 3.0), skates, true), "a faster carrier sooner")
+	assert_lte(KeeperPositioning.depth_for(Vector2(0.0, -4.0), Vector2(0.0, 6.0), skates, true),
+			KeeperPositioning.depth_for(Vector2(0.0, -4.0), Vector2.ZERO, skates, true) + 1e-6, "coming at him already: no further out")
+
+
+# How far out a carrier takes him down: in tight standing still, and as far
+# outside it as the carrier skates while he drops.
+func test_he_goes_down_in_time_to_land_as_the_carrier_comes_in_tight() -> void:
+	var drop_s: float = 0.12
+	assert_almost_eq(KeeperPositioning.down_range(0.0, drop_s), KeeperPositioning.TIGHT_M, 1e-6, "still: in tight")
+	assert_almost_eq(KeeperPositioning.down_range(-4.0, drop_s), KeeperPositioning.TIGHT_M, 1e-6, "skating away: in tight")
+	assert_almost_eq(KeeperPositioning.down_range(9.0, drop_s), KeeperPositioning.TIGHT_M + 9.0 * drop_s, 1e-6,
+			"coming: his drop's time of the carrier's skating further out")
+	for coming: float in [0.0, 9.0]:
+		for off: float in [-0.3, 0.3]:
+			_brain = KeeperPositioning.new()
+			_brain.play = KeeperPlayRead.new()
+			_brain.play.theirs = true
+			_brain.play.loose = false
+			_motor = KeeperMotor.new()
+			var within: float = KeeperPositioning.down_range(coming,
+					_motor.save_move.drop_s * _motor.low_ready.fall_share())
+			var puck := Vector2(0.0, -(within + off))
+			_brain.decide(puck, Vector2(0.0, coming), _motor)
+			_motor.x = _motor.route.spot.x
+			_motor.z = _motor.route.spot.y
+			_brain.decide(puck, Vector2(0.0, coming), _motor)
+			assert_eq(_brain.kept_down, off < 0.0, "coming at %.0f m/s, %+.1f m off his range" % [coming, off])
+
+
+# The share of the lines a shot from `from_m` straight out can take, no
+# steeper than the steepest loft lifts it, that get by him `depth` out.
+func _open_to_a_shot(skel: KeeperSkeleton, from_m: float, depth: float) -> float:
+	var out := SweptDiscOBB.Result.new()
+	var scratch := SweptDiscOBB.Result.new()
+	var r: float = GameRules.PUCK_COLLISION_RADIUS
+	var top: float = GameRules.NET_HEIGHT - GameRules.NET_POST_RADIUS - r
+	var release := Vector3(0.0, GameRules.PUCK_COLLISION_HALF_HEIGHT, depth - from_m)
+	var open: int = 0
+	var all: int = 0
+	var x: float = -KeeperCoverage.MOUTH_HALF_M
+	while x <= KeeperCoverage.MOUTH_HALF_M + 1e-6:
+		var reach: float = release.y + PlayerAttributes.steepest_loft_tan() * Vector2(x, from_m).length()
+		var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
+		while y <= minf(top, reach) + 1e-6:
+			all += 1
+			if KeeperGear.nearest(skel, release, Vector3(x, y, depth), r, out, scratch) < 0:
+				open += 1
+			y += 0.06
+		x += 0.06
+	return float(open) / all
+
+
+# In tight is where going down is the better shape: of the net a shot from
+# there can reach (it cannot be lifted over him from that near), the butterfly
+# shows no more than the low ready does; well outside it, where a shot gets up
+# over the pads, it shows more.
+func test_in_tight_the_butterfly_shows_a_shot_no_more_than_the_low_ready() -> void:
+	var skates := KeeperFootwork.new()
+	var pose := KeeperPose.new()
+	var low := KeeperSkeleton.new()
+	KeeperPoses.low_ready(pose)
+	low.pose(pose)
+	var down := KeeperSkeleton.new()
+	KeeperPoses.butterfly(pose)
+	down.pose(pose)
+	for r: float in [1.5, 2.0, KeeperPositioning.TIGHT_M]:
+		var d: float = KeeperPositioning.depth_for(Vector2(0.0, -r), Vector2.ZERO, skates, true)
+		assert_lte(_open_to_a_shot(down, r, d), _open_to_a_shot(low, r, d), "%.1f m out: down" % r)
+	var far: float = KeeperPositioning.TIGHT_M + 2.0
+	var far_d: float = KeeperPositioning.depth_for(Vector2(0.0, -far), Vector2.ZERO, skates, true)
+	assert_gt(_open_to_a_shot(down, far, far_d), _open_to_a_shot(low, far, far_d), "%.1f m out: on his feet" % far)
+
+
+# Down, his spot gives ground with the carrier: back to where he hides both
+# posts from the puck, never further out than he is. Sliding on the speed he
+# dropped with, or where that is a move across the puck's line (a slide, turned
+# to the carrier), all the way; straight back he gives only what his knees
+# reach.
+func test_down_he_gives_ground_with_the_carrier() -> void:
+	var at := Vector2(0.0, -1.4)
+	var puck := Vector2(0.0, -2.0)
+	var knees: float = KeeperRoute.KNEE_REACH_M
+	var hides: float = KeeperPositioning.closing_depth(puck)
+	assert_lt(hides, at.length() - knees, "the carrier well inside where he dropped")
+	assert_almost_eq(KeeperPositioning._down_spot(puck, at, 10.0, puck.length()).length(), hides, 1e-6,
+			"sliding back further than it takes: all the way back")
+	assert_almost_eq(KeeperPositioning._down_spot(puck, at, knees, puck.length()).length(), at.length() - knees,
+			1e-6, "at rest, straight back: what his knees reach")
+	var wide: Vector2 = Vector2(sin(deg_to_rad(50.0)), -cos(deg_to_rad(50.0))) * 2.0
+	var across: Vector2 = KeeperPositioning._down_spot(wide, at, knees, wide.length())
+	assert_almost_eq(absf(across.normalized().cross(wide.normalized())), 0.0, 1e-6, "the carrier gone wide: on the puck's line")
+	var pushed: float = absf(at.cross(wide.normalized())) * tan(KeeperSlide.MAX_OFF_LINE_RAD)
+	assert_gt(pushed, knees, "further across than his knees reach: a push")
+	assert_almost_eq(across.length(), maxf(maxf(KeeperPositioning.closing_depth(wide), KeeperPositioning.DEPTH_FLOOR_M),
+			at.dot(wide.normalized()) - pushed), 1e-6, "the nearest of it to him, less what the push across gives back")
+	var out_far := Vector2(0.0, -1.8)
+	var aside: Vector2 = Vector2(sin(deg_to_rad(20.0)), -cos(deg_to_rad(20.0))) * 2.0
+	assert_lt(out_far.distance_to(KeeperPositioning._down_spot(aside, out_far, knees, aside.length())),
+			out_far.distance_to(aside.normalized() * KeeperPositioning.closing_depth(aside)),
+			"further out, the carrier a little aside: a shorter way than all the way back")
+	for back: float in [10.0, knees]:
+		var out_there := Vector2(0.0, -0.6)
+		assert_almost_eq(KeeperPositioning._down_spot(Vector2(0.0, -2.6), out_there, back, 2.6).length(), out_there.length(),
+				1e-6, "deeper than he need be: he takes no ground back on his knees")
+	assert_almost_eq(KeeperPositioning._down_spot(Vector2(0.0, -3.6), Vector2(0.0, -1.5), 10.0, 3.6).length(),
+			KeeperPositioning.closing_depth(Vector2(0.0, -KeeperPositioning.TIGHT_M)), 1e-6,
+			"dropped for a carrier still outside tight: back to where he hides the posts from in tight")
+	var nearer: Vector2 = KeeperPositioning._down_spot(puck, at, 10.0, 1.2)
+	assert_lt(nearer.length(), hides, "the carrier coming on nearer: further back than hides the posts from where he is")
+	assert_almost_eq(nearer.length(), maxf(KeeperPositioning.closing_depth(Vector2(0.0, -1.2)), KeeperPositioning.DEPTH_FLOOR_M),
+			1e-6, "to where he hides them from there")
+
+
+# How fast the speed he drops with takes him back along the puck's line:
+# nothing standing or resting on his knees; skating, and down on that speed,
+# its share along that line toward his net.
+func test_the_speed_he_drops_with_takes_him_back_along_the_pucks_line() -> void:
+	var puck := Vector2(0.0, -2.0)
+	_motor.z = -1.4
+	assert_eq(KeeperPositioning._carried_back(puck, _motor), 0.0, "standing: none")
+	for back: Vector2 in [Vector2(0.0, 2.2), Vector2(2.2, 0.0), Vector2(0.0, -2.2)]:
+		_motor = KeeperMotor.new()
+		_motor.z = -1.4
+		_motor.go_to(Vector2(_motor.x, _motor.z) + back, 0.0, R.FEET, back, true)
+		for i: int in 30:
+			_motor.step(DT)
+		assert_almost_eq(KeeperPositioning._carried_back(puck, _motor), maxf(_motor.moving().y, 0.0), 1e-6,
+				"%s, skating: its share back along the puck's line" % back)
+		_motor.go_to(Vector2(_motor.x, _motor.z) + back.normalized() * 2.0, 0.0, R.DOWN)
+		_motor.step(DT)
+		assert_true(_motor.carries(), "%s: dropped as he skated" % back)
+		assert_almost_eq(KeeperPositioning._carried_back(puck, _motor), maxf(_motor.moving().y, 0.0), 1e-6,
+				"%s, down on it: what is left of it" % back)
+	_motor = KeeperMotor.new()
+	_motor.rest = R.DOWN
+	assert_eq(KeeperPositioning._carried_back(puck, _motor), 0.0, "resting on his knees: none")
+
+
+# How far he reads a carrier on: his stopping distance at a skater's hardest
+# stop; all of it where his way goes by him, and where it runs into him, to
+# half a stick short of him.
+func test_a_carrier_is_read_on_no_further_than_he_has_to_go() -> void:
+	var stop: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+	var was: float = 0.0
+	for speed: float in [1.0, 3.0, 5.0, 8.0]:
+		var far: float = KeeperPositioning._committed(speed)
+		assert_almost_eq(far, speed * speed / (2.0 * stop), 1e-6, "%.0f m/s: his stopping distance" % speed)
+		assert_gt(far, was, "%.0f m/s: further the faster he comes" % speed)
+		was = far
+	assert_eq(KeeperPositioning._committed(0.0), 0.0, "standing: nowhere")
+	var at := Vector2(0.0, -1.2)
+	var reach: float = GameRules.DEFAULT_STICK_LENGTH_M * 0.5
+	var puck := Vector2(0.0, -3.5)
+	var at_him := Vector2(0.0, 1.0)
+	assert_eq(KeeperPositioning._short_of_him(puck, at_him, 1.0, at), 1.0, "coming at him but stopping well short: all of it")
+	assert_almost_eq(KeeperPositioning._short_of_him(puck, at_him, 5.0, at), puck.distance_to(at) - reach, 1e-6,
+			"on into him: to half a stick short of him")
+	assert_eq(KeeperPositioning._short_of_him(Vector2(0.0, -1.5), at_him, 5.0, at), 0.0, "already on him: no further")
+	var by_him: Vector2 = (Vector2(1.5, -0.7) - puck).normalized()
+	assert_eq(KeeperPositioning._short_of_him(puck, by_him, 3.0, at), 3.0, "going wide by him: all of it")
+
+
+# The live brain, down for a carrier of theirs who then carries wide round him
+# toward the post: he stays on his knees, reads the carrier on along his way
+# rather than pushing for where the puck was, and ends back by that post
+# turned toward him, not left out in front with the carrier below him.
+func test_a_carrier_going_round_him_is_pushed_back_to_the_post_with() -> void:
+	for side: float in [1.0, -1.0]:
+		_brain = KeeperPositioning.new()
+		_brain.play = KeeperPlayRead.new()
+		_motor = KeeperMotor.new()
+		_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+		var what: String = "%+.0f" % side
+		var body := Vector2(0.0, -9.0)
+		var tick: int = 0
+		var velocity := Vector2(0.0, 5.0)
+		var round_to := Vector2(side * 1.5, -0.7)
+		var was_down: bool = false
+		var dropped_at: float = 0.0
+		var t_round: float = 0.0
+		while body.distance_to(round_to) > 0.05:
+			if _brain.kept_down or was_down:
+				if not was_down:
+					dropped_at = Vector2(_motor.x, _motor.z).length()
+				was_down = true
+				velocity = (round_to - body).normalized() * 4.0
+				t_round += DT
+			body += velocity * DT
+			_brain.play.step(DT, body, velocity, false, body, true)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+			_motor.step(DT)
+			tick += 1
+			if was_down and _motor.rest == R.FEET and _motor.is_idle():
+				assert_ne(_motor.rest, R.FEET, "%s: back on his feet %.2f s into it" % [what, t_round])
+				break
+		assert_true(was_down, "%s: down for him as he came" % what)
+		var at := Vector2(_motor.x, _motor.z)
+		assert_gt(side * at.x, 0.0, "%s: across to his side" % what)
+		assert_lt(at.length(), dropped_at - KeeperRoute.KNEE_REACH_M,
+				"%s: back toward his net, not out where he dropped" % what)
+		assert_lt(at.y, body.y + 0.3, "%s: the carrier not left below him" % what)
+		assert_gt(-side * _motor.yaw, 0.0, "%s: turned toward the carrier" % what)
+
+
+# Once he is down, he is not stood up while a puck from where the carrier has
+# it cannot be lifted over his hands: the live brain, down for a carrier in
+# tight who then backs out, stays on his knees until the carrier is far enough
+# off for that, well outside tight, and gets up once he is.
+func test_down_he_stays_down_until_the_puck_can_be_lifted_over_his_hands() -> void:
+	_brain.play = KeeperPlayRead.new()
+	_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	var body := Vector2(0.0, -8.0)
+	var tick: int = 0
+	var was_down: bool = false
+	var up_at: float = NAN
+	var lift: float = PlayerAttributes.steepest_loft_tan()
+	for phase: int in 2:
+		var velocity := Vector2(0.0, 5.0) if phase == 0 else Vector2(0.0, -2.0)
+		while (phase == 0 and body.y < -2.4) or (phase == 1 and body.y > -16.0 and is_nan(up_at)):
+			body += velocity * DT
+			_brain.play.step(DT, body, velocity, false, body, true)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+			_motor.step(DT)
+			tick += 1
+			was_down = was_down or _motor.rest == R.DOWN
+			var reach: float = GameRules.PUCK_COLLISION_HALF_HEIGHT + lift * body.distance_to(Vector2(_motor.x, _motor.z))
+			if was_down and phase == 1 and reach < 0.9 * KeeperHandsLow.highest():
+				assert_ne(_motor.route.rest, R.FEET, "the carrier %.1f m out, no lifting it over his hands: not asked up" % -body.y)
+			if was_down and _motor.rest == R.FEET and not _motor.drops() and is_nan(up_at):
+				up_at = -body.y
+	assert_true(was_down, "down for him in tight")
+	assert_false(is_nan(up_at), "up once he has backed right off")
+	assert_gt(up_at, KeeperPositioning.TIGHT_M + KeeperPositioning.MARGIN_M + 1.0, "not as soon as he is out of tight")
+	assert_true(KeeperPositioning._clears_his_hands(Vector2(0.0, -9.0), Vector2(0.0, -1.2)), "from the top of the circles: over his hands")
+	assert_false(KeeperPositioning._clears_his_hands(Vector2(0.0, -3.5), Vector2(0.0, -1.2)), "from just outside tight: not")
+
+
+# The live brain against a carrier of theirs sprinting across the front of
+# the crease from one wing to wide of the far post: he does not drop where he
+# is and get left there, but is across to the carrier's side of his net, down
+# or on his way down, by the time the carrier is beside that post.
+func test_a_carrier_sprinting_across_to_the_far_post_is_gone_with() -> void:
+	for side: float in [1.0, -1.0]:
+		_brain = KeeperPositioning.new()
+		_brain.play = KeeperPlayRead.new()
+		_motor = KeeperMotor.new()
+		_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+		var from := Vector2(-side * 7.0, -9.0)
+		var to := Vector2(side * 1.6, -1.5)
+		var velocity: Vector2 = (to - from).normalized() * 9.0
+		var body: Vector2 = from
+		var tick: int = 0
+		while body.distance_to(to) > 0.1:
+			body += velocity * DT
+			_brain.play.step(DT, body, velocity, false, body, true)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+			_motor.step(DT)
+			tick += 1
+		var what: String = "%+.0f" % side
+		assert_gt(side * _motor.x, 0.0, "%s: across to the carrier's side of his net" % what)
+		assert_true(_brain.kept_down or _brain.planted or _motor.rest != R.FEET, "%s: playing him down" % what)
+
+
+# The live brain against a carrier of theirs who sells one side and stops
+# there, braking as hard as a skater stops: skating across on a diagonal, and
+# driving in with the puck pulled wide of the post. Down for him, he is never
+# back on his feet, and with the carrier stopped he is on the puck's line, not
+# pushed on round past it.
+func test_a_carrier_who_sells_one_side_and_stops_is_not_slid_past() -> void:
+	var stop: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+	for wide: bool in [false, true]:
+		for side: float in [1.0, -1.0]:
+			_brain = KeeperPositioning.new()
+			_brain.play = KeeperPlayRead.new()
+			_motor = KeeperMotor.new()
+			_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+			var what: String = "%s %+.0f" % ["driven wide" if wide else "diagonal", side]
+			var from := Vector2(0.0, -7.0) if wide else Vector2(-side, -6.0)
+			var way: Vector2 = Vector2(0.0, 1.0) if wide else (Vector2(side * 1.3, -2.2) - from).normalized()
+			var cruise: float = (4.8 - 5.0 * 5.0 / (2.0 * stop)) / 5.0 if wide else 0.6
+			var was_down: bool = false
+			var body: Vector2 = from
+			var puck: Vector2 = from
+			for tick: int in int(2.4 / DT):
+				var t: float = (tick + 1) * DT
+				var braked: float = clampf(t - cruise, 0.0, 5.0 / stop)
+				var speed: float = 5.0 - stop * braked if t > cruise else 5.0
+				body = from + way * (5.0 * minf(t, cruise) + 5.0 * braked - 0.5 * stop * braked * braked)
+				var sell: float = smoothstep(0.45, 0.85, t) if wide else 1.0
+				puck = body + Vector2(side * (0.3 + sell) if wide else side * 0.45, 0.3)
+				_brain.play.step(DT, puck, way * speed, false, body, true)
+				if tick % PLANNER_EVERY == 0:
+					_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+				_motor.step(DT)
+				was_down = was_down or _motor.rest == R.DOWN
+				if was_down and _motor.rest == R.FEET and not _motor.drops():
+					assert_ne(_motor.rest, R.FEET, "%s: back on his feet at %.2f s" % [what, t])
+					break
+			assert_true(was_down, "%s: down for him" % what)
+			var at := Vector2(_motor.x, _motor.z)
+			assert_gt(atan2(side * puck.x, -puck.y), deg_to_rad(15.0), "%s: the carrier stopped well to one side" % what)
+			var past: float = side * puck.normalized().cross(at)
+			assert_lt(past, KeeperPositioning.SEAL_NEAR_M, "%s: not round past the puck's line" % what)
+			assert_gt(past, -KeeperRoute.KNEE_REACH_M, "%s: within his knees' reach of it" % what)
+
+
+# The live brain against a carrier of theirs skating straight in at a
+# breakaway's pace: backed in as he comes but still out when the carrier is in
+# shooting range, in the butterfly by the time he is in tight though the
+# carrier outruns his C-cuts, giving ground on the speed he dropped with, and
+# never carried past the floor.
+func test_a_breakaway_is_met_out_and_played_down_in_tight() -> void:
+	var speed: float = 8.5
+	_brain.play = KeeperPlayRead.new()
+	_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	var body := Vector2(0.0, -16.0)
+	var tick: int = 0
+	var deepest: float = INF
+	var at_range: float = NAN
+	var dropped_at: float = NAN
+	# Whether he was in the butterfly when the carrier came in tight: 0 not yet there.
+	var at_tight: int = 0
+	while body.y < -1.5:
+		body.y += speed * DT
+		_brain.play.step(DT, body, Vector2(0.0, speed), false, body, true)
+		if tick % PLANNER_EVERY == 0:
+			_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+		_motor.step(DT)
+		tick += 1
+		deepest = minf(deepest, -_motor.z)
+		if is_nan(at_range) and body.y >= -3.5:
+			at_range = -_motor.z
+		if is_nan(dropped_at) and _brain.kept_down:
+			dropped_at = -_motor.z
+		if at_tight == 0 and body.y >= -KeeperPositioning.TIGHT_M:
+			at_tight = 1 if _motor.save_move.is_set() or _motor.rest == R.DOWN else -1
+	assert_gte(at_range, KeeperPositioning.closing_depth(Vector2(0.0, -3.5)) - 0.1,
+			"3.5 m out: no further back than hides both posts")
+	assert_true(_brain.kept_down, "played down once the carrier is in tight")
+	assert_gt(at_tight, 0, "in the butterfly as the carrier came in tight, not starting his drop there")
+	assert_lt(-_motor.z, dropped_at - 0.05, "the speed he dropped with still giving ground")
+	# The carrier pulls up on top of him: the drop lands, and what speed he
+	# carried onto his pads is spent.
+	for i: int in int(1.0 / DT):
+		_brain.play.step(DT, body, Vector2.ZERO, false, body, true)
+		if tick % PLANNER_EVERY == 0:
+			_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+		_motor.step(DT)
+		tick += 1
+		deepest = minf(deepest, -_motor.z)
+	assert_eq(_motor.rest, R.DOWN, "down")
+	assert_gte(deepest, KeeperPositioning.DEPTH_FLOOR_M - 0.02, "no deeper than the floor")
 
 
 # A rush straight in on him: skated back as it comes, deep and set on the
@@ -619,24 +1028,82 @@ func test_a_cut_across_from_the_post_is_slid_with_on_his_knees() -> void:
 
 
 # Out of tight, a carrier of theirs holding the puck out to one side: he
-# squares to the puck where it is, its angle line through the net's centre,
-# either side alike, on his feet.
-func test_out_of_tight_he_squares_to_the_puck() -> void:
+# faces the puck where it is, and stands off its angle line toward the
+# carrier's body by a share of what a pull across would leave him short,
+# nearer the puck's line than the body's, either side alike. A puck held in
+# front of the body, one wound up to shoot, or one with no carrier he reads,
+# he stands square on.
+func test_out_of_tight_he_squares_to_the_puck_and_keeps_a_little_for_the_pull() -> void:
+	var body := Vector2(0.0, -6.3)
 	for held: float in [0.9, -0.9, 0.0]:
-		_brain = KeeperPositioning.new()
-		_brain.play = KeeperPlayRead.new()
-		_brain.play.theirs = true
-		_brain.play.loose = false
-		_motor = KeeperMotor.new()
-		var puck := Vector2(held, -6.0)
-		_brain.decide(puck, Vector2.ZERO, _motor)
-		var spot: Vector2 = _motor.route.spot
-		assert_eq(_motor.route.rest, R.FEET, "%+.1f held: on his feet" % held)
-		assert_almost_eq(absf(spot.normalized().cross(puck.normalized())), 0.0, 1e-4,
-				"%+.1f held: on the puck's angle line" % held)
-		assert_gt(spot.dot(puck), 0.0, "%+.1f held: out toward it" % held)
-		assert_almost_eq(_forward(_motor.route.facing).dot((puck - spot).normalized()), 1.0, 1e-4,
-				"%+.1f held: square to the puck" % held)
+		for winding: bool in [false, true]:
+			for carried: bool in [true, false]:
+				_brain = KeeperPositioning.new()
+				_brain.play = KeeperPlayRead.new()
+				_brain.play.theirs = true
+				_brain.play.loose = false
+				_brain.play.winding_up = winding
+				if carried:
+					_brain.play.carrier = body
+				_motor = KeeperMotor.new()
+				_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+				var puck := Vector2(held, -6.0)
+				var what: String = "%+.1f held%s%s" % [held, ", wound up" if winding else "", "" if carried else ", no body read"]
+				_brain.decide(puck, Vector2.ZERO, _motor)
+				var spot: Vector2 = _motor.route.spot
+				assert_eq(_motor.route.rest, R.FEET, "%s: on his feet" % what)
+				assert_gt(spot.dot(puck), 0.0, "%s: out toward it" % what)
+				assert_almost_eq(_forward(_motor.route.facing).dot((puck - spot).normalized()), 1.0, 1e-4,
+						"%s: facing the puck" % what)
+				var off_puck: float = absf(spot.normalized().cross(puck.normalized()))
+				if held == 0.0 or winding or not carried:
+					assert_almost_eq(off_puck, 0.0, 1e-4, "%s: on the puck's angle line" % what)
+					continue
+				var off_body: float = absf(spot.normalized().cross(body.normalized()))
+				assert_gt(off_puck, 1e-3, "%s: off the puck's line" % what)
+				assert_lt(off_puck, off_body, "%s: nearer it than the body's" % what)
+				assert_eq(signf(spot.x), signf(held), "%s: on the puck's side of his body" % what)
+				assert_lt(absf(spot.x), absf(_stood_on(puck).x), "%s: toward the body from where the puck alone puts him" % what)
+
+
+# Where the brain stands him for a carrier of theirs' puck at `puck` with no
+# body read.
+func _stood_on(puck: Vector2) -> Vector2:
+	var brain := KeeperPositioning.new()
+	brain.play = KeeperPlayRead.new()
+	brain.play.theirs = true
+	brain.play.loose = false
+	var motor := KeeperMotor.new()
+	motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	brain.decide(puck, Vector2.ZERO, motor)
+	return motor.route.spot
+
+
+# The hedge is a share of an even split: with time after his read to make up
+# the whole of a pull, none; with none, HEDGE_SHARE of the way to the body's
+# line; never past the body.
+func test_the_hedge_is_what_he_could_not_make_up_of_a_pull() -> void:
+	_brain.play = KeeperPlayRead.new()
+	_brain.play.theirs = true
+	_brain.play.loose = false
+	_brain.play.carrier = Vector2(0.0, -6.3)
+	_motor.z = -1.8
+	var puck := Vector2(0.9, -6.0)
+	_brain.play.delay_s = 10.0
+	var slow: Vector2 = _brain._hedged(puck, _motor)
+	assert_almost_eq(slow.x, puck.x * (1.0 - KeeperPositioning.HEDGE_SHARE), 1e-4, "no time to make any of it up: the whole share")
+	assert_almost_eq(slow.y, puck.y, 1e-4, "across his body only")
+	_brain.play.delay_s = 0.0
+	_motor.footwork.shuffle_speed = 100.0
+	_motor.footwork.accel = 10000.0
+	assert_almost_eq(_brain._hedged(puck, _motor).x, puck.x, 1e-4, "quick enough to make all of it up: none")
+	_motor = KeeperMotor.new()
+	_motor.z = -1.8
+	_brain.play.delay_s = GoalieSkillProfile.hard().reaction_delay_s
+	var hard: float = _brain._hedged(puck, _motor).x
+	_brain.play.delay_s = GoalieSkillProfile.easy().reaction_delay_s
+	assert_lte(_brain._hedged(puck, _motor).x, hard, "a slower read keeps no less for the pull")
+	assert_gt(hard, 0.0, "never past the body")
 
 
 # A carrier of theirs in tight in front of him, the puck held anywhere across

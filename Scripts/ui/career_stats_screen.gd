@@ -441,7 +441,7 @@ func _on_totals_received(totals: Dictionary) -> void:
 	var toi: int = _safe_int(totals.get("toi_seconds", 0))
 	_identity_label.text = "%s · %d game%s · %s on ice" % [
 		String(totals.get("player_name", "")), games,
-		"" if games == 1 else "s", _format_toi(toi)]
+		"" if games == 1 else "s", _format_minutes_seconds(toi)]
 
 	# Hero figures: the five numbers a player actually looks for.
 	_clear_children(_hero_row)
@@ -496,7 +496,7 @@ func _on_totals_received(totals: Dictionary) -> void:
 		[tr(&"CAREER_PP_GOALS"), str(_safe_int(totals.get("pp_goals", 0)))],
 		[tr(&"CAREER_PP_POINTS"), str(_safe_int(totals.get("pp_points", 0)))],
 		[tr(&"CAREER_SH_GOALS"), str(_safe_int(totals.get("sh_goals", 0)))],
-		[tr(&"CAREER_PIM"), str(_safe_int(totals.get("pim", 0)))],
+		[tr(&"CAREER_PIM"), _format_minutes_seconds(totals.get("pim_seconds", 0))],
 	])
 
 
@@ -1139,7 +1139,7 @@ static func _safe_float(value: Variant) -> float:
 			return 0.0
 
 
-static func _format_toi(seconds: Variant) -> String:
+static func _format_minutes_seconds(seconds: Variant) -> String:
 	var s: int = _safe_int(seconds)
 	var minutes: int = s / 60
 	return "%d:%02d" % [minutes, s % 60]

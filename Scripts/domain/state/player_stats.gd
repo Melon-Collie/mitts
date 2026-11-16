@@ -74,10 +74,10 @@ var fights: int = 0
 var fight_wins: int = 0
 # Penalties and what comes of them (docs/penalties-plan.md), broadcast like the
 # counters above.
-#   pim                — penalty minutes: PenaltyRules.MINOR_PIM for each call he
-#                        paid for (a foul's minor, a fight's under NHL rules in
-#                        5v5, or a penalty shot his foul gave up), whatever the
-#                        minor's length on this match's clock.
+#   pim_seconds        — penalty time: a minor's length on this match's clock
+#                        (PenaltyRules.minor_seconds) for each call he paid for
+#                        (a foul's minor, a fight's under NHL rules in 5v5, or
+#                        a penalty shot his foul gave up), served in full or not.
 #   pp_goals, sh_goals — his goals with his team a man up, or a man down
 #                        (PenaltyRules.goal_situation).
 #   pp_assists         — his assists on a teammate's power-play goal.
@@ -88,7 +88,7 @@ var fight_wins: int = 0
 #   pk_opportunities, pk_on_ice_goals_against — the same for the kills. A man
 #                        in the box is on the ice for neither
 #                        (SpecialTeamsTally).
-var pim: int = 0
+var pim_seconds: int = 0
 var pp_goals: int = 0
 var sh_goals: int = 0
 var penalty_shot_goals: int = 0
@@ -112,7 +112,7 @@ func to_array() -> Array:
 			hits_taken, takeaways, giveaways, faceoff_wins, faceoff_losses,
 			game_winning_goals, one_timer_goals, tip_goals, ot_goals,
 			shot_attempts, shot_attempts_blocked, xg_for, icings,
-			fights, fight_wins, pim, pp_goals, sh_goals, penalty_shot_goals, pp_assists,
+			fights, fight_wins, pim_seconds, pp_goals, sh_goals, penalty_shot_goals, pp_assists,
 			pp_opportunities, pp_on_ice_goals, pk_opportunities, pk_on_ice_goals_against]
 
 static func from_array(a: Array) -> PlayerStats:
@@ -146,7 +146,7 @@ func update_from_array(a: Array) -> void:
 	icings = a[17]
 	fights = a[18]
 	fight_wins = a[19]
-	pim = a[20]
+	pim_seconds = a[20]
 	pp_goals = a[21]
 	sh_goals = a[22]
 	penalty_shot_goals = a[23]
@@ -187,7 +187,7 @@ func to_dict() -> Dictionary:
 		"shot_attempts": shot_attempts,
 		"shot_attempts_blocked": shot_attempts_blocked,
 		"xg_for": snappedf(xg_for, 0.001),
-		"pim": pim,
+		"pim_seconds": pim_seconds,
 		"pp_goals": pp_goals,
 		"pp_assists": pp_assists,
 		"sh_goals": sh_goals,

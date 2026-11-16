@@ -91,7 +91,7 @@ static func value(field: AICarrierField, ctx: RoleContext, candidate: Vector3,
 		score += field.value_at(ctx, cand_release, from_pos, opps, tracked_goalie,
 				keeper_vel_x, cand_keep,
 				field.keeper_stance_at(local_time + cand_windup, released_at,
-						ctx.attacking_goal_pos),
+						ctx.attacking_goal_pos, carry_closing),
 				atan2(tracked_goalie.x - cand_release.x, tracked_goalie.z - cand_release.z),
 				local_time, arrive_vel, AIShotOdds.History.CARRIED)
 	return score / samples
