@@ -1219,6 +1219,16 @@ to 5 m, so a deeper screen is unpriced.
   prices his stations by `tip_ev`. What a rip for a tip needs first is a tipper
   who plays it: the chase must not take him off a teammate's shot he can tip.
 
+  **The chase gives way to the tip** (`66b3864`): a FINISHER or NET_FRONT whose
+  role reads the shot coming at him as his tip (`AIRoleFinisher.tips_incoming`)
+  leaves the chase that tick. Measured with the carrier's tip read put back
+  locally (J=11, 576): 37 of 146 rips tipped (25%, from 18%), xG 0.030 ± 0.004
+  against 0.036 with the rip off. Of the 109 untipped, 39 still find him in the
+  chase, his blade a median 0.48 m off the puck and the deflect not held (a
+  chase entered in the last instant, when the tip read has already let go), and
+  70 in his role with the deflect held on 52 but his blade a median 5.7 m off
+  the rip's line: he is not on it, where `tip_ev` read him reaching it.
+
 - **Order.** If 2c shows a tip on the shot line still scores ~0, the carrier's
   half stays out, and only the finisher's station pricing moves to the measured
   value.
