@@ -145,7 +145,12 @@ static func tip_ev(
 		tip_vel: Vector3 = Vector3.ZERO,
 		opponent_vels: Array[Vector3] = [],
 		opponent_blades: Array[Vector3] = [],
-		tip_blade: Vector3 = Vector3.INF) -> float:
+		tip_blade: Vector3 = Vector3.INF,
+		parts: ShotParts = null) -> float:
+	if parts != null:
+		parts.reach = 1.0
+		parts.lane_end = Vector3.INF
+		parts.scores = 0.0
 	if shot_speed_m_s < TIP_MIN_SPEED_M_S:
 		return 0.0
 	# Shot line: release → net centre (the reactive tip steps ONTO this line,
@@ -190,9 +195,14 @@ static func tip_ev(
 			else AIShotValue.deflection(release, tip_pt, speed, attacking_goal, goalie_pos)
 	if redirect <= 0.0:
 		return 0.0
-	return lane * redirect * _shot_defender_terms(tip_pt, attacking_goal,
+	var scores: float = redirect * _shot_defender_terms(tip_pt, attacking_goal,
 			goalie_pos if goalie_pos.is_finite() else attacking_goal, opponents, speed,
 			opponent_caps)
+	if parts != null:
+		parts.reach = lane
+		parts.lane_end = tip_pt
+		parts.scores = scores
+	return lane * scores
 
 
 # Whether a blade held at `blade` cannot be on a rip's path (from `release`
@@ -222,7 +232,20 @@ static func _keeper_home(goalie_pos: Vector3, attacking_goal: Vector3) -> bool:
 # field), and the follow-up that collects it is
 # docs/bot-net-front-offense-plan.md step 3b/3c: priced before it is played, it
 # had the carrier shoot for rebounds nobody collected.
-const FLAT_REBOUND_CREDIT: float = 0.3 * AIPossessionFloor.FLOOR_THEIR_GOAL_LINE
+# The share of a saved shot's pucks the flat credit gives back to us; the rest
+# are theirs (AIRoleCarrier prices them as a turnover).
+const FLAT_REBOUND_SHARE: float = 0.3
+const FLAT_REBOUND_CREDIT: float = FLAT_REBOUND_SHARE * AIPossessionFloor.FLOOR_THEIR_GOAL_LINE
+
+
+# What a priced shot or rip is made of, for a caller that also prices its losses
+# (AIRoleCarrier): the odds it gets past the defenders to the net or the tipper,
+# where its lane runs to, and its odds of scoring once it does (first contact or
+# the tip, before any rebound credit). Caller-owned scratch, filled in place.
+class ShotParts:
+	var reach: float = 1.0
+	var lane_end: Vector3 = Vector3.INF
+	var scores: float = 0.0
 
 
 # A shot reaching the net with first-contact odds `p`, worth too the second
@@ -262,7 +285,12 @@ static func score_shoot_value(
 		keeper_yaw: float = NAN,
 		rebound_credit: float = -1.0,
 		history: int = AIShotOdds.History.ANY,
-		screen: float = 0.0) -> float:
+		screen: float = 0.0,
+		parts: ShotParts = null) -> float:
+	if parts != null:
+		parts.reach = 1.0
+		parts.lane_end = Vector3.INF
+		parts.scores = 0.0
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
 	var quality: float = precomputed_quality
@@ -280,12 +308,14 @@ static func score_shoot_value(
 						* AIGoalieModel.GOALIE_RESTING_DEPTH_M), attacking_goal, shooter)
 	if screen > 0.0:
 		quality = maxf(quality, 0.0) + (1.0 - maxf(quality, 0.0)) * screen
+	if parts != null:
+		parts.scores = maxf(quality, 0.0)
 	if rebound_credit >= 0.0:
 		quality = with_rebound(maxf(quality, 0.0), rebound_credit)
 	if quality <= 0.0:
 		return 0.0
 	return quality * _shot_defender_terms(shooter, attacking_goal, keeper, opponents,
-			shot_speed_m_s, opponent_caps)
+			shot_speed_m_s, opponent_caps, parts)
 
 
 # score_shoot_value's goalie half: the odds the shot beats the keeper, before
@@ -305,16 +335,18 @@ static func shot_quality(shooter: Vector3, attacking_goal: Vector3, keeper_pos: 
 # side of `keeper`, times the release contest on the wind-up.
 static func _shot_defender_terms(shooter: Vector3, attacking_goal: Vector3,
 		keeper: Vector3, opponents: Array[Vector3], shot_speed_m_s: float,
-		opponent_caps: Array) -> float:
+		opponent_caps: Array, parts: ShotParts = null) -> float:
 	var aim: Vector3 = AIShotAim.compute_open_net_aim(
 			shooter, keeper, attacking_goal.z,
 			GameRules.NET_HALF_WIDTH, AIGoalieModel.GOALIE_SHADOW_HALF_M)
 	var lane: float = AIPuckLane.lane_clear(shooter, aim, opponents, shot_speed_m_s,
 			EMPTY_VEC3, opponent_caps)
-	if lane <= 0.0:
-		return 0.0
-	return lane * AIPuckLane.release_contest_clean(
+	var terms: float = 0.0 if lane <= 0.0 else lane * AIPuckLane.release_contest_clean(
 			AIPuckLane.release_point_toward(shooter, attacking_goal), opponents, opponent_caps)
+	if parts != null:
+		parts.reach = terms
+		parts.lane_end = aim
+	return terms
 
 
 # A pass on the seam: its lane × the receiver's odds off the feed (the keeper at

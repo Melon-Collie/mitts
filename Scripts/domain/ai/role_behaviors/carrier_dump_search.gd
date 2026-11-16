@@ -27,7 +27,7 @@ extends RefCounted
 # the support arriving with the dump, its reception raced (_support_from),
 # their keeper's cover a faceoff in his zone when it is whistled (_cover_value),
 # theirs a turnover there when their collector's first play is away, with the
-# dumper where his skate has him then (AICarrierField.turnover_cost + the 5v5
+# dumper where his skate has him then (AICarrierField.turnover_cost + the
 # counter exposure), less the share our forechecker wins back off him before
 # then (_regain_odds), ours there with him still on it. An iced puck (NHL,
 # released from our half, untouched past their goal line) whose dot race their

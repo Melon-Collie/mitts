@@ -304,6 +304,7 @@ var _phase_dump_pace: float = 0.0
 # The field's shot from this eval's base release (_pick_fire_phase): the holds
 # are solved toward its aim, and a committed SHOOT fires it.
 var _shot_pick := AIShotOdds.Pick.new()
+var _shot_parts := AIActionScoring.ShotParts.new()
 
 # What the carrier sees this phase (AICarrierField), refilled at each phase's
 # head, and the searches that read it.
@@ -670,26 +671,42 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		# where the hands can let it go (AIBotMechanics.shot_hold_sample_s): a
 		# release on the line is no shot, and a hold with none left is none.
 		var sum: float = 0.0
-		var shootable: bool = false
+		var shootable: int = 0
+		var reach_sum: float = 0.0
+		var scores_sum: float = 0.0
+		var release_sum := Vector3.ZERO
+		var lane_end: Vector3 = Vector3.INF
 		for j: int in hold_samples:
 			var released_at: Vector3 = self_pos + hold + horizontal_velocity \
 					* (AIBotMechanics.shot_hold_sample_s(ctx.self_shot_timing_error_s, j,
 							hold_samples) + pull_s)
 			if not _shootable_from(released_at, attacking_goal, goalie_now):
 				continue
-			shootable = true
+			shootable += 1
+			var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(released_at,
+					attacking_goal, goalie_now)
 			sum += AIActionScoring.score_shoot_value(
-					AIGoalieModel.release_ahead_of_goalie(released_at, attacking_goal, goalie_now),
+					release,
 					attacking_goal, keeper_now, _field.opponents_release,
 					keeper_vel_x, _stance_met(keeper_stance, released_at, attacking_goal),
 					sample_speed,
 					_field.opponent_caps, -1.0, keeper_yaw,
 					AIActionScoring.FLAT_REBOUND_CREDIT, _shot_history(),
 					AIScreenField.best_uplift(released_at, attacking_goal, keeper_now,
-							_field.screens_release, _field.screen_cfg) if keeper_now.is_finite() else 0.0)
-		if not shootable:
+							_field.screens_release, _field.screen_cfg) if keeper_now.is_finite() else 0.0,
+					_shot_parts)
+			reach_sum += _shot_parts.reach
+			scores_sum += _shot_parts.scores
+			release_sum += release
+			lane_end = _shot_parts.lane_end
+		if shootable == 0:
 			continue
-		var s: float = sum / hold_samples * _field.holds.keep[k]
+		# Its losses over the samples it leaves from, each sample's own keep (a
+		# hold with no release left in a sample is no shot there, not a loss).
+		var n: float = float(shootable)
+		var s: float = sum / hold_samples * _field.holds.keep[k] - AIShotLoss.cost(_field, ctx,
+				release_sum / n, lane_end, sample_speed, _field.holds.keep[k],
+				reach_sum / n, scores_sum / n) * n / hold_samples
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_share = share
@@ -1038,7 +1055,11 @@ func _tip_read(ctx: RoleContext, self_pos: Vector3, horizontal_velocity: Vector3
 				_field.opponents_release, speed, _field.opponent_caps, ctx.caps_by_peer.get(pid),
 				mate.velocity, _field.opponent_vels, _field.opponent_blades_release,
 				mate.blade_contact_world if mate.blade_contact_world != Vector3.ZERO
-				else Vector3.INF) * _field.holds.keep[k]
+				else Vector3.INF, _shot_parts) * _field.holds.keep[k]
+		if s <= 0.0:
+			continue
+		s -= AIShotLoss.cost(_field, ctx, release, _shot_parts.lane_end, speed, _field.holds.keep[k],
+				_shot_parts.reach, _shot_parts.scores)
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_share = _field.holds.share[k]

@@ -1338,7 +1338,78 @@ over, but the read costs nothing in 3v3, and adds in 5v5. The SUPPORT question i
 
 ---
 
-## Open questions
+## Step 6 — Off-puck doctrine, and what a shot costs
+
+The 3v3 re-measure left the bots ripping for tips more than a grounded read
+should: the FINISHER parks at the net front because the comparison he and the
+carrier make sees what a tip or a screen gains and nothing of what it costs.
+This step looks at how the game is coached, then gives the comparison its
+missing half.
+
+### What the doctrine says
+
+From coaching material and journalism (no one authoritative playbook):
+
+- **5v5, the roles are fluid.** F1 and F2 work the puck low, F3 reads from above
+  the dots as the safety valve; one forward is always above the circles or
+  skating there while the others cycle. Once a team controls the puck in the
+  zone there are no fixed spots.
+- **The net front is a job the play calls for.** The low-to-high pass only pays
+  with a body in front: a point shot with a screen and men on its rebound.
+  Cycling with nobody in front is a common reason a long possession makes
+  nothing. The net-front man screens and collects rebounds.
+- **The back door is the low alternative.** The keeper takes the near post
+  first, so the far post opens to a feed from low or behind the net.
+- **The front of the net is the most dangerous ice** (public xG models), but
+  tips and other net-front shot types score under their xG, and no public model
+  can see a screen.
+- **3v3 is a possession game.** Hold the puck, isolate a defender, drive wide or
+  inside, and with nothing there pull it back out and regroup; "if you're going
+  to shoot, hit the net". Open ice turns any turnover into an odd-man rush, and
+  that shapes every decision. No source found describes net-front play in 3v3.
+
+### What the bots are missing
+
+The FINISHER already picks his spot by value (`finisher.gd:_positioning_decision`:
+the best of a one-timer feed, a tip, and what a body in front adds), which is
+the right shape: net front, one-timer or something else should fall out of it.
+What the comparison lacks is cost:
+
+- **A shot pays nothing when it does not score.** A pass prices each way it is
+  lost (poked at the release, cut off in its lane, missed, lost on the catch) at
+  the opponent's possession there plus the counter-rush it hands over
+  (`carrier_pass_search.gd:_pass_ev`). A shot, or a rip for a tip, pays nothing
+  for the puck lost on the wind-up, blocked, or saved with the rebound theirs.
+- **The counter-rush is priced in 5v5 only** (`carrier_field.gd:
+  counter_exposure_cost`). The 5v5 plan calls it correct in 3v3 too and kept it
+  off only to protect 3v3's shipped tuning (`docs/5v5-ai-plan.md` §10). Open ice
+  is where it matters most.
+- **The FINISHER's station pays nothing for being low.**
+
+### 6a. A shot pays its turnovers
+
+The shot's loss modes, priced as a pass's are, on the carrier's own field:
+
+- lost on the wind-up (1 − the hold's keep), at the release;
+- blocked in its lane (the shot's lane and release contest), where the lane is
+  lost (`AIPuckLane.lane_loss_point`);
+- reaching the net and not scoring, with the rebound theirs (the flat credit's
+  own share, `FLAT_REBOUND_SHARE`), at the rebound's contest point
+  (`AIReboundField.crash_point_at`);
+
+each at `turnover_cost` plus `counter_exposure_cost` from the release. The rip
+for a tip pays the same modes on its own lane and redirect.
+
+### 6b. The counter-rush in 3v3
+
+`counter_exposure_cost` for every team size, passes and carries too, so the
+compete stays in one currency.
+
+### 6c. Then the FINISHER's station
+
+Re-measure first: fewer rips may already take him off the net front. If not,
+the station pays for being low.
+
 
 1. **The screen's model** was decided on 2b's numbers: a share of the SET
    keeper's saves (§2b). A beaten keeper's screen is unmeasured.

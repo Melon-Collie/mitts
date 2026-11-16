@@ -35,7 +35,8 @@ off it in a predictable order.
 - No change to 3v3 behavior. The 3v3 role path is reused **verbatim** and stays
   regression-safe by construction.
 - No positional *inference* for humans — positions are explicit lobby picks (see below).
-- The transition-exposure term is **5v5-gated** for v1 (see §6).
+- The transition-exposure term was **5v5-gated** for v1 (see §6); it now prices
+  every team size (`docs/bot-net-front-offense-plan.md` step 6b).
 - No 3-on-3 OT format for 5v5 matches, no line changes, no fatigue rebalance (above).
 - No deliberate D **pinch** behavior (the "D pinches, F3 fills" rotation) in v1. Both
   halves landed after it — see §10. (The election's cross-fill never produced the
@@ -341,7 +342,7 @@ always covered across a sweep of puck positions; the strong/weak D swap on a cyc
 crossing; wingers extend/collapse with puck depth; the soft-lock releases at the
 boundary and the neighbor inherits.
 
-## 6. Transition-exposure term (grounded ice-value primitive) — **5v5-gated for v1**
+## 6. Transition-exposure term (grounded ice-value primitive) — **5v5-gated for v1, every size since step 6b of the net-front plan**
 
 The carrier already prices getting caught: `AIActionScoring.turnover_cost` runs **per
 carry/pass candidate** and is **self-localizing** — the cost is `loss_prob ×
@@ -492,8 +493,8 @@ Each phase is shippable/testable on its own; 3v3 is untouched throughout.
   the net front; the attacking side plays blue-line points (`GameRules.FACEOFF_END_*`
   + `PlayerRules.faceoff_position`). The defending wingers' spots are
   `team_size`-gated so 3v3's shipped alignment is untouched.
-- **Globalize transition-exposure** (post-v1): apply the exposure term to 3v3 too, with
-  a 3v3 bot-feel re-verification pass. Deferred to protect shipping 3v3.
+- **Globalize transition-exposure**: done (`docs/bot-net-front-offense-plan.md`
+  step 6b), the exposure term priced at every team size.
 - **Positional inference for humans** (post-v1 polish): infer a human's position from
   where they skate so bots reshape around it. Deferred — explicit lobby picks are
   simpler and robust for v1.

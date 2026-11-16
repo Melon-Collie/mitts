@@ -669,7 +669,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# about to catch it in.
 	cost += _field.turnover_cost(receiver_spot,
 			release_clean * clean_lane * (1.0 - reception_kept))
-	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
+	# Transition exposure: each loss mode also prices the COUNTER-RUSH
 	# it hands over — the carrier stays at self_pos through a pass, so his
 	# own recovery race starts from here (plan §6).
 	if not rim_iced:

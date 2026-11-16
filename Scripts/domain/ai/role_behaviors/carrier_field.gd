@@ -9,10 +9,10 @@ extends RefCounted
 # reads the same field. The counter-threat memo and the hold solver are the
 # exceptions: both are scratch the valuations fill as they go.
 
-# ── Transition-exposure appetite (5v5 only — plan §6) ────────────────────────
+# ── Transition-exposure appetite (plan §6) ───────────────────────────────────
 # The per-position risk-aversion FEEL scalar on the counter-rush cost: the model
 # does the seeing, this sets the appetite. Forwards discount it because the
-# F3-high rotation is expected to absorb a forward caught deep. 3v3 pays zero.
+# F3-high rotation is expected to absorb a forward caught deep.
 const EXPOSURE_APPETITE_DEFENSE: float = 1.0
 const EXPOSURE_APPETITE_FORWARD: float = 0.7
 # Loss probabilities below this skip the counter read entirely (hot-path
@@ -105,6 +105,12 @@ var _drive_buf: Array[Vector3] = []
 # (against our defenders), priced by fill().
 var _ours := AIPossessionValue.new()
 var _theirs := AIPossessionValue.new()
+# The shot value_at / feed_value_at hand _regime_value, for what it loses when
+# it does not score (AIShotLoss): read only when the shot beats keeping the
+# puck, since a cost can only lower it.
+var _shot := AIActionScoring.ShotParts.new()
+var _shot_release := Vector3.INF
+var _shot_keep: float = 1.0
 # The keeper's sightline test a screen is read by, at the league's eye height.
 var screen_cfg := GoalieScreenRules.ScreenConfig.new()
 # Who can screen a shot the carrier releases now: their skaters where it meets
@@ -142,13 +148,12 @@ func fill(ctx: RoleContext) -> void:
 			our_defender_vels.append(s.velocity)
 	screens_release.assign(opponents_release)
 	screens_release.append_array(our_defenders)
-	if ctx.team_size >= 5:
-		AIActionScoring.fill_counter_cover_etas(
-				ctx.defending_goal_pos, our_defenders, exposure_mate_etas)
-		exposure_threat_memo.resize(our_defenders.size() + 2)
-		exposure_threat_memo.fill(-1.0)
-		AIActionScoring.fill_counter_opp_home(
-				ctx.defending_goal_pos, opponents, opponent_caps, exposure_opp_home)
+	AIActionScoring.fill_counter_cover_etas(
+			ctx.defending_goal_pos, our_defenders, exposure_mate_etas)
+	exposure_threat_memo.resize(our_defenders.size() + 2)
+	exposure_threat_memo.fill(-1.0)
+	AIActionScoring.fill_counter_opp_home(
+			ctx.defending_goal_pos, opponents, opponent_caps, exposure_opp_home)
 	var opp_keeper: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
 	keeper_stance = AIShotOdds.stance_of(opp_keeper, ctx.attacking_goal_pos) \
 			if opp_keeper != null else AIShotOdds.Stance.UPRIGHT
@@ -275,10 +280,11 @@ static func kept_ceiling(gain: float, keep: float = -1.0,
 # Transition-exposure cost of losing the puck at `loss_point` with
 # probability `loss_prob`, while this carrier would be recovering from
 # `recover_from` — the additive counter-rush half of the turnover price
-# (AIActionScoring.counter_rush_cost; plan §6). 5v5 only: 3v3 pays zero.
+# (AIActionScoring.counter_rush_cost; plan §6), at every team size: open 3v3
+# ice is where a turnover becomes an odd-man rush.
 func counter_exposure_cost(ctx: RoleContext, loss_point: Vector3,
 		loss_prob: float, recover_from: Vector3, our_goalie: Vector3) -> float:
-	if ctx.team_size < 5 or loss_prob <= EXPOSURE_PROB_FLOOR:
+	if loss_prob <= EXPOSURE_PROB_FLOOR:
 		return 0.0
 	var appetite: float = EXPOSURE_APPETITE_DEFENSE if ctx.self_is_defense \
 			else EXPOSURE_APPETITE_FORWARD
@@ -454,7 +460,9 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
 			stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 			opponent_caps, -1.0, keeper_yaw, AIActionScoring.FLAT_REBOUND_CREDIT, history,
-			_screen_at(ctx, pos, keeper_pos, opps)) * shot_keep
+			_screen_at(ctx, pos, keeper_pos, opps), _shot) * shot_keep
+	_shot_release = pos
+	_shot_keep = shot_keep
 	return _regime_value(ctx, pos, from_pos, shoot_s, arrive_s, arrive_vel)
 
 
@@ -473,17 +481,21 @@ func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: 
 			ctx.attacking_goal_pos, goalie_now(ctx), one_timer) if ctx.reads_goalie_motion \
 			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos)
 	var screen: float = _screen_at(ctx, pos, goalie_now(ctx), opps, receiver_now)
-	var shoot_s: float = AIActionScoring.with_rebound(fed + (1.0 - fed) * screen,
+	_shot.scores = fed + (1.0 - fed) * screen
+	var shoot_s: float = AIActionScoring.with_rebound(_shot.scores,
 			AIActionScoring.FLAT_REBOUND_CREDIT)
 	if shoot_s > 0.0:
-		var aim: Vector3 = AIShotAim.compute_open_net_aim(pos, goalie_now(ctx),
+		_shot.lane_end = AIShotAim.compute_open_net_aim(pos, goalie_now(ctx),
 				ctx.attacking_goal_pos.z, GameRules.NET_HALF_WIDTH,
 				AIGoalieModel.GOALIE_SHADOW_HALF_M)
-		shoot_s *= AIPuckLane.lane_clear(pos, aim, opps,
+		_shot.reach = AIPuckLane.lane_clear(pos, _shot.lane_end, opps,
 				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, AIActionScoring.EMPTY_VEC3, opponent_caps) \
 				* AIPuckLane.release_contest_clean(
 						AIPuckLane.release_point_toward(pos, ctx.attacking_goal_pos),
 						opps, opponent_caps)
+		shoot_s *= _shot.reach
+	_shot_release = pos
+	_shot_keep = 1.0
 	return _regime_value(ctx, pos, from_pos, shoot_s, arrive_s, arrive_vel)
 
 
@@ -554,12 +566,31 @@ func entry_value(pos: Vector3, start_s: float, vel: Vector3, known: float) -> fl
 # the shot, or keeping the puck there (continuation_at) when that is worth more.
 func _regime_value(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		shoot_s: float, arrive_s: float = 0.0, arrive_vel: Vector3 = Vector3.ZERO) -> float:
-	if AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos) \
-			or AIActionScoring.in_offensive_zone(pos, ctx.attacking_goal_pos):
-		if shoot_s >= _ours.base_ceiling(pos):
-			return shoot_s
-		return maxf(shoot_s, continuation_at(pos, arrive_s, arrive_vel))
-	return maxf(shoot_s, horizon_value(pos, arrive_s, arrive_vel))
+	var loss: float = NAN
+	if shoot_s > 0.0 and _shot_release.is_finite():
+		_shot_release = Vector3.INF
+	else:
+		loss = 0.0
+	var in_zone: bool = AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos) \
+			or AIActionScoring.in_offensive_zone(pos, ctx.attacking_goal_pos)
+	if in_zone and shoot_s >= _ours.base_ceiling(pos):
+		loss = _loss_of_shot(ctx, pos, loss)
+		if shoot_s - loss >= _ours.base_ceiling(pos):
+			return shoot_s - loss
+	var keep_it: float = continuation_at(pos, arrive_s, arrive_vel) if in_zone \
+			else horizon_value(pos, arrive_s, arrive_vel)
+	if shoot_s <= keep_it:
+		return keep_it
+	return maxf(shoot_s - _loss_of_shot(ctx, pos, loss), keep_it)
+
+
+# The loss AIShotLoss prices on the shot _regime_value is handed (its parts in
+# _shot, released at `release` with _shot_keep), or `known` once read.
+func _loss_of_shot(ctx: RoleContext, release: Vector3, known: float) -> float:
+	if not is_nan(known):
+		return known
+	return AIShotLoss.cost(self, ctx, release, _shot.lane_end,
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, _shot_keep, _shot.reach, _shot.scores)
 
 
 # The value of a man DRIVING IN from `receiver_spot`: the value he reaches by

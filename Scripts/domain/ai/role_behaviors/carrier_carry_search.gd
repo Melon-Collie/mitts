@@ -682,7 +682,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 				_field.opponents, _field.opponent_vels, _field.opponent_caps, true)
 		cost = _field.turnover_cost(strip_point,
 			1.0 - keep_prob)
-		# Transition exposure (5v5): the carrier's recovery race starts from the
+		# Transition exposure: the carrier's recovery race starts from the
 		# CANDIDATE, the spot this carry commits him to.
 		cost += _field.counter_exposure_cost(ctx, strip_point, 1.0 - keep_prob,
 				candidate, our_goalie)
