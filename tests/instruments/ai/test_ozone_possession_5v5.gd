@@ -26,6 +26,10 @@ extends GutTest
 # starts against its defence, so the 3v3 is read with the same jitter, rebounds
 # and tips.
 #
+# MITTS_OZ_COUNTER=1 plays their counter after a possession that ends without the
+# puck ours, and prints an OZCTR line (index | how it ended | their shot's set
+# read at our net | seconds), the goals against the possession gave up.
+#
 # MITTS_OZ_REBOUND=1 plays on past the first shot (docs/bot-net-front-offense-
 # plan.md, step 2d). The duel has no keeper to save it, so the save is drawn
 # from the measured rebound field (AIReboundField): one of the nearest spot's
@@ -55,6 +59,9 @@ const REBOUND_WINDOW_S: float = 3.0
 const FLIGHT_MAX_S: float = 1.5
 # How long a rebound they touch first is followed on.
 const AFTER_TOUCH_S: float = 3.0
+# How long a counter is played on past the possession (MITTS_OZ_COUNTER): long
+# enough for their rush to reach our net from their own goal line.
+const COUNTER_S: float = 12.0
 # A jittered spawn behind the goal line keeps this far outside the post.
 const JITTER_NET_CLEAR_M: float = GameRules.NET_HALF_WIDTH + 0.6
 const OURS: Array[int] = [101, 102, 103, 104, 105]
@@ -79,6 +86,7 @@ var _front_trace: AIFinisherTrace = null
 var _high_trace: AIHighSlotTrace = null
 var _front_kind: Dictionary = {}
 var _rebounds: bool = false
+var _counter: bool = false
 # Skaters a side: 5, or 3 under MITTS_OZ_SIZE=3.
 var _size: int = 5
 
@@ -253,6 +261,42 @@ func _run(duel: Object) -> Dictionary:
 			r["t"] = t
 			return r
 	return r
+
+
+# Their counter after a possession that ended without the puck ours
+# (MITTS_OZ_COUNTER): the duel played on until their first shot at our net, our
+# regaining the puck, or COUNTER_S. Their shot is worth what the shot field's set
+# read gives it at our net, as our first shots are scored; our net's keeper is
+# the harness's static one. Nothing is played after a shot that scored, was
+# covered or tipped, or a possession we still have.
+func _play_counter(duel: Object, r: Dictionary) -> Dictionary:
+	var ct: Dictionary = {"end": "none", "xga": 0.0, "t": 0.0}
+	if r["end"] in ["out-ours", "out-carried"]:
+		return ct
+	if r["end"] == "shot":
+		if not r.has("rebound"):
+			return ct
+		var rb: Dictionary = r["rebound"]
+		if rb["outcome"] in ["G", "C", "R"] or rb["tip_xg"] >= 0.0:
+			return ct
+	var our_goal := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
+	for k: int in int(COUNTER_S / Duel.DT):
+		var c: int = duel.carrier()
+		if c != -1 and duel.team_map[c] == 0:
+			ct["end"] = "regained"
+			ct["t"] = k * Duel.DT
+			return ct
+		var before: int = duel.releases.size()
+		duel.step()
+		if duel.releases.size() > before and int(duel.releases[-1]["team"]) == 1 \
+				and _is_shot(duel.releases[-1]):
+			ct["end"] = "shot"
+			ct["t"] = (k + 1) * Duel.DT
+			ct["xga"] = AIShotValue.set_keeper(duel.releases[-1]["pos"], our_goal)
+			return ct
+	ct["end"] = "held"
+	ct["t"] = COUNTER_S
+	return ct
 
 
 # The save and what follows it (MITTS_OZ_REBOUND). `released` is our shot,
@@ -894,6 +938,7 @@ func _sweep(label: String) -> void:
 		_front_trace = AIFinisherTrace.new()
 		AIRoleFinisher.trace = _front_trace
 	_rebounds = _env_int("MITTS_OZ_REBOUND", 0) == 1
+	_counter = _env_int("MITTS_OZ_COUNTER", 0) == 1
 	var set_sum: float = 0.0
 	var set_sq: float = 0.0
 	var g: int = -1
@@ -913,8 +958,11 @@ func _sweep(label: String) -> void:
 				rng = RandomNumberGenerator.new()
 				rng.seed = 7919 * g + 17
 			_run_index = g
-			var r: Dictionary = _run(_setup(start[0] * m, vel, start[1] * m, start[2] * m,
-					tight, rng))
+			var duel: Object = _setup(start[0] * m, vel, start[1] * m, start[2] * m, tight, rng)
+			var r: Dictionary = _run(duel)
+			if _counter:
+				var ct: Dictionary = _play_counter(duel, r)
+				gut.p("OZCTR|%d|%s|%.4f|%.2f" % [g, ct["end"], ct["xga"], ct["t"]])
 			runs += 1
 			var shot_set: float = float(r["shot"]["set"]) if r["end"] == "shot" else 0.0
 			set_sum += shot_set
