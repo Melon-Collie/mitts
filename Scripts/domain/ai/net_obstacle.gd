@@ -142,6 +142,15 @@ static func own_post_side_waypoint(x: float, own_goal_dir: float) -> Vector3:
 const KEEP_OUT_STEP_M: float = 0.25
 static func carry_path_enters_own_keep_out(from: Vector3, to: Vector3,
 		own_goal_dir: float) -> bool:
+	# Inside the keep-out at all is inside the box round it: a way that misses
+	# the box (most of them, up the ice) never goes deeper, so is not walked.
+	var reach: float = OWN_MOUTH_HALF_WIDTH_M + OWN_MOUTH_KEEP_OUT_M
+	var near_z: float = own_goal_dir * (GameRules.GOAL_LINE_Z - OWN_MOUTH_DEPTH_M
+			- OWN_MOUTH_KEEP_OUT_M)
+	var line_z: float = own_goal_dir * GameRules.GOAL_LINE_Z
+	if not _segment_crosses_aabb_xz(from.x, from.z, to.x, to.z, -reach, reach,
+			minf(near_z, line_z), maxf(near_z, line_z)):
+		return false
 	var start: float = maxf(own_mouth_keep_out_depth(from, own_goal_dir), 0.0)
 	var length: float = Vector2(to.x - from.x, to.z - from.z).length()
 	var steps: int = ceili(length / KEEP_OUT_STEP_M)
