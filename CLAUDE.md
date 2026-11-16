@@ -209,6 +209,15 @@ adds CPU render time and draw calls. No playtest needed, so it is the A/B for
 CPU-side performance work: compare runs on the same machine, never a run here
 against a number from someone else's machine.
 
+**To check the bots for own goals, stage them.** `.claude/hooks/stage-own-goals.sh
+[sizes]` plays an all-bot match headless and stages a loose puck behind and
+beside a net again and again (every puck spot, the defenseman's approach and
+pace, with and without a forechecker, both nets), printing each trial's outcome,
+who played the puck, a summary, and the per-tick trace of any own goal
+(`tools/own_goal_stage_runner.gd`; logs to `.preview/own_goal_stage/`).
+`tools/own_goal_hunt.gd` is its free-play sibling: a match left to run, every
+own goal traced.
+
 A render answers *how it reads*; it does not answer *whether two placements
 agree*. When the question is the second one — does the sleeve stay inside the
 glove, does the mirrored side land where the near side does — measure it in a
