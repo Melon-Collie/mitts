@@ -9,7 +9,9 @@ extends RefCounted
 # RVH the skate on the post pushes him off it and the off leg drops to lead
 # (`push_off`). A slide
 # goes along his line: to a spot off it, he turns as he loads until his lead
-# side faces it, so a slide back to a post is the same slide, turned.
+# side faces it, so a slide back to a post is the same slide, turned; a turn
+# past MAX_OFF_LINE_RAD holds the load for as long as his knees swivel the rest
+# (`turn_s`), the turn and the push one move.
 #
 #   DROP   from his feet, out of the stance he is in: the lead knee falls to
 #          the ice as the butterfly's drop from it does, and the push leg
@@ -64,6 +66,10 @@ const MAX_OFF_LINE_RAD: float = deg_to_rad(45.0)
 # drop's, since after a short slide the leg comes in barely stretched and its
 # shin pitches the boot's rigid toe into the ice under the falling knee.
 const FOLD_LIFT_M: float = 0.10
+# How fast he scoots on his knees, both pads down, to a spot too near for a
+# push to be worth its load (KeeperRoute.KNEE_REACH_M): the top of the pace
+# goalies shuffle on their knees at (docs/AUDIT_2026-07_GOALIE_REALISM.md §5.4).
+const KNEE_SHUFFLE_M_S: float = 0.8
 
 # The push's speed, and the pads' friction on the ice (about μ 0.27).
 var push_speed: float = 2.8
@@ -296,6 +302,56 @@ func post_seal_spot(post: Vector2, side: float, turn: float) -> Vector2:
 	return post - _across(turn) * (end.x + side * GameRules.NET_POST_RADIUS) - back * end.z
 
 
+# Whether this is a slide or a rotation from the butterfly that the pad on
+# `side` (his own) leads: that pad down on the ice the whole way.
+func leads_from_his_knees(side: float) -> bool:
+	return _from == From.BUTTERFLY and _side == side
+
+
+# Whether he is turning on his knees (`rotate_to`), the push leg coming back
+# down as he comes round.
+func turns() -> bool:
+	return _rotating and phase == Phase.TURN
+
+
+# The turn under way stopped where it has got to, the leg folding the rest of
+# the way down in its own time: a rotation commits him to nothing, and gives
+# way to a push the other way.
+func stop_turning() -> void:
+	if not turns():
+		return
+	_yaw_from = yaw
+	_yaw_to = yaw
+	_turn_s = FOLD_S
+
+
+# Whether he is loaded, or loading, for a push from the butterfly he has not
+# yet made.
+func loads() -> bool:
+	return phase == Phase.LOAD and _from == From.BUTTERFLY and not _rotating
+
+
+# Where the slide under way is going.
+func bound_for() -> Vector2:
+	return _origin + _heading * _target
+
+
+# The push he is loading for called off: turned as far as the load has
+# brought him, he comes round on the loaded skate to face `turn` instead, as a
+# rotation does, the leg folding down no quicker than it folds.
+func turn_instead(turn: float) -> void:
+	if not loads():
+		return
+	var off: float = wrapf(turn - yaw, -PI, PI)
+	_rotating = true
+	_yaw_from = yaw
+	_yaw_to = yaw + off
+	_turn_s = maxf(_turn_time(off), FOLD_S)
+	_origin = Vector2(x, z)
+	_target = 0.0
+	speed = 0.0
+
+
 # Down on his spot with the stop settled out of him: in the butterfly.
 # Down on his spot with the push leg folded back: the next move can go. The
 # lean back against the stop eases out of him over SETTLE_S whatever comes
@@ -322,9 +378,17 @@ func glide_reach(peak: float) -> float:
 	return peak * PUSH_S * 0.5 + peak * peak / (2.0 * friction)
 
 
+# How much longer than LOAD_S he loads from the butterfly for a slide that
+# turns him `turn`: nothing within what a slide's load already turns him
+# (MAX_OFF_LINE_RAD), the rest at his knees' swivel.
+func turn_s(turn: float) -> float:
+	return maxf(absf(turn) - MAX_OFF_LINE_RAD, 0.0) / turn_rate()
+
+
 # Seconds from the call until he is at rest `dist` along, pushing at up to
-# `top`, within reach, setting out `from` (From).
-func time_to(dist: float, top: float = INF, from: int = From.BUTTERFLY) -> float:
+# `top`, within reach, setting out `from` (From), turned `turn` as he loads
+# from the butterfly.
+func time_to(dist: float, top: float = INF, from: int = From.BUTTERFLY, turn: float = 0.0) -> float:
 	var v0: float = minf(minf(top, push_speed), _stoppable_peak(dist))
 	var b: float = _brake()
 	var left: float = maxf(dist - v0 * PUSH_S * 0.5, 0.0)
@@ -333,7 +397,8 @@ func time_to(dist: float, top: float = INF, from: int = From.BUTTERFLY) -> float
 	var v1_sq: float = (v0 * v0 / (2.0 * friction) - left) / (1.0 / (2.0 * friction) - 1.0 / (2.0 * b))
 	var v1: float = sqrt(clampf(v1_sq, 0.0, v0 * v0))
 	# He is down only once the pads have folded, which a short slide outlasts.
-	return lead_in_s(from) + PUSH_S + maxf((v0 - v1) / friction + v1 / b, FOLD_S)
+	var turning: float = turn_s(turn) if from == From.BUTTERFLY else 0.0
+	return lead_in_s(from) + turning + PUSH_S + maxf((v0 - v1) / friction + v1 / b, FOLD_S)
 
 
 # Seconds from the call to the push setting out `from` (From): from his feet,
@@ -368,7 +433,9 @@ func step(dt: float) -> void:
 			if pushed >= 1.0 and _clock >= _fall_s():
 				_release()
 		Phase.LOAD, Phase.OFF_POST:
-			_clock += dt / lead_in_s(_from)
+			var turning: float = turn_s(wrapf(_yaw_to - _yaw_from, -PI, PI)) \
+					if _from == From.BUTTERFLY and not _rotating else 0.0
+			_clock += dt / (lead_in_s(_from) + turning)
 			if not _rotating:
 				yaw = lerp_angle(_yaw_from, _yaw_to, smoothstep(0.0, 1.0, minf(_clock, 1.0)))
 			if _clock >= 1.0 and _rotating:

@@ -74,6 +74,7 @@ func test_a_pull_across_gets_the_puck_the_reach_he_plays() -> void:
 		for left: bool in [true, false]:
 			for side: float in [-1.0, 1.0]:
 				var c := _make_carrier(left)
+				assert_eq(c.max_blade_speed, KeeperPlayRead.BLADE_M_S, "the blade's speed he plays")
 				var input := InputState.new()
 				for t: int in ramp_ticks:
 					_step(c, input, 0.0, true)

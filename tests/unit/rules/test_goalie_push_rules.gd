@@ -18,6 +18,14 @@ func test_cruise_reach_past_ramp() -> void:
 	# t=0.5s: d = v·t − v²/(2a) = 1.9 − 0.5157 ≈ 1.3843.
 	assert_almost_eq(GoaliePushRules.cruise_reach(3.8, 14.0, 0.5), 1.3843, 0.001)
 
+func test_time_to_cruise_is_cruise_reachs_inverse() -> void:
+	assert_almost_eq(GoaliePushRules.time_to_cruise(0.0, 2.2, 14.0), 0.0, 1e-9, "no distance: no time")
+	for dist: float in [0.01, 0.1, 0.17, 0.5, 1.3, 4.0]:
+		for accel: float in [14.0, 0.0]:
+			var t: float = GoaliePushRules.time_to_cruise(dist, 2.2, accel)
+			assert_almost_eq(GoaliePushRules.cruise_reach(2.2, accel, t), dist, 1e-6, "%.2f m at accel %.0f" % [dist, accel])
+
+
 func test_cruise_reach_zero_accel_is_instant_speed() -> void:
 	assert_almost_eq(GoaliePushRules.cruise_reach(3.8, 0.0, 0.5), 1.9, 0.0001)
 

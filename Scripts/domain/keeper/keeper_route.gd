@@ -18,6 +18,7 @@ enum Rest { FEET, DOWN, POST }
 enum Do {
 	NONE, FACE, T_PUSH, SHUFFLE, C_CUT, DROP, RISE, RECOVER, SLIDE, SLIDE_FROM_FEET,
 	RVH_DROP_IN, RVH_SLIDE_IN, RVH_RISE_OUT, RVH_FOLD_OUT, GLIDE, ROTATE, RVH_PUSH_OFF,
+	KNEE_SHUFFLE,
 }
 const FROM := KeeperSlide.From
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
@@ -26,6 +27,9 @@ const _TICK_S: float = _PhysicsConstants.TICK_DURATION
 # Within these of his spot and his facing he is there: a goal that drifts no
 # further moves him not at all, rather than in steps of millimetres.
 const THERE_M: float = 0.03
+# How far he scoots on his knees rather than load a push: the reach of a
+# goalie's knee shuffle (docs/AUDIT_2026-07_GOALIE_REALISM.md §5.4, 10 to 40 cm).
+const KNEE_REACH_M: float = 0.4
 const FACED_RAD: float = deg_to_rad(2.0)
 # Down, within this of his facing he is turned to it: a smaller turn his hips
 # and shoulders make over the pads (KeeperLook's trunk), not a rotation.
@@ -273,11 +277,13 @@ func _to_post(at: Vector2, turn: float, from: int, post_side: float) -> void:
 				_offer(slid, Do.SLIDE_FROM_FEET, to)
 
 
-# From the butterfly to the goal's spot and facing, down: slid there and
-# rotated on his knees to the facing; rotated first onto the slide's line where
-# it is off his own and no further off the facing than a slide goes, slid and
-# rotated again; or up, there on his feet and down again. Its time; its first
-# move in _down_do, _down_spot and _down_side.
+# From the butterfly to the goal's spot and facing, down: scooted there on his
+# knees where it is within their reach, or slid there, and rotated on his
+# knees to the facing; a slide off his line turning him as he loads, no
+# further off the facing than a slide goes; rotated first onto the slide's
+# line where it is the other side that has to lead, slid and rotated again.
+# Never up: a spot he has no push for he scoots toward too, as far as it is.
+# Its time; its first move in _down_do, _down_spot and _down_side.
 func _down_to_down(at: Vector2, turn: float) -> float:
 	_down_do = Do.NONE
 	_down_spot = spot
@@ -290,8 +296,9 @@ func _down_to_down(at: Vector2, turn: float) -> float:
 		_down_side = facing
 		return _rotate_s(turn)
 	var best: float = INF
-	if _slidable(at, turn, spot):
-		best = _slides_time(d, FROM.BUTTERFLY) + _rotate_s(_slide_turn(at, turn, spot))
+	var slid: float = _slide_turn(at, turn, spot)
+	if _slidable(at, turn, spot) or absf(wrapf(slid - facing, -PI, PI)) <= KeeperSlide.MAX_OFF_LINE_RAD:
+		best = _slides_time(d, FROM.BUTTERFLY, wrapf(slid - turn, -PI, PI)) + _rotate_s(slid)
 		_down_do = Do.SLIDE
 	var heading: Vector2 = (spot - at) / d
 	for lead: float in [-1.0, 1.0]:
@@ -305,14 +312,12 @@ func _down_to_down(at: Vector2, turn: float) -> float:
 			best = rotated
 			_down_do = Do.ROTATE
 			_down_side = onto
-	var up: float = _ticks(_drop.rise_s) \
-			+ minf(_standing(at, turn), _settled(_on_feet(at, turn, spot)) + _rotate_s(turn)) + _ticks(_drop.drop_s)
-	if up < best:
-		best = up
-		var across: float = _local(spot - at, turn).x
-		_down_do = Do.RISE if absf(across) < THERE_M else Do.RECOVER
-		_down_spot = Vector2.ZERO
-		_down_side = signf(across)
+	var scooted: float = _ticks(d / KeeperSlide.KNEE_SHUFFLE_M_S) + _rotate_s(turn)
+	if (d <= KNEE_REACH_M or best == INF) and scooted < best:
+		best = scooted
+		_down_do = Do.KNEE_SHUFFLE
+		_down_spot = spot
+		_down_side = 0.0
 	return best
 
 
@@ -492,16 +497,18 @@ static func _settled(walk: float) -> float:
 
 
 # Slides one after another to `d` away, each as far as its push carries; the
-# first setting out `from` (KeeperSlide.From). A slide that carries as far as it goes
-# coasts to rest; the last stops on its spot by the edge.
-func _slides_time(d: float, from: int) -> float:
+# first setting out `from` (KeeperSlide.From) and turning him `turn` as it
+# loads. A slide that carries as far as it goes coasts to rest; the last stops
+# on its spot by the edge.
+func _slides_time(d: float, from: int, turn: float = 0.0) -> float:
 	var reach: float = _slide.glide_reach(_slide.push_speed)
 	var t: float = 0.0
 	while d > reach:
-		t += _ticks(_slide.time_to(reach, INF, from))
+		t += _ticks(_slide.time_to(reach, INF, from, turn))
 		d -= reach
 		from = KeeperSlide.From.BUTTERFLY
-	return t + _ticks(_slide.time_to(d, INF, from))
+		turn = 0.0
+	return t + _ticks(_slide.time_to(d, INF, from, turn))
 
 
 func _push_time(d: float) -> float:

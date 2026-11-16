@@ -280,12 +280,15 @@ func _lone_carrier_target(self_pos: Vector3, carrier: Vector3) -> Vector3:
 	return AIRoleMark.decide(_make_ctx(self_pos, skaters, 200)).target_position
 
 
-func test_fallback_target_is_near_our_net_in_dzone() -> void:
-	# DZONE: the fallback centres on midpoint(puck, our net), so it recovers
-	# goal-side of the carrier rather than out toward him.
-	var target: Vector3 = _lone_carrier_target(Vector3(0, 0, 18), DZONE_CARRIER)
-	assert_gt(target.z, DZONE_CARRIER.z,
-			"target stays goal-side of the carrier, near our net; got z=%f" % target.z)
+func test_fallback_recovers_toward_our_net_in_dzone() -> void:
+	# DZONE: the fallback centres on midpoint(puck, our net), so a marker caught
+	# up-ice of a carrier in our slot recovers toward our net, never away from
+	# it. Not goal-side of him: from behind a man that close to the net, getting
+	# on his hands lowers his threat more than a spot the marker cannot reach
+	# first.
+	var marker := Vector3(0, 0, 18)
+	var target: Vector3 = _lone_carrier_target(marker, DZONE_CARRIER)
+	assert_gt(target.z, marker.z, "he recovers toward our net; got z=%f" % target.z)
 
 
 func test_fallback_blocks_shot_lane_for_single_opp() -> void:

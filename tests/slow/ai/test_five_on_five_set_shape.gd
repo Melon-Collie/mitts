@@ -2,8 +2,8 @@ extends GutTest
 
 # ── The 1-1-3 holds a rush as a team ─────────────────────────────────────────
 # A failed forecheck in 5v5: we have lost the puck in their zone with our three
-# forwards caught around it and our D on their blue line, and their three
-# forwards break out with it at speed. The shape that has to form is the set
+# forwards caught around it and our D off their blue line and skating back
+# since it turned over, and their three forwards break out with it at speed. The shape that has to form is the set
 # 1-1-3 filled from the back (Scripts/domain/ai/CLAUDE.md → "Forecheck or set
 # up"): our line held before anything up the ice, the carrier stood up at it,
 # the middle and the weak lane held behind him, the forwards layering in ahead.
@@ -23,7 +23,8 @@ extends GutTest
 # Team 0 (them) attacks -Z; team 1 (us) defends it.
 #
 # Reference readings over the 12 starts: the back line is never thinner than
-# two at entry, and nobody of theirs stands behind it.
+# two at entry, and one of theirs stands behind it in one start (3% of zone
+# ticks): the middle man driving the net off the puck once it has gone wide.
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
@@ -33,6 +34,7 @@ const SECS: float = 6.0
 const NET := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 const THEM: Array[int] = [1, 2, 3]
 const US: Array[int] = [11, 12, 13, 14, 15]
+const D: Array[int] = [14, 15]
 # The slot a defence must keep a rush out of: out to the hash marks, the posts'
 # width plus a stride (test_advantage_scenarios' home plate).
 const SLOT_DEPTH_M: float = 10.0
@@ -75,15 +77,24 @@ func _rush(cx: float, fwd_z: float, speed: float) -> Rush:
 			BotSkillProfile.hard())
 	duel.add_skater(13, 1, Vector3(_side(duel, 13) * 6.0, 0.0, fwd_z + 2.0),
 			BotSkillProfile.hard())
-	duel.add_skater(14, 1, Vector3(_side(duel, 14) * 6.0, 0.0, GameRules.BLUE_LINE_Z + 1.0),
-			BotSkillProfile.hard())
-	duel.add_skater(15, 1, Vector3(_side(duel, 15) * 6.0, 0.0, GameRules.BLUE_LINE_Z + 1.0),
-			BotSkillProfile.hard())
+	# The puck was lost where our forwards are caught, and their carrier has
+	# skated from there to here at no more than his speed. Our D saw it turn
+	# over and have been skating back that long, less their reaction to it.
+	var since_s: float = maxf((fwd_z - RUSH_Z) / speed
+			- BotSkillProfile.hard().carrier_reaction_delay_s, 0.0)
+	var back_m_s: float = AIStrideRamp.speed_at(0.0, since_s,
+			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2)
+	var back_m: float = AIStrideRamp.distance_in(0.0, since_s,
+			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2)
+	for d: int in D:
+		duel.add_skater(d, 1, Vector3(_side(duel, d) * 6.0, 0.0,
+				GameRules.BLUE_LINE_Z + 1.0 - back_m), BotSkillProfile.hard(),
+				Vector3(0.0, 0.0, -back_m_s))
 	duel.start(1)
 	for pid: int in THEM:
 		duel._skater(pid).facing = Vector2(0.0, -1.0)
 	for pid: int in US:
-		duel._skater(pid).facing = Vector2(0.0, 1.0)
+		duel._skater(pid).facing = Vector2(0.0, -1.0 if pid in D else 1.0)
 
 	var r := Rush.new()
 	for _t: int in int(SECS / DT):

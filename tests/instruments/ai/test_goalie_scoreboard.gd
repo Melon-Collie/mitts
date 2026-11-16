@@ -438,3 +438,36 @@ func _read_recorded(path: String) -> Dictionary:
 		if parts.size() >= 4:
 			out[parts[0]] = "%s/%s/%s" % [parts[1], parts[2], parts[3]]
 	return out
+
+
+# The breakaway cutback and walkaround over where the pull across starts
+# (`test_report_the_keeper`'s rows pull at one range, 3.5 m): goals of FAN_AIMS
+# a tier, Easy / Normal / Hard. Which of the two scores turns on whether the
+# pull lands before or after he goes down, so one range reads as a deke he
+# stops or one he never does; the sweep is the deke.
+func test_report_the_bait_sweep() -> void:
+	_build()
+	var lines: PackedStringArray = ["pull from | walkaround E N H | cutback E N H"]
+	var total: int = 0
+	for swing_from: float in [2.6, 3.0, 3.5, 4.0, 4.5]:
+		var row: String = "   %.1f m  |" % swing_from
+		for side: float in [-1.0, 1.0]:
+			for tier: int in TIERS:
+				var goals: int = 0
+				for ai: int in FAN_AIMS:
+					_reset(tier)
+					_settle_ready(Vector3(0.0, 0.0, GOAL_Z + 9.0))
+					_h.begin_trial()
+					_h.bait_commit(0.0, 9.0, 0.9, 5.0, 1.1, 0.25, swing_from)
+					var rel: Vector3 = _h.wrap_to(side * 1.35, 0.70, 4.0)
+					if _h.fire_release_at(rel, _aim(ai, FAN_AIMS), ShotMechanics.ELEVATION_FLAT,
+							18.0, 0.0) == Harness.GOAL:
+						goals += 1
+				row += " %d" % goals
+				total += goals
+			row += "  |"
+		lines.append(row)
+	lines.append("%d of %d" % [total, 5 * 2 * TIERS.size() * FAN_AIMS])
+	gut.p("\n" + "\n".join(lines))
+	assert_true(true)
+

@@ -7,7 +7,8 @@ extends GutTest
 # than friction alone; the push skate holds its place while it drives; the lead
 # pad stays down on the ice the whole way, and both are down through the stop;
 # it starts and ends in the butterfly; and every tick keeps his gear out of the
-# ice, his arms on the stick and nothing on him jumping. Off the RVH he pushes
+# ice, his arms on the stick and nothing on him jumping. A spot behind him is
+# the same slide, the load held while he turns to it. Off the RVH he pushes
 # off the post: from the RVH, the skate on the post holding it until the push
 # ends, to rest on his spot in the slide's time, never toward the post.
 
@@ -355,6 +356,78 @@ func _butterfly() -> KeeperPose:
 	return p
 
 
+# A turn on his knees stopped part way: he turns no further, the push leg
+# folds back down in its own time, sooner than the turn would have ended, and
+# nothing jumps.
+func test_a_turn_on_his_knees_stops_where_it_has_got_to() -> void:
+	for off: float in [deg_to_rad(70.0), deg_to_rad(-70.0)]:
+		_slide = KeeperSlide.new()
+		_slide.rotate_to(off)
+		var what: String = "%+.0f°" % rad_to_deg(off)
+		var t: float = 0.0
+		while not (_slide.turns() and absf(_slide.yaw) > absf(off) * 0.3) and t < 2.0:
+			_slide.step(DT)
+			t += DT
+		assert_true(_slide.turns(), "%s: turning" % what)
+		var stopped_at: float = _slide.yaw
+		_slide.stop_turning()
+		_solve()
+		var was: Array[Vector3] = _bones()
+		var after: float = 0.0
+		while _slide.phase != KeeperSlide.Phase.DOWN and after < 2.0:
+			_slide.step(DT)
+			after += DT
+			_solve()
+			var at: Array[Vector3] = _bones()
+			for b: int in KeeperSkeleton.BONE_COUNT:
+				assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "%s %.3f s after bone %d" % [what, after, b])
+			was = at
+			assert_almost_eq(_slide.yaw, stopped_at, 1e-5, "%s: no further round" % what)
+		assert_true(_slide.is_settled(), "%s: down in the butterfly" % what)
+		assert_lte(after, KeeperSlide.FOLD_S + DT, "%s: in no longer than the leg takes to fold" % what)
+		assert_lt(t + after, _slide.rotate_time(off), "%s: sooner than the turn would have ended" % what)
+	_slide = KeeperSlide.new()
+	_slide.stop_turning()
+	assert_true(_slide.is_settled(), "at rest: nothing to stop")
+
+
+# A push he is loading for called off before it is made: he never leaves his
+# spot, comes round from as far as the load had turned him to the facing asked
+# instead, and is down in the butterfly with nothing having jumped.
+func test_a_push_not_yet_made_is_called_off_for_a_turn() -> void:
+	for spot: Vector2 in [Vector2(0.1, 0.9), Vector2(-0.9, 0.2), Vector2(0.8, -0.1)]:
+		for asked: float in [deg_to_rad(35.0), 0.0, deg_to_rad(-50.0)]:
+			_slide = KeeperSlide.new()
+			var what: String = "to %s, asked %+.0f°" % [spot, rad_to_deg(asked)]
+			_slide.slide_to(spot)
+			assert_true(_slide.loads(), "%s: loading" % what)
+			assert_almost_eq(_slide.bound_for(), spot, Vector2.ONE * 1e-4, "%s: bound for it" % what)
+			for i: int in 5:
+				_slide.step(DT)
+			assert_true(_slide.loads(), "%s: still loading" % what)
+			_slide.turn_instead(asked)
+			assert_false(_slide.loads(), "%s: called off" % what)
+			_solve()
+			var was: Array[Vector3] = _bones()
+			var t: float = 0.0
+			while not _slide.is_settled() and t < 3.0:
+				_slide.step(DT)
+				t += DT
+				_solve()
+				var at: Array[Vector3] = _bones()
+				for b: int in KeeperSkeleton.BONE_COUNT:
+					assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "%s %.3f s bone %d" % [what, t, b])
+				was = at
+				assert_almost_eq(Vector2(_slide.x, _slide.z), Vector2.ZERO, Vector2.ONE * 1e-6, "%s: on his spot" % what)
+			assert_true(_slide.is_settled(), "%s: down in the butterfly" % what)
+			assert_almost_eq(wrapf(_slide.yaw - asked, -PI, PI), 0.0, 1e-4, "%s: facing as asked" % what)
+	_slide = KeeperSlide.new()
+	_slide.rotate_to(1.0)
+	_slide.turn_instead(0.0)
+	_run()
+	assert_almost_eq(_slide.yaw, 1.0, 1e-4, "a rotation is not a push to call off")
+
+
 # Rotation on his knees: from the butterfly he turns to face where he is asked,
 # either way, in the rotation's time, staying on his spot, back in the
 # butterfly; the skate that drives it on the side he turns away from, planted
@@ -455,3 +528,45 @@ func test_off_the_rvh_he_never_pushes_toward_the_post() -> void:
 	_slide.z = start.y
 	assert_eq(_slide.push_off(start + Vector2(0.5, 0.0), 1.0), start, "stays")
 	assert_eq(_slide.phase, KeeperSlide.Phase.DOWN)
+
+
+# A spot further off his line than a slide's load turns him to is still one
+# slide: the load is held while his knees swivel the rest, so it takes that
+# much longer than the same slide along his line and no longer; he ends on the
+# spot with his lead side to it, and every tick keeps his gear out of the ice
+# and nothing on him jumping.
+func test_a_spot_behind_him_is_one_slide_turned_as_he_loads() -> void:
+	for spot: Vector2 in [Vector2(0.3, 0.7), Vector2(-0.25, 0.8), Vector2(0.1, 0.6)]:
+		_slide = KeeperSlide.new()
+		var what: String = "to %s" % spot
+		var lead: float = signf(spot.x)
+		var turned: float = KeeperSlide.facing(spot.normalized(), lead)
+		assert_gt(absf(turned), KeeperSlide.MAX_OFF_LINE_RAD, "%s: further off his line than a load turns him" % what)
+		var along: float = _slide.time_to(spot.length())
+		var planned: float = _slide.time_to(spot.length(), INF, KeeperSlide.From.BUTTERFLY, turned)
+		assert_almost_eq(planned - along, (absf(turned) - KeeperSlide.MAX_OFF_LINE_RAD) / _slide.turn_rate(), 1e-6,
+				"%s: the rest of the turn at his knees' swivel" % what)
+		assert_almost_eq(_slide.slide_to(spot), spot, Vector2.ONE * 1e-6, "%s: within reach" % what)
+		_solve()
+		var was: Array[Vector3] = _bones()
+		var t: float = 0.0
+		while _slide.phase != KeeperSlide.Phase.DOWN and t < 3.0:
+			_slide.step(DT)
+			t += DT
+			_solve()
+			var when: String = "%s %s t %.3f" % [what, KeeperSlide.Phase.keys()[_slide.phase], t]
+			if _slide.phase == KeeperSlide.Phase.LOAD:
+				assert_almost_eq(Vector2(_slide.x, _slide.z), Vector2.ZERO, Vector2.ONE * 1e-6,
+						"%s: turning where he is" % when)
+			elif _slide.phase != KeeperSlide.Phase.DOWN:
+				assert_almost_eq(_slide.yaw, turned, 1e-6, "%s: turned by the push" % when)
+			for part: int in KeeperGear.PART_COUNT:
+				var soft: bool = KeeperGear.save_part(part) == GoalieSaveRules.SavePart.PAD
+				assert_gte(_lowest(part), -(PAD_GIVE_M if soft else HARD_GIVE_M),
+						"%s %s" % [when, KeeperGear.Part.keys()[part]])
+			var at: Array[Vector3] = _bones()
+			for b: int in KeeperSkeleton.BONE_COUNT:
+				assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "%s bone %d" % [when, b])
+			was = at
+		assert_almost_eq(t, planned, 2.0 * DT, "%s: in the slide's time for that turn" % what)
+		assert_almost_eq(Vector2(_slide.x, _slide.z), spot, Vector2.ONE * 1e-6, "%s: on the spot" % what)

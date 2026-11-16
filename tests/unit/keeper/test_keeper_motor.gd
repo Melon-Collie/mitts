@@ -5,8 +5,9 @@ extends GutTest
 # him jumping and his gear out of the ice; the pivot turning him at its rate and
 # stopping on its facing; footwork going in his turned frame; a move asked
 # for from the wrong rest refused; asked down while he skates, down at once
-# carrying his speed; and down pushes one after another, the next going as soon
-# as the last stops.
+# carrying his speed, the slide ridden to a goal behind him and let go for one
+# across; down pushes one after another, the next going as soon as the last
+# stops; and a goal within his knees' reach scooted to and followed.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
@@ -197,19 +198,29 @@ func test_asked_down_while_skating_he_drops_carrying_his_speed() -> void:
 	var was: float = _motor.x
 	_motor.go_to(spot + v * 0.3, 0.0, R.DOWN)
 	_solve()
+	var goal: Vector2 = _motor.route.spot
 	var bones: Array[Vector3] = _bones()
 	var t: float = 0.0
+	var landed: float = NAN
 	while _motor.rest != R.DOWN and t < 1.0:
 		_motor.step(DT)
 		t += DT
+		if is_nan(landed) and _motor.save_move.is_set():
+			landed = t
+			assert_true(_motor.carries(), "landed, the slide still carrying him toward his goal")
 		_solve()
 		var now: Array[Vector3] = _bones()
 		for b: int in KeeperSkeleton.BONE_COUNT:
 			assert_lt(now[b].distance_to(bones[b]), MAX_BONE_STEP_M, "t %.3f bone %d" % [t, b])
 		bones = now
 	assert_eq(_motor.rest, R.DOWN, "down")
-	assert_lte(t, _motor.save_move.drop_s + 2.0 * DT, "down in the drop's time, no stop first")
-	assert_gt(_motor.x - was, 0.5 * moving * t, "his speed carried on")
+	assert_lte(landed, _motor.save_move.drop_s + 2.0 * DT, "in the butterfly in the drop's time, no stop first")
+	assert_gt(_motor.x - was, 0.5 * moving * landed, "his speed carried on")
+	assert_false(_motor.carries(), "the slide let go")
+	assert_lt(_motor.x - goal.x, moving * 2.0 * DT, "not on by his goal")
+	var scoot: float = KeeperSlide.KNEE_SHUFFLE_M_S
+	assert_lt(goal.x - _motor.x, scoot * scoot / (2.0 * _motor.save_move.pad_friction) + moving * 2.0 * DT,
+			"short of it by no more than a slide slowed to a scoot leaves his knees")
 
 
 # Down, a push across and another the moment it stops: the second sets out as
@@ -227,3 +238,230 @@ func test_down_pushes_follow_one_another() -> void:
 	_motor.step(DT)
 	assert_eq(_motor._mover, KeeperMotor.Mover.SLIDE, "the next push under way at once")
 	_run_checked("second push")
+
+
+# Down, a goal within his knees' reach he scoots to in the butterfly, no faster
+# than his knees shuffle, his knees stepping under him, and with nothing
+# committed: a goal that moves he follows, a low save can cut in, and one moved past his reach he pushes for.
+func test_down_he_scoots_on_his_knees_and_follows_his_goal() -> void:
+	_motor.z = -1.0
+	_motor.go_to(Vector2(0.0, -1.0), 0.0, R.DOWN)
+	_run_checked("down")
+	var butterfly := KeeperPose.new()
+	KeeperPoses.butterfly(butterfly)
+	_motor.go_to(Vector2(0.25, -1.0), 0.0, R.DOWN)
+	var was := Vector2(_motor.x, _motor.z)
+	var stepped: bool = false
+	for i: int in 8:
+		_motor.step(DT)
+		assert_eq(_motor._mover, KeeperMotor.Mover.KNEES, "scooting, tick %d" % i)
+		assert_true(_motor.can_save(true), "a save can cut in, tick %d" % i)
+		var at := Vector2(_motor.x, _motor.z)
+		assert_almost_eq(at.distance_to(was), KeeperSlide.KNEE_SHUFFLE_M_S * DT, 1e-6, "at his knees' pace, tick %d" % i)
+		was = at
+		_motor.pose(_pose)
+		var up: Array[float] = [_pose.legs[0].knee.y - butterfly.legs[0].knee.y, _pose.legs[1].knee.y - butterfly.legs[1].knee.y]
+		assert_almost_eq(up[0], 0.0, 1e-6, "the trailing knee down, tick %d" % i)
+		assert_gte(up[1], 0.0, "the leading knee stepping, tick %d" % i)
+		stepped = stepped or up[1] > 1e-3
+	assert_true(stepped, "the knee on the side he goes comes off the ice to step")
+	_motor.go_to(Vector2(-0.1, -0.9), 0.0, R.DOWN)
+	_motor.step(DT)
+	assert_eq(_motor._mover, KeeperMotor.Mover.KNEES, "a goal moved the other way followed without stopping")
+	assert_lt(Vector2(_motor.x, _motor.z).distance_to(Vector2(-0.1, -0.9)), was.distance_to(Vector2(-0.1, -0.9)), "toward it")
+	_run_checked("to the moved goal")
+	assert_almost_eq(Vector2(_motor.x, _motor.z), Vector2(-0.1, -0.9), Vector2.ONE * KeeperRoute.THERE_M, "there")
+	assert_eq(_motor.rest, R.DOWN)
+	for i: int in ceili(KeeperKneeShuffle.SETTLE_S / DT) + 1:
+		_motor.step(DT)
+	_motor.pose(_pose)
+	for leg: int in 2:
+		assert_almost_eq(_pose.legs[leg].knee, butterfly.legs[leg].knee, Vector3.ONE * 1e-6, "stopped: both pads down in the butterfly")
+	_motor.go_to(Vector2(0.8, -0.9), 0.0, R.DOWN)
+	_motor.step(DT)
+	_motor.step(DT)
+	assert_eq(_motor._mover, KeeperMotor.Mover.SLIDE, "past his knees' reach he pushes")
+	assert_true(_motor.slides())
+
+
+# Skating across with the play, asked down where he already is: his edges take
+# the speed off as he drops, and he is down there, not slid on past it.
+func test_dropped_where_he_already_is_he_does_not_slide_on() -> void:
+	_motor.z = -1.0
+	var spot := Vector2(0.0, -1.0)
+	var v := Vector2(2.0, 0.0)
+	for i: int in int(0.6 / DT):
+		spot += v * DT
+		_motor.go_to(spot, 0.0, R.FEET, v)
+		_motor.step(DT)
+	var moving: float = _motor.glide.velocity.length()
+	assert_gt(moving, 1.5, "skating with it")
+	var at := Vector2(_motor.x, _motor.z)
+	_motor.go_to(at, 0.0, R.DOWN)
+	var t: float = 0.0
+	while _motor.rest != R.DOWN and t < 1.0:
+		_motor.step(DT)
+		t += DT
+	assert_eq(_motor.rest, R.DOWN, "down")
+	var stop: float = moving * moving / (2.0 * _motor.save_move.edge_decel)
+	assert_lt(Vector2(_motor.x, _motor.z).distance_to(at), stop + moving * 2.0 * DT,
+			"no further on than his edges take to stop him")
+	assert_lt(Vector2(_motor.x, _motor.z).distance_to(at), 0.25 * moving * moving / (2.0 * _motor.save_move.pad_friction),
+			"a fraction of what his pads' friction alone would slide him")
+
+
+# Down and loading a push for a goal across from him, a goal that comes back to
+# where he is before the push is made calls it off: he turns to its facing on
+# his spot and is never pushed away from it.
+func test_a_push_not_yet_made_gives_way_to_a_goal_where_he_is() -> void:
+	_motor.rest = R.DOWN
+	_motor.z = -1.0
+	_motor.go_to(Vector2(0.9, -0.8), deg_to_rad(-20.0), R.DOWN)
+	var t: float = 0.0
+	while not _motor.slide.loads() and t < 1.0:
+		_motor.step(DT)
+		t += DT
+	assert_true(_motor.slide.loads(), "loading the push")
+	for i: int in 3:
+		_motor.step(DT)
+	_motor.go_to(Vector2(0.0, -1.0), deg_to_rad(30.0), R.DOWN)
+	t = 0.0
+	while not _motor.is_idle() and t < 3.0:
+		_motor.step(DT)
+		t += DT
+		assert_lt(Vector2(_motor.x, _motor.z).distance_to(Vector2(0.0, -1.0)), KeeperRoute.THERE_M, "never pushed off his spot")
+		assert_eq(_motor.rest, R.DOWN, "on his knees throughout")
+	assert_true(_motor.is_idle(), "at rest")
+	assert_almost_eq(_motor.yaw, deg_to_rad(30.0), KeeperRoute.DOWN_FACED_RAD, "turned to the goal's facing")
+
+
+# Down and turning on his knees to a new facing, a goal he has to push for
+# stops the turn: the push starts sooner than the turn would have ended.
+func test_a_turn_on_his_knees_gives_way_to_a_push() -> void:
+	var started: Array[float] = []
+	for gives_way: bool in [false, true]:
+		_motor = KeeperMotor.new()
+		_motor.rest = R.DOWN
+		_motor.z = -1.0
+		_motor.go_to(Vector2(0.0, -1.0), deg_to_rad(80.0), R.DOWN)
+		var t: float = 0.0
+		while not _motor.slide.turns() and t < 1.0:
+			_motor.step(DT)
+			t += DT
+		assert_true(_motor.slide.turns(), "turning on his knees")
+		for i: int in 3:
+			_motor.step(DT)
+		if gives_way:
+			_motor.go_to(Vector2(-1.0, -1.0), 0.0, R.DOWN)
+		t = 0.0
+		while t < 2.0 and not (_motor.slides() and not _motor.slide.turns() and _motor.slide.phase != KeeperSlide.Phase.TURN \
+				and Vector2(_motor.x, _motor.z).distance_to(Vector2(0.0, -1.0)) > 0.05):
+			if not gives_way and _motor.is_idle():
+				_motor.go_to(Vector2(-1.0, -1.0), 0.0, R.DOWN)
+			_motor.step(DT)
+			t += DT
+			assert_eq(_motor.rest, R.DOWN, "on his knees throughout")
+		started.append(t)
+	assert_lt(started[1], started[0] - 2.0 * DT, "pushing sooner for having stopped the turn")
+
+
+# Dropped while he skates back, a goal across him rather than behind is a push
+# from where he lands: his edges take off the speed that was carrying him back
+# as he drops, and the push goes as he lands.
+func test_a_goal_across_him_ends_the_slide_he_dropped_with() -> void:
+	_motor.z = -1.6
+	var spot := Vector2(0.0, -1.6)
+	var back := Vector2(0.0, 1.8)
+	for i: int in int(0.5 / DT):
+		spot += back * DT
+		_motor.go_to(spot, 0.0, R.FEET, back)
+		_motor.step(DT)
+	var backing: float = _motor.glide.velocity.y
+	assert_gt(backing, 1.0, "backing in")
+	var from_z: float = _motor.z
+	_motor.go_to(Vector2(0.9, _motor.z + 0.2), 0.0, R.DOWN)
+	var t: float = 0.0
+	while not _motor.slides() and t < 1.0:
+		_motor.step(DT)
+		t += DT
+	assert_true(_motor.slides(), "the push for it under way")
+	assert_lt(t, 2.0 * _motor.save_move.drop_s, "as he lands")
+	assert_false(_motor.carries(), "the slide he dropped with let go")
+	assert_lt(_motor.z - from_z, 0.5 * backing * backing / (2.0 * _motor.save_move.pad_friction),
+			"not carried on back by the speed he dropped with")
+
+
+# Down, a pad asked out goes out at rest, stays out through a scoot and a
+# slide it leads, and is brought back under him before a slide the other way,
+# a rotation or getting up starts; a save takes it into the pose it cuts in
+# from. Every tick unbroken.
+func test_a_pad_out_rides_what_it_can_and_comes_in_for_what_needs_the_leg() -> void:
+	_motor.z = -1.1
+	_motor.go_to(Vector2(0.0, -1.1), 0.0, R.DOWN)
+	_run_checked("down")
+	_motor.pad_out.asked = 1.0
+	_motor.go_to(Vector2(0.0, -1.1), 0.0, R.DOWN)
+	var was: Array[Vector3] = _bones()
+	for i: int in int(0.3 / DT):
+		_motor.step(DT)
+		var at: Array[Vector3] = _bones()
+		for b: int in KeeperSkeleton.BONE_COUNT:
+			assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "going out, tick %d bone %d" % [i, b])
+		was = at
+	assert_eq(_motor.pad_out.share, 1.0, "out at rest")
+	# Facing as the slide leaves him, so no rotation follows it.
+	var turned: float = KeeperSlide.facing((Vector2(0.8, -0.9) - Vector2(0.0, -1.1)).normalized(), 1.0)
+	_motor.go_to(Vector2(0.8, -0.9), turned, R.DOWN)
+	_motor.step(DT)
+	_motor.step(DT)
+	assert_true(_motor.slides(), "a slide it leads starts at once")
+	_run_checked("the slide it leads")
+	assert_eq(_motor.pad_out.share, 1.0, "out the whole way")
+	_motor.go_to(Vector2(0.95, -0.85), turned, R.DOWN)
+	_run_checked("a scoot")
+	assert_eq(_motor.pad_out.share, 1.0, "out through a scoot")
+	_motor.go_to(Vector2(0.0, -1.0), turned, R.DOWN)
+	_motor.step(DT)
+	_motor.step(DT)
+	assert_false(_motor.slides(), "the other way: not yet")
+	assert_lt(_motor.pad_out.share, 1.0, "the pad coming back under him first")
+	var waited: float = 0.0
+	while not _motor.slides() and waited < 1.0:
+		_motor.step(DT)
+		waited += DT
+	assert_eq(_motor.pad_out.share, 0.0, "in before he pushes off that leg")
+	assert_almost_eq(waited, _motor.pad_out.out_s, 3.0 * DT, "the leg's time")
+	_run_checked("the slide the other way")
+	_motor.pad_out.asked = -1.0
+	for i: int in int(0.3 / DT):
+		_motor.step(DT)
+	assert_eq(_motor.pad_out.share, 1.0, "out the other side")
+	_motor.go_to(Vector2(0.0, -1.0), 0.0, R.FEET)
+	_motor.step(DT)
+	assert_eq(_motor.rest, R.DOWN)
+	assert_eq(_motor._mover, KeeperMotor.Mover.NONE, "up: not before the pad is in")
+	_run_checked("up")
+	assert_eq(_motor.rest, R.FEET)
+	assert_eq(_motor.pad_out.share, 0.0)
+	assert_eq(_motor.refused, 0)
+
+
+func test_a_save_takes_the_pad_out_into_the_pose_it_cuts_in_from() -> void:
+	_motor.z = -1.1
+	_motor.go_to(Vector2(0.0, -1.1), 0.0, R.DOWN)
+	_run_checked("down")
+	_motor.pad_out.asked = 1.0
+	for i: int in int(0.3 / DT):
+		_motor.step(DT)
+	var was: Array[Vector3] = _bones()
+	_motor.save(KeeperSaveMove.Low.BUTTERFLY, 1.0)
+	assert_eq(_motor.pad_out.share, 0.0, "the save's now")
+	var t: float = 0.0
+	while t < 0.5:
+		_motor.step(DT)
+		t += DT
+		var at: Array[Vector3] = _bones()
+		for b: int in KeeperSkeleton.BONE_COUNT:
+			assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "t %.3f bone %d" % [t, b])
+		was = at
+
