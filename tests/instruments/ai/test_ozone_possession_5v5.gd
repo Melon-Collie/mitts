@@ -22,6 +22,10 @@ extends GutTest
 # feed as the pass search priced it (slot:EV:lane:worth:gate, the pass
 # search's trace).
 #
+# MITTS_OZ_SIZE=3 plays it three a side instead, from test_ozone_possession.gd's
+# starts against its defence, so the 3v3 is read with the same jitter, rebounds
+# and tips.
+#
 # MITTS_OZ_REBOUND=1 plays on past the first shot (docs/bot-net-front-offense-
 # plan.md, step 2d). The duel has no keeper to save it, so the save is drawn
 # from the measured rebound field (AIReboundField): one of the nearest spot's
@@ -75,6 +79,8 @@ var _front_trace: AIFinisherTrace = null
 var _high_trace: AIHighSlotTrace = null
 var _front_kind: Dictionary = {}
 var _rebounds: bool = false
+# Skaters a side: 5, or 3 under MITTS_OZ_SIZE=3.
+var _size: int = 5
 
 
 func before_all() -> void:
@@ -186,7 +192,7 @@ func _run(duel: Object) -> Dictionary:
 				s["set_puck"] = AIShotValue.set_keeper(puck, goal)
 				var mates: String = ""
 				for pid: int in OURS:
-					if pid == int(released["peer"]):
+					if pid == int(released["peer"]) or not duel.team_map.has(pid):
 						continue
 					var mp: Vector3 = duel.skater_pos(pid)
 					if _out(mp) > POINT_OUT_M:
@@ -733,6 +739,8 @@ func _print_trace(duel: Object, c: int, t: float) -> void:
 # on the carrier) or home.
 func _setup(carrier: Vector3, vel: Vector3, fa: Vector3, fb: Vector3, tight: bool,
 		rng: RandomNumberGenerator = null) -> Object:
+	if _size == 3:
+		return _setup_3v3(carrier, vel, fa, fb, tight, rng)
 	var duel: Object = Duel.new()
 	duel.team_size = 5
 	for k: int in 5:
@@ -756,6 +764,36 @@ func _setup(carrier: Vector3, vel: Vector3, fa: Vector3, fb: Vector3, tight: boo
 	duel.add_skater(THEIRS[2], 1, _jit(Vector3(-side * 5.0, 0, -13.5), rng), hard)
 	duel.add_skater(THEIRS[3], 1, _jit(strong_d, rng), hard)
 	duel.add_skater(THEIRS[4], 1, _jit(Vector3(-side * 1.0, 0, -24.0), rng), hard)
+	return _start(duel, carrier)
+
+
+# Three a side: our carrier low and two forwards, their three set in front of
+# their net, tight (the strong side's man already toward the puck) or home (net
+# front, low strong side, high slot), as test_ozone_possession.gd stages them.
+func _setup_3v3(carrier: Vector3, vel: Vector3, fa: Vector3, fb: Vector3, tight: bool,
+		rng: RandomNumberGenerator) -> Object:
+	var duel: Object = Duel.new()
+	duel.team_size = 3
+	var hard: BotSkillProfile = BotSkillProfile.hard()
+	carrier = _jit(carrier, rng)
+	duel.add_skater(OURS[0], 0, carrier, hard, vel)
+	duel.add_skater(OURS[1], 0, _jit(fa, rng), hard)
+	duel.add_skater(OURS[2], 0, _jit(fb, rng), hard)
+	var side: float = signf(carrier.x) if absf(carrier.x) > 0.5 else 1.0
+	if tight:
+		duel.add_skater(THEIRS[0], 1, _jit(Vector3(side * 3.5, 0, -22.5), rng), hard)
+		duel.add_skater(THEIRS[1], 1, _jit(Vector3(-side * 1.0, 0, -23.0), rng), hard)
+		duel.add_skater(THEIRS[2], 1, _jit(Vector3(side * 1.5, 0, -15.0), rng), hard)
+	else:
+		duel.add_skater(THEIRS[0], 1, _jit(Vector3(side * 5.5, 0, -21.5), rng), hard)
+		duel.add_skater(THEIRS[1], 1, _jit(Vector3(0.0, 0, -24.0), rng), hard)
+		duel.add_skater(THEIRS[2], 1, _jit(Vector3(side * 0.5, 0, -13.0), rng), hard)
+	return _start(duel, carrier)
+
+
+# Puts the puck on our carrier, the keeper settled on it, and the keeper fed the
+# puck as a carried one each tick.
+func _start(duel: Object, carrier: Vector3) -> Object:
 	duel.start(OURS[0])
 	if _trace:
 		for sk: Object in duel.skaters:
@@ -801,6 +839,8 @@ static func _env_int(key: String, fallback: int) -> int:
 # and mirrored, standing and skating each way, the defence tight and home: the
 # half-wall low, the corner, behind the net, below the circle off the wall.
 func _starts() -> Array:
+	if _size == 3:
+		return _starts_3v3()
 	return [
 		[Vector3(-11.0, 0, -20.0), Vector3(0.5, 0, -23.0), Vector3(5.5, 0, -19.0),
 				[Vector3(0, 0, -4.0), Vector3(0, 0, 4.0)]],
@@ -809,6 +849,23 @@ func _starts() -> Array:
 		[Vector3(-1.5, 0, -28.3), Vector3(3.5, 0, -24.0), Vector3(-2.0, 0, -18.0),
 				[Vector3(-4.0, 0, 0), Vector3(-2.0, 0, 3.5)]],
 		[Vector3(-8.0, 0, -22.0), Vector3(4.0, 0, -24.5), Vector3(1.0, 0, -14.5),
+				[Vector3(4.0, 0, 1.0), Vector3(-4.0, 0, 1.0)]],
+	]
+
+
+# test_ozone_possession.gd's: in the corner (up the wall, behind the net),
+# behind the net (round it, out front), low on the half-wall (up it, down it),
+# and below the circle with the puck worked off the wall (to the middle, to the
+# wall).
+static func _starts_3v3() -> Array:
+	return [
+		[Vector3(-10.0, 0, -24.5), Vector3(-11.5, 0, -15.0), Vector3(4.0, 0, -16.0),
+				[Vector3(0, 0, 4.0), Vector3(4.0, 0, -2.0)]],
+		[Vector3(-1.5, 0, -28.3), Vector3(-8.0, 0, -20.0), Vector3(5.0, 0, -14.0),
+				[Vector3(-4.0, 0, 0), Vector3(-2.0, 0, 3.5)]],
+		[Vector3(-12.0, 0, -20.0), Vector3(-9.0, 0, -25.0), Vector3(2.0, 0, -11.0),
+				[Vector3(0, 0, 4.0), Vector3(0, 0, -4.0)]],
+		[Vector3(-8.0, 0, -22.0), Vector3(0.0, 0, -9.5), Vector3(9.0, 0, -18.0),
 				[Vector3(4.0, 0, 1.0), Vector3(-4.0, 0, 1.0)]],
 	]
 
@@ -825,6 +882,7 @@ func _sweep(label: String) -> void:
 	var picks: Array[String] = []
 	var pass_log: Array = []
 	var row: String = "   "
+	_size = 3 if _env_int("MITTS_OZ_SIZE", 5) == 3 else 5
 	var jitter: int = _env_int("MITTS_OZ_JITTER", 0)
 	var shards: int = maxi(_env_int("MITTS_OZ_SHARDS", 1), 1)
 	var shard: int = _env_int("MITTS_OZ_SHARD", 0)
@@ -938,5 +996,5 @@ static func _rate(k: int, n: float) -> String:
 
 
 func test_ozone_possession_5v5() -> void:
-	_sweep("5v5 hard  ")
+	_sweep("3v3 hard  " if _env_int("MITTS_OZ_SIZE", 5) == 3 else "5v5 hard  ")
 	assert_true(true)
