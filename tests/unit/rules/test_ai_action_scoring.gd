@@ -1382,6 +1382,17 @@ func test_the_tippers_own_momentum_decides_whether_his_blade_gets_there() -> voi
 	assert_gt(skating, 0.0, "skating onto the line, his blade is on it")
 
 
+func test_a_man_on_the_shooter_contests_the_rip_as_he_does_the_shot() -> void:
+	# A defender on the shooter's hip, behind the release and out of the lane to
+	# the tipper, can still get a stick on the rip as it leaves.
+	var none: Array[Vector3] = []
+	var on_him: Array[Vector3] = [Vector3(0.6, 0.0, 9.4)]
+	var free: float = _tip_fixture(Vector3(0.0, 0.0, 24.0), 33.0, none)
+	var contested: float = _tip_fixture(Vector3(0.0, 0.0, 24.0), 33.0, on_him)
+	assert_gt(free, 0.0)
+	assert_lt(contested, free, "the release contest the direct shot pays")
+
+
 func test_tip_needs_shot_pace() -> void:
 	# Under the pace the finisher reads as a shot (AIRoleFinisher
 	# .INCOMING_SHOT_SPEED_M_S) he never goes to tip it, and one he can hold
