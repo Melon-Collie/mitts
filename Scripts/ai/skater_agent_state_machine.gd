@@ -1237,6 +1237,18 @@ func _track_feed(snapshot: WorldSnapshot) -> void:
 
 # Fills the reused RoleContext (_role_ctx — never a fresh allocation, this runs per
 # dispatch per bot) with the read-only inputs every role-behavior decide() needs.
+# A FINISHER or NET_FRONT whose role reads the shot coming at him as his tip.
+func _tips_incoming(snapshot: WorldSnapshot, self_pos: Vector3) -> bool:
+	var slot: int = _current_strategy.get_slot(_peer_id) if _current_strategy != null \
+			else AIRoleSlots.Slot.NONE
+	if slot != AIRoleSlots.Slot.FINISHER and slot != AIRoleSlots.Slot.NET_FRONT:
+		return false
+	if snapshot.puck_state == null or snapshot.puck_state.carrier_peer_id != -1:
+		return false
+	return AIRoleFinisher.tips_incoming(_build_role_context(snapshot, self_pos,
+			snapshot.skater_states.get(_peer_id)))
+
+
 func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		self_state: SkaterNetworkState) -> RoleContext:
 	var ctx := _role_ctx
@@ -1458,6 +1470,12 @@ func _chase_reception_aim_target(snapshot: WorldSnapshot, self_pos: Vector3) -> 
 
 
 func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3, have_puck: bool) -> void:
+	# A teammate's shot he is set up to tip is his tip, not a chase: back to his
+	# role this tick, which holds the deflect (AIRoleFinisher.tips_incoming).
+	if _tips_incoming(snapshot, self_pos):
+		_set_state(State.OFF_PUCK)
+		_state_off_puck(input, snapshot, self_pos, have_puck)
+		return
 	# Shot-aware reception first: if a pass is incoming and a shot from the
 	# reception area is on, one-time it (Mode A → ONE_TIMER_PRESSED) or catch it
 	# in a net-ward posture (Mode B, input set in-place) instead of turning to

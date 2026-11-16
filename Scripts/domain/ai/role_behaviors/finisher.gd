@@ -141,6 +141,12 @@ static func _shot_line_reach(ctx: RoleContext, carrier_pos: Vector3) -> float:
 
 # ── Reactive (incoming shot) ─────────────────────────────────────────────────
 
+# Whether he is set up to tip the shot coming at him now (_try_reactive_decision):
+# what a chase or a reception must give way to.
+static func tips_incoming(ctx: RoleContext) -> bool:
+	return _try_reactive_decision(ctx) != null
+
+
 # A TIP decision when an incoming shot is detected, else null (positioning
 # takes over).
 static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:

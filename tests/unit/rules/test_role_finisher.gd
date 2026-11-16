@@ -875,3 +875,13 @@ func test_the_net_front_man_waits_on_no_one_timer() -> void:
 	var d: RoleDecision = AIRoleFinisher.decide(there)
 	assert_almost_eq(d.target_position.distance_to(there.self_pos), 0.0, 0.5, "at his station")
 	assert_false(d.is_one_timer_ready, "the net-front man is never one-timer ready")
+
+
+func test_a_shot_he_is_set_up_to_tip_is_what_a_chase_gives_way_to() -> void:
+	var teammate_pos := Vector3(2.3, 0.0, -15.0)
+	var fast: RoleContext = _make_ctx(Vector3(0.5, 0.0, -22.0), teammate_pos, SHOT_VEL,
+			[_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0)), _make_skater(2, TEAM_ID, teammate_pos)])
+	assert_true(AIRoleFinisher.tips_incoming(fast), "the rip he can tip")
+	var soft: RoleContext = _make_ctx(Vector3(0.5, 0.0, -22.0), teammate_pos, SHOT_VEL * 0.5,
+			[_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0)), _make_skater(2, TEAM_ID, teammate_pos)])
+	assert_false(AIRoleFinisher.tips_incoming(soft), "a shot he can hold is his to receive")
