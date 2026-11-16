@@ -1229,6 +1229,34 @@ to 5 m, so a deeper screen is unpriced.
   70 in his role with the deflect held on 52 but his blade a median 5.7 m off
   the rip's line: he is not on it, where `tip_ev` read him reaching it.
 
+  **The rip's lane is a pass lane** (`99ee0b6`). Traced from the release, the
+  tipper was in reach of the tip point on nearly every rip and the rip left on
+  his line; 81 of the 109 untipped were first touched by a defender's stick, a
+  median 4.5 m out (quartiles 2.4–7.7 m). The lane over release→tip was priced
+  at 0.70 and 0.45 of the rips reached the tipper, short in every band of the
+  price. The shooter's release contest (`3bf51a9`) read 1.00 on every rip, the
+  nearest defender a median 4.4 m from the release. The lane had been read on
+  the cheap model (defenders standing, the worst alone, no sticks); it is now
+  read as the carrier reads a pass's (`lane_clear` accurate, the defenders'
+  momentum and sticks). Measured with the carrier's tip read put back locally,
+  J=11, 576, against the branch with it off:
+
+  | | tip read off | tip read, pass-lane priced |
+  |---|---|---|
+  | shots / possession | 0.264 ± 0.018 | 0.325 ± 0.020 |
+  | slot shots / possession | 0.099 | 0.087 |
+  | rips | — | 44 (146 before) |
+  | rips reaching the tipper | — | 0.75, priced 0.68 (0.45, priced 0.70 before) |
+  | tipped by ours | 3 | 16 |
+  | xG / possession (first + second) | 0.032 + 0.006 = 0.038 ± 0.006 | 0.033 + 0.007 = 0.040 ± 0.005 |
+
+  The lane now prices what happens, and the rip no longer costs xG, but it adds
+  none within the noise. Of the rips that reach the tipper, 14 of 33 are tipped:
+  10 come off his blade as a plain deflection with his tip read never on, while
+  he skates at 4–6 m/s, and 7 pass the tip point with his tip read on and his
+  blade 0.5–0.9 m off it, his body about a metre from his target. The carrier's
+  rip waits on the tipper playing the rip the carrier prices.
+
 - **Order.** If 2c shows a tip on the shot line still scores ~0, the carrier's
   half stays out, and only the finisher's station pricing moves to the measured
   value.
