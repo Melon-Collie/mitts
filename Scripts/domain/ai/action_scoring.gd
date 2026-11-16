@@ -108,7 +108,11 @@ static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 #   P(the rip gets away)        — the shooter's release contest
 #                                 (AIPuckLane.release_contest_clean), as his
 #                                 direct shot pays it
-# × P(rip reaches the tipper)   — lane_clear over release→tip vs the DEFENDERS
+# × P(rip reaches the tipper)   — the lane release→tip read as the carrier reads
+#                                 a pass's (lane_clear accurate: each defender on
+#                                 his arrival clock from his momentum, his stick
+#                                 where he holds it, every one beaten in turn),
+#                                 since the rip is a pass to the tipper's stick
 # × his blade on the puck       — his tip goes only when his blade can be on the
 #                                 tip point before the puck (AIArrival.reach_eta,
 #                                 the read AIRoleFinisher tips on), 1 or 0
@@ -135,7 +139,9 @@ static func tip_ev(
 		shot_speed_m_s: float,
 		opponent_caps: Array = [],
 		tip_caps: AISkaterCaps = null,
-		tip_vel: Vector3 = Vector3.ZERO) -> float:
+		tip_vel: Vector3 = Vector3.ZERO,
+		opponent_vels: Array[Vector3] = [],
+		opponent_blades: Array[Vector3] = []) -> float:
 	if shot_speed_m_s < TIP_MIN_SPEED_M_S:
 		return 0.0
 	# Shot line: release → net centre (the reactive tip steps ONTO this line,
@@ -172,10 +178,9 @@ static func tip_ev(
 		accel = tip_caps.max_accel
 	if AIArrival.reach_eta(tip_man, tip_pt, tip_vel, vmax, accel, reach) > along / speed:
 		return 0.0
-	# P(rip gets away and reaches him): the release contest, then the defenders'
-	# lane over the release→tip segment.
 	var lane: float = AIPuckLane.release_contest_clean(release, opponents, opponent_caps) \
-			* AIPuckLane.lane_clear(release, tip_pt, opponents, speed, EMPTY_VEC3, opponent_caps)
+			* AIPuckLane.lane_clear(release, tip_pt, opponents, speed, opponent_vels,
+					opponent_caps, true, opponent_blades)
 	if lane <= 0.0:
 		return 0.0
 	var redirect: float = AITipField.best_odds(release, attacking_goal, tip_pt) \

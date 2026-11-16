@@ -1393,6 +1393,31 @@ func test_a_man_on_the_shooter_contests_the_rip_as_he_does_the_shot() -> void:
 	assert_lt(contested, free, "the release contest the direct shot pays")
 
 
+func _rip_past(defender: Vector3, vel: Vector3, blade: Vector3) -> float:
+	var d: Array[Vector3] = [defender]
+	var v: Array[Vector3] = [vel]
+	var b: Array[Vector3] = [blade]
+	return AIActionScoring.tip_ev(Vector3(0.0, 0.0, 10.0), Vector3(0.0, 0.0, 24.0), GOAL,
+			Vector3(0.0, 0.0, 25.5), d, 33.0, [], null, Vector3.ZERO, v, b)
+
+
+# The rip is a pass to the tipper's stick, and its lane is read as the carrier
+# reads a pass's: each defender from his momentum, his stick where he holds it.
+func test_a_defender_skating_into_the_rips_lane_takes_it() -> void:
+	var at := Vector3(2.5, 0.0, 16.0)
+	var standing: float = _rip_past(at, Vector3.ZERO, at)
+	var skating_in: float = _rip_past(at, Vector3(-6.0, 0.0, 0.0), at)
+	assert_gt(standing, 0.0)
+	assert_lt(skating_in, standing, "his skating carries him onto the line")
+
+
+func test_a_stick_held_in_the_rips_lane_takes_it() -> void:
+	var at := Vector3(2.5, 0.0, 16.0)
+	var stick_at_body: float = _rip_past(at, Vector3.ZERO, at)
+	var stick_out: float = _rip_past(at, Vector3.ZERO, Vector3(0.8, 0.0, 16.0))
+	assert_lt(stick_out, stick_at_body, "a blade reaching for the lane plays it")
+
+
 func test_tip_needs_shot_pace() -> void:
 	# Under the pace the finisher reads as a shot (AIRoleFinisher
 	# .INCOMING_SHOT_SPEED_M_S) he never goes to tip it, and one he can hold

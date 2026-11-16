@@ -432,7 +432,8 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		var tip: float = AIActionScoring.tip_ev(
 				carrier_release, c, ctx.attacking_goal_pos, goalie_pos,
 				opp_positions,
-				carrier_shot_speed, ctx.scratch_opp_caps, self_caps)
+				carrier_shot_speed, ctx.scratch_opp_caps, self_caps, Vector3.ZERO,
+				ctx.scratch_opp_vels)
 		# What a body here adds to our shots in front of their net: the screen,
 		# and the rebound, read only as far as it could beat the feed and the tip.
 		var front: float = AIStationSearch.net_front_value(ctx, c, maxf(feed, tip))
