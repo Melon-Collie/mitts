@@ -1447,6 +1447,8 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.one_timer_min_windup_s = one_timer_min_windup_time
 	caps.one_timer_feed_grip = one_timer_feed_grip
 	caps.reception_ceiling_mult = skater.reception_ceiling_mult
+	caps.carry_reach_min_m = carry_reach_min_m
+	caps.carry_reach_fold_m = carry_reach_fold_m
 	# Handle reach scales with the blade lever: max_blade_speed / its base is
 	# exactly the lever ratio (attributes v4 — reach + stick length), so a
 	# longer lever protects the puck further out. _base is captured on the
@@ -2017,7 +2019,7 @@ func _process_input(input: InputState, delta: float) -> void:
 	# clamp never validated — so a stick reaching from behind/beside could drag
 	# the pinned puck into the net even with the blade reading legal. Runs after
 	# _apply_state so it sees this tick's final blade pose.
-	_collide_pinned_puck_with_net()
+	_collide_pinned_puck_with_net(delta)
 	# Mirror the state machine into the replicated field on every simulated
 	# tick, AFTER _apply_state so same-tick transitions are visible to the
 	# cosmetic consumers below (gait shot stance) and to Skater._process (stick
@@ -2701,12 +2703,17 @@ func _do_release(direction: Vector3, power: float, forced: bool = false) -> void
 # only place a net contact can cost you the puck; the blade's own collision
 # (SkaterIKCoordinator.resolve_blade_against_net) is pose-only.
 #
-# Two things this must do:
+# Three things this must do:
 #
 # 1. RESOLVE the pin, not merely test it. Puck._physics_process places the puck at
 #    get_carry_target_global() every tick, so a correction that is computed and
 #    discarded leaves the puck wherever the blade put it — inside the mesh included.
-# 2. Remember the RESOLVED pin as the next sweep's start. The twine is two-sided
+# 2. Resolve the pin where Puck will place it. This runs before Skater
+#    integrates the body (priority −1 against its 0), and Puck places itself
+#    after (priority 1) at the carry target the MOVED body has, plus the
+#    correction — so the pin is solved a tick's travel on (`delta`), or a carrier
+#    skating into the cage lands the puck that far into the mesh every tick.
+# 3. Remember the RESOLVED pin as the next sweep's start. The twine is two-sided
 #    and NetGeometry.interior_or_mouth classifies from the segment start, so a
 #    `prev` that was allowed inside the cavity flips the next tick's faces from
 #    "push out" to "hold in", and one tick of penetration latches: a stick swiped
@@ -2718,12 +2725,13 @@ func _do_release(direction: Vector3, power: float, forced: bool = false) -> void
 # cage only by going through the mouth, because the mouth is the only opening and
 # every other face is solid to both the puck and the stick — see
 # docs/net-play-plan.md §3.
-func _collide_pinned_puck_with_net() -> void:
+func _collide_pinned_puck_with_net(delta: float) -> void:
 	if not has_puck:
 		_has_prev_carry_pin = false
 		skater.carry_pin_correction = Vector3.ZERO
 		return
-	var raw: Vector3 = skater.get_carry_target_raw()
+	var raw: Vector3 = skater.get_carry_target_raw() \
+			+ Vector3(skater.velocity.x, 0.0, skater.velocity.z) * delta
 	# On the first carry tick the sweep starts at the spot the puck was picked up
 	# from. Starting from the pin itself would classify the twine from the blade's
 	# side, so a puck picked up across the mesh would be held on the far side of

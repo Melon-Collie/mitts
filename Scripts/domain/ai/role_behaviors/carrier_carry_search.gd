@@ -245,10 +245,12 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	if caps == null:
 		caps = _league_caps
 	var aim: Vector3 = _fan_aim(ctx)
-	# A destination across a cage is skated at the first waypoint round it.
-	if AINetObstacle.carry_path_blocked_by_net(self_pos, aim):
+	# A destination across a cage, or past our own posts nearer than the
+	# keep-out of our mouth, is skated at the first waypoint round it.
+	if AINetObstacle.carry_path_blocked_by_net(self_pos, aim) \
+			or AINetObstacle.carry_path_enters_own_keep_out(self_pos, aim, ctx.own_goal_dir):
 		aim = AIArrival.cage_waypoint(self_pos, aim, ctx.self_velocity, caps.max_speed,
-				caps.max_accel, caps.lateral_grip)
+				caps.max_accel, caps.lateral_grip, ctx.own_goal_dir)
 	var toward := Vector2(aim.x - self_pos.x, aim.z - self_pos.z)
 	if toward.length_squared() < 0.0001:
 		toward = Vector2(0.0, -ctx.own_goal_dir)
@@ -363,9 +365,10 @@ func _score_destination(ctx: RoleContext, i: int, our_goalie: Vector3, behind_ne
 # velocity; carried on, the destination is worth its value on arrival × the lane
 # from the end × the decay of the rest of the trip. Illegal moves add no row:
 # out of the zone through the one-way valve, or into it while a tag-up is owed.
-# A move ends at its last sample short of a crease, or of the goal line from in
-# front: the carrier re-plans many times a horizon, so a drive at the net is a
-# release on the way in. Pruned whole, every move at pace in tight was, and only
+# A move ends at its last sample short of a crease, of the goal line from in
+# front, or of going deeper into our own mouth's keep-out: the carrier re-plans
+# many times a horizon, so a drive at the net is a release on the way in, and a
+# route past our own posts is priced as far as it stays wide of them. Pruned whole, every move at pace in tight was, and only
 # the brake and the cut back were left.
 func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool,
 		caps: AISkaterCaps, dest_arrival: float) -> void:
@@ -374,7 +377,8 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	_move_path_value[m] = 0.0
 	if not _move_legal(ctx, rollout, m, ctx.self_pos):
 		return
-	var reach: int = rollout.reach_short_of_net(m, _max_abs_z(behind_net))
+	var reach: int = rollout.reach_short_of_net(m, _max_abs_z(behind_net), ctx.self_pos,
+			ctx.own_goal_dir)
 	if reach == 0:
 		return
 	_move_reach[m] = reach
@@ -496,9 +500,10 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 	var t1: float = AICarryRollout.HORIZON_S
 	var start: Vector3 = rollout.end_pos[m1]
 	var aim: Vector3 = _fan_aim(ctx)
-	if AINetObstacle.carry_path_blocked_by_net(start, aim):
+	if AINetObstacle.carry_path_blocked_by_net(start, aim) \
+			or AINetObstacle.carry_path_enters_own_keep_out(start, aim, ctx.own_goal_dir):
 		aim = AIArrival.cage_waypoint(start, aim, rollout.end_vel[m1], caps.max_speed,
-				caps.max_accel, caps.lateral_grip)
+				caps.max_accel, caps.lateral_grip, ctx.own_goal_dir)
 	var toward := Vector2(aim.x - start.x, aim.z - start.z)
 	if toward.length_squared() < 0.0001:
 		toward = Vector2(0.0, -ctx.own_goal_dir)
@@ -514,7 +519,8 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 	for m: int in AICarryRollout.MOVE_COUNT:
 		if not _move_legal(ctx, _rollout2, m, start):
 			continue
-		var reach: int = _rollout2.reach_short_of_net(m, _max_abs_z(behind_net))
+		var reach: int = _rollout2.reach_short_of_net(m, _max_abs_z(behind_net), start,
+				ctx.own_goal_dir)
 		if reach == 0:
 			continue
 		var t2: float = AICarryRollout.HORIZON_S * reach / AICarryRollout.SAMPLES

@@ -1390,6 +1390,9 @@ reaches back into what remains.
     behind a goal line, a rolled move is held off the cage as the body is, and
     the carry cursor
     swings around the nearer post (stick-on-net contact dislodges the puck).
+    Our own mouth is a hard no-go for a carried puck
+    (`own_mouth_safe_blade_target`, `Scripts/ai/CLAUDE.md`): an execution
+    clamp like the boards', not an evaluation term.
     Behind-the-goal-line ice is playable for a carrier already back there
     (`AICarrierCarrySearch._candidate_ice_legal`), or the walkouts are the only moves and
     a pressured carrier plants on the end wall.
@@ -1437,8 +1440,10 @@ reaches back into what remains.
   moves with him: the best read sat a step ahead each time, and a lower tier's
   re-plan came a couple of metres past it.
   A destination across a cage is skated at the arrival clock's waypoint round it
-  (`AIArrival.cage_waypoint`). A move whose path reaches a crease, or the goal
-  line from in front, ends at its last sample short of it and is priced there
+  (`AIArrival.cage_waypoint`), round our own cage at the edge of our mouth's
+  keep-out, and so is one past our own posts nearer than it. A move whose path
+  reaches a crease, the goal line from in front, or deeper into that keep-out
+  ends at its last sample short of it and is priced there
   (`AICarryRollout.reach_short_of_net`): the carrier re-plans many times a
   horizon, so a drive at the net is a release on the way in. Never prune it
   whole — at pace in tight that leaves only the brake and the cut back.

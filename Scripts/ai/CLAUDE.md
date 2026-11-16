@@ -147,6 +147,54 @@ stay on the aim ring. The shot-hold pricing (`AIShotHolds`) measures the pull on
 the same route, and times the swing at the bot's arc rate, so what the carrier
 prices is the path the cursor walks.
 
+**A carried puck never goes into our own net.** The twine holds a carried puck
+rather than stripping it, so nothing in the physics stops a carrier dragging it
+over his own goal line. Every cursor step a carrier takes — the carry aim, a
+cradle, a pocket, a wind-up — goes through `AINetObstacle
+.own_mouth_safe_blade_target` in `_step_mouse_internal`. It reads the puck
+three ways, never the cursor alone: where the carry will hold it, no nearer
+than the floor (`AISkaterCaps.carry_reach_min_m`); where it is now, on our own
+blade (`blade_contact_world`); and the way the blade takes it from there to the
+target. Held in our mouth, in it already, or dragged into it by the body's
+travel in the blade's time to sweep it clear, it goes out wide of the post on
+the body's own side; taken through the mouth on its way (round the cage from in
+front of the line), it goes round the post on its own side. Beside our own
+goalie the cursor holds the puck on the far side of the body from him: parked
+on the body, as beside theirs, the puck trailed behind the carrier along a
+bearing the lagging cursor made, into the goalie's pads, whose gear swept it
+back over the line (`.claude/hooks/stage-own-goals.sh` staged it). A pass or
+rim is priced from its pocket and fired from wherever the puck sits, so the
+release checks the line from there: one crossing our goal line inside our mouth
+(`AINetObstacle.release_into_own_net`) bails the press, as a man on the puck
+does, and the carry takes it out. That is
+the backstop; what keeps it from being needed is the route. A carrier's body
+keeps a carry ring off our mouth (`AINetObstacle.own_mouth_keep_out_depth`):
+his rolled moves end where they would take him deeper into it, his route round
+our cage and past our posts is skated at its edge (`AIArrival.cage_waypoint`
+with his own goal, `carry_path_enters_own_keep_out`), and he walks out from
+behind our net that wide. And a carrier whose stop would run into our own
+crease brakes (`AISteering.stops_in_own_crease`, after the dispatch): the repel
+steers but sheds no momentum. So does one whose travel drags his puck over our
+line inside the mouth before the blade could sweep it clear
+(`AINetObstacle.dragged_over_own_line`), or whose travel takes a puck already
+in our mouth deeper into it (`drags_deeper_into_own_mouth`): at its reach the
+blade cannot take the puck out faster than the body takes it in. The guard's
+exit keeps the puck on its own side of the line: from behind, out in front of
+it wraps the post into the mouth. A loose-puck chaser does not brake: a puck loose
+in our crease is the one most worth getting to, and is gone straight for. One
+beside or behind our net, clear of the mouth, is come to round the keep-out
+(`_state_chase_puck`): one behind our line past the post on its own side
+(`AINetObstacle.own_post_side_waypoint`), one in front at the carrier's cage
+waypoint. Straight in past our post at pace, the pickup carries the puck across
+our line with the body. A carrier's cursor swinging round his body takes the way
+that keeps out of our mouth (`_arc_step_mouse_target`). And a stick WITHOUT the
+puck never reaches over our own line inside the mouth
+(`AINetObstacle.own_line_safe_stick_target`, the same step): a pickup pins the
+puck on the blade, and a ready stance aimed through a loose puck at our post
+swept it up into the cage. A puck in the crease, or on the line, is still played
+from in front of it. `test_own_goal_guards.gd` replays the own goals
+`tools/own_goal_hunt.gd` and `.claude/hooks/stage-own-goals.sh` caught.
+
 **A charged release comes from a listed spot, and is loaded before the press.**
 A shot from a pocket, a reach to either side of its line or the snapshot out
 front on the forehand (where the carry presents the puck, so a shot in stride
