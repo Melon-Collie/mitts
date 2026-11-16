@@ -154,10 +154,15 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	if puck_state == null:
 		return null
 
-	# Held pucks are not shots. Right after a release the puck still reads as
-	# held for the carrier-reaction delay, so the tip starts a beat late — which
-	# is what that difficulty knob means.
-	if puck_state.carrier_peer_id != -1:
+	# Held pucks are not shots. A teammate's release is read when it leaves his
+	# stick (WorldSnapshot.real_puck_carrier_peer_id), the clock the one-timer
+	# press reads a feed on (SkaterAgentOneTimer.line_anchor): read through the
+	# carrier-reaction delay instead, the press fired on the rip first and wound
+	# his stick up off its path.
+	var holder: int = puck_state.carrier_peer_id
+	if holder != -1 and ctx.team_id_by_peer.get(holder, -1) == ctx.team_id:
+		holder = ctx.snapshot.real_puck_carrier_peer_id
+	if holder != -1:
 		return null
 
 	var puck_pos: Vector3 = puck_state.position

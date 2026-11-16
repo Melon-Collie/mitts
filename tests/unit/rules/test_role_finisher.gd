@@ -561,13 +561,11 @@ func test_rush_stages_finisher_at_a_net_crash() -> void:
 	assert_lt(rush_pos.x, 0.0, "…and the rush crash stays weak-side too")
 
 
-func test_reactive_fires_on_loose_shots_and_defers_while_the_puck_reads_held() -> void:
-	# A held puck is never an incoming shot — a carrier skating it fast must
-	# not flip the FINISHER into tip mode, and the carrier-reaction debounce
-	# window right after a release (a live feed still nominally reads held)
-	# must run positioning too: the reactive not-ready decision used to tear
-	# down one-timer readiness on every feed. Reactive TIP fires the tick the
-	# fast on-net puck reads loose.
+func test_reactive_fires_when_a_teammates_shot_leaves_his_stick() -> void:
+	# A held puck is never an incoming shot: a carrier skating it fast must not
+	# flip the FINISHER into tip mode. Off his stick it is read at once, while
+	# the delayed carrier read still has him holding it, as the one-timer press
+	# reads a feed: a beat later, the press fires on the rip first.
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(0.5, 0.0, -22.0),
@@ -577,14 +575,14 @@ func test_reactive_fires_on_loose_shots_and_defers_while_the_puck_reads_held() -
 				_make_skater(2, TEAM_ID, teammate_pos, false),
 			])
 	ctx.snapshot.puck_state.carrier_peer_id = 2
+	ctx.snapshot.real_puck_carrier_peer_id = 2
 	var held: RoleDecision = AIRoleFinisher.decide(ctx)
 	assert_false(held.has_aim_override,
 			"a held puck runs positioning, never tip mode")
-	ctx.snapshot.puck_state.carrier_peer_id = -1
-	var loose: RoleDecision = AIRoleFinisher.decide(ctx)
-	assert_true(loose.has_aim_override,
-			"reactive TIP fires once the fast on-net puck reads loose")
-	assert_true(loose.deflect)
+	ctx.snapshot.real_puck_carrier_peer_id = -1
+	var released: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_true(released.tips_shot and released.deflect,
+			"off his stick, the tip reads it while the delayed carrier still has him on it")
 
 
 func test_finisher_staging_snapshot() -> void:
