@@ -1025,7 +1025,7 @@ func test_settling_carrier_holds_instead_of_firing() -> void:
 
 # The same pressured breakout, with the outlet in two different situations. Both
 # are legal passes that fire on tick one with no doubt; the strong one is worth
-# ~10x PASS_MIN_VALUE, the weak one ~0.9x. Boxed in, the carrier would lose the
+# ~10x PASS_MIN_VALUE, the weak one ~1.4x. Boxed in, the carrier would lose the
 # puck where he stands, so the bar's own PASS_MIN_VALUE is off it and what Normal
 # holds is under its doubt's raise (1.5x). The weak outlet is still sliding into
 # the far corner, so his drive up the wall has to brake that out first. Both
@@ -1047,7 +1047,7 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 # inside the slot is never priced (AINetObstacle.pass_crosses_own_slot).
 const _SETTLE_CARRIER := Vector3(4, 0, 20)
 const _STRONG_OUTLET := Vector3(12, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(10.0, 0, 22.5)  # deep below the dot
+const _MARGINAL_OUTLET := Vector3(10.0, 0, 26.5)  # in the corner, a stride off the goal line
 const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 0.5)   # …and still drifting into the corner
 
 
@@ -2460,7 +2460,10 @@ func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 # straight lane to the strong half-wall winger. The boards are the open lane:
 # rimmed round the corner, the puck reaches the winger before anybody of theirs.
 
-func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
+# `pinned`: a third of theirs stands in front of his post, where skating it out
+# would take him. Without him the D walks out past the man on his hip, who is
+# standing still, and the rim has a carry to beat.
+func _rim_breakout_ctx(lane_blocked: bool, pinned: bool = false) -> RoleContext:
 	var self_pos := Vector3(3.0, 0, GameRules.GOAL_LINE_Z + 1.35)
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos],
@@ -2470,6 +2473,8 @@ func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
 	]
 	if lane_blocked:
 		skaters.append([4, 1, Vector3(7.0, 0, GameRules.GOAL_LINE_Z - 5.65)])   # in the straight lane
+	if pinned:
+		skaters.append([6, 1, Vector3(4.0, 0, GameRules.GOAL_LINE_Z - 2.5)])
 	return _make_ctx(self_pos, skaters)
 
 
@@ -2507,7 +2512,7 @@ func test_a_rim_is_fired_as_soft_as_the_race_allows() -> void:
 
 
 func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:
-	var ctx := _rim_breakout_ctx(true)
+	var ctx := _rim_breakout_ctx(true, true)
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP,
