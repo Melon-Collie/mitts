@@ -1393,12 +1393,17 @@ The shot's loss modes, priced as a pass's are, on the carrier's own field:
 - lost on the wind-up (1 − the hold's keep), at the release;
 - blocked in its lane (the shot's lane and release contest), where the lane is
   lost (`AIPuckLane.lane_loss_point`);
-- reaching the net and not scoring, with the rebound theirs (the flat credit's
-  own share, `FLAT_REBOUND_SHARE`), at the rebound's contest point
-  (`AIReboundField.crash_point_at`);
+- reaching the net and not scoring, the rebounds their side touches first,
+  raced over the rebound field from where every body stands, at those
+  rebounds' contest point (`AIReboundValue.their_share`); a puck the keeper
+  covers is nobody's, neither a loss nor a chance;
 
-each at `turnover_cost` plus `counter_exposure_cost` from the release. The rip
-for a tip pays the same modes on its own lane and redirect.
+each at `turnover_cost`, with the shooter one of our men at his release, plus
+`counter_exposure_cost` from the release (`AIShotLoss`). The rip for a tip pays
+the same modes on its own lane and redirect, and so does every shot the compete
+prices: the carry's planned shot and a receiver's off the feed are netted of
+their losses inside the shot-or-keep-it read (`AICarrierField._regime_value`),
+so a shot worth less than holding the puck is held.
 
 ### 6b. The counter-rush in 3v3
 
