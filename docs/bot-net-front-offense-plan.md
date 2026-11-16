@@ -1272,8 +1272,12 @@ to 5 m, so a deeper screen is unpriced.
   | | tip read off | tip read, the z-plane tip | tip read, the blade's tip |
   |---|---|---|---|
   | rips tipped | — | 14 of 44 | 36 of 44 |
-  | tipped by ours, all shots | 3 of 152 | 14 of 187 | 43 of 187 |
+  | tipped by ours, all shots | 6 of 152 | 14 of 187 | 43 of 187 |
   | xG / possession (first + second) | 0.032 + 0.006 = 0.038 ± 0.006 | 0.032 + 0.007 = 0.039 ± 0.005 | 0.039 + 0.007 = 0.046 ± 0.005 |
+
+  The tip-off column is the blade's tip with the carrier's read off: on the
+  direct shot alone it changes nothing (6 tips against 3, xG 0.038 either
+  way); the gain is the carrier ripping for it.
 
 - **Order.** If 2c shows a tip on the shot line still scores ~0, the carrier's
   half stays out, and only the finisher's station pricing moves to the measured
