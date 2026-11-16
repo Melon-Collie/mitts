@@ -1314,7 +1314,26 @@ jitter, rebounds and tips), J=11, 576, with the carrier's tip read off and on:
 | xG / possession (first + second) | 0.084 + 0.003 = 0.087 ± 0.008 | 0.080 + 0.003 = 0.083 ± 0.007 |
 
 In 3v3 the rip trades slot shots for tips at no gain: xG is level within the
-noise. The SUPPORT question is answered: he takes the first touch on 22 of the
+noise. Traced rip by rip against the same possessions with the read off (same
+seeds), it was priced 0.153 and realized 0.069: the lane held (0.76 priced,
+0.72 got past), but the 3v3 tipper is the FINISHER, one-timer ready, and the
+one-timer press read the rip's release before his tip read did (the press on
+the real carrier, the tip through the carrier-reaction delay) and wound his
+stick up off its path; and the rip was priced at a tip nearer than the one he
+plays, his blade being a ring up the path from his body. Fixed in turn: the tip
+read and the finisher's role re-read take a teammate's release when it leaves
+his stick (`ad947b4`, `ea72b37`), and the tip is priced where he plays it, one
+solve for both (`AITipPoint`, `b84c531`). `8825bca` (his stick's swing onto the
+path) bound almost nowhere. J=11, 576, each against its own read-off sweep:
+
+| | 3v3 off | 3v3 on | 5v5 off | 5v5 on |
+|---|---|---|---|---|
+| tipped | 4 of 308 | 64 of 371 | 8 of 152 | 48 of 197 |
+| slot shots / possession | 0.186 | 0.151 | 0.094 | 0.078 |
+| xG / possession | 0.088 ± 0.008 | 0.088 ± 0.008 | 0.040 ± 0.006 | 0.045 ± 0.005 |
+
+The 3v3 rips are now priced 0.131 and realize 0.084 (60 of 104 tipped): still
+over, but the read costs nothing in 3v3, and adds in 5v5. The SUPPORT question is answered: he takes the first touch on 22 of the
 60 live rebounds ours win, the FINISHER 37.
 
 ---
