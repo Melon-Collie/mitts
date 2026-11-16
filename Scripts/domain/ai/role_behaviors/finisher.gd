@@ -174,16 +174,22 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	if absf(puck_vel.z) < 0.001:
 		return null
 
-	# The tip point: where the puck's path crosses our z plane, short of the
-	# goal line. His blade meets it at that plane, so the tip holds until the puck
-	# is past it by the blade's catch radius (AIPuckLane.LANE_BLADE_CATCH_M):
-	# dropped on the crossing, the deflect is let go on the contact.
-	var t_to_my_z: float = (ctx.self_pos.z - puck_pos.z) / puck_vel.z
-	if t_to_my_z < -AIPuckLane.LANE_BLADE_CATCH_M / absf(puck_vel.z) or t_to_my_z > 2.0:
+	# The tip point: where the puck's path meets him, on the z plane his skating
+	# has carried him to by then (a man skating with the shot is caught further
+	# on), short of the goal line. His blade meets it at that plane, so the tip
+	# holds until the puck is past it in his frame by the blade's catch radius
+	# (AIPuckLane.LANE_BLADE_CATCH_M): dropped on the crossing, the deflect is let
+	# go on the contact.
+	var closing_z: float = puck_vel.z - ctx.self_velocity.z
+	if closing_z * puck_vel.z <= 0.0:
 		return null
-	if (opp_goal_z - ctx.self_pos.z) * puck_vel.z <= 0.0:
+	var t_to_my_z: float = (ctx.self_pos.z - puck_pos.z) / closing_z
+	if t_to_my_z < -AIPuckLane.LANE_BLADE_CATCH_M / absf(closing_z) or t_to_my_z > 2.0:
 		return null
-	var tip := Vector2(puck_pos.x + puck_vel.x * t_to_my_z, ctx.self_pos.z)
+	var meet_z: float = ctx.self_pos.z + ctx.self_velocity.z * maxf(t_to_my_z, 0.0)
+	if (opp_goal_z - meet_z) * puck_vel.z <= 0.0:
+		return null
+	var tip := Vector2(puck_pos.x + puck_vel.x * t_to_my_z, meet_z)
 	var travel: Vector2 = Vector2(puck_vel.x, puck_vel.z) / puck_speed
 
 	# A tip turns the puck at most TIP_MAX_TURN_RAD, so a shot is tipped when

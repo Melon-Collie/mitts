@@ -877,6 +877,25 @@ func test_the_net_front_man_waits_on_no_one_timer() -> void:
 	assert_false(d.is_one_timer_ready, "the net-front man is never one-timer ready")
 
 
+func test_a_man_skating_with_the_shot_tips_it_where_it_catches_him() -> void:
+	# Skating net-ward down the shot's line at 6 m/s, two strides past where the
+	# puck would cross his z now by the time it got there: it catches him further
+	# on, inside his reach. A rip hard enough that, skating with it, he still
+	# cannot hold it.
+	var teammate_pos := Vector3(2.3, 0.0, -12.0)
+	var self_pos := Vector3(0.5, 0.0, -22.0)
+	var rip: Vector3 = SHOT_VEL * 1.2
+	var ctx: RoleContext = _make_ctx(self_pos, teammate_pos, rip,
+			[_make_skater(1, TEAM_ID, self_pos), _make_skater(2, TEAM_ID, teammate_pos)])
+	ctx.self_velocity = Vector3(0.0, 0.0, -6.0)
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_true(d.tips_shot, "the rip catches him as he skates")
+	assert_lt(d.aim_world_pos.z, self_pos.z - 1.0, "on the plane his skating takes him to")
+	assert_almost_eq(d.aim_world_pos.x, teammate_pos.x + rip.x
+			* (self_pos.z - teammate_pos.z) / (rip.z - ctx.self_velocity.z), 0.01,
+			"the blade on the puck's path there")
+
+
 func test_a_shot_he_is_set_up_to_tip_is_what_a_chase_gives_way_to() -> void:
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var fast: RoleContext = _make_ctx(Vector3(0.5, 0.0, -22.0), teammate_pos, SHOT_VEL,
