@@ -29,7 +29,8 @@ const STRONG_MIN_LEAD_M: float = 3.0
 # STRONG's second column: a mid-seam lane at this fraction of the wall offset,
 # so the outlet has a move when the wall lane dies. In 5v5 STRONG is a WALL POST
 # (docs/breakout-plan.md, Phase C) and gets the column only when the carrier's
-# own route occupies the wall lane; 3v3's rover always has it.
+# own route occupies the wall lane; 3v3's rover always has it. With the carrier
+# on the wall lane it is the only column either has.
 const MID_SEAM_FRACTION: float = 0.5
 # "The carrier owns the wall lane": within the wall inset plus a body of
 # the boards on the outlet's side.
@@ -103,8 +104,8 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 
 
 # STRONG candidate set: depth samples from just ahead of the carrier to our blue
-# line, in one or two columns (the wall, and the mid-seam when it is generated),
-# plus self_pos as a stand-still fallback.
+# line, in the wall column, the mid-seam column, or both, plus self_pos as a
+# stand-still fallback.
 static func _strong_wall_candidates(ctx: RoleContext, carrier_pos: Vector3,
 		side_x: float) -> Array[Vector3]:
 	var result: Array[Vector3] = []
@@ -117,7 +118,8 @@ static func _strong_wall_candidates(ctx: RoleContext, carrier_pos: Vector3,
 	# maxf: a carrier already near the line collapses the samples onto it.
 	var bottom_depth: float = maxf(carrier_depth - STRONG_MIN_LEAD_M, blue_depth)
 	var top_depth: float = blue_depth
-	# The 5v5 wall post yields its lane only to the carrier's own route.
+	# The wall lane is the carrier's own road when he is on it: the outlet yields
+	# it and offers the mid-seam. Otherwise the 5v5 wall post holds the boards.
 	var carrier_on_wall: bool = signf(carrier_pos.x) == signf(side_x) \
 			and GameRules.RINK_HALF_WIDTH - absf(carrier_pos.x) < WALL_LANE_BAND_M
 	var wall_only: bool = ctx.team_size >= 5 and not carrier_on_wall
@@ -126,7 +128,8 @@ static func _strong_wall_candidates(ctx: RoleContext, carrier_pos: Vector3,
 		if STRONG_WALL_SAMPLES > 1:
 			t = float(i) / float(STRONG_WALL_SAMPLES - 1)
 		var depth: float = lerpf(bottom_depth, top_depth, t)
-		result.append(Vector3(wall_x, 0.0, own_dir * depth))
+		if not carrier_on_wall:
+			result.append(Vector3(wall_x, 0.0, own_dir * depth))
 		if not wall_only:
 			result.append(Vector3(mid_x, 0.0, own_dir * depth))
 	result.append(ctx.self_pos)
