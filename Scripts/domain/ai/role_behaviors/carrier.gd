@@ -89,6 +89,10 @@ const SHOT_MIN_FORWARD_OF_LINE_M: float = AICarrierField.SHOT_MIN_FORWARD_OF_LIN
 # ── Where the shot is held (shoot-now eval) ──────────────────────────────────
 # The share of pace the winning hold's load gives the committed shot.
 var _shot_sample_share: float = 1.0
+# True when the winning shoot read is the rip for a net-front teammate to tip
+# (_tip_read): the commit fires it flat at full pace at the net's middle, the
+# line his reactive tip steps onto.
+var _shot_sample_is_tip: bool = false
 # The puck's spot off the body (world XZ) the last shoot-now sweep's winner
 # fires from. Fresh every eval, so the state machine's fire-tracking carry
 # holds the puck there while a shot look is live; ZERO until a sweep scores.
@@ -691,9 +695,9 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 			_shot_sample_share = share
 			shoot_now_hold = hold
 
-	# The shot is the direct one only. A rip for a net-front teammate to tip was
-	# priced by the tip field and measured worse than none: about one rip in five
-	# was tipped (docs/bot-net-front-offense-plan.md, step 5).
+	_shot_sample_is_tip = false
+	if not shot_unavailable:
+		_tip_read(ctx, self_pos, horizontal_velocity, attacking_goal, goalie_now)
 
 	var self_state: SkaterNetworkState = snapshot.skater_states[ctx.peer_id]
 	_pass.search(ctx, self_state.facing, _field.teammate_ids)
@@ -965,6 +969,15 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 						AIPuckLane.SOFTEST_FEED_M_S,
 						pass_target_speed)
 			_lock_pass_hold(ctx, pass_target_speed)
+		elif new_intent == INTENT_SHOOT and _shot_sample_is_tip:
+			# At the middle of the net, flat and at full pace: the line the tipper's
+			# reactive tip steps onto, on the ice, too fast for him to hold.
+			shot_aim_point = Vector3(attacking_goal.x, 0.0, attacking_goal.z)
+			shot_loft_level = ShotMechanics.ELEVATION_FLAT
+			shot_power_t = 1.0
+			shot_hold_offset = shoot_now_hold
+			shot_hold_share = _shot_sample_share
+			shot_press_point = _planned_release if due > 0 else Vector3.INF
 		elif new_intent == INTENT_SHOOT:
 			# Aim and loft are the shot field's pick the holds were solved toward
 			# (_pick_fire_phase); at a net with no keeper replicated, flat at the
@@ -996,6 +1009,40 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	intended_action = new_intent
 	if new_intent != INTENT_DUMP:
 		_dumping_in = false
+
+
+# The rip for a net-front teammate to tip: an alternative aim of the same fire
+# action, so it competes with the direct read by max(), never additively. Each
+# teammate who tips a shot coming at him (FINISHER, NET_FRONT) is priced by
+# AIActionScoring.tip_ev from the faster hold, at the keeper as he reads now.
+func _tip_read(ctx: RoleContext, self_pos: Vector3, horizontal_velocity: Vector3,
+		attacking_goal: Vector3, goalie_now: Vector3) -> void:
+	if ctx.team_brain == null or _field.holds.count < 2:
+		return
+	var k: int = 1 if _field.holds.share[1] > _field.holds.share[0] else 0
+	var hold := Vector3(_field.holds.offset[k].x, 0.0, _field.holds.offset[k].y)
+	var released_at: Vector3 = self_pos + hold + horizontal_velocity \
+			* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + _field.holds.pull_s[k])
+	if not _shootable_from(released_at, attacking_goal, goalie_now):
+		return
+	var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(released_at, attacking_goal,
+			goalie_now)
+	var speed: float = ctx.self_wrister_shot_speed * _field.holds.share[k]
+	for pid: int in _field.teammate_ids:
+		var slot: int = ctx.team_brain.get_slot(pid)
+		if (slot != AIRoleSlots.Slot.FINISHER and slot != AIRoleSlots.Slot.NET_FRONT) \
+				or ctx.snapshot.is_out_of_play(pid):
+			continue
+		var mate: SkaterNetworkState = ctx.snapshot.skater_states[pid]
+		var s: float = AIActionScoring.tip_ev(release, mate.position, attacking_goal, goalie_now,
+				_field.opponents_release, speed, _field.opponent_caps, ctx.caps_by_peer.get(pid),
+				mate.velocity, _field.opponent_vels, _field.opponent_blades_release) \
+				* _field.holds.keep[k]
+		if s > _phase_shoot_score:
+			_phase_shoot_score = s
+			_shot_sample_share = _field.holds.share[k]
+			shoot_now_hold = hold
+			_shot_sample_is_tip = true
 
 
 # The committed pass's hold: the pocket the search priced it from (so the carry

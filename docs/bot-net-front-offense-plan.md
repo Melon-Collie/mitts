@@ -1279,6 +1279,9 @@ to 5 m, so a deeper screen is unpriced.
   direct shot alone it changes nothing (6 tips against 3, xG 0.038 either
   way); the gain is the carrier ripping for it.
 
+  **Put back** (the carrier's tip read, `carrier.gd:_tip_read`, with its
+  test): the third column is the shipped behaviour.
+
 - **Order.** If 2c shows a tip on the shot line still scores ~0, the carrier's
   half stays out, and only the finisher's station pricing moves to the measured
   value.
