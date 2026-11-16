@@ -654,6 +654,25 @@ func _decided_twice(ctx: RoleContext) -> AIRoleCarrier:
 	return c
 
 
+# ─── alone outside the zone he carries it in ────────────────────────────────
+
+func test_alone_in_the_neutral_zone_at_pace_he_carries_on_over_the_line() -> void:
+	# Nobody near him and a set keeper: the only play is in. From every start a
+	# move's end, or the spot his hands' hold would let a shot go from at that
+	# end, falls on one side of the blue line or the other, and neither may read
+	# as worth less than standing where he is.
+	for speed: float in [3.0, 5.0, 7.0, 8.5]:
+		for z: float in [4.0, 1.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0]:
+			var self_pos := Vector3(0.0, 0.0, z)
+			var ctx: RoleContext = _set_keeper(_make_ctx(self_pos))
+			ctx.self_velocity = Vector3(0.0, 0.0, -speed)
+			ctx.snapshot.skater_states[1].velocity = ctx.self_velocity
+			var c: AIRoleCarrier = _decided(ctx)
+			var what: String = "z %.0f at %.1f m/s" % [z, speed]
+			assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY, "%s: carrying" % what)
+			assert_lt(c.last_carry_anchor.z, z - 0.5 * speed, "%s: on toward the line, not braked" % what)
+
+
 # ─── turnover costs are priced in the unit of the gains ─────────────────────
 
 func test_a_turnover_costs_the_opponents_possession_wherever_the_carrier_is() -> void:

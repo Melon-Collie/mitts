@@ -194,6 +194,11 @@ static func shot_set(release: Vector3, goal: Vector3, query: Query = null) -> fl
 	return q.odds if q.count > 0 else 0.0
 
 
+# How far out from the goal line each row of release spots was measured (m).
+static func rows_out() -> Array[float]:
+	return AIShotFieldData.SPOT_FWD
+
+
 # The replicated goalie's Stance.
 static func stance_of(keeper: GoalieNetworkState, goal: Vector3) -> int:
 	if keeper.post_seal_x_sign(goal.z) != 0.0:

@@ -3,8 +3,8 @@ walled off at speed, nobody to hit: intent	DUMP
 walled off at speed, outlet up the wall: intent	DUMP
 walled off at speed, outlet up the wall: pass value	0.0000
 impeded by a defender ahead, open mate wide: intent	PASS
-ahead man, clear path: drive-in credit	0.2615
-ahead man, defender in his path: drive-in credit	-0.0246
+ahead man, clear path: drive-in credit	0.3032
+ahead man, defender in his path: drive-in credit	-0.1371
 ahead man, defender in his path: intent	CARRY
 stick 1.6 m ahead on the presented puck: protect gain	0.4531
 stick 1.6 m ahead on the presented puck: offset behind the body	0.7794
@@ -12,7 +12,7 @@ defender abreast 2.2 m off the hip: protect gain	0.4546
 tight-wall pinch, open man wide: intent	PASS
 tight-wall pinch, open man wide: pass target	2
 dead slot over the 8.5 m band, set keeper: shoot-now ratio	29.2790
-spun-off carrier, cut-in over standing still: move-score margin	0.0717
+spun-off carrier, cut-in over standing still: move-score margin	0.0809
 tight-wall pinch, open man wide: carry anchor	(0.0, -22.5)
 spun-off carrier, beaten man behind: pick	CARRY to (1.3, -24.4)
 pressured deep in our zone, open outlet up the strong wall: pick	PASS to 2
@@ -26,9 +26,9 @@ pinged ahead man 12 m out behind a mid-lane stick: variant	SAUCER
 board pincer closing, open outlet across: pick	PASS to 2
 light pressure, only a covered mate behind: intent	CARRY
 deep in our zone, forechecker charging, only a deeper mate: intent	CARRY
-deep in our zone, alone, forechecker charging, flanks open: pick	CARRY to (2.2, 24.8)
+deep in our zone, alone, forechecker charging, flanks open: pick	CARRY to (5.8, 19.8)
 pressured deep, outlet en route, deeper valve as bait: pick	PASS to 2
-alone at rest 0.8 m short of the blue line: pick	CARRY to (0.0, -6.5)
+alone at rest 0.8 m short of the blue line: pick	CARRY to (0.0, -10.6)
 rush up the wall 4.3 m short of the line, room to enter: intent	CARRY
 rush up the wall 5.8 m short of the line, room to enter: pick	CARRY to (-3.5, -10.5)
 rush up the wall, smothered at the line, trailer open: pick	DUMP
@@ -64,10 +64,10 @@ past centre, a loose pair ahead: pick	DUMP
 pinned in our zone by a head-on forecheck, outlet up the wall: pick	PASS to 2
 wheeling up the weak wall, middle clogged: pick	CARRY to (-12.3, 14.4)
 behind our cage, empty rink: pick	CARRY to (3.2, 26.9)
-beat his man down the wing at 8.5 m/s: pick	CARRY to (3.5, -19.9)
+beat his man down the wing at 8.5 m/s: pick	CARRY to (1.7, -24.7)
 wing entry in stride, defender on the inside lane: carry anchor	(8.0, -18.0)
 sharp-angle corner, keeper sealing, defender boxing out: pick	CARRY to (8.1, -25.9)
 behind their cage, empty rink: carry anchor	(-3.0, -27.7)
-splittable gap up the middle, open man wide: carry anchor	(0.0, -22.5)
+splittable gap up the middle, open man wide: carry anchor	(0.0, -24.1)
 checker dead on the carry line: seam degrees off the carry	180.0000
 checker 2 m off the carry line: seam degrees off the carry	30.0000

@@ -711,12 +711,17 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 	# a carrier there does next — the drive-in from it, priced in the in-zone
 	# regime and starting when we arrive — which its own shot xG badly
 	# understates just inside the line.
-	if AIActionScoring.in_offensive_zone(candidate, ctx.attacking_goal_pos) \
-			and not AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos):
+	if AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos):
+		return dest_score
+	if AIActionScoring.in_offensive_zone(candidate, ctx.attacking_goal_pos):
 		dest_score = maxf(dest_score, _field.receiver_drive_in_value(
 				ctx, candidate, ctx.caps_by_peer.get(ctx.peer_id), arrive_vel, candidate,
 				local_time, true))
-	return dest_score
+	# Either side of the line it is worth no less than our possession of it, as
+	# standing still out here is: read by his own shot alone, a spot his hands'
+	# hold carries over the line, or one just inside it, is a step down from
+	# where he stands and he never takes it.
+	return maxf(dest_score, _field.horizon_value(candidate, local_time, arrive_vel))
 
 
 # TWO-PLY pass of the beam (see CARRY_BEAM_WIDTH): completes beam row `i` with

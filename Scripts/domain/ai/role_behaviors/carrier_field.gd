@@ -561,12 +561,21 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# Already tight to the net: no room to improve by driving.
 	if d <= RECEIVER_DRIVE_MIN_NET_DIST_M + 0.1:
 		return 0.0
-	var reach: float = minf(RECEIVER_DRIVE_MAX_M, d - RECEIVER_DRIVE_MIN_NET_DIST_M)
+	# In the zone he drives the net; from outside it, only as far as the horizon,
+	# where what he has is our possession of the spot (value_at).
+	var reach: float = d - RECEIVER_DRIVE_MIN_NET_DIST_M
+	if not AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
+		reach = minf(reach, RECEIVER_DRIVE_MAX_M)
 	var inv: float = 1.0 / d
 	var dir_x: float = to_net_x * inv
 	var dir_z: float = to_net_z * inv
 	var target := Vector3(
 			receiver_spot.x + dir_x * reach, 0.0, receiver_spot.z + dir_z * reach)
+	# The odds he keeps it are priced over the horizon; unstripped inside it, he
+	# goes on.
+	var horizon_reach: float = minf(RECEIVER_DRIVE_MAX_M, reach)
+	var horizon := Vector3(receiver_spot.x + dir_x * horizon_reach, 0.0,
+			receiver_spot.z + dir_z * horizon_reach)
 	if not AIStationSearch.is_legal_position(target) \
 			or AINetObstacle.carry_path_blocked_by_net(receiver_spot, target):
 		return 0.0
@@ -576,8 +585,8 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			else ctx.self_max_accel
 	# Momentum-honest: a man in stride carries his pace into the drive, one curling
 	# back brakes it out first. Never `reach / max_speed`.
-	var reach_time: float = AIArrival.time_to_arrive(
-			receiver_spot, target, receiver_vel, recv_speed, recv_accel)
+	var horizon_time: float = AIArrival.time_to_arrive(
+			receiver_spot, horizon, receiver_vel, recv_speed, recv_accel)
 	# A defender in the way drops keep and stops the drive where he covers it;
 	# apply_escape as for the carrier's own candidates.
 	var opps: Array[Vector3] = opponents
@@ -585,17 +594,18 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		project_opponents(start_s, _entry_buf)
 		opps = _entry_buf
 	var keep: float = AICarrySpace.carry_safety(
-			receiver_spot, target, reach_time,
+			receiver_spot, horizon, horizon_time,
 			opps, opponent_vels, opponent_caps, true)
 	var reached: Vector3 = AICarrySpace.carry_strip_point(
-			receiver_spot, target, reach_time,
+			receiver_spot, horizon, horizon_time,
 			opps, opponent_vels, opponent_caps, true, true)
 	if keep <= 0.0:
 		drive_in_reached = reached
 		return -_drive_loss_cost(ctx, reached, 1.0, own_hands)
-	var t: float = reach_time if reached == target \
-			else AIArrival.time_to_arrive(
-					receiver_spot, reached, receiver_vel, recv_speed, recv_accel)
+	if reached == horizon:
+		reached = target
+	var t: float = AIArrival.time_to_arrive(
+			receiver_spot, reached, receiver_vel, recv_speed, recv_accel)
 	project_opponents(start_s + t, _drive_buf)
 	# The keeper tracks the drive the whole way, so it arrives at him square and
 	# set — for the carrier's own drive and a receiver's alike.
@@ -606,10 +616,26 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# drive's end against a set keeper: in tight that is a shot he has dropped on
 	# by the release, and it out-prices every real one.
 	var advanced: float = AICarrierArrivalShot.value(self, ctx, reached, arrive_vel,
-			start_s + t, regime_from, _drive_buf)
+			start_s + t, regime_from, _drive_buf) * AIActionScoring.delay_discount(t)
+	# He lets it go where the drive's shot is best, not where it stops: read
+	# where it crosses each row the shot field is measured at, in shooting range.
+	var goal_sign: float = signf(ctx.attacking_goal_pos.z)
+	var from_out: float = (ctx.attacking_goal_pos.z - receiver_spot.z) * goal_sign
+	var end_out: float = (ctx.attacking_goal_pos.z - reached.z) * goal_sign
+	for row_out: float in AIShotOdds.rows_out():
+		if row_out <= end_out or row_out >= from_out \
+				or row_out > AICarrierArrivalShot.PATH_SHOT_RANGE_M:
+			continue
+		var at_row: Vector3 = receiver_spot.lerp(reached,
+				(from_out - row_out) / (from_out - end_out))
+		var row_t: float = AIArrival.time_to_arrive(
+				receiver_spot, at_row, receiver_vel, recv_speed, recv_accel)
+		project_opponents(start_s + row_t, _drive_buf)
+		advanced = maxf(advanced, AICarrierArrivalShot.value(self, ctx, at_row,
+				(at_row - receiver_spot) / row_t if row_t > 0.001 else receiver_vel,
+				start_s + row_t, regime_from, _drive_buf) * AIActionScoring.delay_discount(row_t))
 	drive_in_reached = reached
-	return advanced * keep * AIActionScoring.delay_discount(t) \
-			- _drive_loss_cost(ctx, reached, 1.0 - keep, own_hands)
+	return advanced * keep - _drive_loss_cost(ctx, reached, 1.0 - keep, own_hands)
 
 
 # A drive lost at `at` with probability `lost`, as a carry candidate's strip is
