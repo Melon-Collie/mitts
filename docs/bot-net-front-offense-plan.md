@@ -1296,6 +1296,27 @@ After each 5v5 step, re-measure 3v3 (`test_ozone_possession.gd`).
 - SUPPORT gets the rebound station term in 3b if the 2d-style measurement shows
   the 3v3 high man never touches a rebound.
 
+**Re-measured after step 5** (`bd707f4`). `test_ozone_possession.gd`, 48 runs,
+a possession ending at its first shot, against `origin/main`: shots 26 → 28,
+slot shots 15 → 9, other (off the wall) 10 → 19, the first shot 3.6 → 2.3 s in.
+It cannot see a tip or a rebound, so the same 3v3 was put into the 5v5
+instrument (`MITTS_OZ_SIZE=3`, `c2f3cb7`: its starts and defence, with the
+jitter, rebounds and tips), J=11, 576, with the carrier's tip read off and on:
+
+| | tip read off | tip read on |
+|---|---|---|
+| shots / possession | 0.531 ± 0.021 | 0.635 ± 0.020 |
+| slot shots / possession | 0.182 | 0.148 |
+| set read per possession | 0.082 | 0.067 |
+| tipped by ours | 5 of 306 | 52 of 366 |
+| live or missed, nobody on it in 3 s | 0.03 | 0.19 |
+| first touch ours on a live rebound | 0.24 | 0.20 |
+| xG / possession (first + second) | 0.084 + 0.003 = 0.087 ± 0.008 | 0.080 + 0.003 = 0.083 ± 0.007 |
+
+In 3v3 the rip trades slot shots for tips at no gain: xG is level within the
+noise. The SUPPORT question is answered: he takes the first touch on 22 of the
+60 live rebounds ours win, the FINISHER 37.
+
 ---
 
 ## Open questions
