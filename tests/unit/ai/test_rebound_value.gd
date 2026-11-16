@@ -64,3 +64,28 @@ func test_a_man_added_at_a_station_is_priced_as_one_of_ours() -> void:
 	for at: Vector3 in [Vector3(0.5, 0.0, GOAL.z + 3.0), Vector3(-3.0, 0.0, GOAL.z + 8.0)]:
 		assert_almost_eq(race.value_with(at), _credit([RELEASE, at] as Array[Vector3], d), 1e-6,
 				"a man at %s" % at)
+
+
+func _their_share(ours: Array[Vector3], theirs: Array[Vector3]) -> float:
+	var ov: Array[Vector3] = []
+	for _p: Vector3 in ours:
+		ov.append(Vector3.ZERO)
+	var tv: Array[Vector3] = []
+	for _p: Vector3 in theirs:
+		tv.append(Vector3.ZERO)
+	var r := AIReboundValue.new()
+	r.fill(RELEASE, GOAL, ours, ov, theirs, tv)
+	return r.their_share()
+
+
+# Their share of the saves is the race the credit runs, from their side: theirs
+# with only theirs at the net, theirs less with a man of ours there first, and
+# never the pucks the keeper covers.
+func test_their_share_is_the_race_from_their_side() -> void:
+	var d: Array[Vector3] = [Vector3(-1.5, 0.0, GOAL.z + 4.5)]
+	var alone: float = _their_share([RELEASE] as Array[Vector3], d)
+	var contested: float = _their_share([RELEASE, Vector3(0.5, 0.0, GOAL.z + 3.0)] as Array[Vector3], d)
+	assert_gt(alone, 0.0)
+	assert_lt(contested, alone, "a man of ours at the net takes some of them")
+	assert_lt(alone, 1.0, "the pucks the keeper covers are nobody's")
+	assert_eq(_their_share([RELEASE] as Array[Vector3], _none), 0.0, "nobody of theirs, none")

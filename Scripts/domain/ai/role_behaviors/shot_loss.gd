@@ -11,14 +11,16 @@ class_name AIShotLoss
 # leaves (1 − `keep`) at the release; blocked short of `lane_end` (`reach` the
 # odds it gets there) where its lane is lost; and, reaching it and not scoring
 # (`scores` its odds, first contact or the tip, before any rebound credit), the
-# rebound theirs (the flat credit's share, AIActionScoring.FLAT_REBOUND_SHARE)
-# at the rebound's contest point. Each at their possession there and the
-# counter-rush it hands over, the shooter's own recovery from the release.
+# rebounds their side touches first, raced over the rebound field
+# (AIReboundValue.their_share), where they touch them. Each at their possession
+# there, the shooter one of our men at his release, and the counter-rush it
+# hands over, his own recovery from the release.
 static func cost(field: AICarrierField, ctx: RoleContext, release: Vector3,
 		lane_end: Vector3, speed: float, keep: float, reach: float, scores: float) -> float:
 	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
+	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
 	var lost: float = 1.0 - keep
-	var total: float = field.turnover_cost(release, lost) \
+	var total: float = field.turnover_cost(release, lost, 0.0, release, self_caps) \
 			+ field.counter_exposure_cost(ctx, release, lost, release, our_goalie)
 	var blocked: float = keep * (1.0 - reach)
 	if blocked > 0.0:
@@ -28,14 +30,15 @@ static func cost(field: AICarrierField, ctx: RoleContext, release: Vector3,
 					field.opponent_vels, field.opponent_caps, field.opponent_blades_release)
 		if not at.is_finite():
 			at = release
-		total += field.turnover_cost(at, blocked) \
+		total += field.turnover_cost(at, blocked, 0.0, release, self_caps) \
 				+ field.counter_exposure_cost(ctx, at, blocked, release, our_goalie)
-	var theirs: float = keep * reach * (1.0 - scores) \
-			* (1.0 - AIActionScoring.FLAT_REBOUND_SHARE)
-	if theirs > 0.0:
-		var at: Vector3 = AIReboundField.crash_point_at(release, false, ctx.attacking_goal_pos)
-		if not at.is_finite():
-			at = ctx.attacking_goal_pos
-		total += field.turnover_cost(at, theirs) \
-				+ field.counter_exposure_cost(ctx, at, theirs, release, our_goalie)
+	var saved: float = keep * reach * (1.0 - scores)
+	if saved > 0.0:
+		field.rebound.fill(release, ctx.attacking_goal_pos, field.our_bodies,
+				field.our_body_vels, field.opponents, field.opponent_vels)
+		var theirs: float = saved * field.rebound.their_share()
+		if theirs > 0.0:
+			var at: Vector3 = field.rebound.their_at
+			total += field.turnover_cost(at, theirs, 0.0, release, self_caps) \
+					+ field.counter_exposure_cost(ctx, at, theirs, release, our_goalie)
 	return total

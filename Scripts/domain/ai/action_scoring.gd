@@ -232,10 +232,7 @@ static func _keeper_home(goalie_pos: Vector3, attacking_goal: Vector3) -> bool:
 # field), and the follow-up that collects it is
 # docs/bot-net-front-offense-plan.md step 3b/3c: priced before it is played, it
 # had the carrier shoot for rebounds nobody collected.
-# The share of a saved shot's pucks the flat credit gives back to us; the rest
-# are theirs (AIRoleCarrier prices them as a turnover).
-const FLAT_REBOUND_SHARE: float = 0.3
-const FLAT_REBOUND_CREDIT: float = FLAT_REBOUND_SHARE * AIPossessionFloor.FLOOR_THEIR_GOAL_LINE
+const FLAT_REBOUND_CREDIT: float = 0.3 * AIPossessionFloor.FLOOR_THEIR_GOAL_LINE
 
 
 # What a priced shot or rip is made of, for a caller that also prices its losses

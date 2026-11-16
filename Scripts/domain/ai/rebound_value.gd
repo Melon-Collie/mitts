@@ -47,6 +47,8 @@ var _our_late := PackedFloat32Array()
 # there inside the contest band of it changes nothing.
 var _their_first := PackedFloat32Array()
 var _saved: int = 0
+# Where the rebounds their_share gives them are, weighted by it (INF: none).
+var their_at := Vector3.INF
 static var _scratch: AIReboundValue = null
 
 
@@ -128,6 +130,29 @@ func ceiling() -> float:
 	for i: int in _at.size():
 		sum += maxf(_scored[i], _scored_late[i])
 	return sum / _saved if _saved > 0 else 0.0
+
+
+# Of the filled release's saves, the share whose rebound their side touches
+# first, raced as value_with races ours; a puck the keeper covers is nobody's.
+# Leaves their_at at those rebounds' contest point, weighted by the share.
+func their_share() -> float:
+	var share: float = 0.0
+	var at_sum := Vector3.ZERO
+	for i: int in _at.size():
+		var t0: float = _t0[i]
+		var their_first: float = maxf(_their_t0[i], t0)
+		if minf(_our_t0[i], their_first) > _cover_by[i]:
+			continue
+		var our_first: float = maxf(_our_t0[i], t0)
+		if _at_late[i].is_finite():
+			var t_l: float = _t_late[i]
+			our_first = minf(our_first, maxf(_our_late[i], t_l))
+			their_first = minf(their_first, maxf(_their_late[i], t_l))
+		var p: float = 1.0 - AIActionScoring.race_against(their_first, our_first)
+		share += p
+		at_sum += _at[i] * p
+	their_at = at_sum / share if share > 0.0 else Vector3.INF
+	return share / _saved if _saved > 0 else 0.0
 
 
 # The filled release's rebound credit with one more of ours standing at `body`

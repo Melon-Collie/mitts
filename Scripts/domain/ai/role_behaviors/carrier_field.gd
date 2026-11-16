@@ -67,6 +67,11 @@ var opponent_blades_release: Array[Vector3] = []
 var our_defenders: Array[Vector3] = []
 var our_defender_caps: Array[AISkaterCaps] = []
 var our_defender_vels: Array[Vector3] = []
+# Every body of ours, the carrier with them, for a shot's rebound race
+# (AIShotLoss); `rebound` is its scratch.
+var our_bodies: Array[Vector3] = []
+var our_body_vels: Array[Vector3] = []
+var rebound := AIReboundValue.new()
 # Teammate ETAs to the counter point (5v5), candidate-invariant across a phase,
 # and the counter-threat memo by covering-body count, -1-seeded with them.
 var exposure_mate_etas: Array[float] = []
@@ -130,6 +135,10 @@ func fill(ctx: RoleContext) -> void:
 	our_defenders.clear()
 	our_defender_caps.clear()
 	our_defender_vels.clear()
+	our_bodies.clear()
+	our_body_vels.clear()
+	our_bodies.append(ctx.self_pos)
+	our_body_vels.append(ctx.self_velocity)
 	for peer_id: int in ctx.snapshot.skater_states:
 		if peer_id == ctx.peer_id:
 			continue
@@ -146,6 +155,8 @@ func fill(ctx: RoleContext) -> void:
 			our_defenders.append(s.position)
 			our_defender_caps.append(ctx.caps_by_peer.get(peer_id))
 			our_defender_vels.append(s.velocity)
+			our_bodies.append(s.position)
+			our_body_vels.append(s.velocity)
 	screens_release.assign(opponents_release)
 	screens_release.append_array(our_defenders)
 	AIActionScoring.fill_counter_cover_etas(
