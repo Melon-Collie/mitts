@@ -138,6 +138,9 @@ static var _spot_first := PackedInt32Array()
 static var _spot_count := PackedInt32Array()
 # Per spot: its SET cell, the measured answer to "square and set on it".
 static var _set_cell := PackedInt32Array()
+# Per spot: the least keeper travel any feed measured to it asks (_feed_travel,
+# m); INF where none was measured.
+static var _least_travel := PackedFloat32Array()
 # Per cell.
 static var _odds := PackedFloat32Array()
 static var _is_shot_sample := PackedByteArray()
@@ -214,7 +217,54 @@ static func feed(passer: Vector3, receiver: Vector3, speed: float, goal: Vector3
 	var q: Query = _query(query)
 	if not _weigh_feed(q, passer, receiver, speed, goal, keeper_pos, one_timer):
 		return 0.0
-	return q.odds
+	var fed: float = q.odds
+	var share: float = _travel_share(passer, receiver, goal, keeper_pos)
+	return fed if share >= 1.0 else lerpf(shot_set(receiver, goal, q), fed, share)
+
+
+# How far a pass from `passer` to `receiver` asks a keeper to go: one square on
+# the passer at his resting depth, to be square on the receiver (m). Of the
+# pass alone, not of where he stands: deep on his line he has less ice to cross
+# for the same pass and no less of a feed to answer.
+static func _feed_travel(passer: Vector3, receiver: Vector3, goal: Vector3) -> float:
+	var k: Vector3 = AIGoalieModel.goalie_squared_pos(goal - Vector3(0.0, 0.0,
+			signf(goal.z) * AIGoalieModel.GOALIE_RESTING_DEPTH_M), goal, passer)
+	return absf(AIGoalieModel.goalie_arc_match_x(k, goal, receiver) - k.x)
+
+
+# How much of a feed's measured odds a pass from `passer` to `receiver` keeps
+# for the travel it asks of the keeper at `keeper_pos`: all of them from the
+# least travel a feed there was measured at, and less in step below it, down to
+# none for a pass that moves him nowhere, which finds him as set on the
+# receiver as a carry does (shot_set). A pass along his own line is no feed to
+# him, and read off the nearest measured one it is priced as a pass across his
+# crease. The travel is the pass's own (_feed_travel), or how far off the
+# receiver's line he stands now when that is more: caught off it, he has that
+# to make up whatever the pass.
+static func _travel_share(passer: Vector3, receiver: Vector3, goal: Vector3,
+		keeper_pos: Vector3) -> float:
+	var local: Vector2 = _local(receiver, goal)
+	var k := Vector3(keeper_pos.x, 0.0, keeper_pos.z)
+	var travel: float = maxf(_feed_travel(passer, receiver, goal),
+			absf(AIGoalieModel.goalie_arc_match_x(k, goal, receiver) - k.x))
+	var xs: Array[float] = AIShotFieldData.SPOT_X
+	var fs: Array[float] = AIShotFieldData.SPOT_FWD
+	var xi: int = _bracket(xs, local.x)
+	var fi: int = _bracket(fs, local.y)
+	var tx: float = clampf((local.x - xs[xi]) / (xs[xi + 1] - xs[xi]), 0.0, 1.0)
+	var tf: float = clampf((local.y - fs[fi]) / (fs[fi + 1] - fs[fi]), 0.0, 1.0)
+	var total: float = 0.0
+	var least: float = 0.0
+	for corner: int in 4:
+		var w: float = (tx if corner & 1 else 1.0 - tx) * (tf if corner >> 1 else 1.0 - tf)
+		var measured: float = _least_travel[(fi + (corner >> 1)) * xs.size() + xi + (corner & 1)]
+		if w <= 0.0 or is_inf(measured):
+			continue
+		total += w
+		least += w * measured
+	if total <= 0.0 or least <= 0.0:
+		return 1.0
+	return minf(travel * total / least, 1.0)
 
 
 # The odds of the receiver's one-timer off that feed when he does not pick the
@@ -572,6 +622,8 @@ static func _build() -> void:
 	_spot_count.fill(0)
 	_set_cell.resize(spots)
 	_set_cell.fill(-1)
+	_least_travel.resize(spots)
+	_least_travel.fill(INF)
 	var n: int = AIShotFieldData.ROWS.size()
 	_aims_per_cell = LOFTS.size() * AIShotFieldData.AIM_POINTS
 	_odds.resize(n)
@@ -623,6 +675,8 @@ static func _build() -> void:
 		var passer := Vector3(float(t[5]), 0.0, receiver.z if kind != "PASSOUT"
 				else _FIELD_GOAL.z + PASS_OUT_PASSER_FWD_M)
 		_travel[c] = AIGoalieModel.goalie_arc_match_x(pre, _FIELD_GOAL, receiver) - pre.x
+		if fed:
+			_least_travel[spot] = minf(_least_travel[spot], _feed_travel(passer, receiver, _FIELD_GOAL))
 		_flight[c] = passer.distance_to(receiver) / maxf(float(t[6]), 0.1)
 		var sigma_m: float = REFERENCE_SPREAD_RAD \
 				* maxf(Vector2(release.x, release.z - _FIELD_GOAL.z).length(), 0.5)

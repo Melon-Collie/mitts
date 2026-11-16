@@ -998,8 +998,13 @@ reaches back into what remains.
     release (`AIShotValue.set_keeper`) is read from the SET cells alone,
     because a feed cell can show the same visible keeper and a different
     outcome. A pass is priced from the passer, the keeper square on him, at the
-    feed's travel and flight. Outside `AIGoalieModel.GOALIE_HOME_M` the net is
-    empty.
+    feed's travel and flight. Every measured feed crosses him, the least of
+    them asking 0.02 to 0.4 m of travel by spot; a pass that asks less keeps
+    that share of the measured odds and is otherwise a shot at him set on the
+    receiver (`AIShotOdds._travel_share`), so a drop pass straight back, which
+    asks none, is not priced as a pass across his crease (live, a one-timer off
+    it scores 2 of 72 aims against 30 off a feed from 3 m across). Outside
+    `AIGoalieModel.GOALIE_HOME_M` the net is empty.
   - **Odds are at one placement scatter** (`REFERENCE_SPREAD_RAD`): a property
     of the chance, not the shooter (a wobblier tier misses more of the same
     shots). First contact is the outcome: rebounds and screens are not in it
