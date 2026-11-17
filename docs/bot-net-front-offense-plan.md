@@ -1630,6 +1630,22 @@ against 0.052, about four standard errors pooled), so pricing screens lower
 is honest, and the bots playing better on the old field is the screen station
 doing something besides the screen.
 
+**The field read as a fit** (`5dfa248`): on the line, a product of how central
+the release is, how far out it is and how far out the body stands, fitted over
+every on-line cell (χ² 16–19 over 80 cells, inside their own noise); off the
+line, nothing. 5v5, J=11, 576, paired:
+
+| fitted screen against | for | net |
+|---|---|---|
+| today's cell-by-cell read | +0.001 ± 0.003 | +0.002 ± 0.003 |
+| the old keeper's field | −0.010 ± 0.005 | −0.010 ± 0.005 |
+| main | −0.008 ± 0.006 | −0.009 ± 0.007 |
+
+The fit plays as the cell-by-cell read did: the noise was not what cost 5v5.
+It is the screen's honest, lower value on the new keeper, which the old field
+over-stated, and the bots played better over-stating it. What the over-stated
+screen bought is the next question.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
