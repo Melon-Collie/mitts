@@ -1517,6 +1517,30 @@ trace hooks and battle-spot statistics stubbed out of its copy.
   the old keeper). Whether the loss came with main's keeper and the fields
   regenerated on it, or with the merge's resolution, is not yet measured.
 
+**Before the merge, against its own main.** The branch at `68b053e` (before
+step 6 and both later merges) against the main it was built on (`35d1a88`), both
+on the old keeper, on today's instrument (main stubbed as above, its tips scored
+by `68b053e`'s fields), J=11, 576 a side:
+
+| | 3v3 old main | 3v3 branch | 5v5 old main | 5v5 branch |
+|---|---|---|---|---|
+| slot shots / possession | **0.269** | **0.151** | 0.090 | 0.078 |
+| tipped by ours | 0 | 64 | 0 | 48 |
+| xG for | 0.107 | 0.088 | 0.034 | 0.045 |
+| xG against | 0.033 | 0.031 | 0.015 | 0.010 |
+| paired branch − main, for | | −0.019 ± 0.011 | | +0.011 ± 0.007 |
+| paired branch − main, net | | −0.016 ± 0.013 | | +0.015 ± 0.008 |
+
+- **5v5 was ahead before the merge and is behind after it.** Across the merge
+  the branch's 5v5 xG fell 0.045 → 0.030 while main's rose 0.034 → 0.039 on the
+  new keeper. Its slot shots held (0.078 → 0.080) where main's rose (0.090 →
+  0.109), and its tips' worth fell (first shots with tips 0.037 → 0.025).
+- **3v3 was behind before the merge too.** Its slot shots are about half of
+  main's at both points, so that loss is the branch's own behaviour, not the
+  merge. The carrier's tip read accounts for part of it (step 5's 3v3 table: slot
+  shots 0.186 off, 0.151 on); the rest is in some other step, unmeasured in 3v3
+  until after step 5.
+
 **Cost** (`benchmarks/`, run one after the other on this machine): per call,
 FINISHER 2156 → 3372 µs and HIGH_SLOT 211 → 2000 µs, the rest within a few
 percent. The AI's time per game-second is mixed (5v5 ozone-cycle 484k → 377k,
