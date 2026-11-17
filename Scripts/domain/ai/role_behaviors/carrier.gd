@@ -696,7 +696,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 			shoot_now_hold = hold
 
 	_shot_sample_is_tip = false
-	if not shot_unavailable:
+	if not shot_unavailable and ctx.team_size >= 5:
 		_tip_read(ctx, self_pos, horizontal_velocity, attacking_goal, goalie_now)
 
 	var self_state: SkaterNetworkState = snapshot.skater_states[ctx.peer_id]
@@ -1019,6 +1019,8 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 # action, so it competes with the direct read by max(), never additively. Each
 # teammate who tips a shot coming at him (FINISHER, NET_FRONT) is priced by
 # AIActionScoring.tip_ev from the faster hold, at the keeper as he reads now.
+# 5v5 only, a tactical choice: in 3v3 the rip traded slot shots for tips at no
+# gain (docs/bot-net-front-offense-plan.md, 3v3 and step 6).
 func _tip_read(ctx: RoleContext, self_pos: Vector3, horizontal_velocity: Vector3,
 		attacking_goal: Vector3, goalie_now: Vector3) -> void:
 	if ctx.team_brain == null or _field.holds.count < 2:

@@ -1334,7 +1334,14 @@ path) bound almost nowhere. J=11, 576, each against its own read-off sweep:
 | xG / possession | 0.088 ± 0.008 | 0.088 ± 0.008 | 0.040 ± 0.006 | 0.045 ± 0.005 |
 
 The 3v3 rips are now priced 0.131 and realize 0.084 (60 of 104 tipped): still
-over, but the read costs nothing in 3v3, and adds in 5v5. The SUPPORT question is answered: he takes the first touch on 22 of the
+over, but the read costs nothing in 3v3, and adds in 5v5.
+
+**The rip is 5v5 only** (decided with the user, after step 6): in 3v3 it never
+gained anything, measured at every point since (step 6's tables, and the tip
+read off today: −0.001 ± 0.004 for), and the attempts to price it out of 3v3
+from cost (6a, 6c) did not. So the carrier's tip read is a tactical choice by
+team size (`carrier.gd:_tip_read`); the finisher still tips a shot that comes
+at him. The SUPPORT question is answered: he takes the first touch on 22 of the
 60 live rebounds ours win, the FINISHER 37.
 
 ---

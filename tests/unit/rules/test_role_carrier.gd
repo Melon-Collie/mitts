@@ -2951,13 +2951,14 @@ func test_a_pass_leaves_from_the_ice_not_through_the_boards() -> void:
 
 # A carrier 8 m wide at the top of the circle, a teammate in `slot` on his line
 # to the net with his blade at the crease top (AITipPoint: his body a blade back
-# of where he tips it), the keeper square on the carrier.
-func _point_with_tipper(slot: int) -> AIRoleCarrier:
+# of where he tips it), the keeper square on the carrier, `team_size` a side.
+func _point_with_tipper(slot: int, team_size: int = 5) -> AIRoleCarrier:
 	var self_pos := Vector3(8.0, 0.0, OPP_NET_Z + 16.0)
 	var net := Vector3(0.0, 0.0, OPP_NET_Z)
 	var tipper: Vector3 = net + (self_pos - net).normalized() \
 			* (AIRoleFinisher.TIP_STATION_DIST_M - AITipPoint.BLADE_OUT_M)
 	var ctx := _make_ctx(self_pos, [[1, TEAM_ID, self_pos], [2, TEAM_ID, tipper]])
+	ctx.team_size = team_size
 	var brain := TeamBrain.new(TEAM_ID, ctx.team_id_by_peer)
 	brain.slot_assignments[2] = slot
 	ctx.team_brain = brain
@@ -2980,3 +2981,10 @@ func test_a_net_front_man_on_his_line_makes_the_wide_rip_a_tip() -> void:
 	assert_gt(tip.debug_shoot_score, plain.debug_shoot_score,
 			"his tip is worth more than the shot alone")
 	assert_false(plain._shot_sample_is_tip, "a man who does not tip is not shot at")
+
+
+func test_a_3v3_carrier_never_rips_for_the_finishers_tip() -> void:
+	var tip := _point_with_tipper(AIRoleSlots.Slot.FINISHER, 3)
+	assert_false(tip._shot_sample_is_tip, "3v3 shoots the direct shot")
+	assert_true(_point_with_tipper(AIRoleSlots.Slot.FINISHER)._shot_sample_is_tip,
+			"the same finisher in 5v5 is ripped for")
