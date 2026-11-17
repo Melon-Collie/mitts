@@ -1586,6 +1586,27 @@ and net-front play, and whether that nets out depends on the tables it is
 priced by. On the old keeper it did; on the new one it does not, and in 3v3 it
 never did.
 
+**Where 3v3's direct shots went** (bisected on the old keeper, today's
+instrument and duel harness on each commit, main's stubs where a commit lacks
+the branch's hooks, J=11, 576 a probe):
+
+| 3v3 | slot shots | untipped first shots | tips |
+|---|---|---|---|
+| old main (`35d1a88`) | 0.269 | 0.104 | 0 |
+| step 1 and the main merge (`d70c79e`) | 0.269 | 0.104 | 0 |
+| through 4e, F3 and the points (`d6d5f9b`) | 0.276 | 0.111 | 0 |
+| through tips, the shot line and 3c (`5fc34df`) | 0.271 | 0.114 | 0 |
+| **the honest body check (`3549a8c`)** | **0.193** | **0.086** | 0 |
+| the high slot's concession (`874c2ed`) | 0.193 | 0.086 | 0 |
+| before the merge, the rip back (`68b053e`) | 0.151 | 0.068 | 0.016 |
+
+The body check alone takes 3v3 xG for down 0.028 ± 0.010 (net −0.022 ± 0.013);
+the carrier's rip then trades more slot shots for tips at no gain; nothing else
+moves it. The body check is a defender's read as much as an attacker's: both
+teams run it, so in a bot-against-bot sweep "our xG fell" is also "their
+defence strips more" (stripped 0.161 → 0.188). The sweep cannot tell those
+apart without running it on one side only.
+
 **Cost** (`benchmarks/`, run one after the other on this machine): per call,
 FINISHER 2156 → 3372 µs and HIGH_SLOT 211 → 2000 µs, the rest within a few
 percent. The AI's time per game-second is mixed (5v5 ozone-cycle 484k → 377k,
