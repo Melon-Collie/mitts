@@ -1610,6 +1610,26 @@ a screen is priced higher. But a cell is 24 shots with 0–6 goals, so most of
 that difference is within a cell's own noise: the branch's 5v5 swings on
 noise in a table it reads.
 
+**Pooled, the screen's shape is clear** (goals per shot over every cell sharing
+the value; a cell's own read is 24 shots):
+
+| | old keeper | new keeper |
+|---|---|---|
+| nobody in front | 0.002 (1/480) | 0.002 (1/480) |
+| a screener anywhere | 0.015 ± 0.001 | 0.011 ± 0.001 |
+| screener on the line / 0.4 m off / 0.8 m off | 0.052 / 0.006 / 0.006 | 0.030 / 0.006 / 0.006 |
+| shot from the middle / 4 m across / 8 m across | 0.046 / 0.011 / 0.005 | 0.040 / 0.007 / 0.001 |
+| shot from 6 / 9.5 / 15 / 19.5 m out | 0.031 / 0.020 / 0.011 / 0 | 0.024 / 0.014 / 0.006 / 0 |
+| screener 1.5 / 2.5 / 3.5 / 5 m out | 0.005 / 0.018 / 0.018 / 0.020 | 0.005 / 0.009 / 0.012 / 0.018 |
+
+So a screen is not worth the same everywhere: it pays only on the line, on a
+shot from the middle and in close, and more the further out the screener
+stands. The table's dimensions are the right ones; its per-cell resolution is
+the noise. And the new keeper does concede less to a body on the line (0.030
+against 0.052, about four standard errors pooled), so pricing screens lower
+is honest, and the bots playing better on the old field is the screen station
+doing something besides the screen.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
