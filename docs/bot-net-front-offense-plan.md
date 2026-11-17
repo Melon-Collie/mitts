@@ -1415,6 +1415,35 @@ compete stays in one currency.
 Re-measure first: fewer rips may already take him off the net front. If not,
 the station pays for being low.
 
+### 6a and 6b measured: no gain, and in 3v3 more counters against
+
+The O-zone instrument plays on past a possession lost (`MITTS_OZ_COUNTER=1`):
+until their first shot at our net (xG against, read with the shot field's set
+keeper), our regaining the puck, or 12 s. J=11, 576 possessions a side, each
+possession paired with its twin from the same start; "off" is 6a and 6b
+removed (no shot loss, the counter exposure 5v5 only).
+
+| | xG for | xG against | net | counter shots | tips |
+|---|---|---|---|---|---|
+| 3v3 off | 0.0729 | 0.0108 | 0.0621 | 46 (0.135 each) | 42 |
+| 3v3 on | 0.0756 | 0.0197 | 0.0559 | 62 (0.183 each) | 43 |
+| 3v3 paired on − off | +0.0028 ± 0.0062 | +0.0090 ± 0.0040 | −0.0062 ± 0.0073 | | |
+| 5v5 off | 0.0296 | 0.0095 | 0.0200 | 34 (0.162 each) | 40 |
+| 5v5 on | 0.0307 | 0.0126 | 0.0181 | 44 (0.165 each) | 42 |
+| 5v5 paired on − off | +0.0011 ± 0.0026 | +0.0030 ± 0.0021 | −0.0020 ± 0.0034 | | |
+
+- **Nothing gained for.** Both sizes are inside the noise, and 3v3 rips the
+  same (43 tips against 42).
+- **3v3 gives up more against, about two standard errors.** How possessions end
+  barely moves (shots saved with the rebound theirs 180 against 172, picked 128
+  against 131, stripped 92 against 81); the counters off them are more
+  dangerous: off a pick, 22 shots against 14. So the difference is where our
+  men are when the puck goes, not how often it goes.
+- The pairing diverges at the first decision that differs, so the paired
+  errors are close to unpaired ones.
+- The AI's cost rises with it, most in 3v3 (the nz-rush benchmark ~+33%).
+
+## Open questions
 
 1. **The screen's model** was decided on 2b's numbers: a share of the SET
    keeper's saves (§2b). A beaten keeper's screen is unmeasured.
