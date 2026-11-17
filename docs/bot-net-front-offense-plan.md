@@ -1465,6 +1465,23 @@ in the instrument.
 
 Neither change moved the rips, so the station pays for being low.
 
+**First cut: AIRoleSupport's counter term, inert** (`bec852f`). Each FINISHER /
+NET_FRONT station pays `counter_rush_cost_at`: the carrier's live turnover odds
+× the counter's shot past the men who beat it home, him from the station among
+them or not. Measured, 3v3 played every possession bit for bit as without it,
+and 5v5 differed by one counter. Traced over 633 of the 3v3 finisher's reads:
+
+- a counter off a loss at the carrier reaches our slot in 5.2 s (median; 4.5 to
+  5.7 s), and a cover must be there a set margin (~1.3 s) sooner;
+- from any station inside their circles that is a 45 m skate he cannot make,
+  so every candidate pays the same and the cost never moves the argmax (the
+  spread across candidates exceeded 0.001 in 3 reads, at most 0.0025);
+- the carrier is unpressured in most reads (turnover odds 0 at the median).
+
+The term only sees a man who is home and set before the counter arrives. What
+being high buys in their end is not that: it is a man on the counter before its
+shot (a 2-on-2 rather than a 2-on-1), or one on the puck where it was lost.
+
 ## Open questions
 
 1. **The screen's model** was decided on 2b's numbers: a share of the SET
