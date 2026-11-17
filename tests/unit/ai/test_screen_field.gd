@@ -61,3 +61,32 @@ func test_the_screen_does_not_snap_between_spots() -> void:
 	var body := Vector3(0.0, 0.0, NET.z + 3.5)
 	assert_almost_eq(AIScreenField.uplift(a, NET, _keeper(), body, _cfg),
 			AIScreenField.uplift(b, NET, _keeper(), body, _cfg), 0.01)
+
+
+# The fit gives back the measured screened goals at every level of each of its
+# factors (how far out the release is, how far out the body stands): the
+# fixed point iterative proportional fitting converges to.
+func test_the_fit_scores_what_was_measured_at_each_level() -> void:
+	AIScreenField.uplift(Vector3(0.0, 0.0, NET.z + 9.5), NET, _keeper(), NET, _cfg)
+	var xs: Array[float] = AIScreenFieldData.SPOT_X
+	var alongs: Array[float] = AIScreenFieldData.STATION_ALONG_M
+	var by_out_measured: Dictionary = {}
+	var by_out_fitted: Dictionary = {}
+	var by_along_measured: Dictionary = {}
+	var by_along_fitted: Dictionary = {}
+	for r: String in AIScreenFieldData.ROWS:
+		var f: PackedStringArray = r.split("\t")
+		if float(f[3]) < 0.0 or absf(float(f[4])) > 0.01:
+			continue
+		var o: int = AIScreenFieldData.SPOT_FWD.find(float(f[2]))
+		var a: int = alongs.find(float(f[3]))
+		var spot: int = o * xs.size() + xs.find(float(f[1]))
+		var fitted: float = AIScreenField._station[spot * alongs.size() + a] * float(f[6])
+		by_out_measured[o] = by_out_measured.get(o, 0.0) + float(f[5])
+		by_out_fitted[o] = by_out_fitted.get(o, 0.0) + fitted
+		by_along_measured[a] = by_along_measured.get(a, 0.0) + float(f[5])
+		by_along_fitted[a] = by_along_fitted.get(a, 0.0) + fitted
+	for o: int in by_out_measured:
+		assert_almost_eq(by_out_fitted[o], by_out_measured[o], 0.05, "%.1f m out" % AIScreenFieldData.SPOT_FWD[o])
+	for a: int in by_along_measured:
+		assert_almost_eq(by_along_fitted[a], by_along_measured[a], 0.05, "the body %.1f m out" % alongs[a])
