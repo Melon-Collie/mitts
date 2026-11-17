@@ -2,9 +2,9 @@ class_name AIRoleFinisher
 
 # FINISHER (3v3 OZONE; 5v5 OZONE's third low forward) and NET_FRONT (5v5 OZONE).
 # Stateless, and two-mode: REACTIVE deflects an incoming shot and overrides
-# everything while it is active; POSITIONING stages for the next one. No
-# exposure factor: crashing the net is the role, and defensive recovery is
-# SUPPORT's job.
+# everything while it is active; POSITIONING stages for the next one, each
+# station paying the counter-rush a turnover at the carrier would leave it out
+# of (AIRoleSupport's term).
 
 # Speed gate: pucks slower than this are passes / rolling, not shots. The tip
 # pricing reads the same gate.
@@ -50,6 +50,10 @@ const SCREEN_SHOOTER_CLEAR_M: float = 2.0 * AIBotMechanics.BLADE_REACH_M
 # An instrument's record of one positioning read (AIFinisherTrace), filled for
 # its peer only while one is held; null in play.
 static var trace: AIFinisherTrace = null
+
+# The counter-rush read's scratch, refilled once per positioning read.
+static var _scratch_mate_etas: Array[float] = []
+static var _scratch_threat_by_cover: Array[float] = []
 
 
 
@@ -226,6 +230,22 @@ static func _likely_shooter(ctx: RoleContext) -> SkaterNetworkState:
 
 # ── Positioning (no incoming shot) ──────────────────────────────────────────
 
+# When a counter off a loss at the carrier reaches our net's counter point (INF:
+# nobody of theirs to run it), refilling the teammates' races to it and the
+# threat memo for counter_rush_cost_at.
+static func _fill_counter_read(ctx: RoleContext, carrier_pos: Vector3,
+		opp_positions: Array[Vector3], teammate_positions: Array[Vector3]) -> float:
+	AIActionScoring.fill_counter_cover_etas(ctx.defending_goal_pos, teammate_positions,
+			_scratch_mate_etas)
+	_scratch_threat_by_cover.clear()
+	for _i: int in teammate_positions.size() + 2:
+		_scratch_threat_by_cover.append(-1.0)
+	if opp_positions.is_empty():
+		return INF
+	return AIActionScoring.counter_time(carrier_pos, ctx.defending_goal_pos, opp_positions,
+			ctx.scratch_opp_vels, ctx.scratch_opp_caps)
+
+
 # Argmax over the named staging stations, each scored as the better of its two
 # payoffs — the one-timer feed or the tip of the carrier's direct rip. Holds
 # when no teammate carries.
@@ -368,6 +388,12 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
 	AIStationSearch.fill_feed_values(ctx, carrier_pos, goalie_pos, opp_positions,
 			teammate_positions)
+	var t_counter: float = _fill_counter_read(ctx, carrier_pos, opp_positions,
+			teammate_positions)
+	var turnover_prior: float = 0.0 if opp_positions.is_empty() else 1.0 \
+			- AICarrySpace.carry_safety(carrier_pos, carrier_pos, AICarrySpace.EVADE_HORIZON_S,
+					opp_positions, ctx.scratch_opp_vels, ctx.scratch_opp_caps)
+	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
@@ -416,8 +442,13 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		# cover with this spot already offers.
 		var held: float = (AIStationSearch.TARGET_SWITCH_MARGIN if i == held_at else 0.0) \
 				if held_at >= 0 else AIStationSearch.incumbent_bonus(ctx, c)
+		# The counter a turnover at the carrier sends at our net, past the men
+		# who beat it home: him from here among them, or not.
+		var counter: float = AIActionScoring.counter_rush_cost_at(t_counter, turnover_prior,
+				ctx.defending_goal_pos, our_goalie, teammate_positions, c, ctx.self_max_speed,
+				_scratch_mate_etas, _scratch_threat_by_cover)
 		var score: float = maxf(maxf(feed, tip), front) * reach \
-				- AIStationSearch.shared_cover(c, teammate_positions) + held
+				- AIStationSearch.shared_cover(c, teammate_positions) - counter + held
 		if tracing:
 			trace.record(_trace_kind(i, front_from, front_to, candidates.size(), held_at), c,
 					feed, tip, front, reach, score)
