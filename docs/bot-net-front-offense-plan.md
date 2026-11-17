@@ -1607,6 +1607,29 @@ teams run it, so in a bot-against-bot sweep "our xG fell" is also "their
 defence strips more" (stripped 0.161 → 0.188). The sweep cannot tell those
 apart without running it on one side only.
 
+**Run on one side only** (`3549a8c` with `d39c236`'s check kept for one team in
+`AIDefensiveVerbs.evaluate_body_check`), paired against both teams on the old
+check (`5fc34df`), J=11, 576:
+
+| 3v3 | xG for | xG against (their counter) | net |
+|---|---|---|---|
+| the new check on their defence only | −0.028 ± 0.010 | −0.004 ± 0.007 | −0.025 ± 0.012 |
+| the new check on our side only | ±0 (every possession identical) | −0.010 ± 0.006 | +0.010 ± 0.006 |
+| both | −0.028 ± 0.010 | −0.006 ± 0.007 | −0.022 ± 0.013 |
+
+The whole of 3v3's lost xG is the defending team's check: a defence on the
+honest check concedes about a quarter less. Our attackers never commit a hit
+while we hold the puck in their zone, so their play is identical either way;
+on the counter, our side defending with it gives up less. **The body check is
+a defensive gain, not an offensive loss.** Read without it, the branch's 3v3
+offence is ahead of old main's (`5fc34df` against `35d1a88`: for +0.012 ±
+0.010, net +0.006 ± 0.013), and the rip then trades slot shots for tips at
+no gain.
+
+What follows for the branch against main: bot against bot, every defensive
+gain reads as the attack's loss. Main's defenders hunt hits that land soft, the
+branch's poke, so main's attack faces a weaker defence.
+
 **Cost** (`benchmarks/`, run one after the other on this machine): per call,
 FINISHER 2156 → 3372 µs and HIGH_SLOT 211 → 2000 µs, the rest within a few
 percent. The AI's time per game-second is mixed (5v5 ozone-cycle 484k → 377k,
