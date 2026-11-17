@@ -1443,6 +1443,23 @@ removed (no shot loss, the counter exposure 5v5 only).
   errors are close to unpaired ones.
 - The AI's cost rises with it, most in 3v3 (the nz-rush benchmark ~+33%).
 
+Split in 3v3, each against the same "off" (5v5 needs no split: its counter
+exposure was always on, so its row above is the shot loss alone):
+
+| 3v3, paired against off | xG for | xG against | net | slot shots | tips |
+|---|---|---|---|---|---|
+| the shot loss alone | −0.0149 ± 0.0043 | +0.0075 ± 0.0033 | −0.0224 ± 0.0055 | 0.115 (off 0.142) | 42 |
+| the counter exposure alone | +0.0013 ± 0.0059 | +0.0061 ± 0.0038 | −0.0048 ± 0.0069 | 0.163 | 40 |
+| both | +0.0028 ± 0.0062 | +0.0090 ± 0.0040 | −0.0062 ± 0.0073 | 0.167 | 43 |
+
+- **The shot loss alone costs the offence a fifth of its xG**, three standard
+  errors and more: the carrier gives up slot shots (set read per possession
+  0.056 → 0.039). With the exposure on as well, passes and carries pay it too
+  and the shot's handicap cancels, which is why "both" read flat.
+- **Against rises in all three by about the same**, by unrelated changes, so
+  some of it is likely the off run's luck (its 46 counter shots are the fewest).
+- **No variant moves the rips** (40–43 tips).
+
 ## Open questions
 
 1. **The screen's model** was decided on 2b's numbers: a share of the SET
