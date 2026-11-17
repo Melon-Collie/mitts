@@ -125,6 +125,7 @@ func _snapshot() -> Dictionary:
 		"carrier_ring_cue_enabled": PlayerPrefs.carrier_ring_cue_enabled,
 		"possession_pulse_enabled": PlayerPrefs.possession_pulse_enabled,
 		"loose_puck_halo_enabled": PlayerPrefs.loose_puck_halo_enabled,
+		"teammate_pings_enabled": PlayerPrefs.teammate_pings_enabled,
 		"freeplay_goalie_difficulty": PlayerPrefs.freeplay_goalie_difficulty,
 		"locale": PlayerPrefs.locale,
 		"screen_flash": PlayerPrefs.screen_flash,
@@ -317,6 +318,7 @@ func _on_apply_pressed() -> void:
 	PlayerPrefs.carrier_ring_cue_enabled = c.carrier_ring_cue_enabled
 	PlayerPrefs.possession_pulse_enabled = c.possession_pulse_enabled
 	PlayerPrefs.loose_puck_halo_enabled = c.loose_puck_halo_enabled
+	PlayerPrefs.teammate_pings_enabled = c.teammate_pings_enabled
 	PlayerPrefs.freeplay_goalie_difficulty = c.freeplay_goalie_difficulty
 	PlayerPrefs.locale = c.locale
 	PlayerPrefs.screen_flash = c.screen_flash
@@ -424,6 +426,7 @@ func _defaults() -> Dictionary:
 		"carrier_ring_cue_enabled": true,
 		"possession_pulse_enabled": true,
 		"loose_puck_halo_enabled": true,
+		"teammate_pings_enabled": true,
 		"freeplay_goalie_difficulty": GoalieSkillProfile.Difficulty.EASY,
 		"screen_flash": true,
 		"screen_shake": true,

@@ -124,6 +124,20 @@ func test_view_mirrors_ping_chase_peer() -> void:
 	assert_eq(brain.get_view().ping_chase_peer(), P1, "P1 is the ordered chaser")
 
 
+func test_a_carrier_change_the_brain_sees_ends_the_order_it_settles() -> void:
+	var brain := _make_brain()
+	var snap := _make_snapshot(Vector3.ZERO)
+	for pid: int in [P1, P2, OPP]:
+		snap.skater_states[pid] = SkaterNetworkState.new()
+	snap.puck_state.carrier_peer_id = -1
+	brain.tick(0.01, snap)
+	brain.apply_ping(PingRules.Type.GET_PUCK, P2, P1, P1, Vector3.ZERO)
+	assert_eq(brain.ping_chase_peer(), P1)
+	snap.puck_state.carrier_peer_id = OPP
+	brain.tick(0.01, snap)
+	assert_eq(brain.ping_chase_peer(), -1, "they have it: the retrieval is over")
+
+
 # Lines in the agent state machine that touch the LIVE TeamBrain. Every one of
 # these must be main-thread-only, because the AI worker runs dispatch() against
 # the frozen TeamBrainView while the main thread freely mutates the live brain

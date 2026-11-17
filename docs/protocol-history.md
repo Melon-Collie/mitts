@@ -597,3 +597,8 @@ here whenever you bump, in the same format.
 #      fields, so mixed builds must be refused. Replay FORMAT_VERSION
 #      unchanged: a replay poses him from the goalie block, which no field of
 #      this changes.
+# v110: added notify_smart_ping_ack (reliable, host to all): the bot that took
+#      a smart ping as its order and the pinger, so every teammate's screen
+#      can show the bot answering. A new @rpc method shifts the rpc-config
+#      ordering, so mixed builds must be refused. Replay FORMAT_VERSION
+#      unchanged: pings are not recorded.

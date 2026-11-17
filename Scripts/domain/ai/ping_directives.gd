@@ -24,6 +24,7 @@ class Directive:
 	# applies situationally (PASS_TO_ME / IM_OPEN bias whichever bot carries).
 	var obeyer_peer: int = -1
 	var world_pos: Vector3 = Vector3.ZERO
+	var issued_at: float = 0.0
 	var expires_at: float = 0.0
 
 
@@ -51,12 +52,55 @@ func add(type: int, pinger_peer: int, target_peer: int, obeyer_peer: int,
 	d.target_peer = target_peer
 	d.obeyer_peer = obeyer_peer
 	d.world_pos = world_pos
+	d.issued_at = _clock
 	d.expires_at = _clock + duration_s
 	_by_pinger[pinger_peer] = d
 
 
 func clear() -> void:
 	_by_pinger.clear()
+
+
+# Ends the orders a change of carrier settles, so none outlives what it asked
+# for; true when any ended. It reads the CHANGE, not who holds the puck now:
+# the brain's carrier is a debounced belief that can trail the ping, and an
+# order must survive the belief catching up to the play it was given in.
+#   prev_carrier / now_carrier — the carrier before and after, -1 when loose
+func on_carrier_changed(prev_carrier: int, now_carrier: int, our_team: int,
+		team_id_by_peer: Dictionary) -> bool:
+	if _by_pinger.is_empty():
+		return false
+	var now_ours: bool = now_carrier != -1 \
+			and team_id_by_peer.get(now_carrier, -1) == our_team
+	var now_theirs: bool = now_carrier != -1 and not now_ours
+	var any_ended: bool = false
+	for pinger: int in _by_pinger.keys():
+		var d: Directive = _by_pinger[pinger]
+		if _settled_by(d, prev_carrier, now_carrier, now_ours, now_theirs):
+			_by_pinger.erase(pinger)
+			any_ended = true
+	return any_ended
+
+
+func _settled_by(d: Directive, prev_carrier: int, now_carrier: int,
+		now_ours: bool, now_theirs: bool) -> bool:
+	match d.type:
+		PingRules.Type.PASS_TO_ME, PingRules.Type.IM_OPEN:
+			return now_carrier == d.pinger_peer
+		PingRules.Type.SHOOT:
+			return prev_carrier == d.target_peer
+		PingRules.Type.GET_PUCK:
+			return now_carrier != -1
+		PingRules.Type.GET_OPEN:
+			# A loose puck keeps it: that is our pass on its way to him.
+			return now_theirs or now_carrier == d.obeyer_peer
+		PingRules.Type.DEFEND, PingRules.Type.COVER_HIM:
+			return now_ours
+		PingRules.Type.PRESSURE_CARRIER:
+			return prev_carrier == d.target_peer or now_ours
+		PingRules.Type.GO_THERE:
+			return now_carrier == d.obeyer_peer
+	return false
 
 
 func is_empty() -> bool:
@@ -120,12 +164,14 @@ func shoot_ping_for(peer_id: int) -> bool:
 
 # The teammate a live PASS_TO_ME / IM_OPEN ping asks the carrying bot to
 # feed, -1 when none. `carrier_peer_id` is the bot asking; its own ping never
-# matches. First live match wins.
+# matches. The most recent call wins.
 func pass_target_for(carrier_peer_id: int) -> int:
 	if _by_pinger.is_empty():
 		return -1
+	var newest: Directive = null
 	for d: Directive in _by_pinger.values():
 		if (d.type == PingRules.Type.PASS_TO_ME or d.type == PingRules.Type.IM_OPEN) \
-				and d.pinger_peer != carrier_peer_id:
-			return d.pinger_peer
-	return -1
+				and d.pinger_peer != carrier_peer_id \
+				and (newest == null or d.issued_at > newest.issued_at):
+			newest = d
+	return newest.pinger_peer if newest != null else -1

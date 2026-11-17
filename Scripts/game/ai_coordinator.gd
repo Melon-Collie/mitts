@@ -115,6 +115,9 @@ var _pending_force_retick: bool = false
 # (team_id, peer_id) pairs — Vector2i keeps them typed without an object each.
 var _pending_exclude: Array[Vector2i] = []
 var _pending_include: Array[Vector2i] = []
+# Every peer queued out of its brain and not yet back in, as of the last
+# request rather than the last drain: what main may ask at once (is_excluded).
+var _excluded_peers: Dictionary[int, bool] = {}
 
 # ── Main-thread mirrors of live brain fields ─────────────────────────────────
 # Indexed by team_id. Two host paths read a brain every frame from OUTSIDE the
@@ -280,10 +283,19 @@ func queue_force_retick() -> void:
 
 func queue_exclude_skater(team_id: int, peer_id: int) -> void:
 	_pending_exclude.append(Vector2i(team_id, peer_id))
+	_excluded_peers[peer_id] = true
 
 
 func queue_include_skater(team_id: int, peer_id: int) -> void:
 	_pending_include.append(Vector2i(team_id, peer_id))
+	_excluded_peers.erase(peer_id)
+
+
+# Whether a bot is out of its team's shape: in the penalty box, hunting a man
+# for a fight, or a scripted puppet. Its brain hands it no role, so it can be
+# given no order.
+func is_excluded(peer_id: int) -> bool:
+	return _excluded_peers.has(peer_id)
 
 
 # Last published value of a field the host reads off a live brain every frame.
@@ -490,6 +502,7 @@ func shutdown() -> void:
 	_pending_pings.clear()
 	_pending_exclude.clear()
 	_pending_include.clear()
+	_excluded_peers.clear()
 	_pending_force_retick = false
 	_delta_accum = 0.0
 	_ping_chase_by_team.clear()

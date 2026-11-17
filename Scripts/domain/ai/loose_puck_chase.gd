@@ -487,6 +487,18 @@ static func elect(
 	return best_pid
 
 
+# The team's chaser once a human's "Get the puck!" order is laid over the
+# election: the ordered bot, unless he is not among `teammate_ids` or may not
+# touch the puck, when the election stands. Sending only a man who cannot play
+# it sends nobody.
+static func with_order(elected: int, ordered: int, teammate_ids: Array,
+		snapshot: WorldSnapshot) -> int:
+	if ordered == -1 or not teammate_ids.has(ordered) \
+			or snapshot.is_out_of_play(ordered):
+		return elected
+	return ordered
+
+
 # Raw best intercept time (seconds) among `ids` to the loose puck — the
 # election's race read with no hysteresis and no winner identity, so a caller can
 # compare OUR best against THEIRS through the same model. INF when no eligible

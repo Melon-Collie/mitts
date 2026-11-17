@@ -8,6 +8,7 @@ PING_PICK_HIM_UP,Pick him up!,¡Márcalo!
 PING_GET_HIM,Get him!,¡A por él!
 PING_COVER_HIM,Cover him!,¡Cúbrelo!
 PING_OVER_THERE,Over there!,¡Por allí!
+PING_ACK,On it!,¡Voy!
 STAR_FIRST,1ST STAR,1.ª ESTRELLA
 STAR_SECOND,2ND STAR,2.ª ESTRELLA
 STAR_THIRD,3RD STAR,3.ª ESTRELLA
@@ -390,6 +391,8 @@ OPTIONS_POSSESSION_PULSE,Possession Pulse,Pulso de posesión
 OPTIONS_POSSESSION_PULSE_NOTE,"Sends a pulse across the ice when the puck changes hands, bigger on a turnover.","Lanza un pulso por el hielo cuando el disco cambia de manos, más grande en una pérdida."
 OPTIONS_LOOSE_PUCK_HALO,Loose Puck Halo,Halo del disco suelto
 OPTIONS_LOOSE_PUCK_HALO_NOTE,Circles the puck while nobody has it.,Rodea el disco mientras nadie lo tiene.
+OPTIONS_TEAMMATE_PINGS,Teammate Pings,Avisos de compañeros
+OPTIONS_TEAMMATE_PINGS_NOTE,"Shows and plays other players' call-outs. Your own are always shown, and bots obey either way.","Muestra y reproduce los avisos de otros jugadores. Los tuyos siempre se muestran, y los bots obedecen igualmente."
 OPTIONS_IMPACT_NONE,None,Ninguno
 OPTIONS_IMPACT_LOW,Low,Bajo
 OPTIONS_IMPACT_MEDIUM,Medium,Medio

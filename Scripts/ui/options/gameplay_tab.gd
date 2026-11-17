@@ -11,6 +11,7 @@ var _self_beacon_mode_btn: OptionButton = null
 var _carrier_ring_check: CheckButton = null
 var _possession_pulse_check: CheckButton = null
 var _loose_halo_check: CheckButton = null
+var _teammate_pings_check: CheckButton = null
 var _freeplay_goalie_btn: OptionButton = null
 var _share_stats_check: CheckButton = null
 var _colors_file: CustomDataFile = null
@@ -59,6 +60,8 @@ func _build_content() -> void:
 			tr("OPTIONS_POSSESSION_PULSE"), tr("OPTIONS_POSSESSION_PULSE_NOTE"))
 	_loose_halo_check = _cue_toggle(PlayerPrefs.loose_puck_halo_enabled,
 			tr("OPTIONS_LOOSE_PUCK_HALO"), tr("OPTIONS_LOOSE_PUCK_HALO_NOTE"))
+	_teammate_pings_check = _cue_toggle(PlayerPrefs.teammate_pings_enabled,
+			tr("OPTIONS_TEAMMATE_PINGS"), tr("OPTIONS_TEAMMATE_PINGS_NOTE"))
 
 	# Free-play goalie difficulty — a personal-sandbox knob, separate from the
 	# hosted/lobby goalie setting (which lives in the lobby settings panel).
@@ -103,7 +106,7 @@ func _build_content() -> void:
 		+ "With this off, the Career menu and replay playback are unavailable — "
 		+ "both are built from your uploaded games."))
 
-# One puck-following cue's row: the toggle, its note beneath.
+# A toggle's row with its note beneath.
 func _cue_toggle(pressed: bool, label: String, note: String) -> CheckButton:
 	var check := CheckButton.new()
 	check.set_pressed_no_signal(pressed)
@@ -127,6 +130,7 @@ func read_controls() -> Dictionary:
 		"carrier_ring_cue_enabled": _carrier_ring_check.button_pressed,
 		"possession_pulse_enabled": _possession_pulse_check.button_pressed,
 		"loose_puck_halo_enabled": _loose_halo_check.button_pressed,
+		"teammate_pings_enabled": _teammate_pings_check.button_pressed,
 		"freeplay_goalie_difficulty": _freeplay_goalie_btn.selected,
 		"locale": _selected_locale(),
 		"share_gameplay_stats": _share_stats_check.button_pressed,
@@ -142,5 +146,6 @@ func apply_values(v: Dictionary) -> void:
 	_carrier_ring_check.set_pressed_no_signal(v.carrier_ring_cue_enabled)
 	_possession_pulse_check.set_pressed_no_signal(v.possession_pulse_enabled)
 	_loose_halo_check.set_pressed_no_signal(v.loose_puck_halo_enabled)
+	_teammate_pings_check.set_pressed_no_signal(v.teammate_pings_enabled)
 	_freeplay_goalie_btn.selected = v.freeplay_goalie_difficulty
 	_share_stats_check.set_pressed_no_signal(v.share_gameplay_stats)

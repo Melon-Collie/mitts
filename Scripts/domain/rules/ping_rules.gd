@@ -26,9 +26,12 @@ enum Type {
 
 # Translation keys for the chat-bubble text, indexed by Type. The domain stays
 # engine-free (no tr() here — that's an engine call): it hands back a stable
-# key and the display seam localizes it (tr() in GameManager's ping handler),
+# key and the display seam localizes it (SmartPingCoordinator, PingPreview),
 # which also keeps the wire carrying only the enum int. English/Spanish copy
 # lives in locale/translations.csv.
+# The obeying bot's answer (see acknowledges).
+const ACK_MESSAGE_KEY: String = "PING_ACK"
+
 const _MESSAGE_KEYS: Array[String] = [
 	"PING_PASS_TO_ME",
 	"PING_IM_OPEN",
@@ -171,6 +174,13 @@ static func choose_obeyer(type: int, target_peer: int, world_pos: Vector3,
 	return -1
 
 
+# Whether the bot `choose_obeyer` picked answers the ping out loud. Only an
+# order he will carry out: a shot call is a bias the carrier's own read can
+# still refuse, and an answer followed by no shot would be a lie.
+static func acknowledges(type: int, obeyer_peer: int) -> bool:
+	return obeyer_peer != -1 and type != Type.SHOOT
+
+
 # The translation key for a ping type's bubble text; "" for an out-of-range
 # type. Callers tr() the result at the display seam.
 static func message_key_for(type: int) -> String:
@@ -187,6 +197,15 @@ static func directive_duration_s(type: int) -> float:
 
 static func is_valid_type(type: int) -> bool:
 	return type >= 0 and type < _MESSAGE_KEYS.size()
+
+
+# Whether a ping off the wire can be shown and obeyed at all: a known type, a
+# finite position, and a target that is nobody or one of `skater_positions`.
+static func is_well_formed(type: int, target_peer: int, world_pos: Vector3,
+		skater_positions: Dictionary) -> bool:
+	if not is_valid_type(type) or not world_pos.is_finite():
+		return false
+	return target_peer == -1 or skater_positions.has(target_peer)
 
 
 static func _make(type: int, target_peer: int, world_pos: Vector3) -> Resolution:

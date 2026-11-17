@@ -88,6 +88,23 @@ func test_chase_waits_out_the_reaction_delay() -> void:
 			"chase once the reaction delay has elapsed")
 
 
+func test_an_ordered_bot_chases_a_puck_the_election_gave_a_teammate() -> void:
+	var brain := TeamBrain.new(0, _team_map)
+	sm.setup(SELF_ID, 0, brain, _team_map, false)
+	var s := _loose_puck_snap(Vector3(5, 0, 0))
+	s.real_puck_carrier_peer_id = -1
+	_add_skater(s, SELF_ID, Vector3(-12, 0, 0))
+	_add_skater(s, TEAMMATE_ID, Vector3(4, 0, 0))
+	s.closest_to_puck_by_team[0] = TEAMMATE_ID
+	sm._current_strategy = brain
+	assert_false(sm._should_chase_loose_puck(s, Vector3(-12, 0, 0)), "not his puck")
+	brain.apply_ping(PingRules.Type.GET_PUCK, TEAMMATE_ID, SELF_ID, SELF_ID, Vector3.ZERO)
+	assert_true(sm._should_chase_loose_puck(s, Vector3(-12, 0, 0)), "ordered onto it")
+	s.tag_up_peers[SELF_ID] = true
+	assert_false(sm._should_chase_loose_puck(s, Vector3(-12, 0, 0)),
+			"an order cannot send a man who would whistle the play by touching it")
+
+
 func test_loose_clock_survives_a_scramble_graze() -> void:
 	# The failure the old global debounce had: a puck grazing sticks restarted the
 	# reaction clock every time, so a scramble could defer the chase indefinitely.
