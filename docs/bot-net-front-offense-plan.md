@@ -1561,6 +1561,31 @@ it as after (the crease brake keeps main's 3.0 under its own name). So the
 5v5 swing across the merge is the branch's behaviour meeting main's keeper,
 or the fields regenerated on him.
 
+**The fields from before the merge, today.** The branch with `68b053e`'s
+rebound, screen and tip fields (measured on the old keeper) in place of today's,
+5v5, J=11, 576. The instrument scores a tip off the tip field too, but a tip
+reads about the same on either (0.140 against 0.131 each), so the split below
+is the behaviour. xG a possession, split into first shots not tipped, tips and
+second shots:
+
+| 5v5 | untipped first shots | tips | second shots | total |
+|---|---|---|---|---|
+| old main (old keeper) | 0.031 | 0 | 0.004 | 0.034 |
+| branch before the merge (old keeper) | 0.025 | 0.012 | 0.008 | 0.045 |
+| main (new keeper) | **0.037** | 0 | 0.002 | 0.039 |
+| branch, today's fields | **0.016** | 0.009 | 0.005 | 0.030 |
+| branch, today's fields, tip read off | 0.021 | 0.001 | 0.006 | 0.028 |
+| branch, the old fields | 0.023 | 0.011 | 0.004 | 0.038 |
+
+Paired, the old fields against today's: +0.008 ± 0.005 for, +0.011 ± 0.006
+net; against main, level (net −0.001 ± 0.007). So the fields regenerated on the
+new keeper are what took 5v5 behind main. Underneath, in every configuration
+the branch's untipped first shots are worth far less than main's (0.016–0.025
+against 0.031–0.037): the branch trades the carrier's direct shots for tips
+and net-front play, and whether that nets out depends on the tables it is
+priced by. On the old keeper it did; on the new one it does not, and in 3v3 it
+never did.
+
 **Cost** (`benchmarks/`, run one after the other on this machine): per call,
 FINISHER 2156 → 3372 µs and HIGH_SLOT 211 → 2000 µs, the rest within a few
 percent. The AI's time per game-second is mixed (5v5 ozone-cycle 484k → 377k,
