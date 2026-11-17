@@ -1,6 +1,7 @@
 # Bot net-front offence — spacing, rebounds, screens, tips
 
-Status: **steps 1–4 built and measured; 3c, 3d and 5 open.** The CLAUDE.md workflow applies: this doc is
+Status: **steps 1–5 built and measured (3a's measured credit built but off);
+3d's second man not built; step 6 tried and backed out, its 6c first cut inert.** The CLAUDE.md workflow applies: this doc is
 the plan, and deviations get discussed first. It is the decision-layer half of
 #785 (price net presence, crash the net) and the rebound half of #924, and it
 waits on #736 (tips) for its last step. The mechanics it leans on are already
