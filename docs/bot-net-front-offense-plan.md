@@ -1646,6 +1646,29 @@ It is the screen's honest, lower value on the new keeper, which the old field
 over-stated, and the bots played better over-stating it. What the over-stated
 screen bought is the next question.
 
+**What it bought** (the sweep sampling our net-front men every 0.1 s while we
+carry, `MITTS_OZ_NF`, locally; both runs reproduce their sweeps above
+exactly):
+
+| 5v5 | old field | the fit | main |
+|---|---|---|---|
+| NET_FRONT, metres out (median, q25–q75) | 3.7 (2.7–4.7) | 3.9 (2.8–4.8) | |
+| NET_FRONT on the carrier's line (< 0.4 m) | 10% | 11% | |
+| NET_FRONT, one of theirs within 2 m | 51% | 50% | |
+| NET_FRONT holding the screen station | 2% | 21% | |
+| slot shots / possession (their set read) | 0.095 (0.014) | 0.066 (0.007) | 0.109 (0.024) |
+| angle shots / possession | 0.080 | 0.106 | 0.099 |
+
+Not the net front: he stands where he stood. It is the carrier. The old
+field's larger screen credit (`AICarrierField._screen_at` in his shot's and a
+feed's value) is what sent him to the slot to shoot, and with the honest
+credit he shoots from the angle instead. Main's carrier, with no screen
+credit at all, takes more slot shots than either, worth twice as much each
+(0.22 against 0.11–0.15). Main's defence is not the branch's, though: its
+defenders hunt the soft hit, and in 3v3 that was all of the gap. The fair
+read of 5v5's offence is the branch against main with the old check on the
+defending team.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
