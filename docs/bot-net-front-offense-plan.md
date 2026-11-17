@@ -1483,6 +1483,45 @@ The term only sees a man who is home and set before the counter arrives. What
 being high buys in their end is not that: it is a man on the counter before its
 shot (a 2-on-2 rather than a 2-on-1), or one on the puck where it was lost.
 
+---
+
+## The branch against main
+
+The whole branch (`7267145`, the code of the sweeps' "off" runs above) against
+`origin/main` at the commit it merged (`9106431`, the same keeper), on the same
+instrument: the O-zone sweep with the rebound and counter play-on, J=11, 576
+possessions a side, paired by start. Main was played under the branch's duel
+harness (the tip and the press, both game mechanics), with only the branch's
+trace hooks and battle-spot statistics stubbed out of its copy.
+
+| | 3v3 main | 3v3 branch | 5v5 main | 5v5 branch |
+|---|---|---|---|---|
+| shots / possession | 0.613 | 0.595 | 0.292 | 0.319 |
+| slot shots / possession | **0.260** | **0.142** | **0.109** | **0.080** |
+| set read / possession | 0.088 | 0.056 | 0.037 | 0.016 |
+| tipped by ours | 0 | 42 | 0 | 40 |
+| first touch ours, live rebounds | 0.31 | 0.26 | 0.24 | 0.27 |
+| xG for (first + second) | 0.096 | 0.073 | 0.039 | 0.030 |
+| xG against (their counter) | 0.027 | 0.011 | 0.007 | 0.010 |
+| paired branch − main, for | | −0.023 ± 0.008 | | −0.009 ± 0.006 |
+| paired branch − main, against | | −0.016 ± 0.005 | | +0.003 ± 0.003 |
+| paired branch − main, net | | −0.007 ± 0.009 | | −0.012 ± 0.007 |
+
+- **The branch makes about a quarter less xG at both sizes**, and the loss is
+  slot shots: 3v3's nearly halve, 5v5's fall by a quarter.
+- **3v3 gives up much less on the counter** (46 counter shots against 82), so
+  its net is level within the noise. 5v5's net is worse by about two standard
+  errors.
+- **Before the merge the branch read level or ahead of its own start** (5v5,
+  the first-shot set read 0.040 at step 1's start, 0.046 after step 5, against
+  the old keeper). Whether the loss came with main's keeper and the fields
+  regenerated on it, or with the merge's resolution, is not yet measured.
+
+**Cost** (`benchmarks/`, run one after the other on this machine): per call,
+FINISHER 2156 → 3372 µs and HIGH_SLOT 211 → 2000 µs, the rest within a few
+percent. The AI's time per game-second is mixed (5v5 ozone-cycle 484k → 377k,
+nz-rush 5v5 305k → 444k), the worst tick 41–55 ms on main and 35–65 ms here.
+
 ## Open questions
 
 1. **The screen's model** was decided on 2b's numbers: a share of the SET
