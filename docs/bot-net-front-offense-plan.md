@@ -1593,6 +1593,23 @@ and net-front play, and whether that nets out depends on the tables it is
 priced by. On the old keeper it did; on the new one it does not, and in 3v3 it
 never did.
 
+**Which field** (each of `68b053e`'s fields put back alone, 5v5, J=11, 576,
+paired against today's):
+
+| the old field | for | net | slot shots | untipped first shots |
+|---|---|---|---|---|
+| rebound | +0.003 ± 0.004 | +0.005 ± 0.005 | 0.075 | 0.021 |
+| **screen** | **+0.011 ± 0.005** | **+0.012 ± 0.005** | 0.095 | 0.022 |
+| tip | ±0 | ±0 | 0.076 | 0.016 |
+| all three | +0.008 ± 0.005 | +0.011 ± 0.006 | 0.076 | 0.023 |
+
+The screen field is the one. On the new keeper it pays a screen less nearly
+everywhere (summed over each spot's stations: 61 → 55 goals from (0, 6 m),
+16 → 13 from (0, 9.5 m), 4 → 0 from (8, 9.5 m)), and the bots play better when
+a screen is priced higher. But a cell is 24 shots with 0–6 goals, so most of
+that difference is within a cell's own noise: the branch's 5v5 swings on
+noise in a table it reads.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
