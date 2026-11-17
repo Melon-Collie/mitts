@@ -1,7 +1,7 @@
 # Bot net-front offence — spacing, rebounds, screens, tips
 
 Status: **steps 1–5 built and measured (3a's measured credit built but off);
-3d's second man not built; step 6 tried and backed out, its 6c first cut inert.** The CLAUDE.md workflow applies: this doc is
+3d's second man not built; step 6 tried and backed out, its 6c first cut inert and taken out.** The CLAUDE.md workflow applies: this doc is
 the plan, and deviations get discussed first. It is the decision-layer half of
 #785 (price net presence, crash the net) and the rebound half of #924, and it
 waits on #736 (tips) for its last step. The mechanics it leans on are already
@@ -1466,7 +1466,7 @@ in the instrument.
 
 Neither change moved the rips, so the station pays for being low.
 
-**First cut: AIRoleSupport's counter term, inert** (`bec852f`). Each FINISHER /
+**First cut: AIRoleSupport's counter term, inert** (`bec852f`, taken back out). Each FINISHER /
 NET_FRONT station pays `counter_rush_cost_at`: the carrier's live turnover odds
 × the counter's shot past the men who beat it home, him from the station among
 them or not. Measured, 3v3 played every possession bit for bit as without it,
