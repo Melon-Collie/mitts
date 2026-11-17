@@ -1541,6 +1541,26 @@ by `68b053e`'s fields), J=11, 576 a side:
   shots 0.186 off, 0.151 on); the rest is in some other step, unmeasured in 3v3
   until after step 5.
 
+**The carrier's tip read off, today.** The branch with only `_tip_read`
+switched off, J=11, 576:
+
+| | 3v3 | 5v5 |
+|---|---|---|
+| slot shots / possession (main; branch) | 0.170 (0.260; 0.142) | 0.099 (0.109; 0.080) |
+| set read / possession (main; branch) | 0.065 (0.088; 0.056) | 0.021 (0.037; 0.016) |
+| paired tip read off − on, for | −0.001 ± 0.004 | −0.002 ± 0.003 |
+| paired tip read off − on, against | +0.004 ± 0.002 | +0.002 ± 0.002 |
+| paired tip read off − main, net | −0.012 ± 0.010 | −0.016 ± 0.007 |
+
+The rip is not what costs the branch against main: off, it is as far behind.
+In 5v5 it shoots from the slot nearly as often as main and still makes about
+half main's set read a possession, so its shots come from worse spots, not
+fewer. The merge itself is clean: the branch's own changes to the carrier,
+its field, the arrival clock, the steering and the agent read the same before
+it as after (the crease brake keeps main's 3.0 under its own name). So the
+5v5 swing across the merge is the branch's behaviour meeting main's keeper,
+or the fields regenerated on him.
+
 **Cost** (`benchmarks/`, run one after the other on this machine): per call,
 FINISHER 2156 → 3372 µs and HIGH_SLOT 211 → 2000 µs, the rest within a few
 percent. The AI's time per game-second is mixed (5v5 ozone-cycle 484k → 377k,
