@@ -634,7 +634,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		keeper_yaw = opp_keeper.rotation_y
 		if not shot_unavailable:
 			AIShotOdds.pick_shot_now(wrister_base_release, attacking_goal, keeper_now,
-					keeper_vel_x, _stance_met(keeper_stance, wrister_base_release, attacking_goal),
+					keeper_vel_x, _stance_met(keeper_stance, wrister_base_release, attacking_goal, horizontal_velocity),
 					_shot_pick, keeper_yaw, null, _shot_history())
 	var shot_target: Vector3 = _shot_pick.aim if _shot_pick.aim.is_finite() else attacking_goal
 	var shot_dir: Vector3 = shot_target - wrister_base_release
@@ -677,7 +677,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 			sum += AIActionScoring.score_shoot_value(
 					AIGoalieModel.release_ahead_of_goalie(released_at, attacking_goal, goalie_now),
 					attacking_goal, keeper_now, _field.opponents_release,
-					keeper_vel_x, _stance_met(keeper_stance, released_at, attacking_goal),
+					keeper_vel_x, _stance_met(keeper_stance, released_at, attacking_goal, horizontal_velocity),
 					sample_speed,
 					_field.opponent_caps, -1.0, keeper_yaw, true, _shot_history())
 		if not shootable:
@@ -718,10 +718,14 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 # The stance a shot released at `released_at` meets the keeper in, he being in
 # `read` now: down when the puck leaves in tight, since he goes down for a carrier
 # there as it comes (AIGoalieModel.down_in_tight), within the charge he reads
-# the shot over. Never read him as he stands at the decision: a release a metre
-# further in meets him dropped.
-static func _stance_met(read: int, released_at: Vector3, attacking_goal: Vector3) -> int:
-	if AIGoalieModel.down_in_tight(released_at, attacking_goal):
+# the shot over, and the sooner the faster the carrier, skating at
+# `carried_at`, comes at the net. Never read him as he stands at the decision:
+# a release a metre further in meets him dropped.
+static func _stance_met(read: int, released_at: Vector3, attacking_goal: Vector3, carried_at: Vector3) -> int:
+	var to_goal: Vector3 = attacking_goal - released_at
+	to_goal.y = 0.0
+	var closing: float = carried_at.dot(to_goal.normalized()) if to_goal.length_squared() > 0.0001 else 0.0
+	if AIGoalieModel.down_in_tight(released_at, attacking_goal, closing):
 		return AIShotOdds.Stance.DOWN
 	return read
 

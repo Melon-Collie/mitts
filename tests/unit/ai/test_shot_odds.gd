@@ -63,6 +63,40 @@ func test_the_far_net_reads_as_the_measured_net_seen_from_the_other_end() -> voi
 					"feed mirrors at (%.1f, %.1f)" % [release_x, fwd])
 
 
+# A pass along the keeper's own line, to a man straight behind the passer, asks
+# him to go nowhere: he is as set on the receiver as on a carry there, whatever
+# the field measured of feeds across him. The share of a measured feed's odds
+# the pass keeps grows with the travel it asks, and is all of them from the
+# least travel any feed there was measured at.
+func test_a_feed_that_moves_the_keeper_nowhere_is_a_shot_at_him_set() -> void:
+	var goal := Vector3(0.0, 0.0, GOAL_Z)
+	for out: float in [5.0, 6.5, 8.0, 11.0]:
+		for x: float in [0.0, 3.0, -5.0]:
+			var receiver := Vector3(x, 0.0, GOAL_Z + out)
+			var passer: Vector3 = receiver.lerp(goal, 2.0 / receiver.distance_to(goal))
+			var keeper: Vector3 = AIGoalieModel.goalie_squared_pos(_keeper_at(goal, 0.0,
+					AIGoalieModel.GOALIE_RESTING_DEPTH_M), goal, passer)
+			var what: String = "receiver (%.0f, %.1f out)" % [x, out]
+			for one_timer: bool in [true, false]:
+				assert_almost_eq(AIShotOdds.feed(passer, receiver, 14.0, goal, keeper, one_timer),
+						AIShotOdds.shot_set(receiver, goal), 1e-4, "%s, straight back: set on him" % what)
+			assert_almost_eq(AIShotOdds._travel_share(passer, receiver, goal, keeper), 0.0, 1e-4, "%s: no share" % what)
+			# Caught off the receiver's line when it leaves, he has that to make up.
+			assert_gt(AIShotOdds._travel_share(passer, receiver, goal, keeper + Vector3(0.6, 0.0, 0.0)), 0.5,
+					"%s, the keeper 0.6 m off it: a feed to him" % what)
+			# A passer further and further round to the other side of the net from
+			# the receiver asks the keeper further and further across.
+			var away: float = -1.0 if x >= 0.0 else 1.0
+			var prev: float = 0.0
+			for round_m: float in [0.2, 0.5, 1.0, 2.0, 4.0, 8.0]:
+				var from: Vector3 = passer + Vector3(away * round_m, 0.0, 0.0)
+				var share: float = AIShotOdds._travel_share(from, receiver, goal,
+						AIGoalieModel.goalie_squared_pos(keeper, goal, from))
+				assert_gte(share, prev, "%s, from %.1f m round: no smaller a share" % [what, round_m])
+				prev = share
+			assert_eq(prev, 1.0, "%s: a pass across him keeps all of what was measured" % what)
+
+
 func test_a_set_keeper_reads_the_measured_set_cell() -> void:
 	# "Square and set on it" is a measured situation, so at every measured spot
 	# the set read IS that spot's SET cell. A spot in the boards has none.

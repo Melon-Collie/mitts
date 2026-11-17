@@ -114,7 +114,10 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 	duel.add_skater(carrier_peer, 0, start, profile, vel)
 	duel.start(carrier_peer)
 	# NO _ctrl.setup() here — setup() already wired it, and calling it again per
-	# rush re-connects every signal it subscribes to.
+	# rush re-connects every signal it subscribes to. He starts each rush reset,
+	# the puck restaged, so a rush does not depend on the one before it.
+	_puck.stage_at(start)
+	_ctrl.reset_to_crease()
 	_shooter.global_position = start
 	_shooter.velocity = vel
 	_puck.set_carrier(_shooter)
@@ -132,7 +135,7 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 				if duel._skater(carrier_peer) != null else Vector3.ZERO
 		_puck.global_position = puck_pos
 		_publish_windup(duel)
-		_ctrl._physics_process(DT)
+		_h.step_keeper()
 		return _goalie.global_position
 
 	var rec := {"outcome": NO_SHOT, "release": Vector3.INF, "aim": Vector3.INF,

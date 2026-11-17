@@ -159,3 +159,33 @@ func test_gathering_after_a_save_he_can_save_again() -> void:
 		_motor.save(L.EXTENSION if down else L.BUTTERFLY, 1.0)
 		was = _run(what + " again", _motor.save_move.drop_s + DT, was)
 		assert_true(_motor.save_move.is_set(), "%s: the second save made" % what)
+
+
+# Going down as he glides, his edges take off what of his speed does not take
+# him to his spot: all of it across the way there at their stopping rate, and
+# what along it is more than his pads' friction stops on the spot. Down, the
+# pads slide on as they are.
+func test_going_down_his_edges_take_off_the_speed_not_toward_his_spot() -> void:
+	var move := KeeperSaveMove.new()
+	move.state = KeeperSaveMove.State.GOING
+	move.velocity = Vector2(2.0, 1.0)
+	move.hold_to(Vector2(0.0, 5.0), DT)
+	assert_almost_eq(move.velocity.y, 1.0, 1e-6, "toward a far spot: kept")
+	assert_almost_eq(move.velocity.x, 2.0 - move.edge_decel * DT, 1e-6, "across the way there: braked on his edges")
+	move.velocity = Vector2(0.0, 3.0)
+	var near: float = 0.2
+	move.hold_to(Vector2(0.0, near), DT)
+	var most: float = sqrt(2.0 * move.pad_friction * near)
+	assert_almost_eq(move.velocity.y, maxf(most, 3.0 - move.edge_decel * DT), 1e-6,
+			"toward a near spot: down toward the speed his pads stop on it")
+	move.velocity = Vector2(1.5, 0.0)
+	move.hold_to(Vector2.ZERO, DT)
+	assert_almost_eq(move.velocity.x, 1.5 - move.edge_decel * DT, 1e-6, "on his spot: all of it braked")
+	move.velocity = Vector2(0.0, 1.5)
+	move.hold_to(Vector2(0.0, -1.0), DT)
+	assert_almost_eq(move.velocity.y, 1.5 - move.edge_decel * DT, 1e-6, "away from his spot: braked")
+	move.state = KeeperSaveMove.State.HELD
+	move.velocity = Vector2(2.0, 1.0)
+	move.hold_to(Vector2(0.0, 5.0), DT)
+	assert_eq(move.velocity, Vector2(2.0, 1.0), "down: the pads slide on as they are")
+

@@ -897,8 +897,10 @@ he gets there); his positioning is the same on every tier.
 
 **The skater AI's goalie model is a MIRROR, not a second tier.** What the bots
 predict of him outside the shot field — his leg read, his push, the depth he
-takes, the post he holds, his rise, his going down for a carrier in tight
-(`down_in_tight`, which a carry's shot on arrival reads his stance by) — lives
+takes, the post he holds, his rise, his going down for a carrier in tight and
+as far outside it as the carrier skates while he drops (`down_in_tight`, by
+his own `KeeperPositioning.down_range` and the tier's drop, which a carry's
+shot on arrival reads his stance by) — lives
 on `AIGoalieModel`, read from his own
 code (`KeeperPositioning`, `KeeperFootwork`, `KeeperDrop`, his gear), with the
 leg read synced from the match's profile by `set_goalie_profile`.
@@ -996,8 +998,13 @@ reaches back into what remains.
     release (`AIShotValue.set_keeper`) is read from the SET cells alone,
     because a feed cell can show the same visible keeper and a different
     outcome. A pass is priced from the passer, the keeper square on him, at the
-    feed's travel and flight. Outside `AIGoalieModel.GOALIE_HOME_M` the net is
-    empty.
+    feed's travel and flight. Every measured feed crosses him, the least of
+    them asking 0.02 to 0.4 m of travel by spot; a pass that asks less keeps
+    that share of the measured odds and is otherwise a shot at him set on the
+    receiver (`AIShotOdds._travel_share`), so a drop pass straight back, which
+    asks none, is not priced as a pass across his crease (live, a one-timer off
+    it scores 2 of 72 aims against 30 off a feed from 3 m across). Outside
+    `AIGoalieModel.GOALIE_HOME_M` the net is empty.
   - **Odds are at one placement scatter** (`REFERENCE_SPREAD_RAD`): a property
     of the chance, not the shooter (a wobblier tier misses more of the same
     shots). First contact is the outcome: rebounds and screens are not in it
@@ -1050,7 +1057,9 @@ reaches back into what remains.
   (`AICarrySpace._stopped_clearance`; a chaser behind only loses ground by it).
   The carrier's projected defence reads him the same way: backing off in front
   of the carrier, he gives up no more ice, in any direction, than his stop
-  takes (`AICarrierField.project_opponents`). Carried on, his retreat shows
+  takes (`AICarrierField.project_opponents`), and so does the carrier's read of
+  our possession (`AIPossessionValue.read_from_puck`), which prices where his
+  moves end. Carried on, his retreat shows
   every delay of the entry an emptier blue line and his drift across (which
   mirrors the carrier) the far lane opening, so the carrier pulls up to wait or
   flips lanes each time the drift reverses. Which lane the carry is FOR is held
@@ -1351,8 +1360,9 @@ reaches back into what remains.
     carry on), pricing the defence it meets on each. Where a line stops outside
     the zone it is worth our possession of the spot
     (`AICarrierField.horizon_value` → `AIPossessionValue`): the best zone entry
-    (the better of the shot and one straight drive in from it, kept as far as
-    the carry-safety read allows) × the skate there × the race to it
+    (the better of the shot and one straight drive in from it, to the net at the
+    odds the carry-safety read keeps it over the drive's horizon, worth the best
+    shot it passes) × the skate there × the race to it
     (`arrival_race`, its band widened by the arrival clock's own error over the
     trip), or the continuation of the spot when no entry beats it. In the zone
     the same read is the best of those, the shot and the drive.
@@ -1390,12 +1400,19 @@ reaches back into what remains.
     behind a goal line, a rolled move is held off the cage as the body is, and
     the carry cursor
     swings around the nearer post (stick-on-net contact dislodges the puck).
+    Our own mouth is a hard no-go for a carried puck
+    (`own_mouth_safe_blade_target`, `Scripts/ai/CLAUDE.md`): an execution
+    clamp like the boards', not an evaluation term.
     Behind-the-goal-line ice is playable for a carrier already back there
     (`AICarrierCarrySearch._candidate_ice_legal`), or the walkouts are the only moves and
     a pressured carrier plants on the end wall.
   - An in-zone candidate reached from outside also gets its **entry
     continuation** — the drive-in from it — so a drop pass wins only when the
-    trailer's entry genuinely beats the carrier's.
+    trailer's entry genuinely beats the carrier's. Either side of the line a
+    candidate reached from outside is worth no less than our possession of it
+    (`horizon_value`), which is what standing still out there is worth: read
+    by his own shot alone, a spot his hands' hold carries over the line is a
+    step down from where he stands, and he brakes short of it.
   - **One-way valve:** a carrier in the zone prunes any carry candidate or pass
     receiver that would leave it. The pass half keys on the PUCK where it leaves
     the blade (`AICarrierField.zone_taken`), because that is what the offside line reads. The
@@ -1419,14 +1436,21 @@ reaches back into what remains.
   the carrier would shoot from, through the same line gate
   (`AICarrierField.leaves_ahead_of_line`, a release behind it priced as no shot),
   against the keeper at the depth he takes for the pace the carry closes on him
-  at arrival, in the stance the release meets him in: down in tight
+  at arrival, in the stance the release meets him in: down in tight, and from
+  further out the faster the carrier comes
   (`AIGoalieModel.down_in_tight`), which the shot now reads too
   (`AIRoleCarrier._stance_met`). Priced from the body, or against the depth the
   drive's average pace pushed him to, a carry promised shots the shot now
   refused once it got there, and the carrier braked into the slot or coasted
   into the keeper; read as he stands at the decision, a release a metre further
   in priced the keeper the drive had not yet dropped. A drive in, the carrier's
-  own or a receiver's, is shot by the same read (`AICarrierArrivalShot.value`).
+  own or a receiver's, is shot by the same read (`AICarrierArrivalShot.value`),
+  where it ends and where on the way the set keeper gives up most (the best of
+  the shot field's rows it crosses in range, and the row before it, the hands'
+  hold letting go later than he decides): from inside the zone it runs to the
+  net, and one worth only its end's shot is worth nothing from wherever that
+  end is a spot the keeper has covered. Two full reads more a drive, not one a
+  row: a receiver's drive is priced for every pass.
   A move is worth its best shot on the way as well as its end
   (`AICarrierArrivalShot.best_on_path`): the carrier plans where he releases.
   The plan is a point on the ice, kept until a re-plan finds one better by the
@@ -1437,8 +1461,10 @@ reaches back into what remains.
   moves with him: the best read sat a step ahead each time, and a lower tier's
   re-plan came a couple of metres past it.
   A destination across a cage is skated at the arrival clock's waypoint round it
-  (`AIArrival.cage_waypoint`). A move whose path reaches a crease, or the goal
-  line from in front, ends at its last sample short of it and is priced there
+  (`AIArrival.cage_waypoint`), round our own cage at the edge of our mouth's
+  keep-out, and so is one past our own posts nearer than it. A move whose path
+  reaches a crease, the goal line from in front, or deeper into that keep-out
+  ends at its last sample short of it and is priced there
   (`AICarryRollout.reach_short_of_net`): the carrier re-plans many times a
   horizon, so a drive at the net is a release on the way in. Never prune it
   whole — at pace in tight that leaves only the brake and the cut back.

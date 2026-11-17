@@ -34,12 +34,21 @@ func _planning(off: float, worth: float, ticks: int) -> AIRoleCarrier:
 
 func test_a_release_in_tight_meets_the_keeper_down() -> void:
 	var up: int = AIShotOdds.Stance.UPRIGHT
-	assert_eq(AIRoleCarrier._stance_met(up, Vector3(0.0, 0.0, GOAL.z + 2.0), GOAL),
+	var still := Vector3.ZERO
+	assert_eq(AIRoleCarrier._stance_met(up, Vector3(0.0, 0.0, GOAL.z + 2.0), GOAL, still),
 			AIShotOdds.Stance.DOWN, "he goes down for a carrier in tight before it leaves")
-	assert_eq(AIRoleCarrier._stance_met(up, Vector3(0.0, 0.0, GOAL.z + 6.0), GOAL), up,
+	assert_eq(AIRoleCarrier._stance_met(up, Vector3(0.0, 0.0, GOAL.z + 6.0), GOAL, still), up,
 			"out of tight he is read as he stands")
 	assert_eq(AIRoleCarrier._stance_met(AIShotOdds.Stance.DOWN,
-			Vector3(0.0, 0.0, GOAL.z + 6.0), GOAL), AIShotOdds.Stance.DOWN)
+			Vector3(0.0, 0.0, GOAL.z + 6.0), GOAL, still), AIShotOdds.Stance.DOWN)
+	# He lands his drop as a carrier comes in tight, so one coming fast meets
+	# him down from further out; skating away or across does not.
+	var just_out := Vector3(0.0, 0.0, GOAL.z + KeeperPositioning.TIGHT_M + 0.5)
+	var at_the_net: Vector3 = (GOAL - just_out).normalized() * 9.0
+	assert_eq(AIRoleCarrier._stance_met(up, just_out, GOAL, still), up, "standing just outside: up")
+	assert_eq(AIRoleCarrier._stance_met(up, just_out, GOAL, at_the_net), AIShotOdds.Stance.DOWN,
+			"coming fast from just outside: down")
+	assert_eq(AIRoleCarrier._stance_met(up, just_out, GOAL, -at_the_net), up, "skating away: up")
 
 
 func test_the_planned_point_is_kept_against_a_re_plan_no_clearly_better() -> void:

@@ -9,6 +9,7 @@ extends GutTest
 #   FLAT        — the flat shots post to post: G clean goal, o in off him,
 #                 s save, w wide
 # and the goals in off him by the part the puck met first.
+# test_tight_saves is the same against a breakaway's drive released in tight.
 # test_trace_one_slot_goal follows one flat shot tick by tick to the gear it
 # meets: the pads and blade boxes, and the contact's normal and rebound.
 
@@ -20,8 +21,13 @@ const SPEEDS: Array[float] = [20.0, 27.0, 33.0]
 const SPOTS: Array[Vector2] = [Vector2(0.0, 5.0), Vector2(1.5, 5.0), Vector2(0.0, 7.0),
 		Vector2(1.5, 7.0)]
 const DRIVE_M_S: float = 7.0
+const TIGHT_SPOTS: Array[Vector2] = [Vector2(0.0, 3.0), Vector2(0.0, 3.6), Vector2(0.0, 4.3), Vector2(1.0, 3.3)]
+const TIGHT_DRIVE_M_S: float = 8.5
 const DRIVE_FROM_M: float = 14.0
 const PART_NAMES: Array[String] = ["STICK", "PAD", "BLOCKER", "CHEST", "GLOVE", "MASK"]
+# Where a carrier sets in tight: metres out, and across.
+const SET_OUT_M: Array[float] = [2.0, 2.5, 3.0, 3.5]
+const SET_ACROSS_M: Array[float] = [0.0, 0.8, 1.5]
 
 var _s: RefCounted = null
 var _h: RefCounted = null
@@ -111,6 +117,42 @@ func _cell(spot: Vector2, speed: float, driving: bool, charged: bool) -> String:
 			spot.x, spot.y, speed,
 			1.0 - float(clean) / maxf(on_net, 1),
 			1.0 - float(clean + off_total) / maxf(on_net, 1), flat, clean, off_total, str(off_him)]
+
+
+# Every loft and lane against a carrier driving in at a breakaway's pace,
+# released in tight and just outside it, on his line and held a metre off it:
+# FLAT / LOW / HIGH post to post (G clean, o in off him, s save, w wide) and
+# the goals of the cell. What a shooter who can put it anywhere has there.
+func test_tight_saves() -> void:
+	var lines: PackedStringArray = []
+	var total: int = 0
+	for spot: Vector2 in TIGHT_SPOTS:
+		for speed: float in [28.6, 33.0]:
+			var row: String = "drive %.1f m/s to (%.1f, %.1f) at %.1f m/s |" % [TIGHT_DRIVE_M_S, spot.x, spot.y, speed]
+			var goals: int = 0
+			for loft: int in Stager.LOFTS:
+				var lanes: String = ""
+				for i: int in Stager.AIM_POINTS:
+					_h.settle_ready(Vector3(spot.x, 0.0, GOAL_Z + DRIVE_FROM_M))
+					var at: Vector3 = _h.drive_in(spot.x, DRIVE_FROM_M, spot.y, TIGHT_DRIVE_M_S)
+					var r: int = _fire(at, Vector3(Stager.aim_x(i), 0.0, GOAL_Z), loft, speed, false)
+					var touched: bool = _h.last_part >= 0
+					var c: String = "w"
+					if r == Harness.GOAL and not touched:
+						c = "G"
+					elif touched and (r == Harness.GOAL or _h.rebound_goal):
+						c = "o"
+					elif touched:
+						c = "s"
+					if c == "G" or c == "o":
+						goals += 1
+					lanes += c
+				row += " " + lanes
+			total += goals
+			lines.append("%s | %d in" % [row, goals])
+	lines.append("%d in" % total)
+	gut.p("\n" + "\n".join(lines))
+	assert_true(true)
 
 
 # A flat shot that goes in off his right pad (aim 3) and one his blade stops
@@ -221,3 +263,44 @@ func _stage_kind(kind: int, spot: Vector2) -> Vector3:
 		2:
 			return _s.stage_feed(at, Vector3(spot.x - 5.0, 0.0, at.z), 16.0)
 	return _s.stage_set(at)
+
+
+# The lifted shots against a carrier set in tight, released as the keeper
+# settles for him: LOW and HIGH post to post (G clean, o in off him, s save,
+# w wide), the goals of the cell, and the parts that made its saves. What his
+# hands cover where they are held, a shot from there being on him before they
+# answer it.
+func test_set_in_tight() -> void:
+	var lines: PackedStringArray = ["spot (across, out) speed | LOW post to post | HIGH post to post | goals | saved by"]
+	var total: int = 0
+	for out: float in SET_OUT_M:
+		for x: float in SET_ACROSS_M:
+			for speed: float in [20.0, 28.6]:
+				var goals: int = 0
+				var by: Dictionary = {}
+				var rows: String = ""
+				for loft: int in [ShotMechanics.ELEVATION_LOW, ShotMechanics.ELEVATION_HIGH]:
+					var lanes: String = ""
+					for i: int in Stager.AIM_POINTS:
+						var at: Vector3 = _s.stage_set(Vector3(x, 0.0, GOAL_Z + out))
+						var r: int = _fire(at, Vector3(Stager.aim_x(i), 0.0, GOAL_Z), loft, speed, false)
+						var touched: bool = _h.last_part >= 0
+						var c: String = "w"
+						if r == Harness.GOAL and not touched:
+							c = "G"
+						elif touched and (r == Harness.GOAL or _h.rebound_goal):
+							c = "o"
+						elif touched:
+							c = "s"
+							var part: String = PART_NAMES[_h.last_part]
+							by[part] = int(by.get(part, 0)) + 1
+						if c == "G" or c == "o":
+							goals += 1
+						lanes += c
+					rows += " | " + lanes
+				total += goals
+				lines.append("(%.1f, %.1f) %4.1f%s | %2d | %s" % [x, out, speed, rows, goals, str(by)])
+	lines.append("%d in" % total)
+	gut.p("\n" + "\n".join(lines))
+	assert_true(true)
+

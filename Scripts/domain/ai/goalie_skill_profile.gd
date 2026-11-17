@@ -7,8 +7,8 @@ extends RefCounted
 # (Scripts/domain/ai/CLAUDE.md → "The goalie is tiered, but only ever as a
 # weaker goalie").
 #
-# AI MIRROR: the bots' model of him (AIGoalieModel) reads the same leg read,
-# synced from the match's profile by set_goalie_profile; its default is Hard's,
+# AI MIRROR: the bots' model of him (AIGoalieModel) reads the same leg read and
+# drop, synced from the match's profile by set_goalie_profile; its default is Hard's,
 # so unwired contexts (unit tests) plan against the Hard goalie.
 #
 # To add a tier: add a Difficulty enum value, a factory, and a for_difficulty arm.
@@ -38,7 +38,8 @@ var reaction_delay_s: float
 # the bottom: beginners telegraph every shot, so an untiered prime makes Easy
 # sharpest against exactly the shots newcomers take.
 var prearmed_reaction_delay_s: float
-# Pads-to-floor time (s) once the butterfly commits.
+# Pads-to-floor time (s) once the butterfly commits. AI-mirrored
+# (AIGoalieModel.goalie_drop_s).
 var butterfly_drop_s: float
 # The tier this profile is (Difficulty), -1 for one built to other values: what
 # the keeper's wire set carries, so a client's predicted keeper plays the

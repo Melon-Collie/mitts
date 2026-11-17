@@ -8,8 +8,8 @@ extends GutTest
 # steps on in its own world, and snaps on the same ticks as the host's, as a
 # predictor will. Every tick his 22 save boxes, his save and the puck, and on a
 # broadcast tick his whole blob, are held equal to the host's. The snap is held
-# to the play it changes: the same play with no snap meets the shot on the same
-# tick, the same way.
+# to the play it changes: the same play with no snap meets the shot within a
+# tick of it, the same way.
 
 const Harness := preload("res://tests/harness/keeper_play_harness.gd")
 # A 50 ms one-way's span: twice the one-way plus the input lead's margin.
@@ -57,7 +57,9 @@ func _exact_through(play: int) -> void:
 	var plain := Harness.new(add_child_autofree)
 	for t: int in ticks:
 		plain.tick(play, t)
-	assert_eq(plain.first_contact, host.first_contact, "met on the same tick with the snap as without it")
+	# To within a tick: the snap moves him by less than a millimetre, which
+	# moves a contact near a tick's boundary across it.
+	assert_almost_eq(plain.first_contact, host.first_contact, 1, "met when it is with the snap as without it")
 	assert_eq(plain.caught, host.caught, "and the same way")
 	assert_almost_eq(plain.puck.global_position, host.puck.global_position, Vector3.ONE * 0.05,
 			"the puck ends where it did")

@@ -122,6 +122,19 @@ func rests_down() -> bool:
 	return low != Low.KICK
 
 
+# While he is still going down, his edges take off the speed that does not
+# take him to a spot `way` from him: what is across the way there, and what is
+# more than the pads' friction stops on it. A drop made as he glides keeps
+# only the slide that carries him where he is going.
+func hold_to(way: Vector2, dt: float) -> void:
+	if state != State.GOING:
+		return
+	var kept := Vector2.ZERO
+	if way.length_squared() > 1e-6 and velocity.dot(way) > 0.0:
+		kept = velocity.project(way).limit_length(sqrt(2.0 * pad_friction * way.length()))
+	velocity = kept + (velocity - kept).move_toward(Vector2.ZERO, edge_decel * dt)
+
+
 func step(dt: float) -> void:
 	if state == State.NONE:
 		return

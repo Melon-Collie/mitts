@@ -113,19 +113,28 @@ static func _time_to_arrive_routed(from_pos: Vector3, dest: Vector3,
 
 
 # The waypoint of the quickest route round the cage from `from_pos` to `dest`
-# (see _time_to_arrive_routed).
+# (see _time_to_arrive_routed). A carrier round his OWN cage (`carrier_own_goal_dir`,
+# 0 for anyone else) skates the side and front waypoints at the edge of the
+# keep-out of his own mouth (AINetObstacle.own_mouth_keep_out_depth), so the puck
+# on his stick cannot reach it on the way.
 static func cage_waypoint(from_pos: Vector3, dest: Vector3, from_velocity: Vector3,
-		ref_speed_m_s: float, accel_m_s2: float, lateral_grip: float = 1.0) -> Vector3:
+		ref_speed_m_s: float, accel_m_s2: float, lateral_grip: float = 1.0,
+		carrier_own_goal_dir: float = 0.0) -> Vector3:
 	# The cage being crossed is on the side the route actually reaches.
 	var s: float = signf(from_pos.z) \
 			if absf(from_pos.z) >= absf(dest.z) else signf(dest.z)
 	var side_x: float = GameRules.NET_BACK_HALF_WIDTH \
 			+ AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M
+	var front_in: float = AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M
+	if carrier_own_goal_dir != 0.0 and s == carrier_own_goal_dir:
+		side_x = maxf(side_x,
+				AINetObstacle.OWN_MOUTH_HALF_WIDTH_M + AINetObstacle.OWN_MOUTH_KEEP_OUT_M)
+		front_in = maxf(front_in,
+				AINetObstacle.OWN_MOUTH_DEPTH_M + AINetObstacle.OWN_MOUTH_KEEP_OUT_M)
 	var mid_z: float = s * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH * 0.5)
 	var back_z: float = s * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH \
 			+ AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M)
-	var front_z: float = s * (GameRules.GOAL_LINE_Z \
-			- AINetObstacle.CARRY_NET_CLEAR_MARGIN_M - NET_ROUTE_CLEAR_M)
+	var front_z: float = s * (GameRules.GOAL_LINE_Z - front_in)
 	var best: float = INF
 	var best_wp: Vector3 = dest
 	for wp: Vector3 in [
