@@ -752,8 +752,8 @@ func test_in_the_zone_the_keep_discounts_the_shot() -> void:
 	var keeper := ctx.attacking_goal_pos + Vector3(0.0, 0.0, 1.0)
 	var kept: float = c._field.value_at(ctx, self_pos, self_pos, none, keeper, 0.0, 1.0)
 	assert_gt(kept, 0.0)
-	assert_lt(c._field.value_at(ctx, self_pos, self_pos, none, keeper, 0.0, 0.5), kept,
-			"the shot half kept, and the puck lost at the press the other half")
+	assert_almost_eq(c._field.value_at(ctx, self_pos, self_pos, none, keeper, 0.0, 0.5),
+			kept * 0.5, 1e-6)
 
 
 # ─── O-zone shot selection (what he picks at these: the snapshot) ────────────
@@ -2833,17 +2833,14 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 		var stance: int = AIShotOdds.Stance.DOWN \
 				if AIGoalieModel.down_in_tight(spot + Vector3(hold.x, 0.0, hold.y),
 						ctx.attacking_goal_pos) else AIShotOdds.Stance.UPRIGHT
-		var odds: float = AIShotValue.now(release,
+		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(release,
 				ctx.attacking_goal_pos, keeper, 0.0, stance,
 				atan2(keeper.x - release.x, keeper.z - release.z),
-				AIShotOdds.History.CARRIED)
-		var shot_there: float = AIActionScoring.with_rebound(odds,
-				AIActionScoring.FLAT_REBOUND_CREDIT) * c._field.holds.arrival_keep \
-				- AIShotLoss.cost(c._field, ctx, spot + Vector3(hold.x, 0.0, hold.y), Vector3.INF,
-						AIBotMechanics.WRISTER_SHOT_SPEED_M_S, c._field.holds.arrival_keep, 1.0, odds)
+				AIShotOdds.History.CARRIED), AIActionScoring.FLAT_REBOUND_CREDIT) \
+				* c._field.holds.arrival_keep
 		var kept: float = c._field.continuation_at(release)
 		assert_almost_eq(arrival, maxf(shot_there, kept), 1e-4,
-				"arriving at rest at %s prices the shot the keeper facing it gives, less what it loses" % spot)
+				"arriving at rest at %s prices the shot the keeper facing it gives" % spot)
 
 
 # ─── pass pace: a hard feed leaves the receiver settling ─────────────────────
@@ -2929,9 +2926,9 @@ func test_a_point_man_backing_over_the_line_prices_no_shot() -> void:
 	var ctx: RoleContext = _set_keeper(_make_ctx(at))
 	ctx.snapshot.skater_states[1].velocity = Vector3(0.0, 0.0, 7.0)
 	ctx.self_velocity = Vector3(0.0, 0.0, 7.0)
-	assert_eq(_decided(ctx)._phase_shoot_score, -1.0, "backing out, no shot")
+	assert_lte(_decided(ctx)._phase_shoot_score, 0.0, "backing out, no shot")
 	var still: RoleContext = _set_keeper(_make_ctx(at))
-	assert_gt(_decided(still)._phase_shoot_score, -1.0, "standing there, he has one")
+	assert_gt(_decided(still)._phase_shoot_score, 0.0, "standing there, he has one")
 
 
 

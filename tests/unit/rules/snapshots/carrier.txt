@@ -4,7 +4,7 @@ walled off at speed, outlet up the wall: intent	DUMP
 walled off at speed, outlet up the wall: pass value	0.0000
 impeded by a defender ahead, open mate wide: intent	PASS
 ahead man, clear path: drive-in credit	0.3032
-ahead man, defender in his path: drive-in credit	-0.1763
+ahead man, defender in his path: drive-in credit	-0.1371
 ahead man, defender in his path: intent	CARRY
 stick 1.6 m ahead on the presented puck: protect gain	0.4531
 stick 1.6 m ahead on the presented puck: offset behind the body	0.7794
@@ -12,7 +12,7 @@ defender abreast 2.2 m off the hip: protect gain	0.4546
 tight-wall pinch, open man wide: intent	PASS
 tight-wall pinch, open man wide: pass target	2
 dead slot over the 8.5 m band, set keeper: shoot-now ratio	29.2790
-spun-off carrier, cut-in over standing still: move-score margin	0.1154
+spun-off carrier, cut-in over standing still: move-score margin	0.0809
 tight-wall pinch, open man wide: carry anchor	(0.0, -22.5)
 spun-off carrier, beaten man behind: pick	CARRY to (1.3, -24.4)
 pressured deep in our zone, open outlet up the strong wall: pick	PASS to 2
@@ -36,7 +36,7 @@ level with a mate at the blue line, symmetric set D: intent	CARRY
 2 m inside the blue line, open, keeper 2 m out: pick	CARRY to (0.0, -13.1)
 fresh entry, finisher driving the house: intent	CARRY
 fresh entry, finisher driving the house: developing feed	0.9256
-fresh entry, finisher driving the house: shoot-now value	-0.0133
+fresh entry, finisher driving the house: shoot-now value	0.0013
 head-on drive at 6 m/s, keeper 1 m out, from 10 m: pick	CARRY to (-3.3, -23.5)
 head-on drive at 6 m/s, keeper 1 m out, from 9 m: pick	CARRY to (-3.3, -24.5)
 head-on drive at 6 m/s, keeper 1 m out, from 8 m: pick	CARRY to (-3.3, -25.5)
@@ -66,7 +66,7 @@ wheeling up the weak wall, middle clogged: pick	CARRY to (-12.3, 14.4)
 behind our cage, empty rink: pick	CARRY to (3.7, 26.8)
 beat his man down the wing at 8.5 m/s: pick	CARRY to (1.7, -24.7)
 wing entry in stride, defender on the inside lane: carry anchor	(8.0, -18.0)
-sharp-angle corner, keeper sealing, defender boxing out: pick	CARRY to (12.1, -24.6)
+sharp-angle corner, keeper sealing, defender boxing out: pick	CARRY to (8.1, -25.9)
 behind their cage, empty rink: carry anchor	(-3.0, -27.7)
 splittable gap up the middle, open man wide: carry anchor	(0.0, -24.1)
 checker dead on the carry line: seam degrees off the carry	180.0000

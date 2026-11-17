@@ -1386,7 +1386,7 @@ What the comparison lacks is cost:
   is where it matters most.
 - **The FINISHER's station pays nothing for being low.**
 
-### 6a. A shot pays its turnovers
+### 6a. A shot pays its turnovers (built, measured, backed out)
 
 The shot's loss modes, priced as a pass's are, on the carrier's own field:
 
@@ -1405,15 +1405,10 @@ prices: the carry's planned shot and a receiver's off the feed are netted of
 their losses inside the shot-or-keep-it read (`AICarrierField._regime_value`),
 so a shot worth less than holding the puck is held.
 
-### 6b. The counter-rush in 3v3
+### 6b. The counter-rush in 3v3 (built, measured, backed out)
 
 `counter_exposure_cost` for every team size, passes and carries too, so the
 compete stays in one currency.
-
-### 6c. Then the FINISHER's station
-
-Re-measure first: fewer rips may already take him off the net front. If not,
-the station pays for being low.
 
 ### 6a and 6b measured: no gain, and in 3v3 more counters against
 
@@ -1459,6 +1454,16 @@ exposure was always on, so its row above is the shot loss alone):
 - **Against rises in all three by about the same**, by unrelated changes, so
   some of it is likely the off run's luck (its 46 counter shots are the fewest).
 - **No variant moves the rips** (40–43 tips).
+
+Both are backed out (decided with the user): neither gains anything for, and
+the shot loss alone takes a fifth of the offence. If a shot is to pay its
+losses, trace first why it gives up slot shots: a pass pays the same loss
+price, so the shot should not lose to it alone. The counter-rush play-on stays
+in the instrument.
+
+### 6c. The FINISHER's station
+
+Neither change moved the rips, so the station pays for being low.
 
 ## Open questions
 

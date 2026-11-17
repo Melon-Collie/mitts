@@ -1314,7 +1314,7 @@ reaches back into what remains.
   there: `p · ours(meet) − (1 − p) · theirs(meet)`, p the arrival race in
   `arrival_race`'s contest band, widened by the clock's error over the trip
   unless their keeper decides it (he is no skate mis-timed seconds out), theirs
-  the turnover there plus the counter exposure. A race lost to their man is
+  the turnover there plus the 5v5 counter exposure. A race lost to their man is
   read when his first play is away, by the forecheck's own clock
   (`AIForecheckRead`: the pickup's settle, his read, the release): a dump starts
   the forecheck, so our soonest forechecker's stick on him before then (that

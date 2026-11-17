@@ -41,9 +41,8 @@ const AT_THE_NET := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 3.5)
 const ELSEWHERE := Vector3(10.0, 0.0, -GameRules.GOAL_LINE_Z + 20.0)
 
 
-# The screen on a feed from the wall to the slot's top (what feed_value_at lays
-# on the shot off it), its receiver standing now at `receiver_now`, with `others`
-# of ours on the ice too.
+# A feed from the wall to the slot's top, its receiver standing now at
+# `receiver_now`, with `others` of ours on the ice too.
 func _feed(receiver_now: Vector3, others: Array[Vector3] = []) -> float:
 	var carrier := Vector3(-8.0, 0.0, NET.z + 9.5)
 	var mates: Array[Vector3] = [receiver_now]
@@ -52,8 +51,8 @@ func _feed(receiver_now: Vector3, others: Array[Vector3] = []) -> float:
 	var field := AICarrierField.new()
 	field.fill(ctx)
 	var none: Array[Vector3] = []
-	return field._screen_at(ctx, Vector3(0.0, 0.0, NET.z + 9.5), AICarrierField.goalie_now(ctx),
-			none, receiver_now)
+	return field.feed_value_at(ctx, carrier, Vector3(0.0, 0.0, NET.z + 9.5), 15.0, true,
+			carrier, none, 0.0, Vector3.ZERO, receiver_now)
 
 
 # The receiver skating out from the net front to the feed stands, now, on the
