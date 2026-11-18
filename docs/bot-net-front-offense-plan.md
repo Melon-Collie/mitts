@@ -1829,6 +1829,31 @@ cursor not on the path when it passes there); which, is not yet traced. Beyond
 68° rips still do worse in each facing band, on few rips, so facing is most of
 the angle and not all.
 
+**It is the aim, and facing does not hold up** (the forced run with the
+covering defender, his stick nearest the line at the release, followed tick by
+tick: his cursor and his blade against the rip's path):
+
+| | rips | his cursor onto the path | tipped | turned by their stick |
+|---|---|---|---|---|
+| the tip point in front of him (≤ 45°) | 52 | 44% | 56% | 29% |
+| to his side (45–90°) | 50 | 68% | 56% | 36% |
+| behind him (> 90°) | 19 | 47% | 63% | 21% |
+| inside 68° | 80 | 49% | 68% | 22% |
+| beyond 68° | 41 | 66% | 37% | 46% |
+| his cursor went onto the path | 66 | | 35% | 47% |
+| it did not | 55 | | 84% | 11% |
+
+His blade follows his cursor within 0.04–0.20 m (median by facing), so the rig
+is not what limits him. With the covering defender picked this way, facing
+makes no difference (56% tipped in front and beside), so the facing effect
+above came from which defender that read picked, and is withdrawn. What
+decides a rip is whether he goes for it: when his cursor goes onto the path he
+turns it about half the time, and when it does not the rip gets through five
+times in six. He goes for it on two rips in three beyond 68°, one in two
+inside. The lane model assumes every defender goes for every lane his stick
+can reach; the agent goes for one only by the rule it plays by, which the
+lane read does not mirror.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
