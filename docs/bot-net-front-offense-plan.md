@@ -1861,9 +1861,9 @@ stays a model of what a defender's stick can do, and it was its end that was
 wrong: a pass's lane ends a receiver's reach short of him, where his own stick
 plays it, but a tip is played at the tip point, so a rip's lane runs to the
 tipper's blade (`1887240`: `lane_clear`'s `end_reach`, a receiver's reach by
-default, the blade's catch in `tip_ev`). That our defenders go for only about
-half the rips their sticks could reach is a defensive weakness to fix in the
-defence, not something the offence models.
+default, the blade's catch in `tip_ev`). Whether our defenders leave rips
+their sticks could reach was the defence's question, not the offence's;
+traced below, they do not: a stick that misses one arrives a reaction late.
 
 Measured (5v5, J=11, 576 a side, paired against the same code without it):
 
