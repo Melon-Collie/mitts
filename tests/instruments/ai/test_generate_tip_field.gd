@@ -18,10 +18,13 @@ const Fingerprint := preload("res://tests/unit/ai/tip_field_fingerprint.gd")
 
 const OUT_PATH: String = "res://Scripts/domain/ai/generated/tip_field_data.gd"
 const SHARD_PATH: String = "user://tip_field_shard_%d.txt"
-# The screen field's release spots, and the tipper's distance out along each
-# release's line from the crease top to the screen's depth.
-const SPOT_X: Array[float] = [-8.0, -4.0, 0.0, 4.0, 8.0]
-const SPOT_FWD: Array[float] = [6.0, 9.5, 15.0, 19.5]
+# The release spots, out to the wall and down to where a tipper can still stand
+# at the crease top in front of the shooter (a release past the grid reads its
+# edge, so the grid has to reach every spot a carrier rips from), and the
+# tipper's distance out along each release's line from the crease top to the
+# screen's depth.
+const SPOT_X: Array[float] = [-12.0, -10.0, -8.0, -4.0, 0.0, 4.0, 8.0, 10.0, 12.0]
+const SPOT_FWD: Array[float] = [4.0, 6.0, 9.5, 15.0, 19.5]
 const TIP_ALONG_M: Array[float] = [2.5, 3.5, 5.0]
 
 

@@ -11,6 +11,8 @@ class_name AITipField
 static var _built: bool = false
 # Per spot, along, level (level minor): goals over tips.
 static var _odds := PackedFloat32Array()
+# Per spot: whether the generator measured any cell there.
+static var _measured: Array[bool] = []
 
 
 # The odds a shot on the ice from `release` on the net at `attacking_goal`,
@@ -48,12 +50,19 @@ static func best_odds(release: Vector3, attacking_goal: Vector3, tip: Vector3) -
 	return odds(release, attacking_goal, tip, best_level(release, attacking_goal, tip))
 
 
+# A spot the generator measured nothing at (its carrier would stand in the
+# boards) gives its share to the corners that were.
 static func _blended(along: int, level: int) -> float:
 	var v: float = 0.0
+	var w: float = 0.0
 	for k: int in 4:
-		v += AIFieldGrid.weight[k] * _odds[(AIFieldGrid.spot[k] * AITipFieldData.TIP_ALONG_M.size()
-				+ along) * _levels() + level]
-	return v
+		var spot: int = AIFieldGrid.spot[k]
+		if not _measured[spot]:
+			continue
+		w += AIFieldGrid.weight[k]
+		v += AIFieldGrid.weight[k] * _odds[(spot * AITipFieldData.TIP_ALONG_M.size() + along)
+				* _levels() + level]
+	return v / w if w > 0.0 else 0.0
 
 
 static func _levels() -> int:
@@ -83,10 +92,13 @@ static func _build() -> void:
 	var alongs: int = AITipFieldData.TIP_ALONG_M.size()
 	_odds.resize(spots * alongs * _levels())
 	_odds.fill(NAN)
+	_measured.resize(spots)
+	_measured.fill(false)
 	for r: String in AITipFieldData.ROWS:
 		var f: PackedStringArray = r.split("\t")
 		var spot: int = _nearest(AITipFieldData.SPOT_FWD, float(f[2])) \
 				* AITipFieldData.SPOT_X.size() + _nearest(AITipFieldData.SPOT_X, float(f[1]))
+		_measured[spot] = true
 		var outs: String = f[5]
 		var tips: int = outs.length() - outs.count("-") - outs.count("x")
 		_odds[(spot * alongs + _nearest(AITipFieldData.TIP_ALONG_M, float(f[3]))) * _levels()
