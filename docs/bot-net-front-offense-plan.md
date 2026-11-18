@@ -1690,6 +1690,27 @@ possession in 5v5 and 0.028 in 3v3. What the branch's attack does differently
 is volume: half again as many shots, twice main's from the angle (worth little
 each), its slot shots fewer and worth less each, and the tips on top.
 
+**The angle shots** (inside 6.1 m of the goal line and more than 4.5 m off the
+middle; the same fair run, each shot marked by whether the carrier's winning
+read was the rip):
+
+| 5v5, main's defence | shots | from the wall (≥ 10 m across) | priced | tipped | realised (tip or set read, + second) |
+|---|---|---|---|---|---|
+| angle, the rip | 49 | 37 | 0.126 | 16 | 0.047 |
+| angle, direct | 64 | 7 | 0.160 | 2 | 0.064 |
+| other, the rip | 30 | 12 | 0.142 | 24 | 0.113 |
+| slot, direct | 48 | 0 | 0.377 | 4 | 0.220 |
+| main's angle shots | 57 | 5 | 0.180 | 0 | |
+
+Main's carrier takes as many angle shots against its own defence as the
+branch's does against its own (57, 58); against main's softer defence the
+branch's carrier takes twice as many, and the extra ones are rips from low on
+the wall. Priced like the rips from higher up, they are tipped a third as
+often and realise a third of their price. The tip field was measured from
+releases at most 8 m across and at least 6 m out (`AITipFieldData.SPOT_X`,
+`SPOT_FWD`); a release past that reads the grid's edge spot unchanged, and the
+edge spot here, (8, 6 m), is one of the field's best tips (0.24–0.27).
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
