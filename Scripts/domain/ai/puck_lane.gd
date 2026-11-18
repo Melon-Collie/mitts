@@ -480,9 +480,7 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 # closest-approach reachability model (see the doc-block above the lane
 # constants), not the carry-path AICarrySpace.carry_lane_clearance.
 # `puck_speed_m_s` is the speed the puck travels the segment. `opponent_vels`
-# is an OPTIONAL array index-matched to `opponents`; missing entries read as
-# stationary.
-#
+# is index-matched to `opponents`; missing entries read as stationary.
 # `accurate` (the carrier's own pass EV opts in) composes these refinements
 # over the default `1 − max(block)` constant-speed ballistic model:
 #   1. Each defender's BODY read on the momentum-honest arrival clock: the best
@@ -495,8 +493,7 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 #   4. With `opponent_blades` (index-matched), each defender's stick where he
 #      holds it (_blade_block, max'd per defender).
 # The accurate read ends `end_reach` short of `to`: a receiver's reach for a
-# pass, inside which his own stick plays it; a blade's catch for a tip
-# (AIActionScoring.tip_ev), which is played at `to` itself.
+# pass, his own stick playing it there; a blade's catch for a tip (tip_ev).
 static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		puck_speed_m_s: float, opponent_vels: Array[Vector3] = [],
 		opponent_caps: Array = [], accurate: bool = false,
