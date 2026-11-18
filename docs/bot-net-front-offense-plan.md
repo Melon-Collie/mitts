@@ -1819,9 +1819,15 @@ Time in reach is not it (the "along his front" reading was wrong: medians
 Facing is: a rip that passes in front of the covering defender is turned half
 as often again as one that passes to his side, at either angle, and beyond
 68° the path is in front of him on 20 of 29 rips where inside 68° it is on 17
-of 49. The lane model's reach is a disc and ignores his facing; the game's
-stick does not (`FacingRules.reach_edge`). Beyond 68° rips still do worse in
-each facing band, on few rips, so facing is most of the angle and not all.
+of 49. The lane model's reach is a disc and ignores his facing. It is not
+the game's reach edge (`FacingRules.reach_edge`, 157° to either side, so only a
+cone straight behind is out of reach): the difference is between 0–45° and
+45–90° off his facing, well inside it. The duel moves a blade through the real
+arm rig after the cursor the agent aims (`duel_harness.gd:_place_blade`), so it
+is either the rig (the stick slower to a point at his side) or the aim (his
+cursor not on the path when it passes there); which, is not yet traced. Beyond
+68° rips still do worse in each facing band, on few rips, so facing is most of
+the angle and not all.
 
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
