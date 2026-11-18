@@ -1779,6 +1779,29 @@ and the catch read wrong everywhere. So the tip point's contest costs nothing
 inside 68° and about half a rip beyond it, which is something angle-specific
 the lane model does not have, not the receiver's-reach cut alone.
 
+**Why the angle** (the forced run again, each defender within 4 m of the tip
+point placed in the line's frame at the release, and the first thing to turn
+the puck in flight; 135 rips with a tip point):
+
+| | inside 68° | beyond 68° |
+|---|---|---|
+| tipped | 69% | 40% |
+| untipped, turned first by their stick / ours / nothing | 18 / 3 / 7 | 19 / 2 / 6 |
+| a defender within 4 m of the tip point | 80 of 90 | 41 of 45 |
+| his stick on the slot side of the line | 42, tipped 64% | 38, tipped 39% |
+| his stick on the goal-line side | 38, tipped 71% | 3, tipped 0% |
+| his stick within 1 m of the line / 1–2 m | 55% / 77% tipped | 33% / 40% tipped |
+
+The rip is stopped by the stick of the defender on our tipper at every angle.
+Inside 68° it gets past him two times in three, and the nearer his stick the
+less; beyond 68° it gets past him two times in five however far his stick
+starts, and he is nearly always on the slot side of a line that runs a metre
+off the goal line. So it is not where his stick starts: at a steep angle the
+rip runs along his front rather than across it, and he gets his stick to it
+from anywhere he stands. The lane model reads a stick's reach as a disc round
+where it is held and times his slide to the line, so it reads every angle
+alike (and is sure of the block at every angle, the catch read's 0.3).
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
