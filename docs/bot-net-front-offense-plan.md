@@ -1729,6 +1729,36 @@ about 2 m above it, where `AITipPoint.meet_time` reads his blade reaching it in
 time: the solve does not know he cannot skate into the crease. From the same
 wall 6–10 m out the line crosses higher, and 11 of 12 were tipped.
 
+**Traced, it is not the crease** (each rip followed from its release, the
+fair run, locally; all 67 rips). The net-front man's body was in the crease on
+2 of them. Of the 28 untipped, 13 had no tipper playing it when the puck came
+(he had moved off between the price and the release, or let the read go),
+and on the other 15 his stick was on its aim (within 0.3–0.5 m) and the puck
+never reached it: replayed tick by tick, five of five bounced off their
+weak-side D's stick about a metre before the tip point, the D standing beside
+our tipper with his stick in the lane to him, as coverage puts it.
+
+`tip_ev` reads the rip's lane as a pass's (`AIPuckLane.lane_clear`, accurate),
+which ends `LANE_RECEIVER_REACH_M` (1.5 m) short of its end: for a pass, a
+stick inside that is the catch's contest, priced by the reception. A rip has
+no such read, so the stretch where the tipper's own defender stands is never
+priced. The lane read three ways at each rip's release, against what happened
+(60 rips with a tip point, 38 tipped):
+
+| the rip's lane ends | mean | read ≈ 0: rips, tipped | read > 0.8: rips, tipped | log score |
+|---|---|---|---|---|
+| a receiver's reach short (today) | 0.75 | 9, 4 | 40, 31 | −0.95 |
+| a blade's catch short (0.5 m) | 0.43 | 30, 12 | 22, 21 | −0.98 |
+| at the tip point | 0.38 | 32, 13 | 19, 18 | −1.07 |
+
+Read to the blade's catch, the lane ranks the rips far better (21 of 22 read
+open were tipped) but calls 30 blocked of which 12 were tipped anyway: the
+block model is sure a defender's stick beside the tipper takes the puck, and
+four times in ten it does not. Neither end is calibrated; today's is the
+least wrong overall. Pricing the tip point's contest honestly (the defender
+on the tipper racing his stick to the line ahead of the tipper's blade) wants
+it measured, as 2c measured the tip.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
