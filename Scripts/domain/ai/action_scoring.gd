@@ -180,9 +180,11 @@ static func tip_ev(
 	if tip_blade.is_finite() and _blade_late_to_path(release, hx, hz, speed, tip_blade,
 			tip_caps.blade_speed if tip_caps != null else AISkaterCaps.LEAGUE_BLADE_SPEED_M_S):
 		return 0.0
+	# Read to his blade's catch: a stick of theirs on the line before the puck
+	# reaches his blade takes it, whoever is covering him.
 	var lane: float = AIPuckLane.release_contest_clean(release, opponents, opponent_caps) \
 			* AIPuckLane.lane_clear(release, tip_pt, opponents, speed, opponent_vels,
-					opponent_caps, true, opponent_blades)
+					opponent_caps, true, opponent_blades, AIPuckLane.LANE_BLADE_CATCH_M)
 	if lane <= 0.0:
 		return 0.0
 	var redirect: float = AITipField.best_odds(release, attacking_goal, tip_pt) \

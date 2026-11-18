@@ -1418,6 +1418,31 @@ func test_a_stick_held_in_the_rips_lane_takes_it() -> void:
 	assert_lt(stick_out, stick_at_body, "a blade reaching for the lane plays it")
 
 
+# A rip is tipped where his blade is, so its lane runs to his blade's catch
+# (AIPuckLane.LANE_BLADE_CATCH_M), not a receiver's reach short of it: a
+# defender beside the tip point with his stick held off the line gets it onto
+# the line before the tipper's blade, though not a receiver's reach upstream.
+func test_a_lane_read_to_the_blades_catch_counts_a_stick_beside_its_end() -> void:
+	var from := Vector3(0.0, 0.0, 10.0)
+	var to := Vector3(0.0, 0.0, 22.0)
+	var d: Array[Vector3] = [Vector3(4.0, 0.0, 22.5)]
+	var v: Array[Vector3] = [Vector3.ZERO]
+	var b: Array[Vector3] = [Vector3(1.4, 0.0, 22.0)]
+	var to_reach: float = AIPuckLane.lane_clear(from, to, d, 33.0, v, [], true, b)
+	var to_catch: float = AIPuckLane.lane_clear(from, to, d, 33.0, v, [], true, b,
+			AIPuckLane.LANE_BLADE_CATCH_M)
+	assert_lt(to_catch, to_reach, "the stretch short of the end is read")
+
+
+func test_a_stick_on_the_line_short_of_his_blade_takes_the_rip() -> void:
+	var tip_z: float = 24.0 - AITipPoint.BLADE_OUT_M
+	var body := Vector3(2.6, 0.0, tip_z - 1.0)
+	var on_the_line: float = _rip_past(body, Vector3.ZERO, Vector3(0.0, 0.0, tip_z - 1.0))
+	var held_off: float = _rip_past(body, Vector3.ZERO, Vector3(4.0, 0.0, tip_z - 1.0))
+	assert_gt(held_off, 0.0, "a stick held off the line cannot get to it in time")
+	assert_lt(on_the_line, held_off, "a stick on the line before his blade takes it")
+
+
 func test_a_short_rip_is_tipped_only_by_a_stick_that_can_swing_onto_it() -> void:
 	# From 6 m out the rip is at him in under 0.2 s: a stick already on its path
 	# tips it, one held out the far side of him cannot swing across in time.

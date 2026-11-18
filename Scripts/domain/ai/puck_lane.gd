@@ -494,10 +494,14 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 #      time they really get.
 #   4. With `opponent_blades` (index-matched), each defender's stick where he
 #      holds it (_blade_block, max'd per defender).
+# The accurate read ends `end_reach` short of `to`: a receiver's reach for a
+# pass, inside which his own stick plays it; a blade's catch for a tip
+# (AIActionScoring.tip_ev), which is played at `to` itself.
 static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		puck_speed_m_s: float, opponent_vels: Array[Vector3] = [],
 		opponent_caps: Array = [], accurate: bool = false,
-		opponent_blades: Array[Vector3] = []) -> float:
+		opponent_blades: Array[Vector3] = [],
+		end_reach: float = LANE_RECEIVER_REACH_M) -> float:
 	var dx: float = to.x - from.x
 	var dz: float = to.z - from.z
 	var line_len_sq: float = dx * dx + dz * dz
@@ -509,7 +513,7 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 	var eff_speed: float = speed
 	if accurate:
 		eff_speed = line_len / _friction_traverse_time(line_len, speed)
-	var read_len: float = maxf(line_len - LANE_RECEIVER_REACH_M, 0.0)
+	var read_len: float = maxf(line_len - end_reach, 0.0)
 	var seg_time: float = line_len / eff_speed
 	var inv_len: float = 1.0 / line_len
 	var pvx: float = dx * inv_len * eff_speed
