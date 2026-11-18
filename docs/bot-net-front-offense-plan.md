@@ -1903,6 +1903,15 @@ reaction. The read that counted 13 of 33 rips as his to play started his stick
 with no reaction delay, so the weakness above is smaller than it read: his
 stick cannot get there.
 
+Traced the same way on the reverted code, every forced rip that was tipped
+(71 at rip pace), each defender's blade against the puck on every tick: none
+came within 0.7 m of it (4 within 0.75 m, 19 within 1 m). Where a blade did
+reach the line short of the tip, it got there one to three ticks after the
+puck had passed: he goes for it, a reaction late, and a 30–36 m/s rip is gone.
+The man covering the tipper stands level with him, 1.4–2 m off the line, and
+his blade never reaches it short of the tipper's. No defensive gap is left at
+the tip point for the defence to fix.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
