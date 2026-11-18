@@ -159,6 +159,7 @@ var _mouse_arc_rate_rad_s: float = MOUSE_ARC_RATE_RAD_S
 
 # ── Owned state ──────────────────────────────────────────────────────────────
 var _state: State = State.OFF_PUCK
+var _self_ids_scratch: Array = []
 
 # Identity / orientation
 var _peer_id: int = 0
@@ -1541,13 +1542,16 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 		var target: Vector3 = _lead_intercept(
 				self_pos, self_vel_3d, puck_pos, snapshot.puck_state.velocity)
 		# A shot on net is played off its rebound: he goes where it will sit, as
-		# the election raced him there (AILoosePuckChase.rebound_point).
+		# the election raced him there (AILoosePuckChase.rebound_point). A shot
+		# of theirs his stick can get onto in flight he plays there instead.
 		var rebound: Vector3 = Vector3.INF
-		if snapshot.puck_state.carrier_peer_id == -1 \
-				and snapshot.skater_states.has(snapshot.loose_puck_released_by):
-			rebound = AILoosePuckChase.rebound_point(puck_pos, snapshot.puck_state.velocity,
-					snapshot.skater_states[snapshot.loose_puck_released_by].position,
-					AIFieldGrid.spot, AIFieldGrid.weight)
+		var shooter: int = snapshot.loose_puck_released_by
+		if snapshot.puck_state.carrier_peer_id == -1 and snapshot.skater_states.has(shooter):
+			rebound = AILoosePuckChase.rebound_for_team(AILoosePuckChase.rebound_point(puck_pos,
+					snapshot.puck_state.velocity, snapshot.skater_states[shooter].position,
+					AIFieldGrid.spot, AIFieldGrid.weight), _team_id_by_peer.get(shooter, -1) == _team_id,
+					snapshot.skater_states, _self_ids(), puck_pos, snapshot.puck_state.velocity,
+					_caps_by_peer)
 		if rebound.is_finite():
 			target = rebound
 		# Angle an opponent carrier (Scripts/ai/CLAUDE.md → Chase doctrine). A
@@ -3601,6 +3605,13 @@ func _loose_puck_in_reach_band(snapshot: WorldSnapshot, self_pos: Vector3) -> bo
 	return not AILoosePuckChase.teammate_band_meets_first(traj, puck_pos, puck_vel,
 			snapshot.skater_states, snapshot.teammate_ids_by_team[_team_id], _peer_id,
 			meet_s, _caps_by_peer, snapshot.tag_up_peers)
+
+
+# This bot alone, as a roster the chase reads take (built once, not per call).
+func _self_ids() -> Array:
+	if _self_ids_scratch.is_empty():
+		_self_ids_scratch.append(_peer_id)
+	return _self_ids_scratch
 
 
 # Is a teammate's blade clearly first to this puck? See

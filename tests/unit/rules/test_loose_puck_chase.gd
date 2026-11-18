@@ -961,6 +961,34 @@ func test_a_shot_on_net_elects_the_man_soonest_to_its_rebound() -> void:
 			at), 101, "raced to the rebound")
 
 
+# A shot of theirs a defender's stick can get onto before it reaches the goal
+# line is played there: only a shot none of them can reach is raced to its
+# rebound. The shooter's own team always races the rebound.
+func test_the_defence_plays_a_shot_its_stick_can_reach_in_flight() -> void:
+	var vel: Vector3 = (_SHOT_NET - _SHOT_FROM).normalized() * 30.0
+	var at: Vector3 = _rebound(vel)
+	var beside_its_path: Vector3 = _SHOT_FROM + vel.normalized() * 6.0 + Vector3(1.2, 0.0, 0.0)
+	var states := _states({100: _skater(beside_its_path), 101: _skater(at + Vector3(3.5, 0.0, 0.0))})
+	assert_true(AILoosePuckChase.plays_shot_in_flight(states, [100], _SHOT_FROM, vel, {}),
+			"his stick gets on its path before the line")
+	assert_false(AILoosePuckChase.plays_shot_in_flight(states, [101], _SHOT_FROM, vel, {}),
+			"a man beside the rebound plays it there")
+	assert_false(AILoosePuckChase.rebound_for_team(at, false, states, [100], _SHOT_FROM, vel,
+			{}).is_finite(), "the defence plays it in flight")
+	assert_eq(AILoosePuckChase.rebound_for_team(at, false, states, [101], _SHOT_FROM, vel, {}),
+			at, "and its rebound where it cannot")
+	assert_eq(AILoosePuckChase.rebound_for_team(at, true, states, [100], _SHOT_FROM, vel, {}),
+			at, "the shooter's team races the rebound")
+
+
+func test_a_shot_past_a_stick_too_far_off_its_path_goes_to_the_rebound() -> void:
+	var vel: Vector3 = (_SHOT_NET - _SHOT_FROM).normalized() * 30.0
+	var far_off: Vector3 = _SHOT_FROM + vel.normalized() * 6.0 + Vector3(5.0, 0.0, 0.0)
+	var states := _states({100: _skater(far_off)})
+	assert_false(AILoosePuckChase.plays_shot_in_flight(states, [100], _SHOT_FROM, vel, {}),
+			"no stick of his gets there in time")
+
+
 func test_the_rebound_read_off_the_worker_brings_its_own_corners() -> void:
 	# GameManager elects on the main thread while the AI worker reads the
 	# fields through AIFieldGrid's corners: its read must pass its own.

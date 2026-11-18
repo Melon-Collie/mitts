@@ -1537,10 +1537,13 @@ func _build_snapshot() -> WorldSnapshot:
 		for pid: int in snap.teammate_ids_by_team[tid]:
 			if brains[tid].is_one_timer_ready(pid):
 				camped.append(pid)
+		var team_rebound: Vector3 = AILoosePuckChase.rebound_for_team(rebound_at,
+				loose_released_by != -1 and _skater(loose_released_by).team_id == tid,
+				snap.skater_states, snap.teammate_ids_by_team[tid], puck_pos, puck_vel, caps_by_peer)
 		var elected: int = AILoosePuckChase.elect(
 				snap.skater_states, snap.teammate_ids_by_team[tid],
 				puck_pos, puck_vel, int(_prev_chase_by_team.get(tid, -1)),
-				caps_by_peer, true, [], camped, rebound_at)
+				caps_by_peer, true, [], camped, team_rebound)
 		snap.closest_to_puck_by_team[tid] = elected
 		_prev_chase_by_team[tid] = elected
 	# Static home keepers so shot scoring sees someone in each net (goalie

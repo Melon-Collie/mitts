@@ -524,6 +524,43 @@ static func rebound_point(puck_pos: Vector3, puck_vel: Vector3, release: Vector3
 	return AIReboundField.crash_point_into(release, false, goal, spots, weights)
 
 
+# The rebound a team races a shot on net to (rebound_point's `rebound_at`): the
+# shooter's own team always, and the team defending it only where none of its
+# `ids` can play it in flight (plays_shot_in_flight). INF otherwise.
+static func rebound_for_team(rebound_at: Vector3, shooters_team: bool,
+		skater_states: Dictionary, ids: Array, puck_pos: Vector3, puck_vel: Vector3,
+		caps_by_peer: Dictionary) -> Vector3:
+	if not rebound_at.is_finite() or shooters_team:
+		return rebound_at
+	if plays_shot_in_flight(skater_states, ids, puck_pos, puck_vel, caps_by_peer):
+		return Vector3.INF
+	return rebound_at
+
+
+# Whether one of `ids` can play a shot on net (rebound_point) in flight: his
+# stick on its path, on the election's own reach (stick out), before it
+# reaches the goal line. The team defending it then plays the shot, not its
+# rebound, as any defender whose stick can get there would. A main-thread
+# caller may use it: it walks its own path.
+static func plays_shot_in_flight(skater_states: Dictionary, ids: Array, puck_pos: Vector3,
+		puck_vel: Vector3, caps_by_peer: Dictionary) -> bool:
+	if absf(puck_vel.z) < 0.001:
+		return false
+	var to_line: float = (signf(puck_vel.z) * GameRules.GOAL_LINE_Z - puck_pos.z) / puck_vel.z
+	if to_line <= 0.0:
+		return false
+	var traj: Array[Vector3] = walk_race(puck_pos, puck_vel)
+	for pid: int in ids:
+		var s: SkaterNetworkState = skater_states.get(pid)
+		if s == null:
+			continue
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
+		if reach_meet_time(traj, puck_pos, puck_vel, s.position, s.velocity, race_vmax(caps),
+				race_reach(caps), true, true) < to_line:
+			return true
+	return false
+
+
 # Raw best intercept time (seconds) among `ids` to the loose puck — the
 # election's race read with no hysteresis and no winner identity, so a caller can
 # compare OUR best against THEIRS through the same model. INF when no eligible
