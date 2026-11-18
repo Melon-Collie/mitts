@@ -1,6 +1,6 @@
 # Bot net-front offence — spacing, rebounds, screens, tips
 
-Status: **steps 1–5 built and measured (3a's measured credit built but off);
+Status: **steps 1–5 built and measured (3a's measured credit built but off); against main's defence the branch's offence is level or ahead at both sizes (the branch against main);
 3d's second man not built; step 6 tried and backed out, its 6c first cut inert and taken out.** The CLAUDE.md workflow applies: this doc is
 the plan, and deviations get discussed first. It is the decision-layer half of
 #785 (price net presence, crash the net) and the rebound half of #924, and it
@@ -1668,6 +1668,27 @@ credit at all, takes more slot shots than either, worth twice as much each
 defenders hunt the soft hit, and in 3v3 that was all of the gap. The fair
 read of 5v5's offence is the branch against main with the old check on the
 defending team.
+
+**The fair read** (the branch at `2520387`, the defending team on `d39c236`'s
+body check, as main's defenders are; 5v5, J=11, 576, paired):
+
+| 5v5 | branch, main's defence | main | branch, its own defence |
+|---|---|---|---|
+| shots / possession | 0.436 | 0.292 | 0.314 |
+| slot shots (worth each) | 0.089 (0.149) | 0.109 (0.221) | 0.066 (0.106) |
+| angle shots (worth each) | 0.196 (0.032) | 0.099 (0.055) | 0.106 |
+| tipped by ours | 54 | 0 | 45 |
+| our carrier stripped | 0.293 | 0.342 | 0.389 |
+| xG for | 0.046 | 0.039 | 0.031 |
+| paired against main, for | +0.008 ± 0.006 | | −0.008 ± 0.006 |
+| paired against main, net | +0.004 ± 0.007 | | −0.009 ± 0.007 |
+
+Against the same defence the branch's 5v5 offence is level with main or ahead
+of it, as 3v3's was: the whole of its gap was the honest body check making
+the other side's defence harder, which costs any attack about 0.016 a
+possession in 5v5 and 0.028 in 3v3. What the branch's attack does differently
+is volume: half again as many shots, twice main's from the angle (worth little
+each), its slot shots fewer and worth less each, and the tips on top.
 
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
