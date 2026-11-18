@@ -1711,6 +1711,24 @@ releases at most 8 m across and at least 6 m out (`AITipFieldData.SPOT_X`,
 `SPOT_FWD`); a release past that reads the grid's edge spot unchanged, and the
 edge spot here, (8, 6 m), is one of the field's best tips (0.24–0.27).
 
+**The field out to the wall** (`00fabed`: releases ±12 m across, 4–19.5 m out;
+a spot with no cell gives its share to its neighbours). From the wall a tip
+measures 0.08 (4 m out) to 0.16 (6 m out), against the edge's 0.19, so the
+field was generous there but not by much. The same fair run on it:
+
+| 5v5, main's defence | angle rips | priced | tipped | realised | xG for, paired against main |
+|---|---|---|---|---|---|
+| the field to 8 m | 49 | 0.126 | 16 | 0.047 | +0.008 ± 0.006 |
+| the field to the wall | 33 | 0.089 | 12 | 0.040 | +0.005 ± 0.006 |
+
+Fewer wall rips, priced nearer what they make, but still twice it. What is
+left is the tip itself: of the untipped rips from the wall, nothing touched 22
+of 37 before the keeper. From 0–5 m out the release's line runs past the
+crease half a metre out, and the net-front man stands at the crease's top,
+about 2 m above it, where `AITipPoint.meet_time` reads his blade reaching it in
+time: the solve does not know he cannot skate into the crease. From the same
+wall 6–10 m out the line crosses higher, and 11 of 12 were tipped.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
