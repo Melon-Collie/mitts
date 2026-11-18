@@ -1759,6 +1759,26 @@ least wrong overall. Pricing the tip point's contest honestly (the defender
 on the tipper racing his stick to the line ahead of the tipper's blade) wants
 it measured, as 2c measured the tip.
 
+**By the release's angle** (off the line straight out from the net's middle; 0°
+dead centre, 90° along the goal line). The rips the carrier chose, two fair
+runs (old and new tip field), and a third with every rip the read finds fired
+(`AIRoleCarrier.force_rip_for_test`, locally: 149 rips, 135 with a tip point
+from where the tipper stood at the release):
+
+| release angle | chosen rips, tipped | forced rips, tipped | forced: priced lane | forced: lane to the blade's catch |
+|---|---|---|---|---|
+| 0–45° | 17, 71% | 41, 63% | 0.61 | 0.27 |
+| 45–68° | 25, 80% | 49, 73% | 0.70 | 0.32 |
+| 68–76° | 14, 29% | 31, 48% | 0.71 | 0.35 |
+| 76–90° | 11, 27% | 14, 21% | 0.74 | 0.37 |
+
+Past about 68° a rip reaches the tipper's blade about half as often (forced:
+71% inside, 40% beyond; chosen: 76% and 28%). Neither lane read sees it:
+both read the same across every angle, the priced one about right inside 68°
+and the catch read wrong everywhere. So the tip point's contest costs nothing
+inside 68° and about half a rip beyond it, which is something angle-specific
+the lane model does not have, not the receiver's-reach cut alone.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
