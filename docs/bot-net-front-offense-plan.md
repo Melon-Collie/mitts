@@ -1796,9 +1796,9 @@ The rip is stopped by the stick of the defender on our tipper at every angle.
 Inside 68° it gets past him two times in three, and the nearer his stick the
 less; beyond 68° it gets past him two times in five however far his stick
 starts, and he is nearly always on the slot side of a line that runs a metre
-off the goal line. So it is not where his stick starts: at a steep angle the
-rip runs along his front rather than across it, and he gets his stick to it
-from anywhere he stands. The lane model reads a stick's reach as a disc round
+off the goal line. So it is not where his stick starts. Not yet measured: the
+likeliest reading is that at a steep angle the rip runs along his front rather
+than across it, so he gets his stick to it from anywhere he stands. The lane model reads a stick's reach as a disc round
 where it is held and times his slide to the line, so it reads every angle
 alike (and is sure of the block at every angle, the catch read's 0.3).
 
