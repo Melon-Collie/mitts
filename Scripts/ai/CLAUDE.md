@@ -281,15 +281,6 @@ puck, and waiting for it chases a pass down the lane past the man it is going
 to. This is what lets a defender play a passing lane, and the carrier's lane
 read prices it on the same clock (`AILaneReach`).
 
-**A shot on net is played in flight where a stick can get on it.** Its
-shooter's team races its rebound (`AILoosePuckChase.rebound_point`): nothing in
-the shot's path is theirs to play. The team defending it does too only where
-none of its sticks can reach the path before the goal line
-(`rebound_for_team`, the election's own stick-out reach), so a defender beside
-the shot's line blocks it rather than skating to where it will come off the
-keeper. The host's election, the duel's and the chaser's steer all read it
-there.
-
 ## Who may play the puck
 
 "Can this skater legally touch the puck right now?" is

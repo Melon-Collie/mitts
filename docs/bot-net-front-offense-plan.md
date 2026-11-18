@@ -1879,6 +1879,30 @@ shoots instead (slot shots 0.071 → 0.082, untipped first shots 0.016 →
 0.020, tips 0.010 → 0.005) at no cost. Against main, still level (net −0.001
 ± 0.007).
 
+**The defence playing a shot in flight (built, measured, backed out).** Step
+3c sends every team's elected chaser to a shot's rebound, the defending team's
+too, so `a6824fb` sent the defending team's chaser to the shot's path instead
+wherever one of its sticks could reach it before the goal line. Measured each
+team on its own defence, J=11, 576 a side, paired against the same code
+without it:
+
+| | possessions changed | for | against | net |
+|---|---|---|---|---|
+| 5v5 | 22 | −0.0000 ± 0.0006 | −0.0006 ± 0.0004 | +0.0006 ± 0.0007 |
+| 3v3 | 25 | +0.0001 ± 0.0005 | +0.0001 ± 0.0014 | +0.0000 ± 0.0017 |
+| 5v5, every rip the read finds fired | 35 | −0.0001 ± 0.0006 | −0.0001 ± 0.0003 | +0.0000 ± 0.0006 |
+
+The rips are the same possessions either way (26; forced, 73 against 74). It
+moved only where the chaser's body skates. Traced through eight forced rips,
+every defender near the line already went for it (`_should_chase_loose_puck`:
+the race or the reach band), and the chaser's blade already parks at the
+puck's gate (`_chase_reception_aim_target`), whatever the steer. Over a 30–38
+m/s rip the body's target buys nothing. The man nearest the release stands
+1.5–2.1 m off the line and the puck passes him 0.1 s out, 0.06 s of it his
+reaction. The read that counted 13 of 33 rips as his to play started his stick
+with no reaction delay, so the weakness above is smaller than it read: his
+stick cannot get there.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):

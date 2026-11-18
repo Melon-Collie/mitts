@@ -3650,13 +3650,10 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 		# the teammate who actually arrives first keeps the role unless
 		# a challenger clearly beats them, instead of the raw-nearest bot
 		# flickering frame-to-frame.
-		var team_rebound: Vector3 = AILoosePuckChase.rebound_for_team(rebound_at,
-				ids.has(snap.loose_puck_released_by), snap.skater_states, ids, puck_pos, puck_vel,
-				_registry.caps_by_peer)
 		var best_pid: int = AILoosePuckChase.elect(
 				snap.skater_states, ids, puck_pos, puck_vel,
 				_prev_chase_by_team.get(team_id, -1), _registry.caps_by_peer,
-				puck_playable, human_ids, camped_ids, team_rebound)
+				puck_playable, human_ids, camped_ids, rebound_at)
 		# Smart-ping GET_PUCK: a live retrieval order replaces the natural
 		# election for its duration — the ordered bot chases (the state
 		# machine's decline gates are bypassed for it too) and nobody else
