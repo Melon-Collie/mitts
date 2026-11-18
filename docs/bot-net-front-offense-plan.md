@@ -1802,6 +1802,27 @@ than across it, so he gets his stick to it from anywhere he stands. The lane mod
 where it is held and times his slide to the line, so it reads every angle
 alike (and is sure of the block at every angle, the catch read's 0.3).
 
+**The mechanism, measured** (the forced run once more: for each defender within
+4 m of the tip point, the stretch of the rip's path inside his reach round his
+body at the release, how long the puck is in it, how far his stick is from
+it, and how far it lies off his facing):
+
+| | tipped | their stick turned it |
+|---|---|---|
+| no defender's reach on the path (inside / beyond 68°) | 83% / 56% | 10% / 19% |
+| in reach, in front of him (≤ 45° off his facing), inside / beyond | 47% / 25% | 41% / 65% |
+| in reach, to his side or behind (> 45°), inside / beyond | 62% / 44% | 28% / 44% |
+| time in reach 0–0.05 s / 0.05–0.1 s (all angles) | 44% / 55% | 50% / 28% |
+
+Time in reach is not it (the "along his front" reading was wrong: medians
+0.020 s inside 68°, 0.024 s beyond, and longer in reach does not block more).
+Facing is: a rip that passes in front of the covering defender is turned half
+as often again as one that passes to his side, at either angle, and beyond
+68° the path is in front of him on 20 of 29 rips where inside 68° it is on 17
+of 49. The lane model's reach is a disc and ignores his facing; the game's
+stick does not (`FacingRules.reach_edge`). Beyond 68° rips still do worse in
+each facing band, on few rips, so facing is most of the angle and not all.
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
