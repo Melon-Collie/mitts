@@ -1854,6 +1854,31 @@ inside. The lane model assumes every defender goes for every lane his stick
 can reach; the agent goes for one only by the rule it plays by, which the
 lane read does not mirror.
 
+**Decided with the user: price what can happen, never the bots' own
+tendencies.** An offence read from how our defensive bots play is the bots
+reading the bots, and a human defender plays what he can. So the lane read
+stays a model of what a defender's stick can do, and it was its end that was
+wrong: a pass's lane ends a receiver's reach short of him, where his own stick
+plays it, but a tip is played at the tip point, so a rip's lane runs to the
+tipper's blade (`1887240`: `lane_clear`'s `end_reach`, a receiver's reach by
+default, the blade's catch in `tip_ev`). That our defenders go for only about
+half the rips their sticks could reach is a defensive weakness to fix in the
+defence, not something the offence models.
+
+Measured (5v5, J=11, 576 a side, paired against the same code without it):
+
+| | rips | angle rips: priced → realised | other rips: priced → realised (tipped) | for | net |
+|---|---|---|---|---|---|
+| main's defence, without | 66 | 0.089 → 0.040 | 0.133 → 0.109 (25 of 30) | | |
+| main's defence, with | 40 | 0.090 → 0.080 | 0.143 → 0.128 (17 of 17) | −0.002 ± 0.003 | −0.002 ± 0.003 |
+| its own defence, with | | | | −0.001 ± 0.003 | −0.002 ± 0.003 |
+
+A third of the rips go, the ones a defender's stick could take, and the rips
+left realise what they are priced at. Against its own defence the carrier
+shoots instead (slot shots 0.071 → 0.082, untipped first shots 0.016 →
+0.020, tips 0.010 → 0.005) at no cost. Against main, still level (net −0.001
+± 0.007).
+
 **Where 3v3's direct shots went** (bisected on the old keeper, today's
 instrument and duel harness on each commit, main's stubs where a commit lacks
 the branch's hooks, J=11, 576 a probe):
