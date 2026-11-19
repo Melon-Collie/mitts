@@ -1952,8 +1952,11 @@ func test_motion_blind_aim_ignores_the_goalie_slide() -> void:
 
 # ── Protect-side turn (carry arc direction) ──────────────────────────────────
 # A carrier's turn-around picks which way the puck sweeps: shortest by default,
-# the long way when the short sweep drags the puck through a defender's poke
-# reach and the far side is clear. See PROTECT_TURN_* on the state machine.
+# the long way when a defender's stick gets onto the short sweep and the far
+# side is clear. See _opponent_poke_clearance on the state machine.
+
+const ARC_RATE: float = Agent.MOUSE_ARC_RATE_RAD_S
+
 
 func _protect_snap(self_pos: Vector3, opp_pos: Vector3) -> WorldSnapshot:
 	var s := _loose_puck_snap(self_pos)
@@ -1973,7 +1976,7 @@ func test_a_left_hander_s_holds_read_left_handed_from_the_first_build() -> void:
 func test_protect_turn_shortest_in_open_ice() -> void:
 	var s := _protect_snap(Vector3.ZERO, Vector3(0, 0, -30))   # opponent far away
 	# Facing +z (angle 0), target ~172° around via the +x side.
-	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s), 1.0,
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), 1.0,
 			"open ice → the shortest way around")
 
 
@@ -1981,15 +1984,60 @@ func test_protect_turn_flips_away_from_short_side_defender() -> void:
 	# Defender's blade sits right where the short (+x) sweep would carry the
 	# puck; the long (−x) side is empty → sweep the long way.
 	var s := _protect_snap(Vector3.ZERO, Vector3(2.0, 0, 0.2))
-	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s), -1.0,
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), -1.0,
 			"short sweep through a poke threat → turn the long way, puck shielded")
 
 
 func test_protect_turn_stays_short_when_both_sides_threatened() -> void:
 	var s := _protect_snap(Vector3.ZERO, Vector3(2.0, 0, 0.2))
 	_add_skater(s, 12, Vector3(-2.0, 0, 0.2))   # second defender mirrors the first
-	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s), 1.0,
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), 1.0,
 			"nowhere safer to sweep → don't pay the long rotation for nothing")
+
+
+# A defender set off the short sweep's midpoint (angle 1.5 of a 3.0 swing)
+# along the carrier's outward line, his blade `blade_gap` from it and his body
+# `body_gap`; the long side's midpoint is across the carrier, clear of him.
+func _defender_off_short_mid(blade_gap: float, body_gap: float) -> WorldSnapshot:
+	var mid := Vector3(sin(1.5), 0, cos(1.5)) * sm._blade_reach
+	var out: Vector3 = mid.normalized()
+	var s := _protect_snap(Vector3.ZERO, mid + out * body_gap)
+	s.skater_states[OPP_ID].blade_contact_world = mid + out * blade_gap
+	return s
+
+
+func test_protect_turn_reads_the_stick_the_sweep_has_to_beat() -> void:
+	# His blade gets to the midpoint at his blade speed over the sweep's time
+	# there, to within a poke's contact; his body's reach bounds where it can.
+	var sweep_s: float = 1.5 / ARC_RATE
+	var traverse: float = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S * sweep_s + GameRules.POKE_RADIUS_M
+	var reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + GameRules.POKE_RADIUS_M
+	var s := _defender_off_short_mid(traverse - 0.05, reach - 0.05)
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), -1.0,
+			"his blade gets onto the sweep in time → the long way")
+	s = _defender_off_short_mid(traverse + 0.05, reach - 0.05)
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), 1.0,
+			"his blade arrives after the puck has gone by → the short way")
+	s = _defender_off_short_mid(traverse - 0.05, reach + 0.05)
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), 1.0,
+			"the point is outside his reach of his body → the short way")
+
+
+func test_protect_turn_reads_each_defender_by_his_own_build() -> void:
+	var sweep_s: float = 1.5 / ARC_RATE
+	var league: float = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S * sweep_s + GameRules.POKE_RADIUS_M
+	var slow := AISkaterCaps.new()
+	slow.blade_speed = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S * 0.5
+	sm._caps_by_peer = {OPP_ID: slow}
+	var s := _defender_off_short_mid(league - 0.05, 1.0)
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), 1.0,
+			"a league blade gets there; his slower hands do not")
+	var long_reach := AISkaterCaps.new()
+	long_reach.max_blade_reach = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + 0.3
+	sm._caps_by_peer = {OPP_ID: long_reach}
+	s = _defender_off_short_mid(0.5, AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + GameRules.POKE_RADIUS_M + 0.1)
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), -1.0,
+			"past a league reach of his body, inside his longer one")
 
 
 func test_arc_step_commits_to_the_protected_direction() -> void:
