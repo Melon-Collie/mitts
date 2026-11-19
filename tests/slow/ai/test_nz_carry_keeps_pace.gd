@@ -13,8 +13,8 @@ extends GutTest
 #
 # The path is the premise. A defender who starts close and off his line keeps
 # pace with him across the ice and angles him into the wall short of the line:
-# that is the defence playing it right, and a carrier alone with no dump-in
-# (#863) has no entry to take. There he is held only to keeping the puck.
+# that is the defence playing it right, and the carrier alone has no entry to
+# take. There he is held only to keeping the puck.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
