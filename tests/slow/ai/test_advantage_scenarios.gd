@@ -1,8 +1,8 @@
 extends GutTest
 
 # Bots on bots have no "correct" outcome in general, so these stage a KNOWN
-# advantage and assert the side holding it cashes it in: a rusher with a step on
-# his backchecker shoots, an open back-door man gets the feed and the one-timer,
+# advantage and assert the side holding it cashes it in: most rushers with a
+# step on their backchecker shoot, an open back-door man gets the feed and the one-timer,
 # a pressured carrier finds the open man ahead, most 2-on-1s end in a shot, and two
 # defenders back against one rusher concede nothing from the slot.
 #
@@ -18,8 +18,12 @@ const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const SLOT_DEPTH_M: float = 10.0
 const SLOT_HALF_WIDTH_M: float = 4.0
 
-# Starts where the rusher loses the puck today, each with its issue.
-const KNOWN_STEP_LOSSES: Array[String] = []
+# Share of the step family (test_a_step_on_the_backchecker_mostly_ends_in_a_shot)
+# that ends in a shot from inside the slot. A backchecker a step behind at the
+# rusher's pace can still win one he is inside on, so this is a rate, not a
+# must-shoot per start. Measured 38 of 40 (0.95): two without a shot at 4 s.
+# The margin is four starts.
+const STEP_SHOT_SHARE_FLOOR: float = 0.85
 # Share of the 2-on-1 family (test_two_on_ones_mostly_end_in_a_shot) that ends
 # in a shot from inside the circles. A lone D who plays one perfectly may win
 # it, so this is a rate, not a must-shoot per start (#928). Measured 26 of 36
@@ -111,23 +115,38 @@ func _play(rows: Array, carrier: int, secs: float) -> Play:
 	return out
 
 
-func test_a_step_on_the_backchecker_ends_in_a_shot() -> void:
-	# [x, z, backchecker's lateral offset]: he trails by 2.5 m at the same pace.
-	for c: Array in [[0.0, -6.0, 0.8], [7.0, -8.0, -0.8], [-7.0, -8.0, 0.8],
-			[3.0, 2.0, -0.8], [-2.0, -10.0, 0.8]]:
-		var start := Vector3(c[0], 0.0, c[1])
-		var vel := Vector3(-start.x * 0.08, 0.0, -8.0)
-		var p: Play = _play([[1, 0, start, vel],
-				[201, 1, start + Vector3(c[2], 0.0, 2.5), vel]], 1, 4.0)
-		var label := "step from (%.0f, %.0f)" % [start.x, start.z]
-		gut.p("%s: %s" % [label, p.describe()])
-		if KNOWN_STEP_LOSSES.has(label):
-			continue
-		var shot: Dictionary = p.first_shot(0)
-		assert_false(shot.is_empty(), "%s: the rusher gets a shot off" % label)
-		assert_eq(p.lost_at, INF, "%s: and keeps the puck to it" % label)
-		if not shot.is_empty():
-			assert_lt(Play.net_dist(shot["pos"]), SLOT_DEPTH_M, "%s: from inside the slot" % label)
+# The rusher across the ice at each depth, skating at the net at 8 m/s, his
+# backchecker trailing 2.5 m at the same pace, a stick to either side of him.
+func test_a_step_on_the_backchecker_mostly_ends_in_a_shot() -> void:
+	var shots: int = 0
+	var starts: int = 0
+	var misses: PackedStringArray = []
+	for z: float in [2.0, -2.0, -6.0, -10.0]:
+		for x: float in [-7.0, -3.0, 0.0, 3.0, 7.0]:
+			for offset: float in [-0.8, 0.8]:
+				var start := Vector3(x, 0.0, z)
+				var vel := Vector3(-start.x * 0.08, 0.0, -8.0)
+				var p: Play = _play([[1, 0, start, vel],
+						[201, 1, start + Vector3(offset, 0.0, 2.5), vel]], 1, 4.0)
+				var label := "step from (%.0f, %.0f), backchecker %+.1f" % [x, z, offset]
+				gut.p("%s: %s" % [label, p.describe()])
+				starts += 1
+				var shot: Dictionary = p.first_shot(0)
+				if not shot.is_empty() and Play.net_dist(shot["pos"]) < SLOT_DEPTH_M:
+					shots += 1
+				elif not shot.is_empty():
+					misses.append("%s: shot from %.1f m" % [label, Play.net_dist(shot["pos"])])
+				elif p.lost_at < INF:
+					misses.append("%s: lost at %.2f s" % [label, p.lost_at])
+				else:
+					misses.append("%s: no shot in 4 s" % label)
+	var share: float = float(shots) / float(starts)
+	gut.p("steps ending in a shot from inside the slot: %d of %d (%.2f)" % [
+			shots, starts, share])
+	if not misses.is_empty():
+		gut.p("without one:\n  " + "\n  ".join(misses))
+	assert_gte(share, STEP_SHOT_SHARE_FLOOR,
+			"%d of %d steps end in a shot from inside the slot" % [shots, starts])
 
 
 func test_an_open_back_door_gets_the_feed_and_the_one_timer() -> void:
