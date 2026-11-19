@@ -654,6 +654,18 @@ area's: the chaser leaves the matching and the area's owner covers a man
 (`AIZoneCoverage.chased_by_another`), or one body stands off both the puck and
 every man while the race is on (`test_zone_coverage_shape.gd`'s low cycle).
 
+**A D's label follows his man.** The D labels are raced to their posts (the
+puck, the net front), not to the men, so a strong D skating across to a man on
+the weak wall reads nearer the net-front post than his partner. Swapped, his man
+stands outside the box his new label owns, and the partner whose label could
+have him already has the net-front man, whom the house pin keeps, so nobody
+has him. A zone D whose man his partner's label
+could not be handed keeps his label through the election
+(`TeamBrain._keep_the_labels_men_need`). With the puck in the low battle its
+owner's area is everyone's, no man pins a label, and the D nearer the puck
+takes it (`test_team_brain.gd`). Never hand the men across with a swap instead:
+each D then skates across the other to the man the other had.
+
 ## The gap ladder is one ladder, and both puck-owners read it
 
 `AIRoleRushD` (the rush gap) and `AIRolePressure` (the in-zone puck pressurer)
