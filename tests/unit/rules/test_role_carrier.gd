@@ -2098,6 +2098,29 @@ func test_a_frontal_stick_threat_earns_the_shield() -> void:
 			"a stick on the presented spot, with a safe hip to hide it, earns the shield")
 
 
+func test_a_stick_that_reaches_the_back_hip_leaves_no_shield() -> void:
+	# The poke reads no body (PuckInteractionRules.check_poke): a blade reaches
+	# through the carrier to a puck on his far hip as readily as round him. So
+	# wherever a checker on the play line still reaches the spot furthest from
+	# him the blade can hold the puck — straight behind the body — the shield
+	# buys nothing, however close he stands: the gain is zero there, and every
+	# stand inside contact range is such a stand.
+	var handle: float = _make_ctx(_PROTECT_SPOT).self_handle_reach
+	var back_hip: Vector3 = _PROTECT_SPOT + Vector3(0, 0, handle)
+	var still: Array[Vector3] = [Vector3.ZERO]
+	for ahead_m: float in [0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 2.0, 2.5]:
+		var checker: Array[Vector3] = [_PROTECT_SPOT + Vector3(0, 0, -ahead_m)]
+		var hip_safety: float = AICarrySpace.clearance_to_safety(AICarrySpace.reach_clearance(
+				back_hip, AICarrySpace.EVADE_HORIZON_S, checker, still))
+		if ahead_m <= 1.2:
+			assert_eq(hip_safety, 0.0,
+					"a checker %.1f m ahead reaches the back hip through the body" % ahead_m)
+		if hip_safety <= 0.0:
+			assert_eq(_frontal_threat(ahead_m).protect_gain, 0.0,
+					"checker %.1f m ahead reaches the back hip: the shield buys nothing"
+					% ahead_m)
+
+
 func test_the_shield_never_moves_the_puck_toward_the_checker() -> void:
 	# Wherever a checker stands on the play line, the protected spot is no nearer
 	# him than the presented one (the offset with nobody there): the shield moves

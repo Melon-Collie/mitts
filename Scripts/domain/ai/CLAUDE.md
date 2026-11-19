@@ -416,7 +416,11 @@ lift exactly when the carrier's body stands on the line to the puck and the
 shaft's liftable point is still in reach. Reading the path is the
 `reads_puck_path` cognition gate and the lift the `lifts_sticks` one, both
 closed on Easy: its stick reads only where the puck and its own body are now, so
-a carrier skating past outruns it, and a shielded puck is safe.
+a carrier skating past outruns it, and a shielded puck draws a jab, never a
+lift. The jab reaches through the carrier's body as any poke does
+(`check_poke` reads no body), so a shield is worth only the distance it
+puts the puck from the stick, and the carrier's protect read prices it so:
+against a man whose stick reaches the back hip it buys nothing.
 
 **A defensive-zone coverer's extra is the stick tie** (`AIStickTieRead`), and its
 price is its own stick. The man is tied only while the puck is coming to him — a loose

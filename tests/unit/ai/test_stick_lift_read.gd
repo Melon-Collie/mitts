@@ -1,7 +1,7 @@
 extends GutTest
 
 # AIStickLiftRead: an on-puck bot lifts the carrier's stick instead of jabbing
-# exactly when the carrier's body blocks the jab and the shaft is in reach.
+# exactly when the carrier's body stands on the jab's line and the shaft is in reach.
 
 const HAND := Vector3(0.0, 1.0, -0.3)
 const BLADE := Vector3(0.0, 0.03, -1.4)
