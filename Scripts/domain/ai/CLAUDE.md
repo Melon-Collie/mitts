@@ -1205,7 +1205,13 @@ reaches back into what remains.
   forechecker reaching for the puck has his blade a metre nearer the lane than
   his body, and a stick on the puck plays it through the windup, so the first
   metres of a pass out past him are his. Only a pick his body can hold the stick at counts
-  (`AISkaterCaps.max_blade_reach`). The **saucer** (`lane_clear_saucer`) is the same
+  (`AISkaterCaps.max_blade_reach`). **Our own men are on the lane too**
+  (`AICarrierPassSearch._mate_take`): the pickup takes whoever's blade the path
+  crosses, meant for him or not, and a mate a feed comes to goes to play it, so
+  each in play is read on the same arrival clock, the receiver aside. What a mate
+  takes is neither a turnover nor the receiver's catch: it is a feed to him, at
+  his reception (his closing speed, his bobble odds, the sticks on him) and his
+  worth (`_taker_value`). The **saucer** (`lane_clear_saucer`) is the same
   model under the flight a charged LOW release really gets (the shot ladder's
   set angle, so the lift and the carry grow with pace): during the over window a defender's reach
   collapses to their body radius (sticks fly under it), a stick stuffs it on the

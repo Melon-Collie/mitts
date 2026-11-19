@@ -90,7 +90,7 @@ func _why(c: AIRoleCarrier, origin: Vector3, to: Vector3) -> String:
 	var speed: float = 18.0
 	var ll: float = origin.distance_to(to)
 	var d: Vector3 = (to - origin) / ll
-	var eff: float = ll / AIPuckLane._friction_traverse_time(ll, speed)
+	var eff: float = ll / AIPuckLane.friction_traverse_time(ll, speed)
 	var rl: float = maxf(ll - AIPuckLane.LANE_RECEIVER_REACH_M, 0.0)
 	var out: String = ""
 	for i: int in f.opponents_release.size():
@@ -238,7 +238,7 @@ func _model_reads(duel: Object, origin: Vector3, to: Vector3, speed: float) -> S
 	var caps: AISkaterCaps = Duel.match_caps()
 	var ll: float = origin.distance_to(to)
 	var d: Vector3 = (to - origin) / ll
-	var eff: float = ll / AIPuckLane._friction_traverse_time(ll, speed)
+	var eff: float = ll / AIPuckLane.friction_traverse_time(ll, speed)
 	var rl: float = maxf(ll - AIPuckLane.LANE_RECEIVER_REACH_M, 0.0)
 	var out: String = " | model"
 	for delay: float in [AIPuckLane.LANE_REACTION_DELAY_S - AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,

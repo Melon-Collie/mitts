@@ -1,8 +1,9 @@
 class_name AILaneReach
 
-# A defender's body on a fired puck's lane, read on the shared momentum-honest
+# A skater's body on a fired puck's lane, read on the shared momentum-honest
 # arrival clock (AIArrival): the accurate lane read AIPuckLane.lane_clear prices
-# a pass the carrier fires with. A leaf — GameRules, AIArrival, AIBotMechanics
+# a pass the carrier fires with, and the mate a feed meets on its way
+# (AICarrierPassSearch._mate_take). A leaf — GameRules, AIArrival, AIBotMechanics
 # and AISkaterCaps only — that AIPuckLane calls and never the other way.
 
 # Lane points the reach read samples, evenly along the stretch it reads.
@@ -86,7 +87,7 @@ static func _block_at(fx: float, fz: float, dirx: float, dirz: float,
 	return clampf(0.5 + (window - t_arrive) / (2.0 * err), 0.0, 1.0)
 
 
-# A defender's reach for the accurate lane read: his blade span and the outward
+# A skater's reach for the accurate lane read: his blade span and the outward
 # buffer, the same "within a blade" the loose-puck chase plays a puck at.
 static func defender_reach(caps: AISkaterCaps) -> float:
 	return caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M if caps != null \

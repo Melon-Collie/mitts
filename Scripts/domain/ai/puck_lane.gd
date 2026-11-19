@@ -428,7 +428,7 @@ static func _brake_block_at(u: float, a: float, b: float, speed: float,
 # Time for a puck launched at `v0` to slide `dist` against ice friction (Coulomb
 # decel PUCK_ICE_DECEL_M_S2): the first root of dist = v0·T − ½·a·T². Falls
 # back to frictionless if the puck would stop before arriving.
-static func _friction_traverse_time(dist: float, v0: float) -> float:
+static func friction_traverse_time(dist: float, v0: float) -> float:
 	var a: float = GameRules.PUCK_ICE_DECEL_M_S2
 	if a <= 0.0:
 		return dist / v0
@@ -515,7 +515,7 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 	# Friction-aware average speed over the real traversal (accurate only).
 	var eff_speed: float = speed
 	if accurate:
-		eff_speed = line_len / _friction_traverse_time(line_len, speed)
+		eff_speed = line_len / friction_traverse_time(line_len, speed)
 	var read_len: float = maxf(line_len - end_reach, 0.0)
 	var seg_time: float = line_len / eff_speed
 	var inv_len: float = 1.0 / line_len
@@ -613,7 +613,7 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 	# From the touch-down on it is a flat pass on the ice for the rest of the lane.
 	var flown: float = speed * t_down
 	var landed_len: float = line_len - flown
-	var landed_speed: float = landed_len / _friction_traverse_time(landed_len, speed) \
+	var landed_speed: float = landed_len / friction_traverse_time(landed_len, speed) \
 			if landed_len > 0.01 else speed
 	var landed_read: float = line_len - LANE_RECEIVER_REACH_M - flown
 	var has_blades: bool = opponent_blades.size() == opponents.size()
@@ -690,7 +690,7 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 		return Vector3.INF
 	var line_len: float = sqrt(line_len_sq)
 	var speed: float = maxf(puck_speed_m_s, 1.0)
-	var eff_speed: float = line_len / _friction_traverse_time(line_len, speed)
+	var eff_speed: float = line_len / friction_traverse_time(line_len, speed)
 	var dirx: float = dx / line_len
 	var dirz: float = dz / line_len
 	var read_len: float = maxf(line_len - LANE_RECEIVER_REACH_M, 0.0)
