@@ -158,7 +158,14 @@ blade (`blade_contact_world`); and the way the blade takes it from there to the
 target. Held in our mouth, in it already, or dragged into it by the body's
 travel in the blade's time to sweep it clear, it goes out wide of the post on
 the body's own side; taken through the mouth on its way (round the cage from in
-front of the line), it goes round the post on its own side. Beside our own
+front of the line), it goes round the post on its own side. From behind our
+line the stick never reaches round our cage, and that wins over the rest: the
+twine holds the blade on its own side, so the body skating on slid a stick
+reached round the cage along the twine and round the post into the mouth
+(#961). A target that asks for it round swings past the cage's back corner,
+never its front, and a puck already round comes back past the back corner on
+its side. So a carrier never walks the puck out on the far side of our post.
+Beside our own
 goalie the cursor holds the puck on the far side of the body from him: parked
 on the body, as beside theirs, the puck trailed behind the carrier along a
 bearing the lagging cursor made, into the goalie's pads, whose gear swept it
