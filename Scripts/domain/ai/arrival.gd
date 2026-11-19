@@ -2,9 +2,9 @@ class_name AIArrival
 
 # The momentum-honest arrival clock the bots share: how long a body carrying
 # its current velocity takes to reach a point, routed around the nets, or to
-# meet another body. A leaf —
-# it reads GameRules, AIStrideRamp and AINetObstacle only — so the scorer and
-# AICarrySpace can both depend on it (test_scoring_split_stays_acyclic.gd).
+# meet another body. A leaf — it reads GameRules, SkaterMovementRules,
+# AIStrideRamp and AINetObstacle only — so the scorer and AICarrySpace can both
+# depend on it (test_scoring_split_stays_acyclic.gd).
 
 # Reference (league-average) top skating speed, shared with
 # SkaterController.max_speed via GameRules. A FALLBACK: a read with a peer in
@@ -24,15 +24,23 @@ const MIN_TRAVEL_SPEED_M_S: float = 1.0
 const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 
 # ── Calibrated phase model ─────────────────────────────────────────────────────
-# The measured controller (SkaterMovementRules at 120 Hz driven by the real
-# steering — the velocity-matched seek plus the pivot brake, see
-# tests/unit/ai/test_time_to_arrive_calibration.gd, which pins every constant
-# here against simulated arrivals) decomposes into:
+# The measured controller (SkaterMovementRules at the tick driven by the bot's
+# own steering — the velocity-matched seek, the pivot brake or its stance cut,
+# the stance carve; tests/unit/ai/test_time_to_arrive_calibration.gd holds the
+# model against simulated arrivals) decomposes into:
 #
-#   REDIRECT — cross-momentum beyond what the seek sheds for free. The
-#     velocity-matched anchor pull cancels cross-drift out of the thrust's
-#     spare headroom, so moderate drift costs nothing; only the EXCESS above
-#     VM_FREE_SHED_M_S pays, at the measured net shed rate.
+#   TURN — cross-momentum past the seek's free band (REDIRECT's) is carved
+#     round onto the point on the loaded stance's edges (turn_accel × grip ×
+#     the stance's grip) while the speed bleeds at the scrape, the glide and
+#     the stick's share along travel: a skid where the seek points it behind
+#     the travel, a stride where ahead.
+#     Constant lateral authority over a constant bleed is a logarithmic spiral,
+#     so the carve is closed form. The bearing swings while the body travels,
+#     so a second carve takes up what the first left. A point inside the
+#     carve's curl is flown past, and what is left is a REVERSAL.
+#   REDIRECT — cross-momentum the carve leaves beyond what the seek sheds for
+#     free: only the EXCESS above VM_FREE_SHED_M_S pays, at the measured net
+#     shed rate.
 #   REVERSAL — velocity pointed away brakes out at the brake key's real
 #     stop decel and gives back the ground lost while braking.
 #   PURSUIT — the stride's own ramp at the NET push the movement model
@@ -43,10 +51,10 @@ const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 #
 # Never collapse this to `effective = ref + v_along` with the shed as a pure
 # delay: that credits a full-speed closer with up to DOUBLE top speed and hands
-# standing starts top speed for free. Errors vs the measured table are within
-# ~±20% on the clean families; short diagonal cuts at high speed (the
-# controller can overfly the catch window and circle once) run up to ~2× the
-# estimate.
+# standing starts top speed for free. The one place the clock can be off by
+# more than ERROR_FRAC is the edge between a short cut at speed the carve just
+# makes and one it just flies past, where a few tenths of a metre decide a
+# loop: up to ~2× either way there.
 
 # The clock's error against the live controller on the clean families: a share
 # of the trip, with a floor (test_time_to_arrive_calibration.gd holds it).
@@ -60,6 +68,12 @@ const VM_FREE_SHED_M_S: float = 2.0
 const VM_SHED_DECEL_M_S2: float = 11.0
 # Brake-key deceleration for reversals — the hockey stop itself.
 const REVERSAL_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+# Carves the TURN takes: the first onto the bearing at the start, the second
+# onto where the first left the point.
+const TURN_CARVES: int = 2
+# The league body the carve's stance edges, scrape and glide are read from;
+# grip, thrust and top speed come in per call.
+static var _body: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_config()
 
 
 # `ref_speed_m_s` is the actor's flat skating speed; `accel_m_s2` its all-direction
@@ -194,22 +208,80 @@ static func _time_to_arrive_direct(from_pos: Vector3, dest: Vector3,
 		lateral_grip: float = 1.0) -> float:
 	var dx: float = dest.x - from_pos.x
 	var dz: float = dest.z - from_pos.z
-	var dist: float = sqrt(dx * dx + dz * dz)
-	if dist < 0.001:
+	if dx * dx + dz * dz < 0.000001:
 		return 0.0
 	var vmax: float = maxf(ref_speed_m_s, MIN_TRAVEL_SPEED_M_S)
+	var grip: float = maxf(lateral_grip, 0.001)
+	var vx: float = from_velocity.x
+	var vz: float = from_velocity.z
+	var t: float = 0.0
+	for _carve: int in TURN_CARVES:
+		var speed_sq: float = vx * vx + vz * vz
+		var to_dest: float = sqrt(dx * dx + dz * dz)
+		if speed_sq <= SkaterMovementRules.GRIP_MIN_SPEED * SkaterMovementRules.GRIP_MIN_SPEED \
+				or to_dest < 0.001:
+			break
+		var speed: float = sqrt(speed_sq)
+		var cos_off: float = (vx * dx + vz * dz) / (speed * to_dest)
+		var cross: float = (vx * dz - vz * dx) / (speed * to_dest)
+		var sin_off: float = absf(cross)
+		# Cross speed inside the seek's free band needs no carve (REDIRECT).
+		if cos_off <= 0.0 or speed * sin_off <= VM_FREE_SHED_M_S * grip:
+			break
+		# Carved from no faster than top speed, as the ramp prices: no return
+		# then beats the straight distance over vmax (the callers' exact prunes).
+		var v: float = minf(speed, vmax)
+		# The edges: the stance's authority, the turn-rate ceiling binding at low
+		# speed, and the scrape for what it holds past the upright edges.
+		var upright: float = minf(GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2 * grip,
+				GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S * v)
+		var lateral: float = minf(
+				GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2 * grip * _body.stance_grip_mult,
+				GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S * v)
+		# The seek's stick (the bearing less the cross drift over vmax) along
+		# travel: behind it is the skid, ahead of it the stance's stride.
+		var drift: float = v * sin_off / vmax
+		var along: float = (cos_off - drift * sin_off) / sqrt(1.0 + drift * drift)
+		var bleed: float = _body.friction + _body.friction_drag * v \
+				+ _body.stance_scrape * (lateral - upright)
+		if along < 0.0:
+			bleed -= along * REVERSAL_BRAKE_DECEL_M_S2 * _body.reverse_skid_fraction
+		else:
+			bleed -= along * minf(accel_m_s2, accel_m_s2 \
+					* GameRules.DEFAULT_SKATER_POWER_KNEE_M_S / v) * _body.stance_stride_mult
+		# The spiral through the heading change `off`: speed v·e^(−bleed·φ/lateral)
+		# at heading φ, radius speed²/lateral. `ahead` runs along the entry
+		# heading, `aside` toward the point's side of it.
+		var off: float = atan2(sin_off, cos_off)
+		var c: float = 2.0 * bleed / lateral
+		var e: float = exp(-c * off)
+		var kept: float = sqrt(e)
+		var arm: float = v * v / lateral / (1.0 + c * c)
+		var ahead: float = arm * (e * (sin_off - c * cos_off) + c)
+		var aside: float = arm * (1.0 - e * (c * sin_off + cos_off))
+		t += v * off / lateral if absf(bleed) < 0.0001 else v * (1.0 - kept) / bleed
+		# He leaves the carve on the bearing he started it on.
+		var hx: float = vx / speed
+		var hz: float = vz / speed
+		var side: float = signf(cross)
+		var exit_speed: float = minf(v * kept, vmax)
+		var ux: float = dx / to_dest
+		var uz: float = dz / to_dest
+		dx -= ahead * hx - aside * hz * side
+		dz -= ahead * hz + aside * hx * side
+		vx = ux * exit_speed
+		vz = uz * exit_speed
+	var dist: float = sqrt(dx * dx + dz * dz)
+	if dist < 0.001:
+		return t
 	var inv: float = 1.0 / dist
-	var v_along: float = from_velocity.x * dx * inv + from_velocity.z * dz * inv
-	var v_len_sq: float = from_velocity.x * from_velocity.x \
-			+ from_velocity.z * from_velocity.z
-	var v_perp: float = sqrt(maxf(0.0, v_len_sq - v_along * v_along))
+	var v_along: float = vx * dx * inv + vz * dz * inv
+	var v_perp: float = sqrt(maxf(0.0, vx * vx + vz * vz - v_along * v_along))
 	# REDIRECT: only the cross momentum the seek can't shed for free pays,
 	# scaled by this build's edge grip — the turn authority SkaterMovementRules
 	# scales in the real body (turning redirects momentum on the edges; the
 	# stride plays no part, and grip never limits the ramp below).
-	var grip: float = maxf(lateral_grip, 0.001)
-	var t: float = maxf(0.0, v_perp - VM_FREE_SHED_M_S * grip) \
-			/ (VM_SHED_DECEL_M_S2 * grip)
+	t += maxf(0.0, v_perp - VM_FREE_SHED_M_S * grip) / (VM_SHED_DECEL_M_S2 * grip)
 	var r: float = dist
 	var v0: float = v_along
 	if v0 < 0.0:
