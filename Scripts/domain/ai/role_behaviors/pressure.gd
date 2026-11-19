@@ -17,7 +17,8 @@ const SET_IN_ROUNDS: int = 3
 
 
 # `cover_priced`: the caller has already priced who picks the play up if the
-# challenge is beaten (the pinch's rotation), so the hit needs no man behind.
+# challenge is beaten (the pinch's rotation), so the hit needs no man behind,
+# and with no hit to throw he closes on the carrier rather than gapping him.
 static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision:
 	var d := RoleDecision.new()
 
@@ -40,7 +41,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 			d.commit_check = true
 			d.target_position = check.target
 			return d
-	if level:
+	if level or cover_priced:
 		return _close_on_him(ctx, ap, d)
 
 	var our_net: Vector3 = ctx.defending_goal_pos

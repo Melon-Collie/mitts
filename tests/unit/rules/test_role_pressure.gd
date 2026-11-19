@@ -272,6 +272,28 @@ func test_wrong_side_candidates_are_filtered() -> void:
 
 # Depth of the chosen stand, goal-side of the carrier along the carrier→our-net
 # line. Larger = deeper = further from the carrier.
+func test_a_pinch_with_no_hit_to_throw_still_closes_on_the_carrier() -> void:
+	# Their winger collects a puck on their wall and skates it out, our point
+	# a stride goal-side of him with no hit that lands. Pinching (the cover
+	# priced), he goes onto the man; pressuring without it, he holds a gap.
+	var carrier := Vector3(10.0, 0.0, -12.0)
+	var self_pos := Vector3(9.0, 0.0, -9.0)
+	var ctx: RoleContext = _make_ctx(self_pos, 200, [
+			[1, TEAM_ID, self_pos],
+			[200, 1 - TEAM_ID, carrier, Vector3(0.0, 0.0, 3.0)],
+			[2, TEAM_ID, Vector3(0.0, 0.0, OUR_NET_Z - 2.0)],
+	])
+	ctx.self_max_speed = 9.0
+	ctx.check_aggression = 0.0
+	var stick: float = AIRoleRushD.stick_m(ctx)
+	var pinch: RoleDecision = AIRolePressure.decide(ctx, true)
+	assert_false(pinch.commit_check, "no hit is thrown")
+	assert_lt(pinch.target_position.distance_to(carrier), 0.5 * stick,
+			"the pinch goes onto the man, inside his stick")
+	assert_gte(AIRolePressure.decide(ctx).target_position.distance_to(carrier), stick,
+			"without the cover priced, he holds at least a stick off")
+
+
 func _stand_depth(d: RoleDecision, carrier: Vector3) -> float:
 	var to_net: Vector3 = Vector3(0.0, 0.0, OUR_NET_Z) - carrier
 	var n: float = sqrt(to_net.x * to_net.x + to_net.z * to_net.z)
