@@ -26,7 +26,8 @@ static func make() -> RefCounted:
 	native.set_sweep(AICarrySpace.EVADE_HORIZON_S, AICarrySpace.EVADE_SAMPLE_ANGLES,
 			PackedFloat64Array(AICarrySpace.EVADE_SAMPLE_RINGS),
 			AICarrySpace.POKE_CONTACT_RADIUS_M + AICarrySpace.DWELL_HALF_BAND_M,
-			AICarrySpace.POKE_CONTACT_RADIUS_M, AICarrySpace.DWELL_HALF_BAND_M)
+			AICarrySpace.POKE_CONTACT_RADIUS_M, AICarrySpace.DWELL_HALF_BAND_M,
+			AICarrySpace.EVADE_BODY_CONTACT_M)
 	native.set_carry(AICarrySpace.TRANSIT_STRIP_CLEAR_M, AICarrySpace.TRANSIT_SAFE_CLEAR_M,
 			AICarrySpace.CARRY_LUNGE_WINDOW_S, AICarrySpace.CROSSING_PROTECT_SHIFT_M,
 			AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M)

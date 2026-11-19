@@ -1142,7 +1142,12 @@ reaches back into what remains.
     last lunge there: a backchecker out-skating a carrier who slows into the
     crease then sails past it on paper, and the drive in out-prices the shot.
   - The **max-clearance seam** (`best_evade_point`, "can I keep the puck at
-    all") prices the carrier's current safety. Where the body goes to beat a
+    all") prices the carrier's current safety, and `AIEvadeRead.evade_safety`
+    is the same read for the possession value's keep odds. Its envelope is
+    centred where his momentum takes him, stopped where his body meets a
+    defender's (`momentum_horizon_s`): he cannot skate through the man he is
+    evading. Only the seam's end is priced, not the route to it, so a seam past
+    a man he skates by inside his stick still reads clear (#777). Where the body goes to beat a
     man is not a seam read: it is the carry's rolled moves, each priced at its
     own end (`docs/hybrid-carry-plan.md`).
   - **The boards bound the seam search** (`board_gap_m` rejects off-surface

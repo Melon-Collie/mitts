@@ -57,7 +57,7 @@ void NativeCarrySpace::set_rink(double p_inner_half_width, double p_inner_half_l
 
 void NativeCarrySpace::set_sweep(double p_horizon_s, int64_t p_angles,
 		const PackedFloat64Array &p_rings, double p_saturated_m, double p_poke_contact,
-		double p_dwell_half_band) {
+		double p_dwell_half_band, double p_body_contact) {
 	horizon_s = p_horizon_s;
 	angles = (int)p_angles;
 	rings.resize(p_rings.size());
@@ -67,6 +67,7 @@ void NativeCarrySpace::set_sweep(double p_horizon_s, int64_t p_angles,
 	saturated_m = p_saturated_m;
 	poke_contact = p_poke_contact;
 	dwell_half_band = p_dwell_half_band;
+	body_contact = p_body_contact;
 }
 
 void NativeCarrySpace::set_carry(double p_transit_strip, double p_transit_safe,
@@ -339,13 +340,44 @@ double NativeCarrySpace::crossing_keep(double fx, double fz, double tx, double t
 	return clamp01((eff + poke_contact) / poke_contact);
 }
 
+// AICarrySpace.momentum_horizon_s.
+double NativeCarrySpace::momentum_horizon(double cx, double cz, double cvx, double cvz,
+		const std::vector<Defender> &defs) const {
+	double t_c = horizon_s;
+	const double contact_sq = body_contact * body_contact;
+	for (const Defender &o : defs) {
+		const double rx = cx - o.x;
+		const double rz = cz - o.z;
+		const double wx = cvx - o.vx;
+		const double wz = cvz - o.vz;
+		const double b = rx * wx + rz * wz;
+		if (b >= 0.0) {
+			continue;
+		}
+		const double c = rx * rx + rz * rz - contact_sq;
+		if (c <= 0.0) {
+			return 0.0;
+		}
+		const double a = wx * wx + wz * wz;
+		const double disc = b * b - a * c;
+		if (disc < 0.0) {
+			continue;
+		}
+		t_c = std::fmin(t_c, (-b - std::sqrt(disc)) / a);
+	}
+	return t_c;
+}
+
 double NativeCarrySpace::evade_safety(const Vector3 &carrier_pos, const Vector3 &carrier_vel,
 		const Array &opponents, const Array &opponent_vels, double handle_reach,
 		const PackedFloat64Array &caps) const {
 	std::vector<Defender> defs;
 	const bool valid = load(opponents, opponent_vels, caps, defs);
-	const double proj_x = (double)carrier_pos.x + (double)carrier_vel.x * horizon_s;
-	const double proj_z = (double)carrier_pos.z + (double)carrier_vel.z * horizon_s;
+	const double t_c = valid
+			? momentum_horizon(carrier_pos.x, carrier_pos.z, carrier_vel.x, carrier_vel.z, defs)
+			: horizon_s;
+	const double proj_x = (double)carrier_pos.x + (double)carrier_vel.x * t_c;
+	const double proj_z = (double)carrier_pos.z + (double)carrier_vel.z * t_c;
 	const double cx = f32(proj_x);
 	const double cz = f32(proj_z);
 	double best_clear = reach_clearance(cx, cz, horizon_s, defs, valid, -1.0, 0.0, 0.0, 0.0,
@@ -575,7 +607,7 @@ void NativeCarrySpace::_bind_methods() {
 								 "corner_radius", "corner_center_x", "corner_center_z"),
 			&NativeCarrySpace::set_rink);
 	ClassDB::bind_method(D_METHOD("set_sweep", "horizon_s", "angles", "rings", "saturated_m",
-								 "poke_contact", "dwell_half_band"),
+								 "poke_contact", "dwell_half_band", "body_contact"),
 			&NativeCarrySpace::set_sweep);
 	ClassDB::bind_method(D_METHOD("set_carry", "transit_strip", "transit_safe",
 								 "lunge_window_s", "protect_shift", "league_blade_reach"),

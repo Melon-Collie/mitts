@@ -82,33 +82,52 @@ func test_momentum_overshoot_raises_evadability() -> void:
 				"the committed charger from %s overshoots" % start)
 
 
-func test_approach_lowers_evadability_for_a_standing_carrier() -> void:
-	# No momentum on either side: the nearer a stationary defender's stick, the
-	# less room the seam has.
-	var prev: float = INF
-	for gap: float in [3.0, 2.5, 2.0, 1.6, 1.2, 1.0, 0.8, 0.6, 0.4]:
-		var opps: Array[Vector3] = [Vector3(gap, 0, 0.3)]
-		var vels: Array[Vector3] = [Vector3.ZERO]
-		var safety: float = _evade(Vector3.ZERO, Vector3.ZERO, opps, vels)
-		assert_lte(safety, prev + SLACK, "a defender %.1f m off never leaves more room" % gap)
-		prev = safety
-	assert_lt(prev, 1.0, "a stick at the puck takes room away")
+func test_a_closer_defender_ahead_is_never_safer() -> void:
+	# A stationary defender on the carrier's line, his body in the way: the nearer
+	# he stands, the less room the seam has, standing or skating at him. The
+	# carrier cannot skate through him to the ice past him, however fast he comes.
+	for pace: float in [0.0, 3.0, 5.0, 7.0, 9.0]:
+		for off: float in [0.0, 0.3]:
+			var prev: float = INF
+			for gap: float in [5.0, 4.0, 3.5, 3.0, 2.5, 2.0, 1.5, 1.2, 1.0, 0.8, 0.6, 0.4]:
+				var opps: Array[Vector3] = [Vector3(gap, 0, off)]
+				var vels: Array[Vector3] = [Vector3.ZERO]
+				var safety: float = _evade(Vector3.ZERO, Vector3(pace, 0, 0), opps, vels)
+				assert_lte(safety, prev + SLACK,
+						"carrier at %.0f m/s, defender %.1f m ahead (%.1f off the line): never more room"
+						% [pace, gap, off])
+				prev = safety
+			assert_lt(prev, 1.0, "at %.0f m/s a stick at the puck takes room away" % pace)
 
 
-func test_stick_on_the_puck_is_a_real_threat() -> void:
-	# Defender's stick right on the puck, no momentum — the carrier can't just
-	# skate out of it in one cut.
-	var opps: Array[Vector3] = [Vector3(0.8, 0, 0.3)]
-	var vels: Array[Vector3] = [Vector3.ZERO]
-	assert_lt(_evade(Vector3.ZERO, Vector3(3, 0, 0), opps, vels), 0.35,
-			"a stick on the puck is genuine pressure")
+func test_the_carrier_never_projects_through_a_body() -> void:
+	# Wherever his momentum is read to take him, his body is no nearer a defender
+	# (dead-reckoned to the same instant) than their bodies meet.
+	var contact: float = AICarrySpace.EVADE_BODY_CONTACT_M
+	for pace: float in [3.0, 5.0, 7.0, 9.0]:
+		for gap: float in [0.8, 1.0, 1.5, 2.0, 3.0, 4.0]:
+			for d_vel: Vector3 in [Vector3.ZERO, Vector3(-3, 0, 0), Vector3(2, 0, 0.5)]:
+				var car_v := Vector3(pace, 0, 0)
+				var opps: Array[Vector3] = [Vector3(gap, 0, 0.2)]
+				var vels: Array[Vector3] = [d_vel]
+				var t: float = AICarrySpace.momentum_horizon_s(Vector3.ZERO, car_v, opps, vels)
+				assert_between(t, 0.0, AICarrySpace.EVADE_HORIZON_S)
+				var sep: float = (car_v * t).distance_to(opps[0] + d_vel * t)
+				assert_gte(sep, contact - SLACK,
+						"%.0f m/s at a man %.1f m ahead moving %s: %.2f m apart at %.2f s"
+						% [pace, gap, d_vel, sep, t])
 
 
-func test_stationary_wall_ahead_is_tight() -> void:
-	var opps: Array[Vector3] = [Vector3(1.5, 0, 0)]
-	var vels: Array[Vector3] = [Vector3.ZERO]
-	assert_lt(_evade(Vector3.ZERO, Vector3(5, 0, 0), opps, vels), 0.35,
-			"skating into a stationary defender 1.5 m ahead is tight")
+func test_a_man_behind_or_beside_does_not_stop_the_carrier() -> void:
+	# Only a body he skates into ends his momentum: one he is pulling away from,
+	# or one his line clears, leaves the whole horizon.
+	var h: float = AICarrySpace.EVADE_HORIZON_S
+	var car_v := Vector3(6, 0, 0)
+	var behind: Array[Vector3] = [Vector3(-0.5, 0, 0)]
+	var beside: Array[Vector3] = [Vector3(1.5, 0, 1.0)]
+	var still: Array[Vector3] = [Vector3.ZERO]
+	assert_eq(AICarrySpace.momentum_horizon_s(Vector3.ZERO, car_v, behind, still), h)
+	assert_eq(AICarrySpace.momentum_horizon_s(Vector3.ZERO, car_v, beside, still), h)
 
 
 # A defender 2.2 m ahead of a 5 m/s carrier, skating with him at `pace`.

@@ -44,8 +44,10 @@ static func evade_safety_reference(
 		carrier_pos: Vector3, carrier_vel: Vector3,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		handle_reach: float, opponent_caps: Array = []) -> float:
-	var proj_x: float = carrier_pos.x + carrier_vel.x * _HORIZON_S
-	var proj_z: float = carrier_pos.z + carrier_vel.z * _HORIZON_S
+	var t_c: float = AICarrySpace.momentum_horizon_s(carrier_pos, carrier_vel, opponents,
+			opponent_vels)
+	var proj_x: float = carrier_pos.x + carrier_vel.x * t_c
+	var proj_z: float = carrier_pos.z + carrier_vel.z * t_c
 	var best_clear: float = AICarrySpace.reach_clearance(Vector3(proj_x, 0.0, proj_z),
 			_HORIZON_S, opponents, opponent_vels, opponent_caps)
 	if best_clear >= _SATURATED_M:
