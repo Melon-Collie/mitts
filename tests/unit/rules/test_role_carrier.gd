@@ -1820,9 +1820,9 @@ func test_sharp_angle_shot_along_the_ice_into_an_rvh_seal_is_never_worth_firing(
 # ─── attacking blue-line keep-out bands ──────────────────────────────────────
 # The offside puck-line is the TRUE blue line while the carrier reasons in
 # body positions: the pass windup swings the carried puck a stick's reach
-# behind the body, and reception plays the puck a reach around the receiver.
-# Both bands (OZ_RETREAT_LINE_BUFFER_M / OZ_RECEIVE_LINE_BUFFER_M) exist so
-# blue-line slop can't turn a completed play into a zone exit / offside.
+# behind the body (OZ_RETREAT_LINE_BUFFER_M), and a feed is caught where the
+# blade meets it (OZ_RECEIVE_LINE_BUFFER_M), so neither turns a completed play
+# into a zone exit / offside.
 
 func test_oz_valve_prunes_carry_candidates_in_the_blue_line_band() -> void:
 	# Carrier established in the OZ (team 0 attacks -Z; OZ is z < -BLUE_LINE_Z).
@@ -1864,17 +1864,18 @@ func _best_pass_to_mate(ctx: RoleContext) -> AICarrierPassSearch:
 	return c._pass
 
 
-func test_oz_pass_skips_receiver_hugging_the_blue_line() -> void:
-	# Carrier in the OZ; the only teammate is wide open but his tape sits
-	# just inside the blue line — reception slop there takes the puck out
-	# of the zone, so he is excluded as a target entirely. The same open
-	# man past the keep-out band (the far-post backdoor the squared goalie
-	# can't re-square onto) is a legal (positive) feed.
+func test_oz_pass_feeds_a_man_at_the_line_but_not_on_it() -> void:
+	# Carrier in the OZ; the only teammate is wide open. Half a metre inside
+	# the blue line, his catch keeps the puck in the zone (a clean catch holds
+	# it where the blade meets it, a bobble comes back off the face:
+	# tests/instruments/ai/test_line_reception.gd), so he is a legal feed. On
+	# the line itself the puck he catches is outside it, and he is no target.
 	var at_line := Vector3(-2.5, 0.0, -(GameRules.BLUE_LINE_Z + 0.5))
-	assert_eq(_best_pass_to_mate(_backdoor_ctx(at_line)).best_score, 0.0,
-			"a receiver hugging the blue line is not a pass target from inside the zone")
-	assert_gt(_best_pass_to_mate(_backdoor_ctx(_BACKDOOR_MATE)).best_score, 0.0,
-			"the same open man past the keep-out band is a legal feed")
+	assert_gt(_best_pass_to_mate(_backdoor_ctx(at_line)).best_score, 0.0,
+			"a man half a metre inside the line is a pass target")
+	var on_line := Vector3(-2.5, 0.0, -(GameRules.BLUE_LINE_Z + 0.1))
+	assert_eq(_best_pass_to_mate(_backdoor_ctx(on_line)).best_score, 0.0,
+			"a man on the line is not a pass target from inside the zone")
 
 
 # ─── close-quarters saucer variant ───────────────────────────────────────────
@@ -2835,7 +2836,8 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(release,
 				ctx.attacking_goal_pos, keeper, 0.0, stance,
 				atan2(keeper.x - release.x, keeper.z - release.z),
-				AIShotOdds.History.CARRIED)) * c._field.holds.arrival_keep
+				AIShotOdds.History.CARRIED), AIActionScoring.FLAT_REBOUND_CREDIT) \
+				* c._field.holds.arrival_keep
 		var kept: float = c._field.continuation_at(release)
 		assert_almost_eq(arrival, maxf(shot_there, kept), 1e-4,
 				"arriving at rest at %s prices the shot the keeper facing it gives" % spot)
@@ -2943,3 +2945,46 @@ func test_a_pass_leaves_from_the_ice_not_through_the_boards() -> void:
 	assert_gt(origin.z, at.z, "carried on toward the boards up to them")
 	ctx.self_velocity = Vector3(0.0, 0.0, -4.0)
 	assert_lt(AICarrierField.pass_origin(ctx).z, at.z, "skating away, carried on as before")
+
+
+# ─── shooting for a tip ─────────────────────────────────────────────────────
+
+# A carrier 8 m wide at the top of the circle, a teammate in `slot` on his line
+# to the net with his blade at the crease top (AITipPoint: his body a blade back
+# of where he tips it), the keeper square on the carrier, `team_size` a side.
+func _point_with_tipper(slot: int, team_size: int = 5) -> AIRoleCarrier:
+	var self_pos := Vector3(8.0, 0.0, OPP_NET_Z + 16.0)
+	var net := Vector3(0.0, 0.0, OPP_NET_Z)
+	var tipper: Vector3 = net + (self_pos - net).normalized() \
+			* (AIRoleFinisher.TIP_STATION_DIST_M - AITipPoint.BLADE_OUT_M)
+	var ctx := _make_ctx(self_pos, [[1, TEAM_ID, self_pos], [2, TEAM_ID, tipper]])
+	ctx.team_size = team_size
+	var brain := TeamBrain.new(TEAM_ID, ctx.team_id_by_peer)
+	brain.slot_assignments[2] = slot
+	ctx.team_brain = brain
+	var g := GoalieNetworkState.new()
+	var dir: Vector3 = (self_pos - net).normalized()
+	g.position_x = net.x + dir.x * 1.3
+	g.position_z = net.z + dir.z * 1.3
+	_place_keeper(ctx, g)
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	return c
+
+
+func test_a_net_front_man_on_his_line_makes_the_wide_rip_a_tip() -> void:
+	# From out wide the tip field measures a tip at the crease top scoring where
+	# the shot alone does not: the rip for him to tip is the shot read.
+	var tip := _point_with_tipper(AIRoleSlots.Slot.NET_FRONT)
+	var plain := _point_with_tipper(AIRoleSlots.Slot.HIGH_SLOT)
+	assert_true(tip._shot_sample_is_tip, "the rip is for his tip")
+	assert_gt(tip.debug_shoot_score, plain.debug_shoot_score,
+			"his tip is worth more than the shot alone")
+	assert_false(plain._shot_sample_is_tip, "a man who does not tip is not shot at")
+
+
+func test_a_3v3_carrier_never_rips_for_the_finishers_tip() -> void:
+	var tip := _point_with_tipper(AIRoleSlots.Slot.FINISHER, 3)
+	assert_false(tip._shot_sample_is_tip, "3v3 shoots the direct shot")
+	assert_true(_point_with_tipper(AIRoleSlots.Slot.FINISHER)._shot_sample_is_tip,
+			"the same finisher in 5v5 is ripped for")

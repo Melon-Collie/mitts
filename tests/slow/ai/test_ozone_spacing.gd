@@ -9,6 +9,10 @@ extends GutTest
 # ticks: his point handed to a forward, F3 held above the puck on the line, and
 # the spare body of every pass sent up to SUPPORT's post.
 #
+# It also prints, unasserted, where each slot stands (depth, weak-side x) and
+# how far its nearest defender is: the spread the shape count cannot see
+# (docs/bot-net-front-offense-plan.md, step 1).
+#
 # Team 0 attacks -Z; team 1 defends it. Depth is metres off their goal line.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
@@ -35,6 +39,23 @@ class Result:
 	var low_sum: int = 0
 	# Ticks two attackers stood inside the stations' anti-crowd radius.
 	var stacked_ticks: int = 0
+	# Per slot over its OZONE ticks: [ticks, Σ depth, Σ weak-side x, Σ nearest
+	# defender, Σ nearest teammate]. Weak-side x is metres across from the middle
+	# away from the puck's side (the brain's strong_x), so negative is strong-side.
+	var by_slot: Dictionary[int, Array] = {}
+	# Off-puck attackers' nearest defender and nearest teammate, summed over
+	# their ticks. A zone defence follows whoever enters its area, so the first
+	# reads the coverage as much as the attack; the second is the attack's own
+	# spacing.
+	var off_puck_ticks: int = 0
+	var off_puck_gap_sum: float = 0.0
+	var off_puck_mate_sum: float = 0.0
+
+	func off_puck_gap() -> float:
+		return off_puck_gap_sum / float(maxi(off_puck_ticks, 1))
+
+	func off_puck_mate() -> float:
+		return off_puck_mate_sum / float(maxi(off_puck_ticks, 1))
 
 	func four_high_share() -> float:
 		return float(high_hist[4] + high_hist[5]) / float(maxi(ozone_ticks, 1))
@@ -92,13 +113,49 @@ func _run(attackers: Array, carrier: int) -> Result:
 		r.high_hist[high] += 1
 		if stacked:
 			r.stacked_ticks += 1
+		_tally_slots(duel, brain, r)
 	return r
+
+
+func _tally_slots(duel: Duel, brain: TeamBrain, r: Result) -> void:
+	for a: int in range(1, 6):
+		var pa: Vector3 = duel._skater(a).pos
+		var gap: float = INF
+		for dfn: int in range(50, 55):
+			var pd: Vector3 = duel._skater(dfn).pos
+			gap = minf(gap, Vector2(pa.x - pd.x, pa.z - pd.z).length())
+		var mate: float = INF
+		for b: int in range(1, 6):
+			if b != a:
+				var pb: Vector3 = duel._skater(b).pos
+				mate = minf(mate, Vector2(pa.x - pb.x, pa.z - pb.z).length())
+		var slot: int = brain.slot_assignments.get(a, AIRoleSlots.Slot.NONE)
+		if not r.by_slot.has(slot):
+			r.by_slot[slot] = [0, 0.0, 0.0, 0.0, 0.0]
+		var row: Array = r.by_slot[slot]
+		row[0] += 1
+		row[1] += _depth(pa)
+		row[2] += -brain.strong_x() * pa.x
+		row[3] += gap
+		row[4] += mate
+		if slot != AIRoleSlots.Slot.CARRIER:
+			r.off_puck_ticks += 1
+			r.off_puck_gap_sum += gap
+			r.off_puck_mate_sum += mate
 
 
 func _report(label: String, r: Result) -> void:
 	gut.p("  %-24s ozone %4d | high 0..5: %s | 4+ high %3d%% | low/tick %.2f | stacked %3d%%"
 			% [label, r.ozone_ticks, str(r.high_hist), roundi(100.0 * r.four_high_share()),
 			r.low_per_tick(), roundi(100.0 * r.stacked_ticks / float(maxi(r.ozone_ticks, 1)))])
+	gut.p("  %-24s off-puck nearest defender %.2f m, nearest teammate %.2f m"
+			% ["", r.off_puck_gap(), r.off_puck_mate()])
+	for slot: int in r.by_slot:
+		var row: Array = r.by_slot[slot]
+		var n: float = float(maxi(row[0], 1))
+		gut.p("  %-24s   %-14s %4d ticks | depth %5.1f | weak x %+5.1f | nearest D %4.1f | mate %4.1f"
+				% ["", AIRoleSlots.label(slot), row[0], row[1] / n, row[2] / n, row[3] / n,
+				row[4] / n])
 
 
 func _assert_spread(label: String, r: Result) -> void:

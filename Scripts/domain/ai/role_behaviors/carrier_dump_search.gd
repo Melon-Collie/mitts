@@ -506,7 +506,7 @@ func _fill_support(ctx: RoleContext) -> void:
 		_our_then.append(p)
 		_our_then_val.append(AIActionScoring.score_shoot_value(p, ctx.attacking_goal_pos,
 				keeper, _opp_then, 0.0, AIShotOdds.Stance.UPRIGHT,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, _field.opponent_caps, -1.0, NAN, false,
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, _field.opponent_caps, -1.0, NAN, -1.0,
 				AIShotOdds.History.FED)
 				if AIActionScoring.in_offensive_zone(p, ctx.attacking_goal_pos) else 0.0)
 

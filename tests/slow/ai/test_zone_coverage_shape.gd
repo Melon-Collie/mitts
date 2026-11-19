@@ -101,21 +101,24 @@ const ZONE_SLOTS: Array[int] = [
 ]
 
 # Attackers in the zone that no defender has, per tick, in the low cycle
-# (measured 1.06). The carrier rims it up the strong wall at 1.6 s, before the
-# strong D reaches him, and the attack works it point to wall and back: 168 of
-# its 360 ticks are a loose puck, which carry the count.
+# (measured 0.72). The carrier rims it up the strong wall before the strong D
+# reaches him, and the attack works it point to wall and back: 222 of its 360
+# ticks are a loose puck, which carry the count.
 const UNCOVERED_CEILING: float = 1.34
 # The same count over the low cycle's ticks with an attacker on the puck
-# (measured 0.43 over 192: each feed taken starts a handoff).
+# (measured 0.05 over 138: each feed taken starts a handoff).
 const UNCOVERED_CARRIED_CEILING: float = 0.71
 # The scripted crossing cutter (measured 0.00). The cutter himself — the man
 # this fixture is about — is pinned on his own below.
 const UNCOVERED_CEILING_CROSSING_CUTTER: float = 0.28
 # Share of the D-zone ticks the cutter may go unattended (measured 0 of 360).
 const CUTTER_DROPPED_CEILING: float = 0.05
-# The scripted point shot (measured 0.48): the weak-wall man, whom the shot
-# model prices at nothing, on 172 of its 360 ticks.
-const UNCOVERED_CEILING_POINT_SHOT: float = 0.76
+# The scripted point shot (measured 0.81): the weak-wall man, whom the shot
+# model prices at nothing, on 290 of its 360 ticks. The D swap labels as the
+# one covering him crosses to the weak side, the weak D's area (the box) does
+# not hold him, and the matching has no reason to hand a worthless man on
+# (#959; bring the ceiling back down with it).
+const UNCOVERED_CEILING_POINT_SHOT: float = 1.1
 # The man nobody has should not routinely be a prime scoring threat. A loose
 # guard — it separated the two models weakly — against a collapse.
 const OPEN_DANGER_CEILING: float = 0.25

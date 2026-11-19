@@ -1,0 +1,1985 @@
+# Bot net-front offence — spacing, rebounds, screens, tips
+
+Status: **steps 1–5 built and measured (3a's measured credit built but off); against main's defence the branch's offence is level or ahead at both sizes (the branch against main);
+3d's second man not built; step 6 tried and backed out, its 6c first cut inert and taken out.** The CLAUDE.md workflow applies: this doc is
+the plan, and deviations get discussed first. It is the decision-layer half of
+#785 (price net presence, crash the net) and the rebound half of #924, and it
+waits on #736 (tips) for its last step. The mechanics it leans on are already
+built: the press, the dig-in and the screen press (`docs/net-front-battles-plan.md`),
+the goalie's screened read (`GoalieScreenRules`), the deliberate tip
+(`PuckCollisionRules.tip_turn`), and the keeper steering his rebounds
+(`test_keeper_steers_his_rebounds.gd`). What is missing is any reason for a
+bot to go and use them.
+
+## Decisions banked (with the user)
+
+- **Order: spacing, then measure, then rebounds, screens, tips.** Spacing is
+  the cheapest step and a model fix on its own. The three net-front items share
+  one missing input, which is what happens at the net after the first shot, so
+  they are measured together before any of them changes behaviour.
+- **Measure, then model.** Rebounds, screens and tips are each priced from a
+  table measured against the live keeper, the way the shot field is
+  (`docs/shot-currency-plan.md`), never from a curve shaped to feel right. The
+  tip removal (`0102aef`) is the warning: `tip_ev` read the redirect off
+  one-timer feed cells, priced tips at 0.07–0.41 where #736 measured roughly 0
+  in 8, and the bad price made up half the 5v5 shots.
+- **Both modes, 5v5 first.** Each step is measured and tuned on the 5v5 set
+  O-zone first, then 3v3 is re-measured. The roles are shared (FINISHER and
+  NET_FRONT are one module), so most changes reach 3v3 on their own.
+- **Coaching gates stay coaching gates.** Where a behaviour is a tactical rule,
+  for example "the second attacker on a rush drives the net" (`finisher.gd`'s
+  rush depth gate), it stays one. What this plan adds is the value those rules
+  chase, priced so that the rule can eventually be retired.
+- **The rebound field has its own generator,** sharing `shot_odds_stager.gd`
+  with the shot field but never regenerated with it.
+- **The screen's model is chosen by 2b's measurement** (§2b: a separate table
+  or a shot-field cell kind). It came out a separate table (§2b's status).
+- **A second man on an O-zone loose puck is in scope** (§3d), together with
+  #604's attacking-zone chase decline.
+- **The shape the bots play is a cycle-and-retrieve,** not the NHL's 2-3 as
+  such. The bots are not bad in the zone; they get gummed up. The step-1
+  additions all stay (the value-priced HIGH_SLOT, the general rotation, the
+  weak D's activation, the shared cover), since they cost nothing measurable
+  and give the cycle its moving parts. What comes next is why the carrier
+  does not use them.
+
+---
+
+## How the O-zone is played (research)
+
+A web survey of coaching and analytics sources, condensed. Nothing could be
+fetched from this environment, so the numbers come from search summaries of
+the sources listed. They are real-hockey numbers, so they are hypotheses for
+what our own measurements should find and targets for the shape; no evaluator
+reads them as constants.
+
+- **The shape has moved to a "2-3".** Two forwards work low (cutbacks, slip
+  passes). The other three, both D and F3, are a moving high line, and F3
+  skates downhill into the slot when space opens, or arrives at the far post.
+  It replaced the 3-2 spread and the box+1 because standard D-zone coverage is
+  outnumbered up high. (Jack Han, jhanhky.substack.com: "The hidden benefit of
+  attacking downhill", "The DZC dilemma".)
+- **F3 is not a fixed spot between the dots.** He is the low-to-high outlet,
+  the safety valve, and a moving third point who attacks the seam when the
+  defence collapses low.
+- **Width beats a collapsed box.** Shots with no lateral puck movement score
+  about 3%. A pass across the "royal road" through the slot first lifts that to
+  roughly 15–33% (Valiquette; Stimson via NHL.com). Defenders who collapse onto
+  the low man leave the weak-side D or forward open for the cross-ice
+  one-timer.
+- **Someone is always weak-side low.** The backdoor spot is 1–3 m off the goal
+  line and 1.5–3 m outside the far post. It is filled by the net-front man
+  sliding across, the weak-side forward, or the weak D sneaking down the flank.
+- **Rebounds.** Shots with a rebound are about 5% of shots and over 15% of
+  goals. A second shot within 2–3 s scores at about 4× the rate. Rebounds go in
+  about 23% of the time at 5v5. They come out far-post and into the slot when
+  the keeper does not control them. A low far-pad shot is "shooting to pass"
+  for a teammate crashing. The players must arrive within about 2 s of the
+  shot.
+- **Screens and tips.** A clear-sight shot scores about 3%, a screened one
+  about 14% and a deflection about 15% (Valiquette). Tips score about 17–19%,
+  against 9% for wrist shots. A single static screen is the easiest one for a
+  goalie, so the screener moves with the shooter's sightline. Defenders box
+  out early, so position is won before the shot. The tipper stands just off
+  the shot line, 1.5–4.5 m out, facing the shooter, blade on the ice.
+- **Point shots set up the tip, screen or rebound.** On its own a point shot
+  is about 3%. The D walks the line to open a lane, uses a wrister or snap
+  shot over a slapshot, and goes D-to-D or back low when no lane opens.
+- **Only one D below the circle tops at a time,** with a forward covering his
+  point.
+- **3v3.** Two high and one low. When the puck goes high, the next-highest
+  player becomes support or a shot option. Players arrive late from above the
+  hash marks with speed. Teams regroup, even out of the zone, rather than
+  force a play. Against a man-to-man defence, crossing routes and curl-and-
+  delays make 2-on-1s.
+- **Shot danger by location.** The low slot is about 2× the high slot, and
+  perimeter shots are about 2–4%. A royal-road pass, a rebound inside 3 s, a
+  screen or a tip each multiply the danger several times over.
+
+What this means for the plan:
+
+- **Step 1's model fix is the right direction.** Pricing F3's spot at the
+  one-timer's worth lets the shot field's feed cells pay for cross-seam and
+  weak-side spots, which is the royal road.
+- **The shape question is a doctrine decision,** made with the user below. It
+  is whether the 5v5 O-zone stays 3 low / 2 high (`docs/5v5-ai-plan.md` §2,
+  held by `test_ozone_spacing.gd`) or becomes the 2-3 with F3 in the high line.
+- **The net-front steps get targets.** Rebound stations are reached within 2 s
+  of the release (3b). The screener moves with the shooter's sightline rather
+  than standing still (step 4). The point shot is worth taking mostly for what
+  happens at the net, which 3a's credit prices.
+
+---
+
+## What the bots do today
+
+### 1. Rebounds
+
+- **The scoring counts first contact only.** The shot field measures whether
+  the first contact with the keeper is a goal (#785). The carrier's compete
+  adds a flat rebound credit to every shot that reaches the net
+  (`AIActionScoring.with_rebound`:
+  `p + (1 − p) · REBOUND_RECOVER_SHARE · FLOOR_THEIR_GOAL_LINE`). The credit is
+  the same with two of ours at the crease as with none, so a shot taken for the
+  rebound is never worth more than any other.
+- **Nobody positions for one.** Once the puck is released, FINISHER and
+  NET_FRONT hold where they are (`_positioning_decision` returns `self_pos` with
+  no teammate carrying), except for the tip read while a shot is in flight.
+  HIGH_SLOT and SUPPORT re-centre on the puck as if it were a passer.
+- **The chase starts at the save, not at the release.** The election walks
+  `AITrajectory.predict_puck`, which has no net and no keeper in it. While a
+  shot is in flight its predicted path runs through the cage to the end boards,
+  so the race only starts once the keeper has touched the puck, after the
+  carrier-reaction delay, and with bodies nobody set up for it.
+- **One man goes.** The election names one chaser a team, and the rest hold
+  their stations (#924 §1, #604).
+
+### 2. Tips
+
+The finisher still tips a shot coming at him (`_try_reactive_decision`), and
+still scores his stations by `max(feed, tip_ev)`. Since `0102aef` the carrier
+never shoots *for* a tip. The finisher's station pricing still reads the
+unmeasured `tip_ev`, so the tip station is valued by the same model that was
+retired from the carrier.
+
+### 3. Screens
+
+The keeper's read is screened (`GoalieScreenRules.screen_occlusion_delay`), a
+screener digs in (`skater_agent_press.gd:_dig_in`), and a defender presses a
+screener off the sightline (`_press_the_screen`). Nothing values standing
+there:
+
+- The shot value lists screens as not modelled, and the shot field has no
+  screened cells.
+- NET_FRONT's tip/screen station is valued only through `tip_ev`.
+
+So no bot goes to the net to screen, and the battle the press was built for
+does not start on its own.
+
+### 4. Spacing
+
+- **5v5 OZONE has three bodies high and central.** It is CARRIER, two points
+  on the blue line, NET_FRONT at the crease, and HIGH_SLOT
+  (`role_slots_5v5.gd:_specs_for_state`).
+- **HIGH_SLOT is scored on the lanes, not the chance.**
+  `high_slot.gd:decide` samples a band 8–11 m out and ±3 m across. It scores
+  each spot by `lane_clear(feed) × lane_clear(shot)`, the odds the puck gets
+  through, never by what the shot is worth once it does. A spot further from a
+  defence that protects the slot clears its lanes more often, and nothing pays
+  for being closer, so the argmax sits at the top of the band. The band's ±3 m
+  also keeps him in the middle, where the defence is.
+- **3v3 SUPPORT parks high.** Its O-zone station is 3 m inside the blue line,
+  shaded to the carrier's side (`support.gd:_generate_candidates`), with a
+  weak-flank candidate at the top of the circles. That is partly doctrine (the
+  first man back) and is measured before anything changes.
+
+---
+
+## Step 1 — Spacing (5v5 HIGH_SLOT, then 3v3)
+
+### Model fix
+
+Score each HIGH_SLOT candidate in the finisher's currency:
+`AIActionScoring.score_pass_value(carrier, c, …, one_timer = true)`. That is
+the chance he would have off the feed, which already contains both lanes and
+the shot's worth from there against the defence and the keeper. The lane
+product was a stand-in for this.
+
+- **Widen the candidate set,** and let the value pick: depths ~6–11 m (the
+  bumper up to the circle tops) and laterally out to the dots (±6.7 m),
+  weak-side shaded. The weak-side flank is where a slot-protecting defence
+  leaves ice open.
+- **Keep the bounds that are doctrine:**
+  - *Above the puck.* The `stay_above` filter while the puck is no higher than
+    the band.
+  - *First man back.* `AILastManDiscipline.offensive_station_target`, which is
+    what legitimately limits how low he may go.
+  - *Pinch fill.* `rotate_up_to_point`.
+- **3v3 SUPPORT** already scores by `score_pass_value − counter_rush_cost`.
+  Re-measure it after the 5v5 change, and only touch it if it still reads
+  clumped at the line.
+
+### If the direct fix does not spread them
+
+One defender standing between two attackers covers both of them, and a
+per-candidate score blind to teammates cannot see that. The anti-crowd radius
+is only a hard filter at 1–2 m. The grounded fix is to price a station at what
+it ADDS: the defence's best response to the carrier's options with me there,
+against the same options without me (`carrier_best_option`'s machinery, read
+from the attack's side). It is more expensive, so it is built only if the
+measurement asks for it.
+
+### Measurement and acceptance
+
+- **`test_ozone_spacing.gd` (slow).** Add a per-role log: HIGH_SLOT's depth and
+  lateral distribution, and each attacker's distance to his nearest defender
+  (spread). Keep the four-high ceiling (≤ 5%).
+- **`test_ozone_possession_5v5.gd` (instrument).** Track shots, slot shots, the
+  priced value of the shots taken, and turnovers that become counters, so a
+  lower F3 is not a weaker first man back.
+- **Acceptance.** HIGH_SLOT sits lower and wider. Spread rises, shot value and
+  slot shots rise, and four-high and counter-rush turnovers do not rise.
+- **3v3.** `test_ozone_possession.gd`, same reads.
+
+**Baseline (today, `test_ozone_spacing.gd`).** Every fixture passes with two
+high and 2.6–3.0 low a tick, and 0% four-high. So the shape count does not see
+the complaint. Its "low" band reaches 10.7 m out, and a HIGH_SLOT at the top
+of the circles counts as low. The per-role depth, lateral and spread log above
+is therefore the first thing step 1 builds. Its baseline, before the role
+changes (Hard bots, 6 s a fixture; weak x is positive away from the puck's
+side; "nearest D" is the attacker's nearest defender):
+
+| fixture | HIGH_SLOT depth / weak x / nearest D | NET_FRONT depth / weak x | off-puck nearest D |
+|---|---|---|---|
+| D holds it up top | 10.0 / −1.8 / 2.2 | 3.2 / −0.9 | 3.07 |
+| D carries at the point | 7.6 / +0.9 / 2.2 | 3.6 / −1.2 | 4.52 |
+| F carries low | 9.4 / −2.2 / 2.8 | 5.1 / −0.7 | 4.37 |
+| C carries high slot | 8.1 / −2.2 / 3.5 | — | 4.43 |
+
+What the table shows:
+
+- **HIGH_SLOT has a defender closest of any off-puck attacker** (2.2–3.5 m),
+  and he stands at the top of the circles, shaded to the strong side.
+- **Nobody holds the weak side low.** NET_FRONT stays central and
+  strong-shaded, and FINISHER only appears while a pass is in flight.
+- **The weak point drifts to the middle** (+0.4 m) while a forward carries
+  low.
+
+All three are the "slot-protecting defence never has to spread" picture the
+user described.
+
+### Status: first pass built, no measurable change in outcomes
+
+Decided with the user: value decides the shape (no fixed 3-2 or 2-3), and the
+rotation is general, not only the pinch's.
+
+**Built.**
+
+- HIGH_SLOT's grid is priced at the one-timer (above), with no above-the-puck
+  filter.
+- **Either vacated point is filled.** `rotate_up_to_point` reads both, and
+  `point_vacated` counts a D as gone only while he is deeper than his stands
+  and not skating back to his point ahead of the filler. This fixes a
+  clumping path: on a strong-side flip, the sunk strong D was relabelled the
+  "vacated" weak point, and F3 ran up to the line beside him.
+- **The partner** holds the middle of the line whichever D is off it.
+- **The weak D's flank activation** (`_flank_activation`), covered as the
+  pinch is.
+- **A spot shares its value with a teammate inside one defender's span**
+  (`AIStationSearch.shared_cover`, 2 × `BLADE_REACH_M`). This applies to
+  HIGH_SLOT, the flank and the finisher's stations.
+
+**Measured** (`test_ozone_possession_5v5.gd` with `MITTS_OZ_JITTER=11`: 576
+Hard possessions a configuration, per possession, ± one standard error):
+
+| | shot | slot shot | picked | stripped | set read of its shot |
+|---|---|---|---|---|---|
+| before | 0.312 ± 0.019 | 0.102 ± 0.013 | 0.326 | 0.318 | 0.040 ± 0.006 |
+| all of it | 0.306 | 0.109 | 0.323 | 0.339 | 0.036 ± 0.005 |
+| without the HIGH_SLOT pricing | 0.304 | 0.094 | 0.299 | 0.335 | 0.028 ± 0.004 |
+| without the flank activation | 0.307 | 0.102 | 0.325 | 0.337 | 0.030 ± 0.004 |
+| rotation only (neither of those two) | 0.321 | 0.116 | 0.316 | 0.319 | 0.041 ± 0.006 |
+| without the shared cover | 0.311 | 0.104 | 0.314 | 0.333 | 0.032 ± 0.005 |
+
+**What it shows.**
+
+- **Every configuration is within noise of the others.** The 48-run sweep's
+  11 shots against 18 was chaos: one perturbation re-deals every possession.
+  Only a difference of about 0.05 in the shot rate shows at this size.
+- **The attack's own spacing** (off-puck nearest teammate,
+  `test_ozone_spacing.gd`) went from 5.5 / 7.4 / 7.1 / 7.2 m to
+  5.3 / 5.0 / 7.4 / 6.4 m with all of it. The forwards settle just outside the
+  one-defender span, where the old fixed staging spread them further.
+
+So moving the off-puck bodies has not changed what the carrier makes of the
+possession. Whether that is because he does not use the new options (about
+one pass a possession either way) is the next thing to read.
+
+### Why the carrier does not use the ice (the trace)
+
+`MITTS_OZ_TRACE=1` logs the carrier's compete every 0.1 s, and each receiver's
+feed as the pass search priced it (`AICarrierPassTrace`). Over a J=11 sweep
+(about 9,900 samples, step-1 code):
+
+| receiver | feed worth > 0 | lane closed | led out of the zone | median spot worth |
+|---|---|---|---|---|
+| NET_FRONT | 12% | 82% | 0% | 0.165 |
+| HIGH_SLOT | 10% | 81% | 4% | 0.050 |
+| POINT_STRONG | 8% | 42% | 48% | 0 |
+| POINT_WEAK | 7% | 46% | 46% | 0 |
+
+- **The carry leads the compete on two samples in three.** Any pass is worth
+  anything on under half of them, and the carry still out-values it on two in
+  three of those (median margin 0.03).
+- **The points were never receivers at their own stand.** The pass search
+  keeps a feed's lead `OZ_RECEIVE_LINE_BUFFER_M` (2.1 m) inside the line; the
+  points stood `POINT_INSET_M` (2.0 m) inside it. So the low-to-high was off
+  whenever a D held his stand, and the pass-option cache never counted the
+  points. `POINT_INSET_M` is now 2.4 m (the buffer plus a blade), and
+  `test_role_defenseman.gd` holds the order. After it, the points' worth is
+  0.04 and POINT_WEAK's out-of-zone gate is 27%. POINT_STRONG's stays at 41%:
+  a D skating back up from his sink is led out of the zone.
+- **The slot's lanes are shut four ticks in five.** That is the sturdy slot
+  defence the user described, and it is what the cycle has to move.
+
+Outcomes with the inset fix (576 possessions): shot 0.293 ± 0.019, slot shot
+0.102 ± 0.013, picked 0.366 ± 0.020, stripped 0.306, set read 0.036 ± 0.005.
+That is within noise of the code before step 1, with one pass more in every
+ten possessions.
+
+**Also seen:** the finisher's rush depth gate (`stage_dist`, 5 m in a set
+cycle) leaves its weak-dot and high-slot stations unreachable, so NET_FRONT
+never rotates up. It is left alone until step 4 prices the screen that would
+keep the net front manned.
+
+### Why he still stands high and central (the high-slot trace)
+
+`MITTS_OZ_TRACE_HIGH=1` records HIGH_SLOT's read every 0.1 s while we carry
+(`AIHighSlotTrace`: whether he may leave the slot's top, every grid spot's
+score, the pick). Measured at `7790693` (the spacing fixtures: 6–10.6 m out,
+within 0.7 m of the middle, the nearest defender of any off-puck attacker,
+2.1–3.0 m):
+
+- **The counter layer holds him at the top 53% of the time**
+  (`_help_free`): another forward of ours is not as high, and a man of theirs
+  is nearer our net than the slot's top. He picks 9.5–11 m, central or a
+  little strong-side.
+- **Free to go lower, he picks 7.5 m (median) and is sent to 9.5 m**: the shared
+  station read (`offensive_station_target`) lifts his target more than a metre
+  above his pick on 37% of those reads, goal-side of their men up at our
+  points. The two guards overlap.
+- **The weak flank prices at nothing because its lane is shut, not because its
+  shot is poor**: from 4–6 m weak-side the one-timer is worth 0.49–0.55 with
+  nobody in front (as good as or better than the middle), but the feed lane
+  there is shut on 52–64% of reads (median 0), and the defenders in front take
+  more again. The middle wins on partly open lanes (median 0.45–0.74).
+
+**What each guard buys** (each switched off in turn, locally; J=11, 576; the
+slow tier's counter layer and spacing fixtures):
+
+| | both (today) | no `_help_free` | no station lift | neither |
+|---|---|---|---|---|
+| counter layer at 2 s, beaten | +0.9 m, 4 of 12 | +0.9 m, 4 | +0.9 m, 4 | +0.9 m, 4 |
+| shots / possession | 0.247 ± 0.018 | 0.271 ± 0.019 | 0.243 | 0.269 |
+| slot shots / possession | 0.090 | 0.101 | 0.092 | 0.099 |
+| xG (set read) / possession | 0.0345 | 0.0362 | 0.0358 | 0.0359 |
+| HIGH_SLOT depth, the four spacing fixtures | 9.9 / 9.1 / 6.1 / 10.6 | 8.9 / 9.1 / 6.1 / 10.6 | as today | as no `_help_free` |
+
+Neither guard measurably buys or costs anything now: the counter layer reads
+the same with both off, which is not what it read when `_help_free` was added
+(-1.2 m, before the net-front man held the front and the body check was
+priced honestly). He still stands about 9 m out because his pick jumps: free to
+go lower, he picks 5.5 m on a third of reads and 7.5, 9.5 or 11 m on the rest.
+
+`_help_free` is removed (decided with the user): the counter layer reads +0.9 m
+and 4 of 12 without it, and stays the gate if a lower F3 brings the old
+regression back.
+
+**A spot is worth what the defence must concede for it** (`08a6fa4`, the
+plan's "if the direct fix does not spread them"): the defence either leaves
+him open there, conceding his one-timer, or sends the body nearest him to
+cover him, conceding what that body held shut, the carrier's best feed to a
+teammate with him gone (`AIStationSearch.fill_opened_values`, `drawn_open`). A
+spot is worth the lesser, and one worth nothing leaves him at the slot's top;
+it replaces `shared_cover` for HIGH_SLOT. J=11, 576, against the trace's run
+with both guards:
+
+| | both guards, the one-timer | neither guard, the concession |
+|---|---|---|
+| HIGH_SLOT depth, median | 9.7 m | 8.8 m |
+| below 8 m | 19% | 36% |
+| 3 m or more off the middle | 29% | 31% |
+| nearest defender, median | 2.8 m | 2.6 m |
+| shots / possession | 0.247 ± 0.018 | 0.264 ± 0.018 |
+| slot shots / possession | 0.090 | 0.094 |
+| xG (set read) / possession | 0.0345 ± 0.0051 | 0.0396 ± 0.0057 |
+
+Counter layer +0.9 m, 4 of 12; four-high 0% in every spacing fixture. He
+plays lower, not wider: the body nearest a weak-flank spot is the winger on our
+weak point, and drawing him opens only a point shot, which is worth little.
+The station read still lifts his target (picks 5.5 m on 40% of reads, the
+target's median 9.5 m).
+
+---
+
+## Step 2 — Measure the net front (instruments only, no behaviour change)
+
+All three are instruments against the live keeper, each writing a small
+generated table with a staleness test like `test_shot_field_is_current.gd`.
+Each table is regenerated whenever the goalie changes, as the shot field is.
+
+### 2a. The rebound field
+
+From a coarse release grid (a subset of the shot field's spots, e.g. x ∈
+{−8, −4, 0, 4, 8} × out ∈ {3.5, 6, 9.5, 15, 19.5}), each loft, and a SET
+keeper, fire charged shots and record what the save does:
+
+- whether it was a goal, covered (whistle), or deflected out of play;
+- for a live rebound, the puck's position and velocity at a few times after
+  contact (e.g. 0.25 / 0.5 / 1.0 s), and the keeper's state at each: position,
+  stance, and facing.
+
+The keeper's state is what lets the second shot be priced through the
+existing seam. The shot field is kernel-weighted over the keeper's stance and
+offset, so a keeper caught down and across reads as open as he really is.
+
+**Built** (`test_generate_rebound_field.gd` via
+`.claude/hooks/generate-rebound-field.sh`; data in
+`Scripts/domain/ai/generated/rebound_field_data.gd`, held current by
+`test_rebound_field_is_current.gd`). It measures 25 spots (x ±8, ±4, 0 at 3.5,
+6, 9.5, 15 and 19.5 m out) × 3 lofts × 8 aims, a charged wrister at a keeper
+set square on the carrier. The harness is a subclass
+(`rebound_shot_harness.gd`), so the shot field's fingerprint is untouched.
+
+| shot from | goal | missed | covered | live rebound | in front of the net at 0.5 s | keeper down at 0.5 s / 1.0 s |
+|---|---|---|---|---|---|---|
+| 3.5 m | 1% | 0% | 21% | 78% | 89% | 85% / 15% |
+| 6 m | 1% | 3% | 24% | 72% | 80% | 87% / 10% |
+| 9.5 m | 0% | 17% | 17% | 66% | 80% | 90% / 1% |
+| 15 m | 0% | 32% | 16% | 53% | 77% | 97% / 2% |
+| 19.5 m | 0% | 33% | 0% | 67% | 100% | 100% / 0% |
+
+"In front of the net" is the crease, low slot or slot, within 10 m and 4.5 m
+across. Three live rebounds in four sit on the ice, slow enough for a stick,
+in front of the net within 1.5 s: half of all shots. For about half a second
+the keeper is down on nearly every one, and by a second he is up. So the
+rebound is worth its race, the window is the first second, and the
+second chance is against a keeper on his knees. The flat
+`REBOUND_RECOVER_SHARE` credit sees none of it.
+
+Not measured: a keeper caught off the shot (the field's DECOY and FEED
+keepers), tips and screens (2b, 2c), and a missed shot's path round the
+boards (a "W" row stops at the goal line).
+
+**Who wins the rebound today (2d).** `test_ozone_possession_5v5.gd` with
+`MITTS_OZ_REBOUND=1` plays on past the first shot, drawing the save from the
+field (`AIReboundField`, the nearest spot's shots by a seed per run). On a J=11
+sweep (576 possessions, 169 shots, step-1 code):
+
+- **They touch a live rebound first 74% ± 4% of the time, and we touch it
+  first 26% ± 4%.** Their median first touch is 0.36 s after the save, ours
+  0.83 s.
+- **We get a second shot within 3 s on 11% ± 3% of live rebounds** (0.09 a
+  shot), a median 1.1 s after the save, when the keeper is still down 20% of
+  the time. We arrive after the half-second he is on his knees.
+
+28 of the shots were touched in flight (a block or a tip) and draw no save.
+
+### 2b. Screen uplift
+
+The shot field's SET cells, repeated with a screener body on the sightline at
+net-front stations (1.5–3.5 m out, 0 / 0.5 / 1.0 m off the release→keeper
+line). This measures the conversion and the keeper's read delay against the
+unscreened cell. A body that does not hide the release is measured too, so the
+table knows where a screen stops working.
+
+The same screened cells are also measured with the keeper caught off the
+shot (DECOY-style), not only SET. Their result decides how a screen is
+modelled:
+
+- **A separate uplift table** if screened ÷ unscreened conversion holds
+  roughly constant across keeper states. The screen then scales the clean
+  odds, and that is cheap to read.
+- **A SCREEN cell kind in the shot field,** read through the existing kernel,
+  if the ratio moves with where the keeper stands. A single factor would
+  misprice exactly the screens that matter.
+
+The 2b instrument prints that comparison, and the choice is made with the user
+on its numbers.
+
+**Status: measured, SET keeper only** (`test_generate_screen_field.gd` →
+`generated/screen_field_data.gd`, 20 spots × 21 cells × 24 shots). The share
+scored, unscreened → the best on-line station:
+
+| out \ across | −8 | −4 | 0 | +4 | +8 |
+|---|---|---|---|---|---|
+| 6 m | 0 → 0.08 | 0 → 0.04 | 0.04 → 0.17 | 0 → 0.04 | 0 → 0.04 |
+| 9.5 m | 0 → 0.04 | 0 → 0.21 | 0 → 0.25 | 0 → 0.25 | 0 → 0.08 |
+| 15 m | 0 → 0.04 | 0 → 0.08 | 0 → 0.21 | 0 → 0.08 | 0 → 0.04 |
+| 19.5 m | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
+
+- **Only a body on the line screens.** At 0.4 m off it every spot but the
+  slot's top measured 0. The keeper looks round a body that does not cover the
+  release, which is the point of his peek.
+- **The best stations are 2.5–5 m out**, not on the crease.
+- **From the points a screen buys nothing.** A charged wrister from 19.5 m
+  scores 0 with or without a body in front. That is a fact about the goalie,
+  not the bots, and is raised with the user separately.
+- **The DECOY half was not measured.** The SET keeper concedes ~0, so the
+  ratio the two options were to be chosen by has no denominator. The screen is
+  modelled as a share of his saves turned into goals ((screened − clean) ÷
+  (1 − clean)), read through his own sightline test. That form is nothing
+  against a net already open, and it is cheap. Whether a screen on a beaten
+  keeper is worth more than this share says is unmeasured.
+
+### 2c. Tips through a live blade (#736's next step)
+
+Point and circle-top shots through a live skater's blade holding the deflect,
+at tip spots in front of the net, tipped up and down. This records the
+outgoing direction and height spread, and the conversion against the live
+keeper. It answers both of #736's questions: is the deflection physics right,
+and is the keeper too good against it. If the physics is wrong, that is a
+gameplay fix, raised separately before step 5.
+
+**Status: measured** (`tests/instruments/keeper/test_net_front_tips.gd`, on
+this branch's keeper). Shots from (0, 18) and (5, 16) at 24 and 32 m/s through
+a real stick held to deflect at four tip spots, the cursor swept across:
+
+| tip | tips | on net | goals | of those on net |
+|---|---|---|---|---|
+| flat | 592 | 33% | 10 | 5% |
+| low | 592 | 33% | 21 | 11% |
+| mid | 592 | 30% | 22 | 12% |
+| high | 592 | 31% | 23 | 12% |
+
+A tipped point shot scores where the shot alone does not (~0 against a set
+keeper): about 3.5% per tip, from shots worth nothing. From the crease top
+(0, 3), flat and low tips score 0% (his pads) and mid and high ones 15–29%.
+The stick has to be placed: 45–85 cm of cursor puts a tip on net, and the
+crossing moves ~15 cm per 5 cm of cursor.
+
+The O-zone sweep plays tips but not the keeper's answer to them: the duel
+tips a puck on the ice met by a blade held to deflect as the puck does
+(`duel_harness.gd:tip_velocity`, held by `test_duel_tip_mirrors.gd`; a raised
+shot flies over every blade there), and the rebound sweep flies each shot to
+the goal line and prices a tip of ours from the tip field (step 5).
+
+### 2d. The O-zone instrument goes past the first shot
+
+`test_ozone_possession_5v5.gd` ends a possession at its first shot. Let it run
+on through the save and record who touches the rebound first, when, and from
+where. That is the baseline for step 3.
+
+---
+
+## Step 3 — Rebounds
+
+### 3a. A rebound credit priced by who gets there
+
+Replace the flat `REBOUND_RECOVER_SHARE` with the measured field. For a shot
+from a spot:
+
+```
+rebound(spot) = Σ over the measured live rebounds r of w_r ·
+        [ race_r · second_chance(r) − (1 − race_r) · turnover(r) ]
+    + cover share · faceoff value in their zone
+```
+
+- **`race_r`** is `arrival_race` to the rebound's spot at its time, our soonest
+  body against theirs, each with the momentum-honest arrival clock. This is
+  where net presence enters: with nobody of ours near the crease, the race is
+  theirs.
+- **`second_chance(r)`** is `score_shoot_value` from the rebound's spot,
+  against the keeper as the field recorded him there (stance, offset, facing).
+- **`turnover(r)`** is `AICarrierField.turnover_cost` at that spot, in the same
+  currency.
+
+The carrier's compete reads this through the existing `rebound` flag on
+`score_shoot_value`, so "shoot for a rebound" emerges with no new intent: with
+men at the net the shot is worth more, and with none it is worth less than
+today's flat credit.
+
+**Cost.** `score_shoot_value` sits on the carry search's hot path. Per
+dispatch, the rebound read is a lookup on the release spot plus a race per
+landing cluster against bodies whose arrival times are computed once. It is
+held to the benchmarks (per-tick p95/max before and after).
+
+**Status: built and measured, not yet switched on.**
+
+- **The field measures the second chance itself.** Each live rebound is frozen
+  at its contest sample (the first within 1.5 s where a stick can play it in
+  front of the net) and 0.5 s later, and 12 second shots are fired from the
+  puck there at the keeper as he then was, restored before each
+  (`rebound_shot_harness.gd`, main's `keeper_state_cloner.gd`). They score
+  9.6% at the contest (mostly a puck in his pads) and 29% half a second later
+  (the puck in the slot, him still getting up). The NHL's rebound shots score
+  about 23%. Extrapolating the shot field instead (`AIShotValue.now` against a
+  "down" keeper) read 0.4–0.6, and a credit built on it reached 0.37 with two
+  defenders at the net.
+- **`AIReboundValue.credit`** prices it. Each rebound is touched first by one
+  side, at its contest sample or its late one, on the momentum-honest clock
+  and never before the puck. Ours, it is worth the second shot measured where
+  we touched it, or the late one when we touched it first and nobody of
+  theirs can be on it before then. Typical values: 0.03–0.07 for a shot from
+  4 m with its shooter following it, 0.14 from 9.5 m with a man at the crease
+  and one defender, 0.03 with two, and ~0 from the point unless we win the
+  crease.
+- **Switched on alone, it made the offence worse** (576 possessions, J=11, the
+  rebound sweep):
+
+  | | shots | slot shots | first touch ours | xG / possession (first + second) |
+  |---|---|---|---|---|
+  | flat credit | 0.29 | 53 | 26% | 0.0276 + 0.0043 = 0.032 ± 0.005 |
+  | measured credit | 0.41 | 36 | 33% | 0.0223 + 0.0023 = 0.025 ± 0.004 |
+
+  The carrier shot more, from angles, for rebounds the team does not collect
+  as priced. The credit races our men from where they stand at the release,
+  but nobody moves for the rebound until the save, and the second shots come
+  early (0.83 s median), at the keeper's pads, where the measured conversion
+  is lowest.
+- **So the carrier keeps a flat credit for now** (`AIActionScoring
+  .FLAT_REBOUND_CREDIT`, the old 0.3 × the floor at their goal line), and the
+  measured one is switched on with 3b/3c, which make the follow-up it prices
+  happen. The pair is then measured together on the rebound sweep's xG.
+
+### 3b. Off the puck: stand where the rebound goes
+
+- **With a shot in flight** (our release, puck heading at the net), FINISHER,
+  NET_FRONT and HIGH_SLOT argmax over rebound stations: our odds of winning
+  that rebound × its second chance, against the defence.
+- **With a shot look leading** (the carrier's shoot-now read on top), the
+  net-front man's station argmax gains the rebound term beside the feed and the
+  tip, so he goes to the net before the release.
+
+The rush depth gate (`finisher.gd`) says that "nothing in the scoring prices
+the net's rebounds and body presence". Once this term does, re-measure whether
+the gate still binds, and retire it if it does not.
+
+**Status: built (`645baa1`), no measurable effect.** NET_FRONT crashes to
+the release's measured contest point and the FINISHER to its late point
+(`AIReboundField.crash_point`) while our shot is on its way. The finisher's
+tip read now asks whether his blade can reach the puck's line in time
+(`AILoosePuckChase.reach_eta`), so a tip he cannot make becomes a crash.
+
+Rebound sweep, J=11, 576 possessions each:
+
+| | first touch ours | 2nd shots / shot | xG / possession |
+|---|---|---|---|
+| flat credit | 26% ± 4% | 0.089 | 0.032 ± 0.005 |
+| crash, flat credit | 28% ± 4% | 0.088 | 0.030 ± 0.005 |
+| measured credit, no crash | 33% ± 3% | 0.119 | 0.025 ± 0.004 |
+| crash + measured credit | 32% ± 3% | 0.119 | 0.029 ± 0.004 |
+
+**Who beats us** (the first toucher's slot, crash + flat credit, 136 live
+rebounds): their ZONE_D_STRONG 47 and ZONE_D_WEAK 20, half of all
+rebounds, then ZONE_C 12 and the wingers 19. Ours: FINISHER 14, NET_FRONT 12,
+the rest 12. Their house D stand between our forwards and the net, and a
+rebound comes out to whoever is inside. Crashing on the release cannot
+change that geometry. Winning inside position at the net is what can, and
+that is step 4's net-front battle (the screen and the box-out), not more of
+step 3. The measured credit stays off until something wins rebounds as it
+prices them.
+
+### 3c. The chase races the rebound from the release
+
+While our shot is in flight, the election races the measured rebound
+distribution for that release instead of a path through the cage, so bodies
+start moving at the release.
+
+**Status: built (`50c6775`), no measurable effect.** A loose puck released at
+a shot's pace into a net's mouth is raced to where the rebound field's
+rebounds of that release first sit playable
+(`AILoosePuckChase.rebound_point`, `crash_point_into`), by both teams'
+elections, and the elected chaser skates there while it flies. The walk it
+replaces ran through the cage to the end boards. J=11, 576:
+
+| | before | the rebound raced |
+|---|---|---|
+| first touch ours on live rebounds | 26–28% ± 4% | 23% ± 4% |
+| their first touch, median after the save | 0.28–0.30 s | 0.27 s |
+| 2nd shots / shot | 0.106–0.114 | 0.092 |
+| xG / possession | 0.038–0.041 ± 0.006 | 0.038 ± 0.005 |
+
+Their defence races it too, from nearer the net.
+
+### 3d. A second man on an O-zone loose puck (#924, #604)
+
+Today one chaser goes and everyone else holds. In their zone that loses every
+50/50 that squirts out of the first contest. The second man plays the puck's
+NEXT spot, not the puck:
+
+- **Where.** The spot where the first contest sends it: where their soonest
+  collector would make his first play, by the forecheck's own clock
+  (`AIForecheckRead.read_loose`), or where a rebound comes off the keeper, from
+  3a's distribution.
+- **Who.** The teammate other than the elected chaser whose arrival there
+  (`AIArrival.time_to_arrive`) beats their soonest body by the most. He leaves
+  his station only if that race is ours (`arrival_race` above the contest
+  band) and if the shot we would get from winning it is worth more than the
+  station he leaves. Last-man discipline still binds him
+  (`offensive_station_target`), so a point never becomes the second man.
+- **#604's decline.** The chase decline that fires by default deep in the
+  attacking zone is reworked in this step. In their zone a lost race is
+  declined only when the second man's read says nobody of ours can contest
+  the next spot either.
+
+The election stays one chaser a team. The second man is a role decision read
+off the election's result, so the two never send the same body.
+
+Tests: a unit test that the second man goes when his race is won and holds
+when it is lost or when he is the last layer; a slow-tier 5v5 cycle with a
+rebound off a point shot, counting our share of first touches on the squirt.
+
+**Measured first** (the sweep's OZLOOSE lines, J=11, 143 rebound windows, at
+`315a6ad`). Their side touches the rebound first in 107 of them (75%), and it
+is not a 50/50 lost:
+
+- Our elected chaser chases it in 97% of those; he declines for 0.01 s on
+  average. #604's decline does not fire here.
+- When their man has it, our chaser is a median 4.7 m off it (within 2 m in
+  17%), and our nearest other man 3.4 m (within 2 m 11%, within 4 m 55%).
+
+What follows their touch, over the next 3 s, by our shape a brain tick later:
+
+| our shape | rebounds | back to us | out of their zone | still theirs |
+|---|---|---|---|---|
+| OZONE (they did not hold it) | 35 | 19 | 7 | 9 |
+| FORECHECK | 37 | 4 | 15 | 18 |
+| TRANS_DEFENSE | 33 | 3 | 10 | 20 |
+| all | 107 | 27 (25%) | 33 (31%) | 47 (44%) |
+
+So the squirt the second man was for is the OZONE row, which we already win
+half of. The rest is their collector settled with the puck at their net: a
+forecheck on him that wins it back 11% of the time, or the set shape (#924's
+§2) that wins it back 9%.
+
+**Why the forecheck rarely wins it back** (the sweep's OZFC lines, J=11, the 37
+FORECHECK windows). F1 is not late: he is within a stick of their collector in
+46% of them, a median 0.14 s after their touch. But at his blade's closest
+approach to the puck he is holding Ctrl in 28 of the 37, and a committed body
+check takes the stick off the ice (`PuckController`'s poke gate, which the duel
+mirrors). Within a poke of the puck, he stripped it 6 times in 6 without Ctrl
+and once in 8 with it, and his checks stripped nothing (0 hit strips). The
+button is the role's own commit (`AIRolePressure` → `AIBodyCheck.evaluate`,
+attributed in a J=3 run), which commits whenever the predicted shoulder would
+rock the carrier and never weighs what the stick would have taken. After a
+strip their next man was nearer the loose puck than ours (3.6 m against 4.6 m),
+and it went to them 5 times in 9.
+
+**Why the checks strip nothing** (a J=11 run with every body contact and its
+delivered strip impulse logged, the harness instrumented locally). F1 holds
+Ctrl in 35 of the 37 windows, a median of about a second of each. His body
+meets a man of theirs in only 8, never their carrier, and the hardest delivered
+0.82 against the strip threshold's 1.35 (closing at 0.4–5.9 m/s). The commit
+read (`AIBodyCheck.evaluate`) prices the hit at his top speed toward the
+intercept (`_predicted_approach`'s `self_max_speed`) and the intercept as
+reachable at top speed: it does not see his own velocity or the stride ramp
+between, nor a carrier stepping out of the hunt, so it commits to hits that
+land soft or not at all, and the stick stays off the ice the whole while.
+
+**Priced at the hit he can land** (`3549a8c`): the contact on his arrival
+clock, the hit at the speed his stride builds by then. J=11, 576:
+
+| | before | the honest hit |
+|---|---|---|
+| FORECHECK windows won back | 4 of 37 (11%) | 10 of 26 (38%) |
+| F1 holding Ctrl at his closest approach | 28 of 37 | 3 of 26 |
+| shots / possession | 0.302 ± 0.019 | 0.247 ± 0.018 |
+| our carrier stripped | 0.302 | 0.340 ± 0.020 |
+| xG / possession | 0.038 ± 0.005 | 0.037 ± 0.005 |
+
+Their defenders read the same model, so they poke where they hunted hits,
+and our carriers lose more pucks before they shoot. In the slow tier's
+D-zone coverage fixture (`test_zone_coverage_shape.gd`, the scripted point
+shot) the uncovered share went from 0.52 to 0.81 against its 0.76 ceiling:
+the weak-wall man, whom the shot model prices at nothing, is unlocked on 290
+ticks of 360 against 186, after the wingers and the D swap slots; the
+low-cycle fixture improved (0.86 to 0.72). The D swap is a coverage handoff
+that predates the change (#959): the new weak D's area does not hold the man he
+had, and the matching has no reason to hand on a man worth nothing. The
+fixture's ceiling is raised to 1.1 until #959 is fixed.
+
+The other half, a hit only when the body reaches the man before the blade
+reaches the puck, is not built: the poke is a distance test the carrier's body
+does not block, so a stick 2 m long reaches a puck shielded 0.9 m behind him
+before any body contact, and the rule would end nearly every hit.
+
+### Tests
+
+- A unit test that the rebound credit rises with our bodies at the net and
+  falls with theirs, and equals first contact behind the goal line.
+- A station test for FINISHER and NET_FRONT with a shot in flight.
+- The chase election's race on a shot in flight.
+- The 2d instrument: our share of first touches on rebounds, before and after.
+
+---
+
+## Step 4 — Screens
+
+- **The shot value reads the screen** through the measured uplift (2b): the
+  bodies between the release and the keeper, from either team, at the
+  replicated positions. Both sides use one seam, so the defence's threat reads
+  also see a screened shooter as more dangerous, and a defender's own body
+  screening his keeper is already the shot block's concern.
+- **NET_FRONT's station argmax gains a screen term:** the carrier's shot with
+  me on the sightline, against without me. That puts a forward on the
+  sightline. Battles follow from what exists: the screener digs in, and a
+  defender presses him.
+- **Tests:** a screen-uplift test against the 2b table; a NET_FRONT station
+  test that he takes the sightline when the carrier has a shot; and a slow-tier
+  scenario counting net-front contact ticks in a 5v5 cycle, which is the
+  aggregate the user asked for.
+
+**Status: built (`4d93203`). The battle works but seldom starts.**
+
+- **Built.** `AIScreenField` reads 2b. FINISHER / NET_FRONT gain a SCREEN
+  station on the carrier's line at the field's best distance out, valued at
+  the share of the carrier's misses a body there turns into goals, and they
+  publish it as `RoleDecision.battle_spot` when it wins. The press pass wins
+  that spot (`_win_the_spot`): Ctrl into a man of theirs nearer it, when the
+  press moves him off it. The carrier's shot and feed values credit the screen
+  standing in front of him (`AICarrierField._screen_at`).
+- **Rebound sweep, J=11, 576 possessions:**
+
+  | | shots | slot shots | first touch ours | 2nd shots / shot | xG / possession |
+  |---|---|---|---|---|---|
+  | crash, flat credit | 0.295 | 0.083 | 28% ± 4% | 0.088 | 0.030 ± 0.005 |
+  | + screen | 0.297 | 0.080 | 30% ± 4% | 0.105 | 0.031 ± 0.005 |
+
+  Within noise everywhere. Of the shots, 6% were screened (mean uplift
+  0.007). Ours pressed for a screen spot in 12% of possessions, for 0.03 s
+  each on average.
+- **Where the chain stops** (J=2, 144 possessions). The spot is published in
+  30% of possessions, for about 0.9 s in each of those. Our man is 2.2 m from
+  it on average while it is up, and a man of theirs is nearer it, in reach,
+  for 0.01 s per possession. So the battle almost never has anything to fight
+  for. The station is priced on where the carrier stands now, and the field
+  pays a screen only on central releases from 9.5–15 m, where the bot carrier
+  seldom is (8% of possessions end in a slot shot). It flickers on and off as
+  he moves, and the net front is not held between his shots.
+- **The sweep above ran with a bug since fixed.** A receiver read his own
+  body, where it stood at the pass, as a screen on his shot off the feed
+  (0.47 against 0.33 for a man skating out from the crease to the slot's
+  top). A feed's shot now leaves the receiver out, by where he stands, and
+  counts every other body (`test_carrier_field_screen.gd`). The battle
+  numbers are the finisher's station, which the bug did not touch.
+
+### 4b. Hold the net front between shots (`8c838b5`)
+
+The screen station is priced over every shot of ours a body in front could
+help (`AIStationSearch.fill_shot_plays`): the carrier's from where he stands,
+and each teammate's off a feed, weighted by the lane to him and the keeper's
+save on his one-timer. The best play counts, one puck being one shot. The
+station he holds is published whenever it screens any of them, not only when
+the screen is its best term. Read from what the net-front man can see; the
+carrier's own planned release is his agent's, and a human carrier has none.
+
+| (J=11, 576) | slot shots | first touch ours | xG / possession | spot published | contested |
+|---|---|---|---|---|---|
+| 4 | 0.080 | 30% ± 4% | 0.031 ± 0.005 | 30%, 0.27 s | 0.01 s |
+| 4b | 0.090 | 27% ± 4% | 0.033 ± 0.005 | 69%, 1.00 s | 0.07 s |
+
+The net front is held seven times as long and contested seven times as
+often. Outcomes stay within noise, and our man is 3.4 m from the spot on
+average while it is up.
+
+### 4c. Box out for the rebound (`48638ab`)
+
+Step 3 found their house D win half of all rebounds by standing inside our
+forwards. A net-front station is now priced by what a body there adds to each
+shot the keeper would save: the screen's share turned into goals, and of the
+saves left, his share of the rebound, raced against everyone else
+(`AIReboundValue.fill` once a play, `value_with` per station). Each play's
+measured contest point is a station. The station held is the battle spot
+whenever it is worth anything in front, so the press moves their D off the
+ice the rebound comes to.
+
+| (J=11, 576) | first touch ours | their median touch | xG / possession | battle | spot published |
+|---|---|---|---|---|---|
+| 4b | 27% ± 4% | 0.35 s | 0.033 ± 0.005 | 0.04 s, 13% | 69%, 1.00 s |
+| 4c, pressing in flight too | 22% ± 4% | 0.28 s | 0.029 ± 0.004 | 0.11 s, 25% | 99%, 2.06 s |
+| 4c, pressing only while we carry | 24% ± 4% | 0.28 s | 0.028 ± 0.004 | 0.08 s, 22% | 99%, 1.60 s |
+
+The battle now happens, and it wins no rebounds. The press takes the stick
+off the ice, so the spot is fought for only while one of ours carries the
+puck (`test_no_fight_for_the_spot_with_the_puck_loose`), and the crash
+publishes none. That changed nothing measurable: their first touches are
+still their house D (ZONE_D_STRONG 47 of 99, ZONE_D_WEAK 22, the same split
+as 4b), and they now reach the puck sooner (0.28 s against 0.35 s). Every
+row is within a standard error or two of 4b, so neither direction is
+established.
+
+**Cost.** The rebound race read per station took FINISHER's argmax from
+3.2 ms to 5.9 ms on the micro-bench, and the 5v5 benchmarks' worst tick from
+about 41 ms to 59 ms. Two exact prunes (`f81422b`) bring the argmax to about
+4.9 ms: a man's arrival is solved only where it could change a race, and a
+play's rebound is read only where even every rebound ours could beat the
+station's feed and tip. The rest is the race filled per play (≈0.3 ms each)
+and read per station near the net.
+
+### 4d. Why the battle seldom starts
+
+Every tick one of ours holds a battle spot while we carry, filed under the
+first link that fails (J=11, 576 possessions, after 4c):
+
+| link | share | |
+|---|---|---|
+| their man nearer the spot, out of the press's reach | 55% | |
+| nobody of theirs nearer it, ours not on it | 22% | closing at 1.8 m/s |
+| ours on it | 16% | |
+| pressing | 6% | |
+| in reach, the press too weak to move him | 1% | it would move him 1.05 m |
+
+- **The spot re-picks.** It moves 3.7–4.3 m a second, 96–97% of that in
+  re-picks of 2.6 m about 1.4 times a second, so he is sent somewhere new
+  before he gets anywhere. Discounting a station by his skate there
+  (`b34ffca`, `delay_discount` on `AIArrival.time_to_arrive`) took it only
+  from 1.6 re-picks a second to 1.4. The driver is the one-timer feed term:
+  a lane opening or closing moves a station's value by 0.3–0.4, more than the
+  trip or the switch margin holds, and the battle spot is whichever station
+  he holds. FINISHER and NET_FRONT share one search, and its job is getting
+  open, the opposite of holding the net front.
+- **The duel harness had no press** (`b34ffca`). Every sweep before it moved
+  nobody with one. `duel_harness.gd:_press` now lays `PressRules` as the
+  controller does, held to the live rig within 2 cm
+  (`test_duel_press_mirrors.gd`). Re-measured with it and the trip priced:
+  first touch ours 29% ± 4%, xG 0.028 ± 0.004, the chain the same.
+
+### 4e. The net-front man holds the front (`62f06b2`)
+
+NET_FRONT prices his station by what he adds in front of the net (the tip,
+the screen, the rebound) and never by a feed to him; getting open for the
+feed stays the FINISHER's.
+
+| (J=11, 576) | re-picks / s | spot moves | on it | their man nearer, not touching | net-front first touches | shots screened | xG / possession |
+|---|---|---|---|---|---|---|---|
+| 4c + the trip + the press | 1.37 | 3.7 m/s | 16% | 55% | 11 | 4% | 0.028 ± 0.004 |
+| 4e | 0.77 | 2.0 m/s | 18% | 55% | 16 | 7% | 0.030 ± 0.004 |
+
+The re-picks halved and the net-front man plays more of our rebounds, but
+the battle still seldom starts: he is 2.7 m from his spot on average, and
+their man is nearer it than he is, out of the press's reach (0.3 m edge to
+edge), over half the time. What is left:
+
+- **The remaining re-picks** are 2.5 m jumps. The rebound and screen fields
+  are read at the release's nearest measured spot (a 4 m grid), so a crash
+  point or a screen station snaps to the next cell's as the carrier crosses
+  a boundary.
+- **Their man on his spot is skated to, not stepped into.** His route ends
+  at the spot, which their man stands on, so he stops short of him.
+
+### The counter layer (step 1's regression)
+
+`tests/slow/ai/test_counter_layer.gd` had failed since step 1: 8–9 of 12
+breaks out of their zone with nobody of ours goal-side, the bar 7.
+
+- The weak D going down his flank read to the strong D as his partner off
+  the line, and he slid from his wall to the middle, where their breaker on
+  his side went free (`92261e0`: the strong D keeps his wall, and the weak
+  D leaves only with HIGH_SLOT already on his point).
+- With the activation off entirely it still reads 8 of 12: the points' 2.4 m
+  inset (`c0e91cb`, which made a point receivable) costs the rest. At 2.0 m
+  it passes (6 of 12, +0.9 m).
+- **Resolved** (`516d4f0`, `5d5d474`, `65119b4`). The reception buffer was
+  measured (`tests/instruments/ai/test_line_reception.gd`): a still point
+  man's clean catch keeps the puck where the blade meets it and a bobble
+  comes back into the zone, at every depth to 0.5 m; only a feed that misses
+  his stick runs out. `OZ_RECEIVE_LINE_BUFFER_M` is now the blade and the
+  puck (0.34 m, from 2.1 m), and the points stand at 2.0 m again. With the
+  net-front man holding the front, F3 then dropped into the low slot and the
+  counter layer read -1.2 m; HIGH_SLOT now goes below the top of the slot only
+  while another forward of ours is that high or no man of theirs is above it
+  (`_help_free`). Slow tier all green: counter layer +0.6 m and 6 of 12,
+  spacing 0–1% four high.
+
+| (J=11, 576) | slot shots / poss | first touch ours | 2nd shots / shot | xG / possession |
+|---|---|---|---|---|
+| 4e | 0.085 | 26% ± 4% | 0.091 | 0.030 ± 0.004 |
+| buffer + F3 the help | 0.101 | 29% ± 4% | 0.109 | 0.040 ± 0.005 |
+
+The battle chain is unchanged (their man nearer the spot, out of reach,
+55%; re-picks 0.78 a second): the grid snaps and the step into the man are
+still to do.
+
+### 4f. The fields read between spots; the man on the spot skated into (`7def294`)
+
+The rebound and screen fields now place bodies between their measured spots
+(`AIFieldGrid`), and a man of theirs standing on our spot short of contact
+is skated into (`CLOSE_IN_M`). J=11, 576 possessions: battle in 38% of
+possessions for 0.15 s each (was 32%, 0.09 s), the net-front man first on 19
+rebounds (was 15), xG 0.040 ± 0.006 (unchanged). Split by slot (J=2), the
+chain is the net-front man's: he holds a spot 1.71 s a possession, their man
+nearer it out of reach 53%, re-picking 0.81 a second, 2.3 m each. The grid
+snaps were not the re-picks' driver.
+
+**What the re-picks are** (`AIFinisherTrace`, `MITTS_OZ_TRACE_FRONT=1`, J=2,
+198 re-picks): 112 from the spot he held to another net-front station, 25 to
+the tip station, 19 to where he stands. Only 13 were forced (the held spot
+filtered out). In the rest, the station he went to was worth 0.121 in front
+against 0.061 for the one he left, with the trip and the switch margin alike
+for both: the ice worth holding moves with the carrier and his teammates (a
+crash point, a screen line, each follows its shot), and the spot he holds is a
+fixed point that goes stale. The incumbent is held by place, not by what it is.
+
+**Held by what it is** (`1661cb0`, `RoleDecision.station_key`: the shot a
+station is in front of, and how). The held station now slides with its
+shooter (22% of the spot's motion is continuous, from 4%), but the re-picks
+are unchanged at 0.82 a second, and so is the chain (J=11, 576: their man
+nearer out of reach 54%, xG 0.038 ± 0.005). Of 775 re-picks, 179 found the
+held station gone (its shot's lane shut, or its place filtered); in the rest
+the new one was worth 0.119 in front against the held one's 0.070. The value
+moves between our shots, not within one: each teammate's one-timer is
+weighted by the lane to him now, and lanes open and shut as the defence
+moves, so the shot worth standing in front of changes and he follows it.
+
+**In front of the puck alone** (`4afe2f2`): NET_FRONT prices stations in
+front of the carrier's shot only, the tip station held by key too. J=11, 576:
+
+| | 4f + key hold | puck alone |
+|---|---|---|
+| net-front re-picks / s | 0.82 | 0.51 |
+| spot moves | 2.3 m/s | 1.6 m/s |
+| first touch ours on live rebounds | 27% ± 4% | 32% ± 4% |
+| our median first touch | 0.57 s | 0.24 s |
+| net-front man first on | 15 | 22 |
+| 2nd shots / shot | 0.106 | 0.125 |
+| battle (possessions, s each) | 32%, 0.14 s | 22%, 0.08 s |
+| shots screened | 8% | 4% |
+| xG / possession | 0.038 ± 0.005 | 0.039 ± 0.005 |
+
+He is on the rebound twice as fast, from in front of the puck, and screens
+less (the slot-top man's line is no longer his). Their man is still nearer
+his spot, out of reach, 52% of the time.
+
+**The counter layer, again** (`c6e7374`, `d278495`). With the net-front man in
+front of the puck the slow tier's counter layer read -1.1 m. Traced: it had
+passed on a slot swap that sent the other D back, while the weak point held
+his stand 1.3 s into a break, because "behind me" (`race_depth_to_net`) raced
+him square to our net at full speed. A point faces up the ice. The race now
+charges each side its own turn, ours on the better of our two retreats
+(backpedal at the backward caps, or turned to skate), his to face our net,
+a facing unknown turning as ours. Slow tier green (counter layer +0.0 m, 6 of
+12; spacing holds); default 6,221.
+
+| (J=11, 576) | puck alone | + the turn race |
+|---|---|---|
+| first touch ours on live rebounds | 32% ± 4% | 31% ± 4% |
+| 2nd shots / shot | 0.125 | 0.141 |
+| net-front man first on | 22 | 23 |
+| xG / possession | 0.039 ± 0.005 | 0.042 ± 0.006 |
+
+**The arrival brake reads the glide** (`193d9ea`). Found by the reception
+measurement: a receiver side-stepping into his stance for a slow feed straight
+at him overshot it by 1.2 m, since under 3 m/s the brake assumed friction would
+settle him (the glide carries a body ~7.7 m from 2.8 m/s); past the stance the
+read gave the feed up and it slid by out of the zone. The brake now stands down
+only when the glide stops inside its margin of the anchor. It serves every
+station-keeping bot. J=11, 576:
+
+| | the turn race | + the glide brake |
+|---|---|---|
+| net-front man on his spot | 19% | 26% |
+| their man nearer, out of reach | 52% | 47% |
+| shots / possession | 0.307 | 0.325 |
+| slot shots / possession | 0.104 | 0.087 |
+| 2nd shots / shot | 0.141 | 0.139 |
+| xG / possession | 0.042 ± 0.006 | 0.037 ± 0.005 |
+
+The net front is held more often; the attack's numbers move within noise.
+
+**Why their man is nearer** (J=2, the far ticks split): our man is skating to
+his spot 74–79% of them, 4 m off it at 2.7–3 m/s, the spot half a second old;
+stalled 21–26%; blocked by a body never. Their man stands on the spot 6–7% of
+the time. He is not losing battles: he is rarely in one.
+
+**One station, the shot's line** (`ec2a037`): NET_FRONT stands on the
+carrier's shot line from 2.0 to 5.5 m out, each point priced as any station,
+the held point carried at its distance out. J=11, 576:
+
+| | three stations (glide brake) | the shot line |
+|---|---|---|
+| the spot's motion | 1.5 m/s | 2.1 m/s |
+| its jumps (> 0.5 m a tick) | 0.51 / s, 1.9 m | 0.86 / s, 1.5 m |
+| NET_FRONT changes hands | 0.06 / s | 0.22 / s, the new man 6.8 m off |
+| net-front man on his spot | 26% | 19% |
+| shots screened | 4% | 9% |
+| first touch ours on rebounds | 30% ± 4% | 26% ± 4% |
+| xG / possession | 0.037 ± 0.005 | 0.044 ± 0.006 |
+
+The line moves with every step the carrier takes, and the best point on it
+runs between the crease and the screen distance, so the spot moves more, not
+less; standing out on the line, the net-front man is handed the slot by the
+election more often.
+
+**The crease top on the shot's line** (`51a8c01`): one point while the carrier
+has a shot, `TIP_STATION_DIST_M` out, moving only with the shooter's angle.
+
+| (J=11, 576) | three stations | the shot line | the crease top |
+|---|---|---|---|
+| net-front re-picks / s | 0.50 | 0.85 | 0.15 |
+| the spot's motion | 1.5 m/s | 2.1 m/s | 1.1 m/s |
+| on his spot | 26% | 19% | 41% |
+| their man nearer, out of reach | 47% | 50% | 39% |
+| our man off his spot | 2.6 m | 3.0 m | 2.2 m |
+| NET_FRONT changes hands | 0.06 / s | 0.22 / s | 0.07 / s |
+| shots screened | 4% | 9% | 3% |
+| 2nd shots / shot | 0.139 | 0.096 | 0.141 |
+| xG / possession | 0.037 ± 0.005 | 0.044 ± 0.006 | 0.041 ± 0.006 |
+
+He holds the net front. The press still fires on 5% of the ticks he holds it:
+their man stands on the spot 8% of the time.
+
+### 4g. The screen's depth beside the crease top (`b4fa282`)
+
+Decided with the user: on a high-slot shot he should step out to screen. While
+the carrier has a shot, NET_FRONT's stations are the crease top and, when the
+screen field measured that release's screen worth most a stride further out
+(`AIScreenField.best_station_along`; 5 m, the grid's deepest, for releases 9.5
+to 15 m out down the middle), that depth too, each held by its key. Both are
+priced alike, by what he adds in front. From the slot's top the deeper spot
+screens more (0.23 against 0.17 of the keeper's saves turned into goals) but
+plays less of the rebound, and the crease top still prices higher (0.278
+against 0.249 in `test_role_finisher.gd`'s fixture). J=11, 576:
+
+| | the crease top | + the screen's depth |
+|---|---|---|
+| NET_FRONT at the screen's depth | — | 4% of the time we carry |
+| shots screened | 3–5% | 5% |
+| first touch ours on rebounds | 26–28% | 26% |
+| xG / possession | 0.041 ± 0.006 | 0.038 ± 0.006 |
+
+It changes nothing measurable: the rebound he plays from the crease is worth
+more than the screen he adds out there. The screen field is measured only out
+to 5 m, so a deeper screen is unpriced.
+
+---
+
+## Step 5 — Tips
+
+- **Rebuild `tip_ev` from the measured tip table (2c).** Hold it against the
+  instrument's cells, like `test_shot_odds_vs_truth.gd`.
+
+  **Status: built.** The tip field (`AITipField`, generated by
+  `tests/instruments/ai/test_generate_tip_field.gd` through
+  `.claude/hooks/generate-tip-field.sh`, held current by
+  `test_tip_field_is_current.gd`) is 2c's sweep at the screen field's 20
+  release spots: a charged wrister on the ice (33 m/s) through a tipper on the
+  release's line 2.5, 3.5 and 5 m out, at each tip height, 37 cursor
+  placements a cell. `tip_ev`'s redirect reads it at the height that scores
+  most (the empty net still reads `AIShotValue.deflection`), and the reactive
+  tip takes that height for a shot on the ice (a raised one is still knocked
+  down). The old redirect read 0.34–0.47 everywhere; measured, a tip scores:
+
+  | release (x, out) | 2.5 m | 3.5 m | 5 m |
+  |---|---|---|---|
+  | (0, 9.5) | 0.03 | 0.08 | 0.03 |
+  | (0, 15) | 0.05 | 0.05 | 0.05 |
+  | (0, 19.5) | 0.14 | 0.08 | 0.14 |
+  | (8, 19.5) | 0.27 | 0.19 | 0.14 |
+  | (8, 9.5) | 0.24 | 0.19 | 0.14 |
+
+  A tip pays off a shot from wide or from the point, where it moves the puck
+  across a keeper set on the release; down the middle he is already square to
+  where it goes. A cell is 37 tips, so 1–2 goals either way is noise: the
+  height chosen between levels a goal apart is not a finding, and the field
+  wants more placements a cell before the choice of height is trusted.
+
+  **In play, almost never.** With the duel tipping (2c) the 5v5 sweep (576
+  possessions) saw 1 tip of 178 shots, and 0 of 179 once the net front tips
+  only a shot too fast to hold (`caa71b2`, which also keeps him out of the
+  reception chase that took the shot from him); xG 0.039 then 0.041 ± 0.006.
+  A trace of 26 shots says why: 7 were his own, most of the rest came from
+  beside the net within 2 m of the goal line, where no shooter's line passes
+  him, and all 6 from range were raised, which the duel's flat puck flies over
+  every blade with. The tips are in the carrier's shot choice, the next bullet.
+- **Restore the carrier's shoot-for-tip** (the `_pick_fire_phase` block
+  `0102aef` removed), priced by the new `tip_ev`, as `max` with the direct
+  shot.
+- **Acceptance.** The 5v5 O-zone sweep must not regress to tips from the walls
+  making up half the shots. Tips should come from spots where the table says
+  they score.
+
+  **Status: built (`c44cc30`, `1f2f242`).** The rip for a FINISHER or
+  NET_FRONT teammate to tip competes with the direct shot by max
+  (`carrier.gd:_tip_read`, `tip_ev` on the tip field), and `tip_ev` prices no
+  tip of a rip he could hold. Its first sweep turned 5 of 215 shots into tips:
+  traced rip by rip, the net-front man pressed a one-timer on 11 of 29 rips
+  (he read as one-timer ready though never fed) and let the deflect go on the
+  contact on the near ones (the tip ended as the puck crossed his z-plane,
+  where his blade meets it). Both fixed (`1f2f242`). J=11, 576, the same code
+  with the carrier's tip read off and on:
+
+  | | no tip read | the tip read |
+  |---|---|---|
+  | shots / possession | 0.260 ± 0.018 | 0.373 ± 0.020 |
+  | slot shots / possession | 0.095 | 0.075 |
+  | "other" (perimeter) shots | 52 of 150 (35%) | 115 of 215 (53%) |
+  | tipped by ours | 2 | 23 (0.15 each by the tip field) |
+  | passes picked off | 0.260 | 0.205 |
+  | xG / possession (first + second) | 0.030 + 0.006 = 0.036 ± 0.006 | 0.031 + 0.007 = 0.038 ± 0.005 |
+
+  xG is unchanged within noise, and perimeter shots are now half of them: the
+  acceptance's failure shape, though no longer at a cost. About one rip in
+  four is tipped (a short trace put 29 of 69 shots as rips), where `tip_ev`
+  prices the tipper's stick on it on most.
+
+  **The contact read** (`f51f93a`): `tip_ev` priced the tipper's stick on the
+  rip by the lane defender's race (his lateral close at half his top speed),
+  which read contact at ~1.0 for a man 3–4 m off the line. It now reads his tip's
+  own gate, his blade on the tip point before the puck on his arrival clock
+  (`AIArrival.reach_eta`, from his velocity). That did not mend it: J=11, 576,
+  the carrier took 146 rips, 26 tipped (18%), priced at the tip happening 0.70
+  of the time; shots 0.427, slot shots 0.056, xG 0.027 ± 0.004, below the
+  read off. The untipped rips find the tipper in the loose-puck chase on 56 of
+  120 (3c sends the elected chaser, usually the net-front man, to the rebound
+  while the shot flies, and a teammate's shot on his line reads as a feed to
+  chase), and in positioning a median 3.75 m off the puck on the rest.
+
+  **Taken back out** (the carrier's shot is the direct one only). The
+  tipper's fixes (`1f2f242`) and the honest contact read stay: the finisher
+  prices his stations by `tip_ev`. What a rip for a tip needs first is a tipper
+  who plays it: the chase must not take him off a teammate's shot he can tip.
+
+  **The chase gives way to the tip** (`66b3864`): a FINISHER or NET_FRONT whose
+  role reads the shot coming at him as his tip (`AIRoleFinisher.tips_incoming`)
+  leaves the chase that tick. Measured with the carrier's tip read put back
+  locally (J=11, 576): 37 of 146 rips tipped (25%, from 18%), xG 0.030 ± 0.004
+  against 0.036 with the rip off. Of the 109 untipped, 39 still find him in the
+  chase, his blade a median 0.48 m off the puck and the deflect not held (a
+  chase entered in the last instant, when the tip read has already let go), and
+  70 in his role with the deflect held on 52 but his blade a median 5.7 m off
+  the rip's line: he is not on it, where `tip_ev` read him reaching it.
+
+  **The rip's lane is a pass lane** (`99ee0b6`). Traced from the release, the
+  tipper was in reach of the tip point on nearly every rip and the rip left on
+  his line; 81 of the 109 untipped were first touched by a defender's stick, a
+  median 4.5 m out (quartiles 2.4–7.7 m). The lane over release→tip was priced
+  at 0.70 and 0.45 of the rips reached the tipper, short in every band of the
+  price. The shooter's release contest (`3bf51a9`) read 1.00 on every rip, the
+  nearest defender a median 4.4 m from the release. The lane had been read on
+  the cheap model (defenders standing, the worst alone, no sticks); it is now
+  read as the carrier reads a pass's (`lane_clear` accurate, the defenders'
+  momentum and sticks). Measured with the carrier's tip read put back locally,
+  J=11, 576, against the branch with it off:
+
+  | | tip read off | tip read, pass-lane priced |
+  |---|---|---|
+  | shots / possession | 0.264 ± 0.018 | 0.325 ± 0.020 |
+  | slot shots / possession | 0.099 | 0.087 |
+  | rips | — | 44 (146 before) |
+  | rips reaching the tipper | — | 0.75, priced 0.68 (0.45, priced 0.70 before) |
+  | tipped by ours | 3 | 16 |
+  | xG / possession (first + second) | 0.032 + 0.006 = 0.038 ± 0.006 | 0.033 + 0.007 = 0.040 ± 0.005 |
+
+  The lane now prices what happens, and the rip no longer costs xG, but it adds
+  none within the noise. Of the rips that reach the tipper, 14 of 33 are tipped:
+  10 come off his blade as a plain deflection with his tip read never on, while
+  he skates at 4–6 m/s, and 7 pass the tip point with his tip read on and his
+  blade 0.5–0.9 m off it, his body about a metre from his target. The carrier's
+  rip waits on the tipper playing the rip the carrier prices.
+
+  **The tipper plays the rip where it passes him** (`2a11d61`, `772130f`,
+  `5402125`). The 10 plain deflections were all in the chase, where the tip's
+  reach gate refused on every tick: the reactive tip put the tip point where the
+  shot crosses his z-plane, and these rips run across the crease from low on
+  the wall (~30 m/s across, 10–14 m/s at the net), crossing it 2–4 m to his
+  side while passing in reach. Read instead where the path comes nearest his
+  body, the point ran downstream as he skated to the spot it asked for (his
+  body stands a blade's ring back of it): 5 tips. Read where it comes nearest
+  his blade held up the tip's bearing, so that on his spot he reads the same
+  point, with a reach-out to the point nearest his body for a rip on him too
+  soon to set, J=11, 576, the carrier's tip read put back locally:
+
+  | | tip read off | tip read, the z-plane tip | tip read, the blade's tip |
+  |---|---|---|---|
+  | rips tipped | — | 14 of 44 | 36 of 44 |
+  | tipped by ours, all shots | 6 of 152 | 14 of 187 | 43 of 187 |
+  | xG / possession (first + second) | 0.032 + 0.006 = 0.038 ± 0.006 | 0.032 + 0.007 = 0.039 ± 0.005 | 0.039 + 0.007 = 0.046 ± 0.005 |
+
+  The tip-off column is the blade's tip with the carrier's read off: on the
+  direct shot alone it changes nothing (6 tips against 3, xG 0.038 either
+  way); the gain is the carrier ripping for it.
+
+  **Put back** (the carrier's tip read, `carrier.gd:_tip_read`, with its
+  test): the third column is the shipped behaviour.
+
+- **Order.** If 2c shows a tip on the shot line still scores ~0, the carrier's
+  half stays out, and only the finisher's station pricing moves to the measured
+  value.
+
+---
+
+## 3v3
+
+After each 5v5 step, re-measure 3v3 (`test_ozone_possession.gd`).
+
+- FINISHER is shared with NET_FRONT, so steps 3–5 reach it directly.
+- SUPPORT gets the rebound station term in 3b if the 2d-style measurement shows
+  the 3v3 high man never touches a rebound.
+
+**Re-measured after step 5** (`bd707f4`). `test_ozone_possession.gd`, 48 runs,
+a possession ending at its first shot, against `origin/main`: shots 26 → 28,
+slot shots 15 → 9, other (off the wall) 10 → 19, the first shot 3.6 → 2.3 s in.
+It cannot see a tip or a rebound, so the same 3v3 was put into the 5v5
+instrument (`MITTS_OZ_SIZE=3`, `c2f3cb7`: its starts and defence, with the
+jitter, rebounds and tips), J=11, 576, with the carrier's tip read off and on:
+
+| | tip read off | tip read on |
+|---|---|---|
+| shots / possession | 0.531 ± 0.021 | 0.635 ± 0.020 |
+| slot shots / possession | 0.182 | 0.148 |
+| set read per possession | 0.082 | 0.067 |
+| tipped by ours | 5 of 306 | 52 of 366 |
+| live or missed, nobody on it in 3 s | 0.03 | 0.19 |
+| first touch ours on a live rebound | 0.24 | 0.20 |
+| xG / possession (first + second) | 0.084 + 0.003 = 0.087 ± 0.008 | 0.080 + 0.003 = 0.083 ± 0.007 |
+
+In 3v3 the rip trades slot shots for tips at no gain: xG is level within the
+noise. Traced rip by rip against the same possessions with the read off (same
+seeds), it was priced 0.153 and realized 0.069: the lane held (0.76 priced,
+0.72 got past), but the 3v3 tipper is the FINISHER, one-timer ready, and the
+one-timer press read the rip's release before his tip read did (the press on
+the real carrier, the tip through the carrier-reaction delay) and wound his
+stick up off its path; and the rip was priced at a tip nearer than the one he
+plays, his blade being a ring up the path from his body. Fixed in turn: the tip
+read and the finisher's role re-read take a teammate's release when it leaves
+his stick (`ad947b4`, `ea72b37`), and the tip is priced where he plays it, one
+solve for both (`AITipPoint`, `b84c531`). `8825bca` (his stick's swing onto the
+path) bound almost nowhere. J=11, 576, each against its own read-off sweep:
+
+| | 3v3 off | 3v3 on | 5v5 off | 5v5 on |
+|---|---|---|---|---|
+| tipped | 4 of 308 | 64 of 371 | 8 of 152 | 48 of 197 |
+| slot shots / possession | 0.186 | 0.151 | 0.094 | 0.078 |
+| xG / possession | 0.088 ± 0.008 | 0.088 ± 0.008 | 0.040 ± 0.006 | 0.045 ± 0.005 |
+
+The 3v3 rips are now priced 0.131 and realize 0.084 (60 of 104 tipped): still
+over, but the read costs nothing in 3v3, and adds in 5v5.
+
+**The rip is 5v5 only** (decided with the user, after step 6): in 3v3 it never
+gained anything, measured at every point since (step 6's tables, and the tip
+read off today: −0.001 ± 0.004 for), and the attempts to price it out of 3v3
+from cost (6a, 6c) did not. So the carrier's tip read is a tactical choice by
+team size (`carrier.gd:_tip_read`); the finisher still tips a shot that comes
+at him. The SUPPORT question is answered: he takes the first touch on 22 of the
+60 live rebounds ours win, the FINISHER 37.
+
+---
+
+## Step 6 — Off-puck doctrine, and what a shot costs
+
+The 3v3 re-measure left the bots ripping for tips more than a grounded read
+should: the FINISHER parks at the net front because the comparison he and the
+carrier make sees what a tip or a screen gains and nothing of what it costs.
+This step looks at how the game is coached, then gives the comparison its
+missing half.
+
+### What the doctrine says
+
+From coaching material and journalism (no one authoritative playbook):
+
+- **5v5, the roles are fluid.** F1 and F2 work the puck low, F3 reads from above
+  the dots as the safety valve; one forward is always above the circles or
+  skating there while the others cycle. Once a team controls the puck in the
+  zone there are no fixed spots.
+- **The net front is a job the play calls for.** The low-to-high pass only pays
+  with a body in front: a point shot with a screen and men on its rebound.
+  Cycling with nobody in front is a common reason a long possession makes
+  nothing. The net-front man screens and collects rebounds.
+- **The back door is the low alternative.** The keeper takes the near post
+  first, so the far post opens to a feed from low or behind the net.
+- **The front of the net is the most dangerous ice** (public xG models), but
+  tips and other net-front shot types score under their xG, and no public model
+  can see a screen.
+- **3v3 is a possession game.** Hold the puck, isolate a defender, drive wide or
+  inside, and with nothing there pull it back out and regroup; "if you're going
+  to shoot, hit the net". Open ice turns any turnover into an odd-man rush, and
+  that shapes every decision. No source found describes net-front play in 3v3.
+
+### What the bots are missing
+
+The FINISHER already picks his spot by value (`finisher.gd:_positioning_decision`:
+the best of a one-timer feed, a tip, and what a body in front adds), which is
+the right shape: net front, one-timer or something else should fall out of it.
+What the comparison lacks is cost:
+
+- **A shot pays nothing when it does not score.** A pass prices each way it is
+  lost (poked at the release, cut off in its lane, missed, lost on the catch) at
+  the opponent's possession there plus the counter-rush it hands over
+  (`carrier_pass_search.gd:_pass_ev`). A shot, or a rip for a tip, pays nothing
+  for the puck lost on the wind-up, blocked, or saved with the rebound theirs.
+- **The counter-rush is priced in 5v5 only** (`carrier_field.gd:
+  counter_exposure_cost`). The 5v5 plan calls it correct in 3v3 too and kept it
+  off only to protect 3v3's shipped tuning (`docs/5v5-ai-plan.md` §10). Open ice
+  is where it matters most.
+- **The FINISHER's station pays nothing for being low.**
+
+### 6a. A shot pays its turnovers (built, measured, backed out)
+
+The shot's loss modes, priced as a pass's are, on the carrier's own field:
+
+- lost on the wind-up (1 − the hold's keep), at the release;
+- blocked in its lane (the shot's lane and release contest), where the lane is
+  lost (`AIPuckLane.lane_loss_point`);
+- reaching the net and not scoring, the rebounds their side touches first,
+  raced over the rebound field from where every body stands, at those
+  rebounds' contest point (`AIReboundValue.their_share`); a puck the keeper
+  covers is nobody's, neither a loss nor a chance;
+
+each at `turnover_cost`, with the shooter one of our men at his release, plus
+`counter_exposure_cost` from the release (`AIShotLoss`). The rip for a tip pays
+the same modes on its own lane and redirect, and so does every shot the compete
+prices: the carry's planned shot and a receiver's off the feed are netted of
+their losses inside the shot-or-keep-it read (`AICarrierField._regime_value`),
+so a shot worth less than holding the puck is held.
+
+### 6b. The counter-rush in 3v3 (built, measured, backed out)
+
+`counter_exposure_cost` for every team size, passes and carries too, so the
+compete stays in one currency.
+
+### 6a and 6b measured: no gain, and in 3v3 more counters against
+
+The O-zone instrument plays on past a possession lost (`MITTS_OZ_COUNTER=1`):
+until their first shot at our net (xG against, read with the shot field's set
+keeper), our regaining the puck, or 12 s. J=11, 576 possessions a side, each
+possession paired with its twin from the same start; "off" is 6a and 6b
+removed (no shot loss, the counter exposure 5v5 only).
+
+| | xG for | xG against | net | counter shots | tips |
+|---|---|---|---|---|---|
+| 3v3 off | 0.0729 | 0.0108 | 0.0621 | 46 (0.135 each) | 42 |
+| 3v3 on | 0.0756 | 0.0197 | 0.0559 | 62 (0.183 each) | 43 |
+| 3v3 paired on − off | +0.0028 ± 0.0062 | +0.0090 ± 0.0040 | −0.0062 ± 0.0073 | | |
+| 5v5 off | 0.0296 | 0.0095 | 0.0200 | 34 (0.162 each) | 40 |
+| 5v5 on | 0.0307 | 0.0126 | 0.0181 | 44 (0.165 each) | 42 |
+| 5v5 paired on − off | +0.0011 ± 0.0026 | +0.0030 ± 0.0021 | −0.0020 ± 0.0034 | | |
+
+- **Nothing gained for.** Both sizes are inside the noise, and 3v3 rips the
+  same (43 tips against 42).
+- **3v3 gives up more against, about two standard errors.** How possessions end
+  barely moves (shots saved with the rebound theirs 180 against 172, picked 128
+  against 131, stripped 92 against 81); the counters off them are more
+  dangerous: off a pick, 22 shots against 14. So the difference is where our
+  men are when the puck goes, not how often it goes.
+- The pairing diverges at the first decision that differs, so the paired
+  errors are close to unpaired ones.
+- The AI's cost rises with it, most in 3v3 (the nz-rush benchmark ~+33%).
+
+Split in 3v3, each against the same "off" (5v5 needs no split: its counter
+exposure was always on, so its row above is the shot loss alone):
+
+| 3v3, paired against off | xG for | xG against | net | slot shots | tips |
+|---|---|---|---|---|---|
+| the shot loss alone | −0.0149 ± 0.0043 | +0.0075 ± 0.0033 | −0.0224 ± 0.0055 | 0.115 (off 0.142) | 42 |
+| the counter exposure alone | +0.0013 ± 0.0059 | +0.0061 ± 0.0038 | −0.0048 ± 0.0069 | 0.163 | 40 |
+| both | +0.0028 ± 0.0062 | +0.0090 ± 0.0040 | −0.0062 ± 0.0073 | 0.167 | 43 |
+
+- **The shot loss alone costs the offence a fifth of its xG**, three standard
+  errors and more: the carrier gives up slot shots (set read per possession
+  0.056 → 0.039). With the exposure on as well, passes and carries pay it too
+  and the shot's handicap cancels, which is why "both" read flat.
+- **Against rises in all three by about the same**, by unrelated changes, so
+  some of it is likely the off run's luck (its 46 counter shots are the fewest).
+- **No variant moves the rips** (40–43 tips).
+
+Both are backed out (decided with the user): neither gains anything for, and
+the shot loss alone takes a fifth of the offence. If a shot is to pay its
+losses, trace first why it gives up slot shots: a pass pays the same loss
+price, so the shot should not lose to it alone. The counter-rush play-on stays
+in the instrument.
+
+### 6c. The FINISHER's station
+
+Neither change moved the rips, so the station pays for being low.
+
+**First cut: AIRoleSupport's counter term, inert** (`bec852f`, taken back out). Each FINISHER /
+NET_FRONT station pays `counter_rush_cost_at`: the carrier's live turnover odds
+× the counter's shot past the men who beat it home, him from the station among
+them or not. Measured, 3v3 played every possession bit for bit as without it,
+and 5v5 differed by one counter. Traced over 633 of the 3v3 finisher's reads:
+
+- a counter off a loss at the carrier reaches our slot in 5.2 s (median; 4.5 to
+  5.7 s), and a cover must be there a set margin (~1.3 s) sooner;
+- from any station inside their circles that is a 45 m skate he cannot make,
+  so every candidate pays the same and the cost never moves the argmax (the
+  spread across candidates exceeded 0.001 in 3 reads, at most 0.0025);
+- the carrier is unpressured in most reads (turnover odds 0 at the median).
+
+The term only sees a man who is home and set before the counter arrives. What
+being high buys in their end is not that: it is a man on the counter before its
+shot (a 2-on-2 rather than a 2-on-1), or one on the puck where it was lost.
+
+---
+
+## The branch against main
+
+The whole branch (`7267145`, the code of the sweeps' "off" runs above) against
+`origin/main` at the commit it merged (`9106431`, the same keeper), on the same
+instrument: the O-zone sweep with the rebound and counter play-on, J=11, 576
+possessions a side, paired by start. Main was played under the branch's duel
+harness (the tip and the press, both game mechanics), with only the branch's
+trace hooks and battle-spot statistics stubbed out of its copy.
+
+| | 3v3 main | 3v3 branch | 5v5 main | 5v5 branch |
+|---|---|---|---|---|
+| shots / possession | 0.613 | 0.595 | 0.292 | 0.319 |
+| slot shots / possession | **0.260** | **0.142** | **0.109** | **0.080** |
+| set read / possession | 0.088 | 0.056 | 0.037 | 0.016 |
+| tipped by ours | 0 | 42 | 0 | 40 |
+| first touch ours, live rebounds | 0.31 | 0.26 | 0.24 | 0.27 |
+| xG for (first + second) | 0.096 | 0.073 | 0.039 | 0.030 |
+| xG against (their counter) | 0.027 | 0.011 | 0.007 | 0.010 |
+| paired branch − main, for | | −0.023 ± 0.008 | | −0.009 ± 0.006 |
+| paired branch − main, against | | −0.016 ± 0.005 | | +0.003 ± 0.003 |
+| paired branch − main, net | | −0.007 ± 0.009 | | −0.012 ± 0.007 |
+
+- **The branch makes about a quarter less xG at both sizes**, and the loss is
+  slot shots: 3v3's nearly halve, 5v5's fall by a quarter.
+- **3v3 gives up much less on the counter** (46 counter shots against 82), so
+  its net is level within the noise. 5v5's net is worse by about two standard
+  errors.
+- **Before the merge the branch read level or ahead of its own start** (5v5,
+  the first-shot set read 0.040 at step 1's start, 0.046 after step 5, against
+  the old keeper). Whether the loss came with main's keeper and the fields
+  regenerated on it, or with the merge's resolution, is not yet measured.
+
+**Before the merge, against its own main.** The branch at `68b053e` (before
+step 6 and both later merges) against the main it was built on (`35d1a88`), both
+on the old keeper, on today's instrument (main stubbed as above, its tips scored
+by `68b053e`'s fields), J=11, 576 a side:
+
+| | 3v3 old main | 3v3 branch | 5v5 old main | 5v5 branch |
+|---|---|---|---|---|
+| slot shots / possession | **0.269** | **0.151** | 0.090 | 0.078 |
+| tipped by ours | 0 | 64 | 0 | 48 |
+| xG for | 0.107 | 0.088 | 0.034 | 0.045 |
+| xG against | 0.033 | 0.031 | 0.015 | 0.010 |
+| paired branch − main, for | | −0.019 ± 0.011 | | +0.011 ± 0.007 |
+| paired branch − main, net | | −0.016 ± 0.013 | | +0.015 ± 0.008 |
+
+- **5v5 was ahead before the merge and is behind after it.** Across the merge
+  the branch's 5v5 xG fell 0.045 → 0.030 while main's rose 0.034 → 0.039 on the
+  new keeper. Its slot shots held (0.078 → 0.080) where main's rose (0.090 →
+  0.109), and its tips' worth fell (first shots with tips 0.037 → 0.025).
+- **3v3 was behind before the merge too.** Its slot shots are about half of
+  main's at both points, so that loss is the branch's own behaviour, not the
+  merge. The carrier's tip read accounts for part of it (step 5's 3v3 table: slot
+  shots 0.186 off, 0.151 on); the rest is in some other step, unmeasured in 3v3
+  until after step 5.
+
+**The carrier's tip read off, today.** The branch with only `_tip_read`
+switched off, J=11, 576:
+
+| | 3v3 | 5v5 |
+|---|---|---|
+| slot shots / possession (main; branch) | 0.170 (0.260; 0.142) | 0.099 (0.109; 0.080) |
+| set read / possession (main; branch) | 0.065 (0.088; 0.056) | 0.021 (0.037; 0.016) |
+| paired tip read off − on, for | −0.001 ± 0.004 | −0.002 ± 0.003 |
+| paired tip read off − on, against | +0.004 ± 0.002 | +0.002 ± 0.002 |
+| paired tip read off − main, net | −0.012 ± 0.010 | −0.016 ± 0.007 |
+
+The rip is not what costs the branch against main: off, it is as far behind.
+In 5v5 it shoots from the slot nearly as often as main and still makes about
+half main's set read a possession, so its shots come from worse spots, not
+fewer. The merge itself is clean: the branch's own changes to the carrier,
+its field, the arrival clock, the steering and the agent read the same before
+it as after (the crease brake keeps main's 3.0 under its own name). So the
+5v5 swing across the merge is the branch's behaviour meeting main's keeper,
+or the fields regenerated on him.
+
+**The fields from before the merge, today.** The branch with `68b053e`'s
+rebound, screen and tip fields (measured on the old keeper) in place of today's,
+5v5, J=11, 576. The instrument scores a tip off the tip field too, but a tip
+reads about the same on either (0.140 against 0.131 each), so the split below
+is the behaviour. xG a possession, split into first shots not tipped, tips and
+second shots:
+
+| 5v5 | untipped first shots | tips | second shots | total |
+|---|---|---|---|---|
+| old main (old keeper) | 0.031 | 0 | 0.004 | 0.034 |
+| branch before the merge (old keeper) | 0.025 | 0.012 | 0.008 | 0.045 |
+| main (new keeper) | **0.037** | 0 | 0.002 | 0.039 |
+| branch, today's fields | **0.016** | 0.009 | 0.005 | 0.030 |
+| branch, today's fields, tip read off | 0.021 | 0.001 | 0.006 | 0.028 |
+| branch, the old fields | 0.023 | 0.011 | 0.004 | 0.038 |
+
+Paired, the old fields against today's: +0.008 ± 0.005 for, +0.011 ± 0.006
+net; against main, level (net −0.001 ± 0.007). So the fields regenerated on the
+new keeper are what took 5v5 behind main. Underneath, in every configuration
+the branch's untipped first shots are worth far less than main's (0.016–0.025
+against 0.031–0.037): the branch trades the carrier's direct shots for tips
+and net-front play, and whether that nets out depends on the tables it is
+priced by. On the old keeper it did; on the new one it does not, and in 3v3 it
+never did.
+
+**Which field** (each of `68b053e`'s fields put back alone, 5v5, J=11, 576,
+paired against today's):
+
+| the old field | for | net | slot shots | untipped first shots |
+|---|---|---|---|---|
+| rebound | +0.003 ± 0.004 | +0.005 ± 0.005 | 0.075 | 0.021 |
+| **screen** | **+0.011 ± 0.005** | **+0.012 ± 0.005** | 0.095 | 0.022 |
+| tip | ±0 | ±0 | 0.076 | 0.016 |
+| all three | +0.008 ± 0.005 | +0.011 ± 0.006 | 0.076 | 0.023 |
+
+The screen field is the one. On the new keeper it pays a screen less nearly
+everywhere (summed over each spot's stations: 61 → 55 goals from (0, 6 m),
+16 → 13 from (0, 9.5 m), 4 → 0 from (8, 9.5 m)), and the bots play better when
+a screen is priced higher. But a cell is 24 shots with 0–6 goals, so most of
+that difference is within a cell's own noise: the branch's 5v5 swings on
+noise in a table it reads.
+
+**Pooled, the screen's shape is clear** (goals per shot over every cell sharing
+the value; a cell's own read is 24 shots):
+
+| | old keeper | new keeper |
+|---|---|---|
+| nobody in front | 0.002 (1/480) | 0.002 (1/480) |
+| a screener anywhere | 0.015 ± 0.001 | 0.011 ± 0.001 |
+| screener on the line / 0.4 m off / 0.8 m off | 0.052 / 0.006 / 0.006 | 0.030 / 0.006 / 0.006 |
+| shot from the middle / 4 m across / 8 m across | 0.046 / 0.011 / 0.005 | 0.040 / 0.007 / 0.001 |
+| shot from 6 / 9.5 / 15 / 19.5 m out | 0.031 / 0.020 / 0.011 / 0 | 0.024 / 0.014 / 0.006 / 0 |
+| screener 1.5 / 2.5 / 3.5 / 5 m out | 0.005 / 0.018 / 0.018 / 0.020 | 0.005 / 0.009 / 0.012 / 0.018 |
+
+So a screen is not worth the same everywhere: it pays only on the line, on a
+shot from the middle and in close, and more the further out the screener
+stands. The table's dimensions are the right ones; its per-cell resolution is
+the noise. And the new keeper does concede less to a body on the line (0.030
+against 0.052, about four standard errors pooled), so pricing screens lower
+is honest, and the bots playing better on the old field is the screen station
+doing something besides the screen.
+
+**The field read as a fit** (`5dfa248`): on the line, a product of how central
+the release is, how far out it is and how far out the body stands, fitted over
+every on-line cell (χ² 16–19 over 80 cells, inside their own noise); off the
+line, nothing. 5v5, J=11, 576, paired:
+
+| fitted screen against | for | net |
+|---|---|---|
+| today's cell-by-cell read | +0.001 ± 0.003 | +0.002 ± 0.003 |
+| the old keeper's field | −0.010 ± 0.005 | −0.010 ± 0.005 |
+| main | −0.008 ± 0.006 | −0.009 ± 0.007 |
+
+The fit plays as the cell-by-cell read did: the noise was not what cost 5v5.
+It is the screen's honest, lower value on the new keeper, which the old field
+over-stated, and the bots played better over-stating it. What the over-stated
+screen bought is the next question.
+
+**What it bought** (the sweep sampling our net-front men every 0.1 s while we
+carry, `MITTS_OZ_NF`, locally; both runs reproduce their sweeps above
+exactly):
+
+| 5v5 | old field | the fit | main |
+|---|---|---|---|
+| NET_FRONT, metres out (median, q25–q75) | 3.7 (2.7–4.7) | 3.9 (2.8–4.8) | |
+| NET_FRONT on the carrier's line (< 0.4 m) | 10% | 11% | |
+| NET_FRONT, one of theirs within 2 m | 51% | 50% | |
+| NET_FRONT holding the screen station | 2% | 21% | |
+| slot shots / possession (their set read) | 0.095 (0.014) | 0.066 (0.007) | 0.109 (0.024) |
+| angle shots / possession | 0.080 | 0.106 | 0.099 |
+
+Not the net front: he stands where he stood. It is the carrier. The old
+field's larger screen credit (`AICarrierField._screen_at` in his shot's and a
+feed's value) is what sent him to the slot to shoot, and with the honest
+credit he shoots from the angle instead. Main's carrier, with no screen
+credit at all, takes more slot shots than either, worth twice as much each
+(0.22 against 0.11–0.15). Main's defence is not the branch's, though: its
+defenders hunt the soft hit, and in 3v3 that was all of the gap. The fair
+read of 5v5's offence is the branch against main with the old check on the
+defending team.
+
+**The fair read** (the branch at `2520387`, the defending team on `d39c236`'s
+body check, as main's defenders are; 5v5, J=11, 576, paired):
+
+| 5v5 | branch, main's defence | main | branch, its own defence |
+|---|---|---|---|
+| shots / possession | 0.436 | 0.292 | 0.314 |
+| slot shots (worth each) | 0.089 (0.149) | 0.109 (0.221) | 0.066 (0.106) |
+| angle shots (worth each) | 0.196 (0.032) | 0.099 (0.055) | 0.106 |
+| tipped by ours | 54 | 0 | 45 |
+| our carrier stripped | 0.293 | 0.342 | 0.389 |
+| xG for | 0.046 | 0.039 | 0.031 |
+| paired against main, for | +0.008 ± 0.006 | | −0.008 ± 0.006 |
+| paired against main, net | +0.004 ± 0.007 | | −0.009 ± 0.007 |
+
+Against the same defence the branch's 5v5 offence is level with main or ahead
+of it, as 3v3's was: the whole of its gap was the honest body check making
+the other side's defence harder, which costs any attack about 0.016 a
+possession in 5v5 and 0.028 in 3v3. What the branch's attack does differently
+is volume: half again as many shots, twice main's from the angle (worth little
+each), its slot shots fewer and worth less each, and the tips on top.
+
+**The angle shots** (inside 6.1 m of the goal line and more than 4.5 m off the
+middle; the same fair run, each shot marked by whether the carrier's winning
+read was the rip):
+
+| 5v5, main's defence | shots | from the wall (≥ 10 m across) | priced | tipped | realised (tip or set read, + second) |
+|---|---|---|---|---|---|
+| angle, the rip | 49 | 37 | 0.126 | 16 | 0.047 |
+| angle, direct | 64 | 7 | 0.160 | 2 | 0.064 |
+| other, the rip | 30 | 12 | 0.142 | 24 | 0.113 |
+| slot, direct | 48 | 0 | 0.377 | 4 | 0.220 |
+| main's angle shots | 57 | 5 | 0.180 | 0 | |
+
+Main's carrier takes as many angle shots against its own defence as the
+branch's does against its own (57, 58); against main's softer defence the
+branch's carrier takes twice as many, and the extra ones are rips from low on
+the wall. Priced like the rips from higher up, they are tipped a third as
+often and realise a third of their price. The tip field was measured from
+releases at most 8 m across and at least 6 m out (`AITipFieldData.SPOT_X`,
+`SPOT_FWD`); a release past that reads the grid's edge spot unchanged, and the
+edge spot here, (8, 6 m), is one of the field's best tips (0.24–0.27).
+
+**The field out to the wall** (`00fabed`: releases ±12 m across, 4–19.5 m out;
+a spot with no cell gives its share to its neighbours). From the wall a tip
+measures 0.08 (4 m out) to 0.16 (6 m out), against the edge's 0.19, so the
+field was generous there but not by much. The same fair run on it:
+
+| 5v5, main's defence | angle rips | priced | tipped | realised | xG for, paired against main |
+|---|---|---|---|---|---|
+| the field to 8 m | 49 | 0.126 | 16 | 0.047 | +0.008 ± 0.006 |
+| the field to the wall | 33 | 0.089 | 12 | 0.040 | +0.005 ± 0.006 |
+
+Fewer wall rips, priced nearer what they make, but still twice it. What is
+left is the tip itself: of the untipped rips from the wall, nothing touched 22
+of 37 before the keeper. From 0–5 m out the release's line runs past the
+crease half a metre out, and the net-front man stands at the crease's top,
+about 2 m above it, where `AITipPoint.meet_time` reads his blade reaching it in
+time: the solve does not know he cannot skate into the crease. From the same
+wall 6–10 m out the line crosses higher, and 11 of 12 were tipped.
+
+**Traced, it is not the crease** (each rip followed from its release, the
+fair run, locally; all 67 rips). The net-front man's body was in the crease on
+2 of them. Of the 28 untipped, 13 had no tipper playing it when the puck came
+(he had moved off between the price and the release, or let the read go),
+and on the other 15 his stick was on its aim (within 0.3–0.5 m) and the puck
+never reached it: replayed tick by tick, five of five bounced off their
+weak-side D's stick about a metre before the tip point, the D standing beside
+our tipper with his stick in the lane to him, as coverage puts it.
+
+`tip_ev` reads the rip's lane as a pass's (`AIPuckLane.lane_clear`, accurate),
+which ends `LANE_RECEIVER_REACH_M` (1.5 m) short of its end: for a pass, a
+stick inside that is the catch's contest, priced by the reception. A rip has
+no such read, so the stretch where the tipper's own defender stands is never
+priced. The lane read three ways at each rip's release, against what happened
+(60 rips with a tip point, 38 tipped):
+
+| the rip's lane ends | mean | read ≈ 0: rips, tipped | read > 0.8: rips, tipped | log score |
+|---|---|---|---|---|
+| a receiver's reach short (today) | 0.75 | 9, 4 | 40, 31 | −0.95 |
+| a blade's catch short (0.5 m) | 0.43 | 30, 12 | 22, 21 | −0.98 |
+| at the tip point | 0.38 | 32, 13 | 19, 18 | −1.07 |
+
+Read to the blade's catch, the lane ranks the rips far better (21 of 22 read
+open were tipped) but calls 30 blocked of which 12 were tipped anyway: the
+block model is sure a defender's stick beside the tipper takes the puck, and
+four times in ten it does not. Neither end is calibrated; today's is the
+least wrong overall. Pricing the tip point's contest honestly (the defender
+on the tipper racing his stick to the line ahead of the tipper's blade) wants
+it measured, as 2c measured the tip.
+
+**By the release's angle** (off the line straight out from the net's middle; 0°
+dead centre, 90° along the goal line). The rips the carrier chose, two fair
+runs (old and new tip field), and a third with every rip the read finds fired
+(`AIRoleCarrier.force_rip_for_test`, locally: 149 rips, 135 with a tip point
+from where the tipper stood at the release):
+
+| release angle | chosen rips, tipped | forced rips, tipped | forced: priced lane | forced: lane to the blade's catch |
+|---|---|---|---|---|
+| 0–45° | 17, 71% | 41, 63% | 0.61 | 0.27 |
+| 45–68° | 25, 80% | 49, 73% | 0.70 | 0.32 |
+| 68–76° | 14, 29% | 31, 48% | 0.71 | 0.35 |
+| 76–90° | 11, 27% | 14, 21% | 0.74 | 0.37 |
+
+Past about 68° a rip reaches the tipper's blade about half as often (forced:
+71% inside, 40% beyond; chosen: 76% and 28%). Neither lane read sees it:
+both read the same across every angle, the priced one about right inside 68°
+and the catch read wrong everywhere. So the tip point's contest costs nothing
+inside 68° and about half a rip beyond it, which is something angle-specific
+the lane model does not have, not the receiver's-reach cut alone.
+
+**Why the angle** (the forced run again, each defender within 4 m of the tip
+point placed in the line's frame at the release, and the first thing to turn
+the puck in flight; 135 rips with a tip point):
+
+| | inside 68° | beyond 68° |
+|---|---|---|
+| tipped | 69% | 40% |
+| untipped, turned first by their stick / ours / nothing | 18 / 3 / 7 | 19 / 2 / 6 |
+| a defender within 4 m of the tip point | 80 of 90 | 41 of 45 |
+| his stick on the slot side of the line | 42, tipped 64% | 38, tipped 39% |
+| his stick on the goal-line side | 38, tipped 71% | 3, tipped 0% |
+| his stick within 1 m of the line / 1–2 m | 55% / 77% tipped | 33% / 40% tipped |
+
+The rip is stopped by the stick of the defender on our tipper at every angle.
+Inside 68° it gets past him two times in three, and the nearer his stick the
+less; beyond 68° it gets past him two times in five however far his stick
+starts, and he is nearly always on the slot side of a line that runs a metre
+off the goal line. So it is not where his stick starts. Not yet measured: the
+likeliest reading is that at a steep angle the rip runs along his front rather
+than across it, so he gets his stick to it from anywhere he stands. The lane model reads a stick's reach as a disc round
+where it is held and times his slide to the line, so it reads every angle
+alike (and is sure of the block at every angle, the catch read's 0.3).
+
+**The mechanism, measured** (the forced run once more: for each defender within
+4 m of the tip point, the stretch of the rip's path inside his reach round his
+body at the release, how long the puck is in it, how far his stick is from
+it, and how far it lies off his facing):
+
+| | tipped | their stick turned it |
+|---|---|---|
+| no defender's reach on the path (inside / beyond 68°) | 83% / 56% | 10% / 19% |
+| in reach, in front of him (≤ 45° off his facing), inside / beyond | 47% / 25% | 41% / 65% |
+| in reach, to his side or behind (> 45°), inside / beyond | 62% / 44% | 28% / 44% |
+| time in reach 0–0.05 s / 0.05–0.1 s (all angles) | 44% / 55% | 50% / 28% |
+
+Time in reach is not it (the "along his front" reading was wrong: medians
+0.020 s inside 68°, 0.024 s beyond, and longer in reach does not block more).
+Facing is: a rip that passes in front of the covering defender is turned half
+as often again as one that passes to his side, at either angle, and beyond
+68° the path is in front of him on 20 of 29 rips where inside 68° it is on 17
+of 49. The lane model's reach is a disc and ignores his facing. It is not
+the game's reach edge (`FacingRules.reach_edge`, 157° to either side, so only a
+cone straight behind is out of reach): the difference is between 0–45° and
+45–90° off his facing, well inside it. The duel moves a blade through the real
+arm rig after the cursor the agent aims (`duel_harness.gd:_place_blade`), so it
+is either the rig (the stick slower to a point at his side) or the aim (his
+cursor not on the path when it passes there); which, is not yet traced. Beyond
+68° rips still do worse in each facing band, on few rips, so facing is most of
+the angle and not all.
+
+**It is the aim, and facing does not hold up** (the forced run with the
+covering defender, his stick nearest the line at the release, followed tick by
+tick: his cursor and his blade against the rip's path):
+
+| | rips | his cursor onto the path | tipped | turned by their stick |
+|---|---|---|---|---|
+| the tip point in front of him (≤ 45°) | 52 | 44% | 56% | 29% |
+| to his side (45–90°) | 50 | 68% | 56% | 36% |
+| behind him (> 90°) | 19 | 47% | 63% | 21% |
+| inside 68° | 80 | 49% | 68% | 22% |
+| beyond 68° | 41 | 66% | 37% | 46% |
+| his cursor went onto the path | 66 | | 35% | 47% |
+| it did not | 55 | | 84% | 11% |
+
+His blade follows his cursor within 0.04–0.20 m (median by facing), so the rig
+is not what limits him. With the covering defender picked this way, facing
+makes no difference (56% tipped in front and beside), so the facing effect
+above came from which defender that read picked, and is withdrawn. What
+decides a rip is whether he goes for it: when his cursor goes onto the path he
+turns it about half the time, and when it does not the rip gets through five
+times in six. He goes for it on two rips in three beyond 68°, one in two
+inside. The lane model assumes every defender goes for every lane his stick
+can reach; the agent goes for one only by the rule it plays by, which the
+lane read does not mirror.
+
+**Decided with the user: price what can happen, never the bots' own
+tendencies.** An offence read from how our defensive bots play is the bots
+reading the bots, and a human defender plays what he can. So the lane read
+stays a model of what a defender's stick can do, and it was its end that was
+wrong: a pass's lane ends a receiver's reach short of him, where his own stick
+plays it, but a tip is played at the tip point, so a rip's lane runs to the
+tipper's blade (`1887240`: `lane_clear`'s `end_reach`, a receiver's reach by
+default, the blade's catch in `tip_ev`). Whether our defenders leave rips
+their sticks could reach was the defence's question, not the offence's;
+traced below, they do not: a stick that misses one arrives a reaction late.
+
+Measured (5v5, J=11, 576 a side, paired against the same code without it):
+
+| | rips | angle rips: priced → realised | other rips: priced → realised (tipped) | for | net |
+|---|---|---|---|---|---|
+| main's defence, without | 66 | 0.089 → 0.040 | 0.133 → 0.109 (25 of 30) | | |
+| main's defence, with | 40 | 0.090 → 0.080 | 0.143 → 0.128 (17 of 17) | −0.002 ± 0.003 | −0.002 ± 0.003 |
+| its own defence, with | | | | −0.001 ± 0.003 | −0.002 ± 0.003 |
+
+A third of the rips go, the ones a defender's stick could take, and the rips
+left realise what they are priced at. Against its own defence the carrier
+shoots instead (slot shots 0.071 → 0.082, untipped first shots 0.016 →
+0.020, tips 0.010 → 0.005) at no cost. Against main, still level (net −0.001
+± 0.007).
+
+**The defence playing a shot in flight (built, measured, backed out).** Step
+3c sends every team's elected chaser to a shot's rebound, the defending team's
+too, so `a6824fb` sent the defending team's chaser to the shot's path instead
+wherever one of its sticks could reach it before the goal line. Measured each
+team on its own defence, J=11, 576 a side, paired against the same code
+without it:
+
+| | possessions changed | for | against | net |
+|---|---|---|---|---|
+| 5v5 | 22 | −0.0000 ± 0.0006 | −0.0006 ± 0.0004 | +0.0006 ± 0.0007 |
+| 3v3 | 25 | +0.0001 ± 0.0005 | +0.0001 ± 0.0014 | +0.0000 ± 0.0017 |
+| 5v5, every rip the read finds fired | 35 | −0.0001 ± 0.0006 | −0.0001 ± 0.0003 | +0.0000 ± 0.0006 |
+
+The rips are the same possessions either way (26; forced, 73 against 74). It
+moved only where the chaser's body skates. Traced through eight forced rips,
+every defender near the line already went for it (`_should_chase_loose_puck`:
+the race or the reach band), and the chaser's blade already parks at the
+puck's gate (`_chase_reception_aim_target`), whatever the steer. Over a 30–38
+m/s rip the body's target buys nothing. The man nearest the release stands
+1.5–2.1 m off the line and the puck passes him 0.1 s out, 0.06 s of it his
+reaction. The read that counted 13 of 33 rips as his to play started his stick
+with no reaction delay, so the weakness above is smaller than it read: his
+stick cannot get there.
+
+Traced the same way on the reverted code, every forced rip that was tipped
+(71 at rip pace), each defender's blade against the puck on every tick: none
+came within 0.7 m of it (4 within 0.75 m, 19 within 1 m). Where a blade did
+reach the line short of the tip, it got there one to three ticks after the
+puck had passed: he goes for it, a reaction late, and a 30–36 m/s rip is gone.
+The man covering the tipper stands level with him, 1.4–2 m off the line, and
+his blade never reaches it short of the tipper's. No defensive gap is left at
+the tip point for the defence to fix.
+
+**Where 3v3's direct shots went** (bisected on the old keeper, today's
+instrument and duel harness on each commit, main's stubs where a commit lacks
+the branch's hooks, J=11, 576 a probe):
+
+| 3v3 | slot shots | untipped first shots | tips |
+|---|---|---|---|
+| old main (`35d1a88`) | 0.269 | 0.104 | 0 |
+| step 1 and the main merge (`d70c79e`) | 0.269 | 0.104 | 0 |
+| through 4e, F3 and the points (`d6d5f9b`) | 0.276 | 0.111 | 0 |
+| through tips, the shot line and 3c (`5fc34df`) | 0.271 | 0.114 | 0 |
+| **the honest body check (`3549a8c`)** | **0.193** | **0.086** | 0 |
+| the high slot's concession (`874c2ed`) | 0.193 | 0.086 | 0 |
+| before the merge, the rip back (`68b053e`) | 0.151 | 0.068 | 0.016 |
+
+The body check alone takes 3v3 xG for down 0.028 ± 0.010 (net −0.022 ± 0.013);
+the carrier's rip then trades more slot shots for tips at no gain; nothing else
+moves it. The body check is a defender's read as much as an attacker's: both
+teams run it, so in a bot-against-bot sweep "our xG fell" is also "their
+defence strips more" (stripped 0.161 → 0.188). The sweep cannot tell those
+apart without running it on one side only.
+
+**Run on one side only** (`3549a8c` with `d39c236`'s check kept for one team in
+`AIDefensiveVerbs.evaluate_body_check`), paired against both teams on the old
+check (`5fc34df`), J=11, 576:
+
+| 3v3 | xG for | xG against (their counter) | net |
+|---|---|---|---|
+| the new check on their defence only | −0.028 ± 0.010 | −0.004 ± 0.007 | −0.025 ± 0.012 |
+| the new check on our side only | ±0 (every possession identical) | −0.010 ± 0.006 | +0.010 ± 0.006 |
+| both | −0.028 ± 0.010 | −0.006 ± 0.007 | −0.022 ± 0.013 |
+
+The whole of 3v3's lost xG is the defending team's check: a defence on the
+honest check concedes about a quarter less. Our attackers never commit a hit
+while we hold the puck in their zone, so their play is identical either way;
+on the counter, our side defending with it gives up less. **The body check is
+a defensive gain, not an offensive loss.** Read without it, the branch's 3v3
+offence is ahead of old main's (`5fc34df` against `35d1a88`: for +0.012 ±
+0.010, net +0.006 ± 0.013), and the rip then trades slot shots for tips at
+no gain.
+
+What follows for the branch against main: bot against bot, every defensive
+gain reads as the attack's loss. Main's defenders hunt hits that land soft, the
+branch's poke, so main's attack faces a weaker defence.
+
+**Cost** (`benchmarks/`, run one after the other on this machine): per call,
+FINISHER 2156 → 3372 µs and HIGH_SLOT 211 → 2000 µs, the rest within a few
+percent. The AI's time per game-second is mixed (5v5 ozone-cycle 484k → 377k,
+nz-rush 5v5 305k → 444k), the worst tick 41–55 ms on main and 35–65 ms here.
+
+## Open questions
+
+1. **The screen's model** was decided on 2b's numbers: a share of the SET
+   keeper's saves (§2b). A beaten keeper's screen is unmeasured.
+2. **Per-tier goalie fields (#786)** are out of scope. Every table here is
+   measured against the Hard keeper, as the shot field is.
+
+## Where it lives
+
+| piece | file |
+|---|---|
+| HIGH_SLOT station | `Scripts/domain/ai/role_behaviors/high_slot.gd` |
+| 3v3 SUPPORT station | `Scripts/domain/ai/role_behaviors/support.gd` |
+| FINISHER / NET_FRONT stations, tip read | `Scripts/domain/ai/role_behaviors/finisher.gd` |
+| rebound credit, `tip_ev`, the screen in a shot | `Scripts/domain/ai/action_scoring.gd` |
+| rebound and screen fields | `Scripts/domain/ai/rebound_field.gd`, `rebound_value.gd`, `screen_field.gd` |
+| the screen battle | `Scripts/ai/skater_agent_press.gd:_win_the_spot` |
+| shot value seam | `Scripts/domain/ai/shot_value.gd`, `shot_odds.gd` |
+| chase election | `Scripts/domain/ai/loose_puck_chase.gd` |
+| carrier shot pick | `Scripts/domain/ai/role_behaviors/carrier.gd:_pick_fire_phase` |
+| new generated tables | `Scripts/domain/ai/generated/` |
+| instruments | `tests/instruments/ai/` |

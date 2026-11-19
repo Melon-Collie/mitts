@@ -93,6 +93,26 @@ static func time_to_arrive(from_pos: Vector3, dest: Vector3,
 			lateral_grip)
 
 
+# ETA for the BLADE to touch `point`, rather than for the body to land on it.
+# The destination is the nearest spot on the reach circle around `point` — the
+# path point pulled `reach` back along the approach line — so the last stick-
+# length is never charged as travel. Already inside reach is 0: the stick is on
+# it now.
+static func reach_eta(from_pos: Vector3, point: Vector3, vel: Vector3,
+		max_speed: float, accel: float, reach: float) -> float:
+	if reach <= 0.0:
+		return time_to_arrive(from_pos, point, vel, max_speed, accel)
+	var dx: float = point.x - from_pos.x
+	var dz: float = point.z - from_pos.z
+	var d: float = sqrt(dx * dx + dz * dz)
+	if d <= reach:
+		return 0.0
+	var f: float = (d - reach) / d
+	return time_to_arrive(from_pos,
+			Vector3(from_pos.x + dx * f, point.y, from_pos.z + dz * f),
+			vel, max_speed, accel)
+
+
 # Extra lateral/depth clearance the net-aware ETA's corner waypoints keep
 # beyond the inflated frame — a body's half-width, the corner is skated
 # around, not clipped (see _time_to_arrive_routed).

@@ -148,7 +148,8 @@ Per-state specs (behavior module in parentheses; **bold = new code**, others reu
 
 - **OZONE** — the standard even-strength 3-low/2-high. NET_FRONT (reuses `AIRoleFinisher`)
   is the crease-edge screen/backdoor man — FINISHER's argmax already lives in that space.
-  HIGH_SLOT (**new decide in `AIRoleHighSlot`**, thin) is F3: floats the soft ice between
+  HIGH_SLOT (**new decide in `AIRoleHighSlot`**, thin; since re-priced, see
+  `docs/bot-net-front-offense-plan.md` step 1) is F3: floats the soft ice between
   the dots at depth ~8–10.7, stays **above the puck** (own-goal-side of it) while the
   puck is no higher than that band (with it at the points he keeps the band, below it), is the
   one-timer seam option, and is the designated first man back — the same
@@ -491,8 +492,10 @@ Each phase is shippable/testable on its own; 3v3 is untouched throughout.
   the net front; the attacking side plays blue-line points (`GameRules.FACEOFF_END_*`
   + `PlayerRules.faceoff_position`). The defending wingers' spots are
   `team_size`-gated so 3v3's shipped alignment is untouched.
-- **Globalize transition-exposure** (post-v1): apply the exposure term to 3v3 too, with
-  a 3v3 bot-feel re-verification pass. Deferred to protect shipping 3v3.
+- **Globalize transition-exposure** (post-v1): apply the exposure term to 3v3 too.
+  Tried and measured with the counter-rush played on
+  (`docs/bot-net-front-offense-plan.md` step 6): no xG gained in 3v3 and none
+  conceded less, so it stays 5v5-gated.
 - **Positional inference for humans** (post-v1 polish): infer a human's position from
   where they skate so bots reshape around it. Deferred — explicit lobby picks are
   simpler and robust for v1.
@@ -568,6 +571,8 @@ geometry). Full source URLs live with the research notes in the PR description.
   lost low outlet.
 
 ### O-zone structure (drives §2 OZONE + §4)
+A newer survey, including the NHL's move to a 2-3 shape, is in
+`docs/bot-net-front-offense-plan.md` → *How the O-zone is played*.
 - Even strength = **3 low / 2 high** (the umbrella/1-3-1 is a power-play shape).
 - Points staggered: strong-side D sinks toward the circle top on his wall (~6–8 m off
   the boards, above the dot lane); weak-side D holds the line shaded central.

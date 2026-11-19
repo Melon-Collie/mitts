@@ -232,6 +232,7 @@ var _prev_role_slot: int = AIRoleSlots.Slot.NONE
 var _prev_role_target: Vector3 = Vector3.INF
 var _prev_role_target_vel: Vector3 = Vector3.ZERO
 var _prev_role_target_age_s: float = 0.0
+var _prev_station_key: int = -1
 # The man this skater's role is covering, from the last role dispatch
 # (RoleDecision.locked_man_pid) — reset on slot change, and cleared on
 # leaving OFF_PUCK: a skater chasing or carrying
@@ -1037,6 +1038,7 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	_off_puck_stick_live = false
 	_off_puck_tie_live = false
 	_off_puck_yank_live = false
+	var tipping: bool = false
 
 	# Tag-up override: when ghosted or owing an NHL tag-up, bot must clear
 	# back across the blue line before doing anything else. Highest-priority
@@ -1067,10 +1069,11 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		# flight outside it cannot arrive faster than it crosses the ring, so the
 		# throttled cadence loses nothing there. The ready-armed bypass rides the
 		# same ring: arming is positional, and its consumers run at the ~30 Hz
-		# argmax anyway.
+		# argmax anyway. A teammate's release is loose from when it leaves his
+		# stick, the clock the tip read and the one-timer press both read it on.
 		var finisher_puck_near: bool = is_finisher_slot \
 				and snapshot.puck_state != null \
-				and snapshot.puck_state.carrier_peer_id == -1 \
+				and _released_to_us(snapshot) \
 				and snapshot.puck_state.position.distance_squared_to(self_pos) \
 						<= FINISHER_FLIGHT_NEAR_M * FINISHER_FLIGHT_NEAR_M
 		var must_recompute: bool = _cached_role_decision == null \
@@ -1107,6 +1110,7 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			# stretch the argmax cadence a second time.
 			_role_decision_cooldown -= _dispatch_armed_span_ticks
 			decision = _cached_role_decision
+		tipping = decision.tips_shot
 		# Smart-ping GO_THERE override: a live location order from a human
 		# teammate replaces the role's move target for its duration. The role
 		# keeps supplying aim / lift / one-timer readiness — only the skating
@@ -1130,12 +1134,10 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			# assumed (an uncommitted drive lands only the passive fraction).
 			input.hit_held = true
 		# FINISHER holds the deflect to tip an incoming shot; the loft level names
-		# the tip (Puck.apply_blade_deflect): LOW lifts a shot on the ice over the
-		# pad, FLAT knocks a raised one down.
+		# the tip (Puck.apply_blade_deflect).
 		input.stick_lift_held = decision.deflect
 		if decision.deflect:
-			input.elevation_level = ShotMechanics.ELEVATION_LOW if decision.deflect_up \
-					else ShotMechanics.ELEVATION_FLAT
+			input.elevation_level = decision.deflect_level
 		# Preserve one-timer readiness through pass flights: with no carrier,
 		# FINISHER can't score the feed and reports "not ready", though the stance
 		# hasn't moved — dropping the flag there would stop the trigger firing when
@@ -1206,6 +1208,10 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	# Transitions
 	if have_puck:
 		_set_state(State.CARRY)
+	elif tipping:
+		# A teammate's shot too fast to hold, set up to tip: neither received,
+		# one-timed nor chased.
+		pass
 	elif _is_one_timer_ready and not _one_timer_spent and _in_attacking_zone(self_pos) \
 			and (_one_timer.line_anchor(snapshot, self_pos, _attacking_goal_pos).is_finite()
 			or _puck_in_one_timer_zone(snapshot, self_pos)):
@@ -1226,6 +1232,15 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		# the latter gets us into the squared reception setup before the fast puck
 		# arrives, rather than reacting only once it's on top of us.
 		_set_state(State.CHASE_PUCK)
+
+
+# Whether the puck is loose: the delayed carrier read, except that a teammate's
+# release is read when it leaves his stick (AIRoleFinisher's tip read).
+func _released_to_us(snapshot: WorldSnapshot) -> bool:
+	var holder: int = snapshot.puck_state.carrier_peer_id
+	if holder != -1 and _team_id_by_peer.get(holder, -1) == _team_id:
+		holder = snapshot.real_puck_carrier_peer_id
+	return holder == -1
 
 
 # Holds where a teammate's release left from while the puck is loose off him and
@@ -1251,6 +1266,18 @@ func _track_feed(snapshot: WorldSnapshot) -> void:
 
 # Fills the reused RoleContext (_role_ctx — never a fresh allocation, this runs per
 # dispatch per bot) with the read-only inputs every role-behavior decide() needs.
+# A FINISHER or NET_FRONT whose role reads the shot coming at him as his tip.
+func _tips_incoming(snapshot: WorldSnapshot, self_pos: Vector3) -> bool:
+	var slot: int = _current_strategy.get_slot(_peer_id) if _current_strategy != null \
+			else AIRoleSlots.Slot.NONE
+	if slot != AIRoleSlots.Slot.FINISHER and slot != AIRoleSlots.Slot.NET_FRONT:
+		return false
+	if snapshot.puck_state == null or snapshot.puck_state.carrier_peer_id != -1:
+		return false
+	return AIRoleFinisher.tips_incoming(_build_role_context(snapshot, self_pos,
+			snapshot.skater_states.get(_peer_id)))
+
+
 func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		self_state: SkaterNetworkState) -> RoleContext:
 	var ctx := _role_ctx
@@ -1352,6 +1379,7 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 	# target (see RoleContext.prev_role_target).
 	ctx.prev_role_target = _prev_role_target + _prev_role_target_vel * _prev_role_target_age_s \
 			if slot == _prev_role_slot and _prev_role_target.is_finite() else Vector3.INF
+	ctx.prev_station_key = _prev_station_key if slot == _prev_role_slot else -1
 	# Pinch-read hysteresis incumbent, same reset-across-slot-change contract.
 	ctx.prev_held_forward_stand = _prev_held_forward_stand \
 			if slot == _prev_role_slot else false
@@ -1434,6 +1462,7 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 	_prev_role_target = decision.target_position
 	_prev_role_target_vel = decision.target_velocity
 	_prev_role_target_age_s = 0.0
+	_prev_station_key = decision.station_key
 	_prev_locked_man_pid = decision.locked_man_pid
 	_prev_held_forward_stand = decision.held_forward_stand
 	return decision
@@ -1470,6 +1499,12 @@ func _chase_reception_aim_target(snapshot: WorldSnapshot, self_pos: Vector3) -> 
 
 
 func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3, have_puck: bool) -> void:
+	# A teammate's shot he is set up to tip is his tip, not a chase: back to his
+	# role this tick, which holds the deflect (AIRoleFinisher.tips_incoming).
+	if _tips_incoming(snapshot, self_pos):
+		_set_state(State.OFF_PUCK)
+		_state_off_puck(input, snapshot, self_pos, have_puck)
+		return
 	# Shot-aware reception first: if a pass is incoming and a shot from the
 	# reception area is on, one-time it (Mode A → ONE_TIMER_PRESSED) or catch it
 	# in a net-ward posture (Mode B, input set in-place) instead of turning to
@@ -1505,6 +1540,16 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 			self_vel_3d = self_state2.velocity
 		var target: Vector3 = _lead_intercept(
 				self_pos, self_vel_3d, puck_pos, snapshot.puck_state.velocity)
+		# A shot on net is played off its rebound: he goes where it will sit, as
+		# the election raced him there (AILoosePuckChase.rebound_point).
+		var rebound: Vector3 = Vector3.INF
+		if snapshot.puck_state.carrier_peer_id == -1 \
+				and snapshot.skater_states.has(snapshot.loose_puck_released_by):
+			rebound = AILoosePuckChase.rebound_point(puck_pos, snapshot.puck_state.velocity,
+					snapshot.skater_states[snapshot.loose_puck_released_by].position,
+					AIFieldGrid.spot, AIFieldGrid.weight)
+		if rebound.is_finite():
+			target = rebound
 		# Angle an opponent carrier (Scripts/ai/CLAUDE.md → Chase doctrine). A
 		# teammate carrier never reaches here (the chase ends on possession), so a
 		# carrier is an opponent. Without the angling read the bot chases straight.
@@ -1524,7 +1569,7 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 		# the play. Overshoot along the approach line instead, so our momentum
 		# weights the contested squirt our way
 		# (PuckCollisionRules.contested_pickup_velocity) and carries us through.
-		var contested: bool = carrier_pid == -1 \
+		var contested: bool = carrier_pid == -1 and not rebound.is_finite() \
 				and puck_speed_xz <= LOOSE_PUCK_TRACK_SPEED_M_S \
 				and _opponent_within_of(snapshot, puck_pos, ENGAGEMENT_PROXIMITY_M)
 		if contested:
@@ -1536,7 +1581,7 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 				# rather than driving the body through the frame.
 				if AINetObstacle.carry_path_blocked_by_net(puck_pos, target):
 					target = puck_pos
-		elif carrier_pid == -1:
+		elif carrier_pid == -1 and not rebound.is_finite():
 			# BLADE-FIRST pickup route: steer the BODY one carry cradle SHORT of the
 			# intercept, so the puck meets the blade a cradle ahead on the skating
 			# line (and lands at the carry spot) rather than the chest overrunning
@@ -2846,7 +2891,9 @@ func apply_shot_block(input: InputState, snapshot: WorldSnapshot) -> void:
 func apply_press(input: InputState, snapshot: WorldSnapshot) -> bool:
 	return _press.apply(input, snapshot, _own_goal_dir,
 			_cached_role_decision.locked_man_pid if _cached_role_decision != null else -1,
-			_check_aggression, _protects_the_puck, _state == State.CARRY)
+			_check_aggression, _protects_the_puck, _state == State.CARRY,
+			_cached_role_decision.battle_spot if _cached_role_decision != null \
+					and _state == State.OFF_PUCK else Vector3.INF)
 
 
 # Holds the stick-check button for a lift or a tie the dispatch started, every

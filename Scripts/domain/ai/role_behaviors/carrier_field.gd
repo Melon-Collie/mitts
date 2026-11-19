@@ -26,11 +26,13 @@ const RECEIVER_DRIVE_MAX_M: float = AIPossessionValue.DRIVE_MAX_M
 const RECEIVER_DRIVE_MIN_NET_DIST_M: float = AIPossessionValue.DRIVE_MIN_NET_DIST_M
 
 # RECEIVE: how far inside the line a pass target must sit when the carrier is
-# in the OZ. The catch plays the puck up to a stick's reach around the body and
-# gives with it (~a stride), so routine reception slop on a line-hugging target
-# takes the puck out. Such feeds are hard reads for a human receiver too, so
-# they're excluded, not discounted.
-const OZ_RECEIVE_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 0.7
+# in the OZ: the blade that meets the puck there and the puck on it, so it is
+# caught on the zone side. Measured (tests/instruments/ai/test_line_reception.gd),
+# a still receiver's clean catch keeps the puck where the blade meets it and a
+# bobble comes back off the face into the zone, at any depth to half a metre;
+# only a feed that misses his stick runs out, and the pass already prices a miss.
+const OZ_RECEIVE_LINE_BUFFER_M: float = GameRules.DEFAULT_BLADE_LENGTH_M \
+		+ GameRules.PUCK_COLLISION_RADIUS
 # Haircut on the pass-OPTION value a carry candidate inherits (see
 # pass_option_from): the option is a coarse read — receiver valued at his
 # CURRENT spot, lane judged against CURRENT defenders — and it still has to
@@ -103,6 +105,12 @@ var _drive_buf: Array[Vector3] = []
 # (against our defenders), priced by fill().
 var _ours := AIPossessionValue.new()
 var _theirs := AIPossessionValue.new()
+# The keeper's sightline test a screen is read by, at the league's eye height.
+var screen_cfg := GoalieScreenRules.ScreenConfig.new()
+# Who can screen a shot the carrier releases now: their skaters where it meets
+# them (opponents_release) and ours, filled by fill().
+var screens_release: Array[Vector3] = []
+var _screen_bodies: Array[Vector3] = []
 
 
 func fill(ctx: RoleContext) -> void:
@@ -132,6 +140,8 @@ func fill(ctx: RoleContext) -> void:
 			our_defenders.append(s.position)
 			our_defender_caps.append(ctx.caps_by_peer.get(peer_id))
 			our_defender_vels.append(s.velocity)
+	screens_release.assign(opponents_release)
+	screens_release.append_array(our_defenders)
 	if ctx.team_size >= 5:
 		AIActionScoring.fill_counter_cover_etas(
 				ctx.defending_goal_pos, our_defenders, exposure_mate_etas)
@@ -147,6 +157,23 @@ func fill(ctx: RoleContext) -> void:
 			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
 	_ours.read_from_puck(ctx.self_pos.z)
 	_theirs.fill(ctx.defending_goal_pos, our_defenders, our_defender_vels, our_defender_caps)
+
+
+# What the bodies in front of their keeper at `keeper` add to a shot released
+# at `at` by hiding it (AIScreenField.best_uplift): `opps` (their skaters where
+# the shot meets them) and ours, the carrier aside and the shooter where he
+# stands now (`shooter_now`): a feed's receiver is among them, and is no screen
+# on his own shot.
+func _screen_at(ctx: RoleContext, at: Vector3, keeper: Vector3, opps: Array[Vector3],
+		shooter_now: Vector3 = Vector3.INF) -> float:
+	if not keeper.is_finite():
+		return 0.0
+	_screen_bodies.assign(opps)
+	for b: Vector3 in our_defenders:
+		if b != shooter_now:
+			_screen_bodies.append(b)
+	return AIScreenField.best_uplift(at, ctx.attacking_goal_pos, keeper, _screen_bodies,
+			screen_cfg)
 
 
 func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
@@ -427,7 +454,8 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
 			stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-			opponent_caps, -1.0, keeper_yaw, true, history) * shot_keep
+			opponent_caps, -1.0, keeper_yaw, AIActionScoring.FLAT_REBOUND_CREDIT, history,
+			_screen_at(ctx, pos, keeper_pos, opps)) * shot_keep
 	return _regime_value(ctx, pos, from_pos, shoot_s, arrive_s, arrive_vel)
 
 
@@ -436,14 +464,18 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 # it; otherwise he catches and charges. A goalie-motion-blind tier
 # (ctx.reads_goalie_motion) reads the keeper already set on the receiver. The
 # feed reaches him `arrive_s` from now, moving at `arrive_vel` (horizon_value).
+# `receiver_now` is where the receiver stands as it is priced.
 func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: float,
 		one_timer: bool, from_pos: Vector3, opps: Array[Vector3], arrive_s: float = 0.0,
-		arrive_vel: Vector3 = Vector3.ZERO) -> float:
+		arrive_vel: Vector3 = Vector3.ZERO, receiver_now: Vector3 = Vector3.INF) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, 0.0):
 		return horizon_value(pos, arrive_s, arrive_vel)
-	var shoot_s: float = AIActionScoring.with_rebound(AIShotValue.feed(passer, pos, pass_speed,
-			ctx.attacking_goal_pos, goalie_now(ctx), one_timer) if ctx.reads_goalie_motion
-			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos))
+	var fed: float = AIShotValue.feed(passer, pos, pass_speed,
+			ctx.attacking_goal_pos, goalie_now(ctx), one_timer) if ctx.reads_goalie_motion \
+			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos)
+	var screen: float = _screen_at(ctx, pos, goalie_now(ctx), opps, receiver_now)
+	var shoot_s: float = AIActionScoring.with_rebound(fed + (1.0 - fed) * screen,
+			AIActionScoring.FLAT_REBOUND_CREDIT)
 	if shoot_s > 0.0:
 		var aim: Vector3 = AIShotAim.compute_open_net_aim(pos, goalie_now(ctx),
 				ctx.attacking_goal_pos.z, GameRules.NET_HALF_WIDTH,

@@ -105,6 +105,10 @@ func test_hold_when_no_puck_state() -> void:
 
 # ─── TIP: fast ground shot ────────────────────────────────────────────────
 
+# A hard wrister down the line the tip fixtures share: 30.6 m/s, faster than a
+# man standing on it holds a catch (AIFeedReception.RECEIVE_HOLD_CEILING_M_S).
+const SHOT_VEL := Vector3(-6.0, 0.0, -30.0)
+
 # Where the tip the decision sets up sends the puck: the turn the body→blade
 # bearing asks of PuckCollisionRules.tip_turn — the puck's own physics — applied
 # to its line at the blade, carried to the goal line.
@@ -115,11 +119,24 @@ func _tipped_x_at_goal(d: RoleDecision, puck_vel: Vector3) -> float:
 	return d.aim_world_pos.x + out.x * (OPP_NET_Z - d.aim_world_pos.z) / out.y
 
 
-# The blade on the path at the tip point, the body a blade's ring back of it.
-func _assert_blade_on_the_path(d: RoleDecision, tip_x: float) -> void:
+# The blade on the path at the tip point, where the path comes nearest his blade
+# in his frame (`reached_out`: nearest his body, the stick out to it), the body a
+# blade's ring back of it.
+func _assert_blade_on_the_path(d: RoleDecision, ctx: RoleContext,
+		reached_out: bool = false) -> void:
 	assert_true(d.has_aim_override)
-	assert_almost_eq(d.aim_world_pos.x, tip_x, 0.05, "the blade waits on the path")
-	assert_almost_eq(d.aim_world_pos.z, -22.0, 0.001)
+	var puck: PuckNetworkState = ctx.snapshot.puck_state
+	var travel := Vector2(puck.velocity.x, puck.velocity.z).normalized()
+	var to_tip := Vector2(d.aim_world_pos.x - puck.position.x, d.aim_world_pos.z - puck.position.z)
+	assert_almost_eq(absf(travel.cross(to_tip)), 0.0, 0.01, "the blade waits on the path")
+	var rel := Vector2(puck.velocity.x - ctx.self_velocity.x, puck.velocity.z - ctx.self_velocity.z)
+	var t: float = to_tip.length() / Vector2(puck.velocity.x, puck.velocity.z).length()
+	var blade_out := Vector2(d.aim_world_pos.x - d.target_position.x,
+			d.aim_world_pos.z - d.target_position.z)
+	var blade_then := Vector2(ctx.self_pos.x + ctx.self_velocity.x * t,
+			ctx.self_pos.z + ctx.self_velocity.z * t) + (Vector2.ZERO if reached_out else blade_out)
+	assert_almost_eq(rel.normalized().dot(Vector2(d.aim_world_pos.x, d.aim_world_pos.z) - blade_then),
+			0.0, 0.05, "where it passes his blade nearest")
 	assert_almost_eq(Vector2(d.aim_world_pos.x - d.target_position.x,
 			d.aim_world_pos.z - d.target_position.z).length(),
 			AIRoleFinisher.TIP_BLADE_OUT_M, 0.001, "the body a ring back of it")
@@ -127,35 +144,53 @@ func _assert_blade_on_the_path(d: RoleDecision, tip_x: float) -> void:
 
 func test_tip_puts_the_blade_on_the_path_and_turns_it_at_the_middle() -> void:
 	# Fast ground shot on net from a teammate at (2.3, 0, -15). Finisher
-	# (peer 1) is at (-2, 0, -22) — back door. Puck vel (-3, 0, -15) —
-	# speed ≈ 15 m/s, heading toward our offensive goal at -Z, crossing its
-	# line at x ≈ 0. Path crosses our z (-22) at t ≈ 0.467 s,
-	# x ≈ 2.3 + (-3)(0.467) ≈ 0.9.
+	# (peer 1) is at (0.5, 0, -22), a stride off its line. The puck heads toward our
+	# offensive goal at -Z, crossing its line at x ≈ 0, and passing him nearest at
+	# about (0.9, -22.1).
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
-	var vel := Vector3(-3.0, 0.0, -15.0)
+	var vel := SHOT_VEL
 	var ctx: RoleContext = _make_ctx(
-			Vector3(-2.0, 0.0, -22.0),
+			Vector3(0.5, 0.0, -22.0),
 			teammate_pos, vel,
 			[
-				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, false),  # not elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	_assert_blade_on_the_path(d, 0.9)
+	_assert_blade_on_the_path(d, ctx)
+	assert_true(d.tips_shot, "left to the tip, not received")
 	assert_almost_eq(_tipped_x_at_goal(d, vel), 0.0, 0.02,
 			"the tip goes at the middle of the net")
+
+
+func test_a_shot_he_can_hold_is_received_not_tipped() -> void:
+	# The same line at half the pace: he can hold it, so he takes it as a
+	# reception and the tip stands down.
+	var teammate_pos := Vector3(2.3, 0.0, -15.0)
+	var ctx: RoleContext = _make_ctx(
+			Vector3(-2.0, 0.0, -22.0),
+			teammate_pos, SHOT_VEL * 0.5,
+			[
+				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(2, TEAM_ID, teammate_pos, false),
+			])
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_false(d.tips_shot)
+	assert_false(d.deflect)
 
 
 func test_a_wide_shot_a_tip_can_bring_back_is_tipped_in() -> void:
 	# The same line from 1.7 m further right crosses the goal line ~0.8 m
 	# outside the mouth: under a tip's turn from the blade, so it is tipped,
 	# and as far as a tip turns it lands inside the mouth.
-	var vel := Vector3(-3.0, 0.0, -15.0)
+	# He stands where his stick can be on it in time (from the back door's 4.6 m
+	# it is past before he could reach).
+	var vel := SHOT_VEL
 	var ctx: RoleContext = _make_ctx(
-			Vector3(-2.0, 0.0, -22.0),
+			Vector3(1.0, 0.0, -22.0),
 			Vector3(4.0, 0.0, -15.0), vel)
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	_assert_blade_on_the_path(d, 2.6)
+	_assert_blade_on_the_path(d, ctx)
 	assert_true(d.deflect)
 	assert_lt(absf(_tipped_x_at_goal(d, vel)), GameRules.NET_ENTRY_HALF_WIDTH,
 			"the tip puts it on net")
@@ -168,7 +203,7 @@ func test_a_shot_wider_than_a_tip_turns_is_not_tipped() -> void:
 	var anchor := Vector3(-2.0, 0.0, -22.0)
 	var ctx: RoleContext = _make_ctx(
 			anchor,
-			Vector3(8.0, 0.0, -15.0), Vector3(-1.0, 0.0, -15.0))
+			Vector3(8.0, 0.0, -15.0), Vector3(-2.0, 0.0, -30.0))
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
 	assert_false(d.has_aim_override, "no tip off a puck no tip brings back")
 	assert_false(d.deflect)
@@ -184,42 +219,43 @@ func test_an_elevated_shot_is_tipped_down() -> void:
 	# it down, off the plane the keeper read.
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
-			Vector3(-2.0, 0.0, -22.0),
-			teammate_pos, Vector3(-3.0, 0.0, -15.0),
+			Vector3(0.5, 0.0, -22.0),
+			teammate_pos, SHOT_VEL,
 			[
-				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, true),  # elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	_assert_blade_on_the_path(d, 0.9)
+	_assert_blade_on_the_path(d, ctx)
 	assert_true(d.deflect, "an incoming shot is tipped, not caught")
-	assert_false(d.deflect_up, "a raised shot is tipped down")
+	assert_eq(d.deflect_level, ShotMechanics.ELEVATION_FLAT, "a raised shot is tipped down")
 
 
-func test_a_ground_shot_is_tipped_up() -> void:
+func test_a_ground_shot_is_tipped_at_its_best_height() -> void:
 	# A fast GROUND shot is deflected too — the press keeps the blade on the
-	# ice for a puck met there — and tipped up.
+	# ice for a puck met there — at the height the tip field scores it most.
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
-			Vector3(-2.0, 0.0, -22.0),
-			teammate_pos, Vector3(-3.0, 0.0, -15.0),
+			Vector3(0.5, 0.0, -22.0),
+			teammate_pos, SHOT_VEL,
 			[
-				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, false),  # NOT elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
 	assert_true(d.deflect, "an incoming shot is tipped, not caught")
-	assert_true(d.deflect_up, "a shot on the ice is tipped up")
+	assert_eq(d.deflect_level, AITipField.best_level(teammate_pos, ctx.attacking_goal_pos,
+			d.aim_world_pos), "a shot on the ice is tipped at its measured best height")
 
 
 func test_the_deflect_waits_for_the_press_to_read_the_shot() -> void:
-	# The same ground shot from twice as far: it reaches our z-plane past the
-	# press's read horizon, so the finisher sets up the tip without the
-	# deflect yet — held from there, the press would read nothing.
-	var teammate_pos := Vector3(5.1, 0.0, -1.0)
+	# The same ground shot from 32 m: it reaches our z-plane past the press's
+	# read horizon, so the finisher sets up the tip without the deflect yet —
+	# held from there, the press would read nothing.
+	var teammate_pos := Vector3(7.3, 0.0, 10.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
-			teammate_pos, Vector3(-3.0, 0.0, -15.0),
+			teammate_pos, SHOT_VEL,
 			[
 				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, false),
@@ -425,8 +461,9 @@ func _dead_offices_target() -> Vector3:
 func test_finisher_stages_for_a_tip_when_offices_die_and_goalie_sits_deep() -> void:
 	# Every one-timer feed is dead, so the staging argmax stages for the tip of
 	# the point blast (tip_ev): where he stands is worth its tip, not its feed,
-	# and no less a tip than the TIP/SCREEN station on the carrier→net line at
-	# crease-edge depth. Which spot wins is the shot field's read.
+	# and, skated there, no less a tip than the TIP/SCREEN station on the
+	# carrier→net line at crease-edge depth. Which spot wins is the shot field's
+	# read.
 	var ctx: RoleContext = _dead_offices_ctx()
 	var target: Vector3 = AIRoleFinisher.decide(ctx).target_position
 	var goal: Vector3 = ctx.attacking_goal_pos
@@ -443,8 +480,11 @@ func test_finisher_stages_for_a_tip_when_offices_die_and_goalie_sits_deep() -> v
 	var feed: float = AIActionScoring.score_pass_value(TIP_CARRIER, target, goal, goalie, opps,
 			AIPuckLane.expected_pass_speed(TIP_CARRIER, target), ctx.scratch_opp_caps, true)
 	assert_gt(tip.call(target), feed, "staged for the tip, not a feed; got %s" % target)
-	assert_gte(tip.call(target), tip.call(station) - 1e-6,
-			"no worse a tip than the shot-line post; got %s" % target)
+	var skated := func(at: Vector3) -> float:
+		return tip.call(at) * AIActionScoring.delay_discount(AIArrival.time_to_arrive(
+				ctx.self_pos, at, ctx.self_velocity, ctx.self_max_speed))
+	assert_gte(skated.call(target), skated.call(station) - 1e-6,
+			"skated there, no worse a tip than the shot-line post; got %s" % target)
 
 
 func test_finisher_stays_off_a_covered_feed_lane() -> void:
@@ -521,30 +561,28 @@ func test_rush_stages_finisher_at_a_net_crash() -> void:
 	assert_lt(rush_pos.x, 0.0, "…and the rush crash stays weak-side too")
 
 
-func test_reactive_fires_on_loose_shots_and_defers_while_the_puck_reads_held() -> void:
-	# A held puck is never an incoming shot — a carrier skating it fast must
-	# not flip the FINISHER into tip mode, and the carrier-reaction debounce
-	# window right after a release (a live feed still nominally reads held)
-	# must run positioning too: the reactive not-ready decision used to tear
-	# down one-timer readiness on every feed. Reactive TIP fires the tick the
-	# fast on-net puck reads loose.
+func test_reactive_fires_when_a_teammates_shot_leaves_his_stick() -> void:
+	# A held puck is never an incoming shot: a carrier skating it fast must not
+	# flip the FINISHER into tip mode. Off his stick it is read at once, while
+	# the delayed carrier read still has him holding it, as the one-timer press
+	# reads a feed: a beat later, the press fires on the rip first.
 	var teammate_pos := Vector3(2.3, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
-			Vector3(-2.0, 0.0, -22.0),
-			teammate_pos, Vector3(-3.0, 0.0, -15.0),  # fast ground shot
+			Vector3(0.5, 0.0, -22.0),
+			teammate_pos, SHOT_VEL,
 			[
-				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0), false),
 				_make_skater(2, TEAM_ID, teammate_pos, false),
 			])
 	ctx.snapshot.puck_state.carrier_peer_id = 2
+	ctx.snapshot.real_puck_carrier_peer_id = 2
 	var held: RoleDecision = AIRoleFinisher.decide(ctx)
 	assert_false(held.has_aim_override,
 			"a held puck runs positioning, never tip mode")
-	ctx.snapshot.puck_state.carrier_peer_id = -1
-	var loose: RoleDecision = AIRoleFinisher.decide(ctx)
-	assert_true(loose.has_aim_override,
-			"reactive TIP fires once the fast on-net puck reads loose")
-	assert_true(loose.deflect)
+	ctx.snapshot.real_puck_carrier_peer_id = -1
+	var released: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_true(released.tips_shot and released.deflect,
+			"off his stick, the tip reads it while the delayed carrier still has him on it")
 
 
 func test_finisher_staging_snapshot() -> void:
@@ -561,3 +599,350 @@ func test_finisher_staging_snapshot() -> void:
 		snap.record("%s, target z" % key, target.z)
 	snap.record("weak-side stage x, strong side +X", _stage_x_for_strong_side(1.0))
 	snap.verify(self)
+
+
+# ─── CRASH: our shot on its way ──────────────────────────────────────────────
+
+class SlotStub extends TeamStrategyView:
+	var slots: Dictionary = {}
+
+	func get_slot(peer_id: int) -> int:
+		return slots.get(peer_id, AIRoleSlots.Slot.NONE)
+
+
+const SHOOTER := 2
+const POINT_SHOT_FROM := Vector3(-6.0, 0.0, -9.0)
+
+
+# Our point man (peer 2) has just let a shot go at their net; me (peer 1) on
+# `slot`, standing at `me`, behind the puck so no tip is on.
+func _crash_ctx(slot: int, me: Vector3 = Vector3(3.0, 0.0, -8.5),
+		puck_vel: Vector3 = Vector3.INF) -> RoleContext:
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var from: Vector3 = POINT_SHOT_FROM + Vector3(0.4, 0.0, -0.8)
+	var vel: Vector3 = (goal - from).normalized() * 25.0 if not puck_vel.is_finite() else puck_vel
+	var ctx: RoleContext = _make_ctx(me, from, vel,
+			[_make_skater(1, TEAM_ID, me), _make_skater(SHOOTER, TEAM_ID, POINT_SHOT_FROM)])
+	ctx.snapshot.loose_puck_released_by = SHOOTER
+	var slots := SlotStub.new()
+	slots.slots = {1: slot, SHOOTER: AIRoleSlots.Slot.POINT_WEAK}
+	ctx.team_brain = slots
+	return ctx
+
+
+func test_the_net_front_man_crashes_to_where_the_rebound_sits() -> void:
+	var ctx: RoleContext = _crash_ctx(AIRoleSlots.Slot.NET_FRONT)
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var want: Vector3 = AIReboundField.crash_point(
+			AIReboundField.spot_of(POINT_SHOT_FROM, goal), false, goal)
+	assert_true(want.is_finite(), "the point shot's spot has rebounds to play")
+	assert_lt(Vector2(d.target_position.x - want.x, d.target_position.z - want.z).length(), 1.0,
+			"to the measured contest point; got %s for %s" % [d.target_position, want])
+	assert_true(AIStationSearch.is_legal_position(d.target_position), "never in the crease")
+	assert_true(d.arrive_at_speed, "he gets there at speed")
+	assert_false(d.battle_spot.is_finite(), "his stick is for the puck now, not the man")
+
+
+func test_the_finisher_takes_the_late_rebound_in_the_slot() -> void:
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var d: RoleDecision = AIRoleFinisher.decide(_crash_ctx(AIRoleSlots.Slot.FINISHER))
+	var late: Vector3 = AIReboundField.crash_point(
+			AIReboundField.spot_of(POINT_SHOT_FROM, goal), true, goal)
+	assert_lt(Vector2(d.target_position.x - late.x, d.target_position.z - late.z).length(), 1.0,
+			"to the measured late point; got %s for %s" % [d.target_position, late])
+
+
+func test_no_crash_on_their_release_or_a_puck_going_away() -> void:
+	var ctx: RoleContext = _crash_ctx(AIRoleSlots.Slot.NET_FRONT)
+	ctx.team_id_by_peer[SHOOTER] = 1
+	assert_false(AIRoleFinisher.decide(ctx).arrive_at_speed, "their shot is not ours to crash")
+	var away: RoleContext = _crash_ctx(AIRoleSlots.Slot.NET_FRONT, Vector3(3.0, 0.0, -8.5),
+			Vector3(0.0, 0.0, 20.0))
+	assert_false(AIRoleFinisher.decide(away).arrive_at_speed, "a puck going up the ice is no shot")
+
+
+func test_a_tip_he_cannot_make_is_a_crash() -> void:
+	# Ahead of the puck but 9 m across from its line: the shot is past his line
+	# before he could be on it.
+	var d: RoleDecision = AIRoleFinisher.decide(
+			_crash_ctx(AIRoleSlots.Slot.NET_FRONT, Vector3(8.0, 0.0, -20.0)))
+	assert_false(d.has_aim_override, "no tip")
+	assert_true(d.arrive_at_speed, "the crash")
+
+
+
+# ─── NET FRONT: ice in front of one of our shots ─────────────────────────────
+
+const SLOT_TOP_MATE := Vector3(0.5, 0.0, OPP_NET_Z + 10.0)
+
+
+# Our carrier (peer 2) at `carrier`, me (peer 1) low on the weak side, their
+# three in the house; with `mate` our man at the slot's top (peer 3).
+func _screen_ctx(carrier: Vector3, mate: bool) -> RoleContext:
+	var g: float = OPP_NET_Z
+	var me := Vector3(-3.0, 0.0, g + 5.0)
+	var sk: Array = [
+		_make_skater(1, TEAM_ID, me),
+		_make_skater(2, TEAM_ID, carrier),
+		_make_skater(10, 1, Vector3(-2.3, 0.0, g + 1.5)),
+		_make_skater(11, 1, Vector3(-0.8, 0.0, g + 6.0)),
+		_make_skater(12, 1, Vector3(1.2, 0.0, g + 3.0)),
+	]
+	if mate:
+		sk.append(_make_skater(3, TEAM_ID, SLOT_TOP_MATE))
+	var ctx: RoleContext = _make_ctx(me, carrier, Vector3.ZERO, sk)
+	ctx.snapshot.puck_state.carrier_peer_id = 2
+	_add_opp_goalie(ctx, carrier)
+	return ctx
+
+
+func test_he_fights_for_ice_in_front_while_the_carrier_works_the_wall() -> void:
+	var d: RoleDecision = AIRoleFinisher.decide(
+			_screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 6.0), true))
+	assert_true(d.battle_spot.is_finite(), "the spot is published")
+	assert_eq(d.battle_spot, d.target_position, "it is the ice he holds")
+
+
+# net_front_value over the plays _screen_ctx's carrier and team make.
+func _front_at(ctx: RoleContext, carrier: Vector3, at: Vector3) -> float:
+	var goalie: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
+	var opps: Array[Vector3] = ctx.scratch_opp_positions
+	AIRoleReads.collect_opponents(ctx, opps, ctx.scratch_opp_states)
+	var mates: Array[Vector3] = ctx.scratch_teammates
+	AIRoleReads.collect_teammates_excluding_self(ctx, mates)
+	AIStationSearch.fill_shot_plays(ctx, carrier, goalie, opps, mates)
+	return AIStationSearch.net_front_value(ctx, at)
+
+
+func test_a_man_at_the_slot_top_makes_his_line_worth_holding() -> void:
+	# The carrier low on the wall has no shot a screen helps; our man at the
+	# slot's top has a one-timer off the feed, which a body on his line hides.
+	var carrier := Vector3(8.0, 0.0, OPP_NET_Z + 6.0)
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var along: float = AIScreenField.best_station_along(SLOT_TOP_MATE, goal)
+	var on_line: Vector3 = goal + (SLOT_TOP_MATE - goal).normalized() * along
+	var with_him: float = _front_at(_screen_ctx(carrier, true), carrier, on_line)
+	var without: float = _front_at(_screen_ctx(carrier, false), carrier, on_line)
+	assert_gt(with_him, without, "his shot is the one a body there screens")
+
+
+func test_ice_far_from_the_net_adds_nothing_in_front() -> void:
+	var ctx: RoleContext = _screen_ctx(Vector3(0.0, 0.0, OPP_NET_Z + 11.0), false)
+	var goalie: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
+	var opps: Array[Vector3] = ctx.scratch_opp_positions
+	AIRoleReads.collect_opponents(ctx, opps, ctx.scratch_opp_states)
+	var mates: Array[Vector3] = ctx.scratch_teammates
+	AIRoleReads.collect_teammates_excluding_self(ctx, mates)
+	AIStationSearch.fill_shot_plays(ctx, Vector3(0.0, 0.0, OPP_NET_Z + 11.0), goalie, opps, mates)
+	assert_eq(AIStationSearch.net_front_value(ctx, Vector3(-9.0, 0.0, OPP_NET_Z + 18.0)), 0.0)
+	assert_gt(AIStationSearch.net_front_value(ctx, Vector3(0.0, 0.0, OPP_NET_Z + 2.5)), 0.0,
+			"the crease top screens him and plays his rebound")
+
+
+func test_a_point_shot_gets_its_rebound_station_and_no_screen() -> void:
+	# The field measured a screen worth nothing from its last row out, so a
+	# shot from past it sends nobody onto its line; its rebound is still played
+	# where it comes out.
+	var from := Vector3(-8.0, 0.0, OPP_NET_Z + 22.0)
+	var ctx: RoleContext = _screen_ctx(from, false)
+	var goalie: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
+	var opps: Array[Vector3] = ctx.scratch_opp_positions
+	AIRoleReads.collect_opponents(ctx, opps, ctx.scratch_opp_states)
+	var none: Array[Vector3] = []
+	AIStationSearch.fill_shot_plays(ctx, from, goalie, opps, none)
+	var stations: Array[Vector3] = []
+	AIStationSearch.append_net_front_stations(ctx, stations)
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var crash: Vector3 = AIReboundField.crash_point_at(
+			AIPuckLane.release_point_toward(from, goal), false, goal)
+	assert_eq(stations, [crash] as Array[Vector3])
+
+
+func test_the_net_front_man_holds_the_front_not_a_feed() -> void:
+	# The 5v5 net-front man prices his station by what he adds in front of the
+	# net, never by a feed to him: where he goes screens or plays a rebound, and
+	# it is the spot he fights for.
+	var ctx: RoleContext = _screen_ctx(Vector3(8.0, 0.0, OPP_NET_Z + 6.0), true)
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	ctx.team_brain = slots
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_gt(AIStationSearch.net_front_value(ctx, d.target_position), 0.0,
+			"his ice is worth something in front; got %s" % d.target_position)
+	assert_eq(d.battle_spot, d.target_position, "and it is the spot he fights for")
+
+
+func test_the_net_front_man_holds_his_station_where_the_play_takes_it() -> void:
+	# He holds a station in front of the carrier's shot from the slot's top;
+	# the carrier skates across, and the station with him. The next read holds
+	# that station where it now is, not the place it stood.
+	var ctx: RoleContext = _screen_ctx(Vector3(-1.0, 0.0, OPP_NET_Z + 11.0), false)
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	ctx.team_brain = slots
+	var first: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_ne(first.station_key, -1, "he holds a station in front; got %s" % first.target_position)
+	var moved: RoleContext = _screen_ctx(Vector3(0.5, 0.0, OPP_NET_Z + 11.0), false)
+	moved.team_brain = slots
+	moved.prev_role_target = first.target_position
+	moved.prev_station_key = first.station_key
+	var next: RoleDecision = AIRoleFinisher.decide(moved)
+	assert_eq(next.station_key, first.station_key, "the same station")
+	assert_ne(next.target_position, first.target_position, "where the play has taken it")
+
+
+func test_the_net_front_man_reads_the_puck_not_a_teammates_shot() -> void:
+	# A teammate at the slot's top with an open lane adds no station of his own
+	# to the net-front man's read: he stands on the carrier's shot line.
+	var carrier := Vector3(8.0, 0.0, OPP_NET_Z + 6.0)
+	var ctx: RoleContext = _screen_ctx(carrier, true)
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	ctx.team_brain = slots
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_eq(d.station_key, AIStationSearch.station_key(2, AIStationSearch.ON_SHOT_LINE))
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var line: Vector3 = (AIPuckLane.release_point_toward(carrier, goal) - goal).normalized()
+	var off: Vector3 = d.target_position - goal
+	assert_almost_eq(off.x * line.z - off.z * line.x, 0.0, 0.01,
+			"on the carrier's line; got %s" % d.target_position)
+
+
+func test_a_high_slot_shot_puts_the_screens_depth_beside_the_crease_top() -> void:
+	# The carrier at the slot's top, square to the net: the screen field
+	# measured a body further out on his line screening more than one at the
+	# crease, so the net-front man weighs both, on the line, and stands where
+	# what he adds in front is worth more.
+	var carrier := Vector3(0.0, 0.0, OPP_NET_Z + 11.0)
+	var ctx: RoleContext = _screen_ctx(carrier, false)
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	ctx.team_brain = slots
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var release: Vector3 = AIPuckLane.release_point_toward(carrier, goal)
+	var depth: float = AIScreenField.best_station_along(release, goal)
+	assert_gt(depth, AIRoleFinisher.TIP_STATION_DIST_M + AIRoleFinisher.SCREEN_STEP_OUT_MIN_M,
+			"the screen's best depth is out from the crease top")
+	var line: Vector3 = (release - goal).normalized()
+	var crease: Vector3 = goal + line * AIRoleFinisher.TIP_STATION_DIST_M
+	var screen: Vector3 = goal + line * depth
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	var screen_key: int = AIStationSearch.station_key(2, AIStationSearch.ON_SCREEN_LINE)
+	var line_key: int = AIStationSearch.station_key(2, AIStationSearch.ON_SHOT_LINE)
+	gut.p("crease %.3f screen %.3f, took %s" % [_front_at(ctx, carrier, crease),
+			_front_at(ctx, carrier, screen), d.target_position])
+	if d.station_key == screen_key:
+		assert_almost_eq(d.target_position.distance_to(screen), 0.0, 0.01)
+	else:
+		assert_eq(d.station_key, line_key)
+		assert_almost_eq(d.target_position.distance_to(crease), 0.0, 0.01)
+
+
+func test_the_net_front_spot_slides_with_the_puck() -> void:
+	# The carrier at the slot's top skates half a metre across: the net-front
+	# man's spot moves with his line, a fraction of that, never a jump.
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	var ctx: RoleContext = _screen_ctx(Vector3(-1.0, 0.0, OPP_NET_Z + 11.0), false)
+	ctx.team_brain = slots
+	var first: RoleDecision = AIRoleFinisher.decide(ctx)
+	var moved: RoleContext = _screen_ctx(Vector3(-0.5, 0.0, OPP_NET_Z + 11.0), false)
+	moved.team_brain = slots
+	moved.prev_role_target = first.target_position
+	moved.prev_station_key = first.station_key
+	var next: RoleDecision = AIRoleFinisher.decide(moved)
+	assert_eq(next.station_key, first.station_key, "the same station")
+	assert_lt(next.target_position.distance_to(first.target_position), 0.5,
+			"slid with the line; got %s then %s" % [first.target_position, next.target_position])
+
+
+func test_the_tip_holds_through_the_contact() -> void:
+	# The puck a hair past his z-plane, inside his blade's catch radius: he is
+	# still tipping it. A metre past, it has gone by.
+	var vel := SHOT_VEL
+	var self_pos := Vector3(0.5, 0.0, -22.0)
+	var at_contact := Vector3(0.9 + vel.x * 0.006, 0.0, -22.0 + vel.z * 0.006)
+	var d: RoleDecision = AIRoleFinisher.decide(_make_ctx(self_pos, at_contact, vel))
+	assert_true(d.tips_shot and d.deflect, "on the contact, still the deflect")
+	var gone := Vector3(0.9 + vel.x * 0.04, 0.0, -22.0 + vel.z * 0.04)
+	assert_false(AIRoleFinisher.decide(_make_ctx(self_pos, gone, vel)).tips_shot,
+			"a metre past, no tip")
+
+
+func test_the_net_front_man_waits_on_no_one_timer() -> void:
+	# At his station he holds the front for the carrier's shot, never a feed: a
+	# teammate's release on his line is his tip, not his one-timer.
+	var slots := SlotStub.new()
+	slots.slots = {1: AIRoleSlots.Slot.NET_FRONT}
+	var carrier := Vector3(-1.0, 0.0, OPP_NET_Z + 11.0)
+	var ctx: RoleContext = _screen_ctx(carrier, false)
+	ctx.team_brain = slots
+	var first: RoleDecision = AIRoleFinisher.decide(ctx)
+	var there: RoleContext = _screen_ctx(carrier, false)
+	there.team_brain = slots
+	there.self_pos = first.target_position
+	there.snapshot.skater_states[1].position = first.target_position
+	var d: RoleDecision = AIRoleFinisher.decide(there)
+	assert_almost_eq(d.target_position.distance_to(there.self_pos), 0.0, 0.5, "at his station")
+	assert_false(d.is_one_timer_ready, "the net-front man is never one-timer ready")
+
+
+func test_a_man_skating_with_the_shot_tips_it_where_it_catches_him() -> void:
+	# Skating net-ward down the shot's line at 6 m/s, two strides past where the
+	# puck would cross his z now by the time it got there: it catches him further
+	# on, inside his reach. A rip hard enough that, skating with it, he still
+	# cannot hold it.
+	var teammate_pos := Vector3(2.3, 0.0, -12.0)
+	var self_pos := Vector3(0.5, 0.0, -22.0)
+	var rip: Vector3 = SHOT_VEL * 1.2
+	var ctx: RoleContext = _make_ctx(self_pos, teammate_pos, rip,
+			[_make_skater(1, TEAM_ID, self_pos), _make_skater(2, TEAM_ID, teammate_pos)])
+	ctx.self_velocity = Vector3(0.0, 0.0, -6.0)
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_true(d.tips_shot, "the rip catches him as he skates")
+	_assert_blade_on_the_path(d, ctx)
+	var standing: RoleContext = _make_ctx(self_pos, teammate_pos, rip,
+			[_make_skater(1, TEAM_ID, self_pos), _make_skater(2, TEAM_ID, teammate_pos)])
+	assert_lt(d.aim_world_pos.z, AIRoleFinisher.decide(standing).aim_world_pos.z - 1.0,
+			"further down the shot than standing, where his skating takes him")
+
+
+func test_a_rip_across_the_slot_is_tipped_where_it_passes_him() -> void:
+	# From low on the wall across the crease at the middle of the net: it crosses
+	# his z-plane 3.6 m to his side, but passes 1.5 m from him, inside his stick,
+	# too soon to set: he reaches out to it.
+	var teammate_pos := Vector3(9.0, 0.0, -23.0)
+	var self_pos := Vector3(4.73, 0.0, -23.3)
+	var rip := Vector3(-29.1, 0.0, -13.35)
+	var ctx: RoleContext = _make_ctx(self_pos, teammate_pos, rip,
+			[_make_skater(1, TEAM_ID, self_pos), _make_skater(2, TEAM_ID, teammate_pos)])
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_true(d.tips_shot, "his stick is on its path")
+	_assert_blade_on_the_path(d, ctx, true)
+
+
+func test_on_his_tip_spot_he_reads_the_same_tip() -> void:
+	# Skated to the body spot the tip asks for, the tip it asks for is the same:
+	# the target holds still under him rather than running down the shot.
+	var teammate_pos := Vector3(9.0, 0.0, -23.0)
+	var rip := Vector3(-29.1, 0.0, -13.35)
+	var start := Vector3(4.73, 0.0, -23.3)
+	var d: RoleDecision = AIRoleFinisher.decide(_make_ctx(start, teammate_pos, rip,
+			[_make_skater(1, TEAM_ID, start), _make_skater(2, TEAM_ID, teammate_pos)]))
+	var there: Vector3 = d.target_position
+	var again: RoleDecision = AIRoleFinisher.decide(_make_ctx(there, teammate_pos, rip,
+			[_make_skater(1, TEAM_ID, there), _make_skater(2, TEAM_ID, teammate_pos)]))
+	assert_true(again.tips_shot)
+	assert_lt(again.target_position.distance_to(there), 0.05, "the spot holds")
+	assert_lt(again.aim_world_pos.distance_to(d.aim_world_pos), 0.05, "and the tip")
+
+
+func test_a_shot_he_is_set_up_to_tip_is_what_a_chase_gives_way_to() -> void:
+	var teammate_pos := Vector3(2.3, 0.0, -15.0)
+	var fast: RoleContext = _make_ctx(Vector3(0.5, 0.0, -22.0), teammate_pos, SHOT_VEL,
+			[_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0)), _make_skater(2, TEAM_ID, teammate_pos)])
+	assert_true(AIRoleFinisher.tips_incoming(fast), "the rip he can tip")
+	var soft: RoleContext = _make_ctx(Vector3(0.5, 0.0, -22.0), teammate_pos, SHOT_VEL * 0.5,
+			[_make_skater(1, TEAM_ID, Vector3(0.5, 0.0, -22.0)), _make_skater(2, TEAM_ID, teammate_pos)])
+	assert_false(AIRoleFinisher.tips_incoming(soft), "a shot he can hold is his to receive")

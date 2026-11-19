@@ -200,6 +200,10 @@ var _ai_snapshot := WorldSnapshot.new()
 var _teammate_ids_pool: Dictionary = {}   # team_id -> Array[int]
 var _human_ids_scratch: Array = []
 var _camped_ids_scratch: Array = []
+# The main thread's own corners for the rebound field's read of a shot on net
+# (AILoosePuckChase.rebound_point); AIFieldGrid's are the AI worker's.
+var _rebound_spots := PackedInt32Array([0, 0, 0, 0])
+var _rebound_weights := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 var _input_blocked: bool = false
 var _puck_oob_timer: float = 0.0
 var _puck_net_stuck_timer: float = 0.0
@@ -554,6 +558,7 @@ func _ready() -> void:
 	NativeShotOddsFactory.install()
 	NativeCarrySpaceFactory.install()
 	AIShotOdds.prepare()
+	AIReboundField.prepare()
 	# Make Manrope the engine-wide fallback font so every Control that
 	# doesn't set its own font picks it up automatically — saves us from
 	# touching every popup, dialog, and HUD label by hand. Explicit font
@@ -3622,6 +3627,11 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 	# elects a fresh chaser immediately.
 	var puck_playable: bool = not (puck != null and puck.pickup_locked \
 			and puck.get_carrier() == null)
+	var rebound_at: Vector3 = Vector3.INF
+	if snap.skater_states.has(snap.loose_puck_released_by):
+		rebound_at = AILoosePuckChase.rebound_point(puck_pos, puck_vel,
+				snap.skater_states[snap.loose_puck_released_by].position, _rebound_spots,
+				_rebound_weights)
 	for team_id: int in snap.teammate_ids_by_team:
 		var ids: Array = snap.teammate_ids_by_team[team_id]
 		# Election-side eligibility (see AILoosePuckChase.elect): humans
@@ -3652,7 +3662,7 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 		var best_pid: int = AILoosePuckChase.elect(
 				snap.skater_states, ids, puck_pos, puck_vel,
 				_prev_chase_by_team.get(team_id, -1), _registry.caps_by_peer,
-				puck_playable, human_ids, camped_ids)
+				puck_playable, human_ids, camped_ids, rebound_at)
 		# Smart-ping GET_PUCK: a live retrieval order replaces the natural
 		# election for its duration — the ordered bot chases (the state
 		# machine's decline gates are bypassed for it too) and nobody else

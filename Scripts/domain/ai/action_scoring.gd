@@ -104,13 +104,25 @@ static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 # The finisher's reactive TIP mode steps onto the shot path holding the
 # deliberate deflect, so the puck redirects off his blade at near-full pace
 # whatever its pace (PuckCollisionRules.deflect_velocity), and the outcome is a
-# NEW release from the tip point. Three independent events compose:
-#   P(rip reaches the tipper)   — lane_clear over release→tip vs the DEFENDERS
-# × P(blade contacts the puck)  — the same reach/reaction race a lane defender
-#                                 runs (_lane_block_at)
-# × the redirect (AIShotValue.deflection): a one-timer off the rip whose line
-#                                 is not picked, the keeper as he reads now.
-# The redirect is read off one-timer feed cells, which no staged tip backs (#736).
+# NEW release from the tip point. Four independent events compose:
+#   P(the rip gets away)        — the shooter's release contest
+#                                 (AIPuckLane.release_contest_clean), as his
+#                                 direct shot pays it
+# × P(rip reaches the tipper)   — the lane release→tip read as the carrier reads
+#                                 a pass's (lane_clear accurate: each defender on
+#                                 his arrival clock from his momentum, his stick
+#                                 where he holds it, every one beaten in turn),
+#                                 since the rip is a pass to the tipper's stick
+# × his blade on the puck       — at the point he tips it (AITipPoint, the solve
+#                                 AIRoleFinisher's tip plays), his blade on it
+#                                 before the puck (AIArrival.reach_eta), and, held
+#                                 where `tip_blade` is, his hands can swing it
+#                                 onto the rip's path once he reads the release
+#                                 before the puck gets there; 1 or 0
+# × the redirect: the tip field's odds at the tip point, tipped at the height
+#                                 that scores most (AITipField.best_odds), or
+#                                 the empty net's with the keeper out of his
+#                                 home range (AIShotValue.deflection).
 
 # The pace from which the finisher reads a loose puck heading at the net as a
 # shot and goes to tip it (AIRoleFinisher.INCOMING_SHOT_SPEED_M_S): a rip below
@@ -129,7 +141,11 @@ static func tip_ev(
 		opponents: Array[Vector3],
 		shot_speed_m_s: float,
 		opponent_caps: Array = [],
-		tip_caps: AISkaterCaps = null) -> float:
+		tip_caps: AISkaterCaps = null,
+		tip_vel: Vector3 = Vector3.ZERO,
+		opponent_vels: Array[Vector3] = [],
+		opponent_blades: Array[Vector3] = [],
+		tip_blade: Vector3 = Vector3.INF) -> float:
 	if shot_speed_m_s < TIP_MIN_SPEED_M_S:
 		return 0.0
 	# Shot line: release → net centre (the reactive tip steps ONTO this line,
@@ -141,53 +157,82 @@ static func tip_ev(
 		return 0.0
 	var hx: float = dx / line_len
 	var hz: float = dz / line_len
-	# Tip point: where the tipper's blade meets the puck on the line. Must
-	# be a real mid-flight contact: past the shooter's own handle, short of
-	# the goal mouth.
-	var relx: float = tip_man.x - release.x
-	var relz: float = tip_man.z - release.z
-	var along: float = relx * hx + relz * hz
+	# Tip point: where he will tip it (AITipPoint, the solve his reactive tip
+	# plays), which holds it to a rip too fast to hold, his stick on it in time.
+	# Past the shooter's own handle, short of the goal mouth.
+	var speed: float = maxf(shot_speed_m_s, 1.0)
+	var vmax: float = AIArrival.SKATER_REF_SPEED_M_S
+	var accel: float = AIArrival.SHED_ACCEL_DEFAULT_M_S2
+	var reach: float = AIBotMechanics.BLADE_REACH_M
+	if tip_caps != null:
+		reach = tip_caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M
+		vmax = tip_caps.max_speed
+		accel = tip_caps.max_accel
+	var rip := Vector3(hx * speed, 0.0, hz * speed)
+	var t_meet: float = AITipPoint.meet_time(release, rip, tip_man, tip_vel, vmax, accel, reach,
+			attacking_goal.z)
+	if is_nan(t_meet):
+		return 0.0
+	var along: float = speed * maxf(t_meet, 0.0)
 	if along <= TIP_MIN_ALONG_M or along >= line_len - 0.3:
 		return 0.0
 	var tip_pt := Vector3(release.x + hx * along, 0.0, release.z + hz * along)
-	# P(blade contacts): the tipper's real stick reach + lateral close.
-	var stick: float = AIPuckLane.LANE_DEFENDER_REACH_M
-	var close: float = AIPuckLane.LANE_DEFENDER_CLOSE_SPEED_M_S
-	if tip_caps != null:
-		stick = tip_caps.stick_reach
-		close = AIPuckLane.LANE_LATERAL_FRACTION * tip_caps.max_speed
-	var speed: float = maxf(shot_speed_m_s, 1.0)
-	var p_contact: float = AIPuckLane.lane_block_at(
-			release.x, release.z, hx * speed, hz * speed, along / speed,
-			tip_man.x, tip_man.z, 0.0, 0.0, stick, close)
-	if p_contact <= 0.0:
+	if tip_blade.is_finite() and _blade_late_to_path(release, hx, hz, speed, tip_blade,
+			tip_caps.blade_speed if tip_caps != null else AISkaterCaps.LEAGUE_BLADE_SPEED_M_S):
 		return 0.0
-	# P(rip reaches him): the defenders' lane over the release→tip segment.
-	var lane: float = AIPuckLane.lane_clear(release, tip_pt, opponents, speed, EMPTY_VEC3, opponent_caps)
+	# Read to his blade's catch: a stick of theirs on the line before the puck
+	# reaches his blade takes it, whoever is covering him.
+	var lane: float = AIPuckLane.release_contest_clean(release, opponents, opponent_caps) \
+			* AIPuckLane.lane_clear(release, tip_pt, opponents, speed, opponent_vels,
+					opponent_caps, true, opponent_blades, AIPuckLane.LANE_BLADE_CATCH_M)
 	if lane <= 0.0:
 		return 0.0
-	# The redirect: a new release at the tip point holding the incoming pace (a
-	# tip keeps the along-face glance), its line not picked.
-	var redirect: float = AIShotValue.deflection(release, tip_pt, speed, attacking_goal,
-			goalie_pos)
+	var redirect: float = AITipField.best_odds(release, attacking_goal, tip_pt) \
+			if _keeper_home(goalie_pos, attacking_goal) \
+			else AIShotValue.deflection(release, tip_pt, speed, attacking_goal, goalie_pos)
 	if redirect <= 0.0:
 		return 0.0
-	return p_contact * lane * redirect * _shot_defender_terms(tip_pt, attacking_goal,
+	return lane * redirect * _shot_defender_terms(tip_pt, attacking_goal,
 			goalie_pos if goalie_pos.is_finite() else attacking_goal, opponents, speed,
 			opponent_caps)
 
 
+# Whether a blade held at `blade` cannot be on a rip's path (from `release`
+# along (hx, hz) at `speed`) before the puck passes it: his read of the release
+# (AIPuckLane.LANE_REACTION_DELAY_S), then the swing onto the path at his hands'
+# pace, to within the blade's catch (AIPuckLane.LANE_BLADE_CATCH_M) of where the
+# path passes the blade.
+static func _blade_late_to_path(release: Vector3, hx: float, hz: float, speed: float,
+		blade: Vector3, blade_speed: float) -> bool:
+	var bx: float = blade.x - release.x
+	var bz: float = blade.z - release.z
+	var swing: float = maxf(absf(bx * hz - bz * hx) - AIPuckLane.LANE_BLADE_CATCH_M, 0.0)
+	return AIPuckLane.LANE_REACTION_DELAY_S + swing / maxf(blade_speed, 0.001) \
+			> (bx * hx + bz * hz) / speed
+
+
+# An unknown keeper reads as home, as AIShotValue reads him.
+static func _keeper_home(goalie_pos: Vector3, attacking_goal: Vector3) -> bool:
+	return not goalie_pos.is_finite() or Vector2(goalie_pos.x - attacking_goal.x,
+			goalie_pos.z - attacking_goal.z).length() <= AIGoalieModel.GOALIE_HOME_M
+
+
 # ── The rebound ──────────────────────────────────────────────────────────────
-# A shot that reaches the net and is saved or missed still leaves a puck in their
-# zone, and our side gets this share of those back, credited at the zone's floor
-# rather than as a second shot (docs/possession-floor-plan.md §2.3). A feel
-# tunable until it is measured.
-const REBOUND_RECOVER_SHARE: float = 0.3
+# The rebound credit the carrier prices a shot with until the bots play the
+# rebound the way the measured one is won: a share of the puck back, at the
+# zone's floor. AIReboundValue measures the real second chance (the rebound
+# field), and the follow-up that collects it is
+# docs/bot-net-front-offense-plan.md step 3b/3c: priced before it is played, it
+# had the carrier shoot for rebounds nobody collected.
+const FLAT_REBOUND_CREDIT: float = 0.3 * AIPossessionFloor.FLOOR_THEIR_GOAL_LINE
 
 
-# A shot reaching the net with first-contact odds `p`, worth its rebound too.
-static func with_rebound(p: float) -> float:
-	return p + (1.0 - p) * REBOUND_RECOVER_SHARE * AIPossessionFloor.FLOOR_THEIR_GOAL_LINE
+# A shot reaching the net with first-contact odds `p`, worth too the second
+# chance its save leaves: `credit`, the odds of scoring off the rebound once it
+# is saved (AIReboundValue.credit, which races it), read by the caller, which
+# knows who is there.
+static func with_rebound(p: float, credit: float) -> float:
+	return p + (1.0 - p) * credit
 
 
 # ── The shot, priced on the field ────────────────────────────────────────────
@@ -199,10 +244,13 @@ static func with_rebound(p: float) -> float:
 # AIShotOdds.Stance, facing `keeper_yaw` (AIShotValue.now); `keeper_pos` INF
 # means square and set on the release (AIShotValue.set_keeper).
 # `precomputed_quality` (>= 0) hands in the shot_quality a caller already has
-# for these arguments. `rebound`: the odds of reaching the net carry their
-# rebound (with_rebound) — the carrier's compete, weighing the shot against
-# keeping the puck. `history`: the play the shooter saw (AIShotOdds.History),
-# for a keeper read where he stands.
+# for these arguments. `rebound_credit` (>= 0): the odds of reaching the net
+# carry the rebound's second chance (with_rebound) — the carrier's compete,
+# weighing the shot against keeping the puck; negative, first contact only.
+# `history`: the play the shooter saw (AIShotOdds.History), for a keeper read
+# where he stands. `screen`: the share of the keeper's saves a body hiding the
+# release turns into goals (AIScreenField.best_uplift), laid on the odds before
+# the rebound.
 static func score_shoot_value(
 		shooter: Vector3,
 		attacking_goal: Vector3,
@@ -214,8 +262,9 @@ static func score_shoot_value(
 		opponent_caps: Array = [],
 		precomputed_quality: float = -1.0,
 		keeper_yaw: float = NAN,
-		rebound: bool = false,
-		history: int = AIShotOdds.History.ANY) -> float:
+		rebound_credit: float = -1.0,
+		history: int = AIShotOdds.History.ANY,
+		screen: float = 0.0) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
 	var quality: float = precomputed_quality
@@ -231,8 +280,10 @@ static func score_shoot_value(
 		keeper = AIGoalieModel.goalie_squared_pos(
 				attacking_goal - Vector3(0.0, 0.0, signf(attacking_goal.z)
 						* AIGoalieModel.GOALIE_RESTING_DEPTH_M), attacking_goal, shooter)
-	if rebound:
-		quality = with_rebound(maxf(quality, 0.0))
+	if screen > 0.0:
+		quality = maxf(quality, 0.0) + (1.0 - maxf(quality, 0.0)) * screen
+	if rebound_credit >= 0.0:
+		quality = with_rebound(maxf(quality, 0.0), rebound_credit)
 	if quality <= 0.0:
 		return 0.0
 	return quality * _shot_defender_terms(shooter, attacking_goal, keeper, opponents,
@@ -592,7 +643,7 @@ static func counter_rush_cost_at(
 			threat = score_shoot_value(
 					counter_point, our_net, our_goalie_pos, _scratch_counter_cover, 0.0,
 					AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [],
-					-1.0, NAN, false, AIShotOdds.History.CARRIED)
+					-1.0, NAN, -1.0, AIShotOdds.History.CARRIED)
 		if cover_count < threat_by_cover.size():
 			threat_by_cover[cover_count] = threat
 	return loss_prob * threat * delay_discount(t_counter)

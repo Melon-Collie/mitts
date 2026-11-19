@@ -18,7 +18,8 @@ extends RefCounted
 #     and knockdown, settle, top hand, loft and intents.
 #   - The body: SkaterMovementRules at the physics tick, the controller's facing step
 #     (turn wind-up, board shield, a wrister's freeze, the slapper stance), a
-#     wound-up body only gliding, skater contacts (SkaterCollisionRules), hits
+#     wound-up body only gliding, skater contacts (SkaterCollisionRules), the
+#     press (PressRules, test_duel_press_mirrors.gd), hits
 #     staggering and knocking down by the balance model, the boards and nets
 #     holding bodies.
 #   - The arm (duel_rig.gd): the upper body's twist and reach lean, the blade
@@ -26,7 +27,8 @@ extends RefCounted
 #     backhand stop, and the rest reach without purpose, chased at the hands'
 #     speed and acceleration.
 #   - The puck: pickups, catches, settles, bobbles (with their hop), deflections
-#     off a blade too fast to hold, contested pickups, pokes (with the pinch
+#     off a blade too fast to hold, a blade held to deflect tipping what it
+#     meets (test_duel_tip_mirrors.gd), contested pickups, pokes (with the pinch
 #     hop), stick lifts, ties, hit strips, every cooldown; releases through
 #     ShotMechanics on the controller's configs, a lofted one flying over the
 #     sticks, each with its follow-through; puckless one-timers swung through
@@ -35,9 +37,10 @@ extends RefCounted
 # What is APPROXIMATED (keep scenario assertions coarse because of these):
 #   - The arm leaves out the skating lean and the trunk's fold, and the boards
 #     do not limit its reach.
-#   - The puck is flat: an airborne one is touched by nothing, and a landing
-#     keeps its pace; shots take no body blocks.
-#   - Board pins and the press's pair coupling are absent, as is goalie
+#   - The puck is flat: an airborne one is touched by nothing (a raised shot
+#     is never tipped down), and a landing keeps its pace; shots take no body
+#     blocks.
+#   - Board pins and the press's squeeze against the boards are absent, as is goalie
 #     BEHAVIOR (a static net-center keeper per team, or a goalie_provider's).
 #   - Puppets and scripted attackers skate their own simple policies.
 
@@ -91,6 +94,13 @@ const DEFLECT_TANGENTIAL_RETAIN: float = 0.85
 const BOBBLE_SPEED_M_S: float = 11.0
 const BOBBLE_COOLDOWN_TICKS: int = (_PhysicsConstants.PHYSICS_TICK * 12 + 50) / 100
 const DEFLECT_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 10
+# A deliberate tip (Puck.apply_blade_deflect, _tip_face): the most it turns the
+# puck, and the vertical launch each tip height gives it.
+const TIP_MAX_TURN_DEG: float = 25.0
+const TIP_LOW_LOFT_M_S: float = 2.9
+const TIP_MID_LOFT_M_S: float = 4.2
+const TIP_HIGH_LOFT_M_S: float = 5.5
+const TIP_DOWN_LOFT_M_S: float = 3.5
 # The hop a squeezed puck takes: a bobble off the face, and two blades pinching it
 # (a poke, a contested pickup) — PuckCollisionRules.squeeze_lift_speed's dials at
 # Puck's values.
@@ -186,6 +196,16 @@ class SimSkater:
 	var drive_phase: int = CheckDriveRules.Phase.IDLE
 	var drive_elapsed: float = 0.0
 	var stance_active: bool = false
+	# The body as the tick started, which a press against him reads
+	# (Skater's latched_* fields): where he stood, his velocity, facing, stick,
+	# brake, posture and stagger.
+	var start_pos: Vector3 = Vector3.ZERO
+	var start_vel: Vector3 = Vector3.ZERO
+	var start_facing: Vector2 = Vector2(0, -1)
+	var start_intent: Vector2 = Vector2.ZERO
+	var start_brake: bool = false
+	var start_posture: int = SkaterMovementRules.Posture.UPRIGHT
+	var start_stagger: float = 0.0
 	# The blade marker's offset off the body, latched as a wrister charge starts
 	# (see step()).
 	var wrister_hold: Vector3 = Vector3.ZERO
@@ -278,6 +298,13 @@ var bobbles: int = 0
 var lifts: int = 0
 var hit_strips: int = 0
 var deflects: int = 0
+# Deliberate tips this run, and the last one: who, where his blade met it, at
+# which tip height, on which tick.
+var tips: int = 0
+var last_tip_peer: int = -1
+var last_tip_at: Vector3 = Vector3.INF
+var last_tip_level: int = ShotMechanics.ELEVATION_FLAT
+var last_tip_tick: int = -1
 var contests: int = 0
 # Per-team incumbent for the snapshot's chase election (hysteresis feed).
 var _prev_chase_by_team: Dictionary = {}
@@ -562,6 +589,8 @@ func step() -> void:
 			carrier_id = -1
 			loose_released_by = c.peer_id
 	_puckless_swings()
+	for s: SimSkater in skaters:
+		_latch(s)
 	# Integrate bodies + blades.
 	for s: SimSkater in skaters:
 		if s.agent == null:
@@ -587,6 +616,8 @@ func step() -> void:
 		s.prev_blade = s.blade
 		_place_blade(s)
 		s.slap_charge_s = s.slap_charge_s + DT if s.input.slap_held else 0.0
+	for s: SimSkater in skaters:
+		_press(s)
 	_resolve_contacts()
 	for s: SimSkater in skaters:
 		if s.agent != null:
@@ -660,6 +691,12 @@ func step() -> void:
 		puck_pos = stepped.origin
 		puck_vel = stepped.basis.x
 		for s: SimSkater in skaters:
+			if _deflecting(s):
+				if _can_play(s) and PuckInteractionRules.check_deflect(prev_puck, puck_pos,
+						s.prev_blade, s.blade, PICKUP_RADIUS, DeflectReachRules.VERTICAL_REACH_M):
+					_tip(s)
+					break
+				continue
 			if not _can_play(s) or not PuckInteractionRules.check_pickup(
 					prev_puck, puck_pos, s.prev_blade, s.blade, PICKUP_RADIUS):
 				continue
@@ -721,6 +758,50 @@ func step() -> void:
 			break
 
 
+# Q held without the puck (SkaterController._wants_deflect): the blade redirects
+# what it meets instead of corralling it (PuckController._check_interactions).
+func _deflecting(s: SimSkater) -> bool:
+	return s.input.stick_lift_held and carrier_id != s.peer_id
+
+
+func _tip(s: SimSkater) -> void:
+	var out: Vector3 = tip_velocity(puck_vel, s.blade - s.pos, s.input.elevation_level)
+	puck_vel = Vector3(out.x, 0.0, out.z)
+	_hop(out.y)
+	_release_grace[s.peer_id] = ticks + (BOBBLE_COOLDOWN_TICKS
+			if out.length() < BOBBLE_SPEED_M_S else DEFLECT_COOLDOWN_TICKS)
+	tips += 1
+	last_tip_peer = s.peer_id
+	last_tip_at = s.blade
+	last_tip_level = s.input.elevation_level
+	last_tip_tick = ticks
+	loose_released_by = -1
+
+
+# Puck.apply_blade_deflect for a deliberate tip of a puck on the ice at
+# `puck_velocity`: off the face that turns it toward the side the blade is held
+# on (`body_to_blade`), then lifted at `level`'s launch with its pace kept.
+static func tip_velocity(puck_velocity: Vector3, body_to_blade: Vector3, level: int) -> Vector3:
+	var turn: float = PuckCollisionRules.tip_turn(puck_velocity, body_to_blade,
+			deg_to_rad(TIP_MAX_TURN_DEG))
+	var face: Vector3 = PuckCollisionRules.aimed_face_normal(puck_velocity, turn,
+			AIFeedReception.DEFLECT_NORMAL_RESTITUTION,
+			AIFeedReception.DEFLECT_NORMAL_RESTITUTION_MIN, DEFLECT_TANGENTIAL_RETAIN,
+			AIFeedReception.DEFLECT_SPEED_REF_M_S)
+	var out: Vector3 = PuckCollisionRules.deflect_velocity(puck_velocity, face,
+			AIFeedReception.DEFLECT_NORMAL_RESTITUTION,
+			AIFeedReception.DEFLECT_NORMAL_RESTITUTION_MIN, DEFLECT_TANGENTIAL_RETAIN,
+			AIFeedReception.DEFLECT_SPEED_REF_M_S)
+	var vy: float = PuckCollisionRules.deflect_loft_speed(level, TIP_LOW_LOFT_M_S,
+			TIP_MID_LOFT_M_S, TIP_HIGH_LOFT_M_S, TIP_DOWN_LOFT_M_S, false)
+	var pace: float = out.length()
+	if is_zero_approx(vy) or pace <= 0.001:
+		return out
+	var flat: Vector3 = Vector3(out.x, 0.0, out.z).normalized()
+	return Vector3(flat.x, ShotMechanics.loft_y(pace, absf(vy)) * signf(vy), flat.z) \
+			.normalized() * pace
+
+
 # The knockdown's clock (SkaterController._apply_movement): true while he is down,
 # when input is ignored and the body slides out its momentum. Coming up, he finds
 # his legs through a short stagger.
@@ -768,6 +849,72 @@ func _move(s: SimSkater) -> void:
 			BodyCheckRules.grip_mult(s.stagger, cfg))
 	move_cfg.thrust = base_thrust
 	s.pos += s.vel * DT
+
+
+func _latch(s: SimSkater) -> void:
+	s.start_pos = s.pos
+	s.start_vel = s.vel
+	s.start_facing = s.facing
+	s.start_intent = s.input.move_vector \
+			if s.input.move_vector.length() > move_cfg.move_deadzone else Vector2.ZERO
+	s.start_brake = s.input.brake
+	s.start_posture = SkaterMovementRules.posture_of(s.stance_active, s.hit_active)
+	s.start_stagger = s.stagger
+
+
+# SkaterController._apply_press: pressed against the nearest body he touches,
+# his motion along the contact normal is the pair's (PressRules), laid over the
+# move's from the velocity the tick started with, against the partner as he
+# stood at its start, and carried into this tick's step. Not modelled: the
+# squeeze against the boards (BoardWallRules), as the board pins are not.
+func _press(s: SimSkater) -> void:
+	if s.knockdown > 0.0:
+		return
+	var r: float = _match_body.radius
+	var p: SimSkater = null
+	var best_gap: float = INF
+	for o: SimSkater in skaters:
+		if o == s or o.knockdown > 0.0:
+			continue
+		var gap: float = Vector2(o.start_pos.x - s.start_pos.x, o.start_pos.z - s.start_pos.z) \
+				.length() - 2.0 * r
+		if PressRules.touching(gap, 0.0, 0.0) and gap < best_gap:
+			best_gap = gap
+			p = o
+	if p == null:
+		return
+	var d := Vector3(p.start_pos.x - s.start_pos.x, 0.0, p.start_pos.z - s.start_pos.z)
+	var dist: float = d.length()
+	if dist < 0.0001:
+		return
+	var n3: Vector3 = d / dist
+	var n := Vector2(n3.x, n3.z)
+	var bc: BodyCheckRules.Config = _match_body.check_cfg
+	var posture: int = SkaterMovementRules.posture_of(s.stance_active, s.hit_active)
+	var intent: Vector2 = s.input.move_vector \
+			if s.input.move_vector.length() > move_cfg.move_deadzone else Vector2.ZERO
+	var u: float = s.start_vel.dot(n3)
+	var drive_self: float = PressRules.drive(move_cfg, _match_body.thrust, posture, s.input.brake,
+			false, BodyCheckRules.thrust_mult(s.stagger, bc), s.facing,
+			WorldStateCodec.quantize_move_intent(intent), n, u)
+	var drive_other: float = PressRules.drive(move_cfg, _match_body.thrust, p.start_posture,
+			p.start_brake, false, BodyCheckRules.thrust_mult(p.start_stagger, bc), p.start_facing,
+			WorldStateCodec.quantize_move_intent(p.start_intent), -n, -u)
+	if not PressRules.pressing(drive_self, drive_other):
+		return
+	var hold_self: float = PressRules.hold(move_cfg, posture, s.input.brake, false,
+			BodyCheckRules.grip_mult(s.stagger, bc), s.facing, n, u)
+	var hold_other: float = PressRules.hold(move_cfg, p.start_posture, p.start_brake, false,
+			BodyCheckRules.grip_mult(p.start_stagger, bc), p.start_facing, n, u)
+	var w: float = _match_body.weight
+	var u_new: float = u + DT * PressRules.pair_accel(w, drive_self, hold_self,
+			w, drive_other, hold_other, u, DT)
+	if absf(u_new) > absf(u):
+		u_new = clampf(u_new, -maxf(move_cfg.max_speed, absf(u)), maxf(move_cfg.max_speed, absf(u)))
+	var dv: Vector3 = n3 * (u_new - s.vel.dot(n3))
+	s.vel += dv
+	s.pos += dv * DT
+	_hold_on_ice(s)
 
 
 # Skater.clamp_body_to_rink and clamp_body_to_net: the body's edge stops at the
@@ -1377,6 +1524,10 @@ func _build_snapshot() -> WorldSnapshot:
 	for s: SimSkater in skaters:
 		var arr: Array = snap.teammate_ids_by_team.get_or_add(s.team_id, [])
 		arr.append(s.peer_id)
+	var rebound_at: Vector3 = Vector3.INF
+	if carrier_id == -1 and loose_released_by != -1:
+		rebound_at = AILoosePuckChase.rebound_point(puck_pos, puck_vel,
+				_skater(loose_released_by).pos, AIFieldGrid.spot, AIFieldGrid.weight)
 	for tid: int in snap.teammate_ids_by_team:
 		# The camper filter is part of that enrichment too: a one-timer-ready
 		# bot has opted out of loose-puck work, so electing him froze the whole
@@ -1389,7 +1540,7 @@ func _build_snapshot() -> WorldSnapshot:
 		var elected: int = AILoosePuckChase.elect(
 				snap.skater_states, snap.teammate_ids_by_team[tid],
 				puck_pos, puck_vel, int(_prev_chase_by_team.get(tid, -1)),
-				caps_by_peer, true, [], camped)
+				caps_by_peer, true, [], camped, rebound_at)
 		snap.closest_to_puck_by_team[tid] = elected
 		_prev_chase_by_team[tid] = elected
 	# Static home keepers so shot scoring sees someone in each net (goalie

@@ -156,6 +156,8 @@ var dispatch_period_ticks: int = 1
 # another's target). The incumbent for argmax switch-hysteresis
 # (AIStationSearch.append_incumbent / incumbent_bonus).
 var prev_role_target: Vector3 = Vector3.INF
+# Last dispatch's RoleDecision.station_key, -1 across a slot change.
+var prev_station_key: int = -1
 
 # NHL delayed offside: a teammate owes a tag-up, so the carrier keeps its
 # carries, feeds and rims out of the attacking zone.
@@ -202,6 +204,8 @@ var scratch_teammates: Array[Vector3] = []
 var scratch_teammate_caps: Array[AISkaterCaps] = []
 # Index-matched to scratch_teammates.
 var scratch_teammate_vels: Array[Vector3] = []
+# Index-matched to scratch_teammates: each one's peer id.
+var scratch_teammate_ids: Array[int] = []
 # The opposing attack's possession read against our skaters
 # (AIRoleReads.defence_possession), over the three teammate buffers above.
 var scratch_defence_possession := AIPossessionValue.new()

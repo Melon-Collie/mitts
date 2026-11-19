@@ -497,6 +497,38 @@ who stands him up holds Ctrl, the brace, when the pair moves his way harder
 with his body in it (`AIPressRead.pair_accel`, with against without). Both ride
 the `protects_the_puck` gate.
 
+**In their end the net front is fought for.** FINISHER / NET_FRONT price a
+station in front of each shot of ours (the carrier's now, and each teammate's
+off a feed, at the lane to him) by what a body there adds to the shot the keeper
+would save, NET_FRONT by that and the tip alone, in front of the puck alone,
+never a feed to him nor a teammate's shot off one (a lane opening or closing
+moved either by more than any hold, and sent him spot to spot faster than he
+could reach one): the screen field's share turned into goals, and of the saves left,
+his share of the rebound, raced against everyone else (`AIReboundValue`'s
+`fill` once, `value_with` per station). They publish the station they hold
+when it is worth anything in front (`RoleDecision.battle_spot`), whatever else
+it is worth: a man at the slot's top keeps the net front's ice worth holding
+while the carrier works the wall, and their D standing inside is a man to move.
+A net-front station is held by what it is (`RoleDecision.station_key`: the
+shot it is in front of, and how), wherever its shooter has taken it since.
+NET_FRONT's stations, while the carrier has a shot, are on that shot's line,
+so they move only with the shooter's angle: the crease top
+(`AIRoleFinisher.TIP_STATION_DIST_M` out) and, a stride or more further out,
+the depth the screen field measured that release's screen worth most at
+(`AIScreenField.best_station_along`), each held by its key. Three stations a couple of metres apart sent him
+between them about twice a second, and the best point along the whole line ran
+between the crease and the screen's depth, so neither held him.
+Never hold one by its place: the ice worth holding moves with the play, and
+held where it stood it went stale, half as valuable, and he re-picked 2.3 m a
+time almost once a second.
+The press pass then wins it while one of ours carries the puck (skating into a man who
+stands on it short of contact, `CLOSE_IN_M`, rather than stopping at the spot
+his body holds), never with it loose: the press takes the stick off the ice, and the rebound it was won for
+goes to the man it moved (`SkaterAgentPress._win_the_spot`): a man of theirs
+nearer the spot, within `STEP_IN_M`, is pressed when the push moves him off it by both
+bodies' width. Never value a screen off the line: the field measured a body
+0.4 m off it adding nothing, because the keeper looks round it.
+
 ### The three facts a station reads, and the one that stays unread
 
 **CONTROL** (`AIRushRead.pressure_eta_s`) drives NEITHER the hold decision nor
@@ -937,7 +969,25 @@ takes the whole class down and every static call on it from every file at once.
     `InfractionRules.judge_icing_race`) and the faceoff it hands over;
   - `possession_floor.gd` (`AIPossessionFloor`) — the continuation: what
     keeping the puck at a spot is worth by position alone, a floor up the ice
-    plus the slot bonus (`docs/possession-floor-plan.md`).
+    plus the slot bonus (`docs/possession-floor-plan.md`);
+  - `rebound_field.gd` (`AIReboundField`) — the generated rebound field read in
+    the frame of the net attacked: per measured spot its shots, their outcomes,
+    their sampled rebounds and the second chance measured at each;
+  - `screen_field.gd` (`AIScreenField`) — the generated screen field: what a
+    body hiding the release from the live keeper adds to a shot from a spot,
+    by how far out along the release's line it stands;
+  - `tip_field.gd` (`AITipField`) — the generated tip field: the odds a shot
+    on the ice tipped by a stick held to deflect on the release's line
+    scores against the live keeper, by how far out the tip is and its height;
+  - `tip_point.gd` (`AITipPoint`) — where a man tips a shot coming at him:
+    the point his reactive tip plays and the shooter's rip is priced at, so
+    the two are one solve;
+  - `field_grid.gd` (`AIFieldGrid`) — a measured field's spot grid read
+    between its spots by bilinear weight. The rebound, screen and tip fields
+    read through it (`crash_point_at`, `best_station_along`, `uplift`,
+    `AITipField.odds`):
+    read at the nearest spot, a body's place snapped ~2.5 m as the carrier
+    crossed into the next one, and the net front re-picked on every snap.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
@@ -945,7 +995,8 @@ takes the whole class down and every static call on it from every file at once.
 
 Both evaluators read the leaves and never each other. `possession_value.gd`
 (`AIPossessionValue`, what possession of a spot is worth) reads both from above,
-so neither may read it; so does `evade_read.gd` (`AIEvadeRead`, the
+so neither may read it; so does `rebound_value.gd` (`AIReboundValue`, a
+rebound's second chance raced over the field); so does `evade_read.gd` (`AIEvadeRead`, the
 evadability it keeps the puck at). `test_scoring_split_stays_acyclic.gd` holds that. A
 primitive both need goes in a leaf; an extraction is cut where nothing in the cut
 reaches back into what remains.
@@ -955,7 +1006,8 @@ reaches back into what remains.
 - **Shot value — the one shot model** (`AIShotValue`, `shot_value.gd`). Every
   "how good is a shot from here" asks it — the carrier's compete, the threat
   surfaces and coverage reads, a pass's worth to either side
-  (`score_pass_value`), tips (`deflection`, the line not picked) and the
+  (`score_pass_value`), a tip into an empty net (`deflection`; against a keeper
+  at home a tip reads the tip field) and the
   post-game xG stat (`now_at_spread`, at the shot's context spread) — so offence
   and defence price a chance alike, and the model behind it can be replaced in
   that file alone. It answers the odds of scoring on today's
@@ -1010,8 +1062,16 @@ reaches back into what remains.
     shots). First contact is the outcome: rebounds and screens are not in it
     (#785), so a clean shot from range against a set keeper is worth ~0. The
     carrier's compete credits a shot that reaches the net with its rebound
-    (`score_shoot_value`'s `rebound`: `AIActionScoring.with_rebound`), so a
-    point shot is weighed against keeping the puck at more than nothing.
+    (`score_shoot_value`'s `rebound_credit`: `AIActionScoring.with_rebound`),
+    so a point shot is weighed against keeping the puck at more than nothing.
+    Today that credit is flat (`FLAT_REBOUND_CREDIT`). The measured one
+    (`AIReboundValue`, raced over the rebound field) waits on the follow-up that
+    wins it: priced before the bots played it, the carrier shot for rebounds
+    nobody collected (`docs/bot-net-front-offense-plan.md` step 3a). A
+    screen is credited the same way, on top of the field: the share of the
+    keeper's saves a body hiding the release turns into goals
+    (`score_shoot_value`'s `screen`, `AICarrierField._screen_at` over every
+    other body, either side's).
   - **The open set is goal intervals, not aim samples.** The generator sweeps
     24 aims per loft and bisects every edge of a goal run to ~5 mm
     (`tests/unit/ai/open_set_edges.gd`); a run reaching a post ends at the post.
@@ -1329,7 +1389,10 @@ reaches back into what remains.
   forecheck line pair, F3, the high slot, the trailing valve — go through
   `offensive_station_target`: hold the forward stand (leashed to the play), or
   give it up — to `numbers_floor`, goal-side of the deepest attacker behind it,
-  while we still have the puck; to the retreat floor once we don't. *The two
+  while we still have the puck; to the retreat floor once we don't. "Behind" is
+  a race (`AIRoleRushD.race_depth_to_net`), each side turning first from where
+  it faces: a point faces up the ice and a man breaking for our net does not,
+  and raced square to our net he read as level until he was past. *The two
   NEUTRAL shapes* —
   3v3 FLANK and 5v5 DBACK — go through `neutral_station_target`: a slow loose
   puck is not a rush, so giving up the stand restores a **numbers layer**
@@ -1420,7 +1483,11 @@ reaches back into what remains.
     a perception), **buffered on both sides**: carry candidates stay
     `OZ_RETREAT_LINE_BUFFER_M` off the line (the pass windup sweeps the puck a
     stick's reach behind the body), and a pass target's lead sits
-    `OZ_RECEIVE_LINE_BUFFER_M` inside it.
+    `OZ_RECEIVE_LINE_BUFFER_M` inside it: a blade and the puck, since a catch
+    keeps the puck where the blade meets it and a bobble comes back off the
+    face into the zone (`tests/instruments/ai/test_line_reception.gd`). Never
+    widen it to a reception's "give": that excluded every feed to a point
+    on his stand, and only a feed that misses runs out, which the pass prices.
 
 - **The carry is a destination and a skated move** (`docs/hybrid-carry-plan.md`).
   The destination (`AICarrierDestinations`) is where the carry is FOR, chosen

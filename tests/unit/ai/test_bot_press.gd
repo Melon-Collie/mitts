@@ -200,3 +200,72 @@ func test_a_carrier_winding_up_or_on_the_beginner_tier_does_not() -> void:
 	s = _drive_snap()
 	sm._protects_the_puck = false
 	assert_false(sm.apply_press(_skating_at_him(), s), "the beginner tier does not read it")
+
+
+# Our carrier in their end (they defend -z); our role holds the screen spot on
+# his line, OPP stands on it, and we are right behind him, touching.
+func _spot_snap() -> WorldSnapshot:
+	var s := WorldSnapshot.new()
+	s.puck_state = PuckNetworkState.new()
+	s.puck_state.position = Vector3(0.0, 0.02, -_goal_z + 10.0)
+	s.puck_state.carrier_peer_id = MATE_ID
+	s.skater_states[MATE_ID] = _state(s.puck_state.position, Vector2(0.0, -1.0))
+	var spot := Vector3(0.0, 0.0, -_goal_z + 3.5)
+	s.skater_states[OPP_ID] = _state(Vector3(spot.x, 0.85, spot.z), Vector2(0.0, 1.0))
+	s.skater_states[SELF_ID] = _state(Vector3(0.0, 0.85, spot.z + TOUCHING_M), Vector2(0.0, -1.0))
+	s.goalie_states[1] = _goalie(-_goal_z + 0.6)
+	var hold := RoleDecision.new()
+	hold.battle_spot = spot
+	sm._cached_role_decision = hold
+	return s
+
+
+func test_a_forward_drives_their_man_off_the_battle_spot() -> void:
+	var input := InputState.new()
+	assert_true(sm.apply_press(input, _spot_snap()))
+	assert_true(input.hit_held, "Ctrl: the drive")
+	assert_almost_eq(input.move_vector.angle_to(Vector2(0.0, -1.0)), 0.0, 1e-3, "into him")
+
+
+func test_no_fight_for_the_spot_against_a_man_set_on_it() -> void:
+	var s: WorldSnapshot = _spot_snap()
+	var man: SkaterNetworkState = s.skater_states[OPP_ID]
+	man.brake_intent = true
+	man.hit_committed = true
+	s.skater_states[SELF_ID].check_drive_phase = CheckDriveRules.Phase.SPENT
+	var input := InputState.new()
+	sm.apply_press(input, s)
+	assert_false(input.hit_held and not input.brake,
+			"set and braced, the press does not move him off it: no drive (a dig-in may hold)")
+
+
+func test_no_fight_for_a_spot_he_is_not_on() -> void:
+	var s: WorldSnapshot = _spot_snap()
+	s.skater_states[OPP_ID].position.z += 2.0 * TOUCHING_M
+	s.skater_states[SELF_ID].position.z -= 2.0 * TOUCHING_M
+	var input := InputState.new()
+	sm.apply_press(input, s)
+	assert_false(input.hit_held, "we are nearer the spot than he is")
+
+
+func test_no_fight_for_the_spot_with_the_puck_loose() -> void:
+	# Our shot is away: the press would take his stick off the ice the rebound
+	# comes to.
+	var s: WorldSnapshot = _spot_snap()
+	s.puck_state.carrier_peer_id = -1
+	s.puck_state.position = Vector3(3.0, 0.02, -_goal_z + 6.0)
+	var input := InputState.new()
+	sm.apply_press(input, s)
+	assert_false(input.hit_held and not input.brake, "no drive into him")
+
+
+func test_a_man_on_the_spot_out_of_reach_is_skated_into() -> void:
+	# He stands on our spot a metre off us: routed to the spot, his body would
+	# hold us short of him, so we skate straight into him, no Ctrl until contact.
+	var s: WorldSnapshot = _spot_snap()
+	s.skater_states[SELF_ID].position.z += 1.0
+	var input := InputState.new()
+	sm.apply_press(input, s)
+	assert_false(input.hit_held, "no Ctrl short of him")
+	var to_him := Vector2(0.0, -1.0)
+	assert_almost_eq(input.move_vector.angle_to(to_him), 0.0, 1e-3, "into him")
