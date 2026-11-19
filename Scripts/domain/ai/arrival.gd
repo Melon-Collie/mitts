@@ -68,6 +68,9 @@ const VM_FREE_SHED_M_S: float = 2.0
 const VM_SHED_DECEL_M_S2: float = 11.0
 # Brake-key deceleration for reversals — the hockey stop itself.
 const REVERSAL_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+# Within a blade's contact of a point the body has arrived at it: the clock's
+# arrival, which the calibration measures to.
+const ARRIVE_CONTACT_M: float = 0.5
 # Carves the TURN takes: the first onto the bearing at the start, the second
 # onto where the first left the point.
 const TURN_CARVES: int = 2
@@ -225,8 +228,10 @@ static func _time_to_arrive_direct(from_pos: Vector3, dest: Vector3,
 		var cos_off: float = (vx * dx + vz * dz) / (speed * to_dest)
 		var cross: float = (vx * dz - vz * dx) / (speed * to_dest)
 		var sin_off: float = absf(cross)
-		# Cross speed inside the seek's free band needs no carve (REDIRECT).
-		if cos_off <= 0.0 or speed * sin_off <= VM_FREE_SHED_M_S * grip:
+		# Cross speed inside the seek's free band needs no carve (REDIRECT), nor
+		# does a point the travel already passes within contact of.
+		if cos_off <= 0.0 or speed * sin_off <= VM_FREE_SHED_M_S * grip \
+				or to_dest * sin_off <= ARRIVE_CONTACT_M:
 			break
 		# Carved from no faster than top speed, as the ramp prices: no return
 		# then beats the straight distance over vmax (the callers' exact prunes).

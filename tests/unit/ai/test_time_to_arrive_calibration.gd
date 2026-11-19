@@ -18,9 +18,9 @@ extends GutTest
 # for it, so that edge is held to a factor rather than the band.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
-# Pass-through tolerance: within one blade's contact of the target counts as
-# arrived (ETAs feed contests and races, not parking precision).
-const ARRIVE_RADIUS_M: float = 0.5
+# Pass-through tolerance: the clock's own arrival (ETAs feed contests and races,
+# not parking precision).
+const ARRIVE_RADIUS_M: float = AIArrival.ARRIVE_CONTACT_M
 const TOL_FRAC: float = AIArrival.ERROR_FRAC
 const TOL_FLOOR_S: float = AIArrival.ERROR_FLOOR_S
 const PEER_ID: int = 1
@@ -181,6 +181,22 @@ func test_a_point_the_carve_flies_past_costs_the_loop() -> void:
 	var near: float = _model_s(v0, ORIGIN + Vector3(0.0, 0.0, -3.0))
 	var far: float = _model_s(v0, ORIGIN + Vector3(0.0, 0.0, -8.0))
 	assert_gt(near, far, "the point flown past is the slower one")
+
+
+func test_a_point_the_travel_passes_within_contact_of_needs_no_loop() -> void:
+	# A metre ahead at 20° off 9 m/s the travel line passes within contact: the
+	# body is on it at once (the sim) and the clock must not price the loop a
+	# point it flies wide of costs.
+	var v0 := Vector3(sin(PI / 9.0), 0.0, -cos(PI / 9.0)) * 9.0
+	var passed: float = _model_s(v0, ORIGIN + Vector3(0.0, 0.0, -1.0))
+	var looped: float = _model_s(Vector3(sin(PI / 4.0), 0.0, -cos(PI / 4.0)) * 9.0,
+			ORIGIN + Vector3(0.0, 0.0, -1.0))
+	assert_lt(passed * 2.0, looped, "passed within contact %.2fs vs looped for %.2fs"
+			% [passed, looped])
+	assert_lt(_sim_arrival_s(v0, ORIGIN + Vector3(0.0, 0.0, -1.0)) * 2.0,
+			_sim_arrival_s(Vector3(sin(PI / 4.0), 0.0, -cos(PI / 4.0)) * 9.0,
+					ORIGIN + Vector3(0.0, 0.0, -1.0)),
+			"and the body agrees")
 
 
 func test_momentum_direction_ordering() -> void:
