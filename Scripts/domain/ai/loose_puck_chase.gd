@@ -565,11 +565,12 @@ static func best_intercept_time(
 
 
 # Should I decline a loose puck? True when a committed opponent reaches it a
-# clear contest band (CHASE_CONTEST_MARGIN_M) ahead of me AND nobody else contains
-# the counter. Inside the band it is a live 50/50 worth racing.
+# clear contest band (CHASE_CONTEST_MARGIN_M) ahead of me, declining makes ME
+# containment, and nobody else already is. Inside the band it is a live 50/50
+# worth racing.
 #
 # `own_goal_dir` (+1 = our net at +Z) enables the containment read; 0.0 (unit
-# tests only) claims no containment.
+# tests only) claims no containment, so a lost race is always declined.
 static func loose_puck_race_lost(
 		snapshot: WorldSnapshot, self_pos: Vector3, self_vel: Vector3,
 		self_max_speed: float, team_id: int, team_id_by_peer: Dictionary,
@@ -619,35 +620,43 @@ static func loose_puck_race_lost(
 			/ maxf(self_max_speed, 1.0)
 	if my_eta <= best_opp_eta + contest_window:
 		return false
-	# Declining buys a pre-contain body, worth it only when nobody else contains.
+	if own_goal_dir == 0.0:
+		return true
+	# Declining buys a pre-contain body: worth it only when I would be one and
+	# nobody else already is. Behind the pickup and out of reach of home (a puck
+	# rimmed up-ice past us deep in their zone) a decline covers nothing.
+	if not _contains(self_pos, self_vel, best_opp_meet, own_goal_dir):
+		return false
 	return not _has_containment_behind(snapshot, team_id, team_id_by_peer,
 			self_pid, best_opp_meet, own_goal_dir)
 
 
-# Is someone else covering the counter, so that leaving to chase is free? A live
-# teammate qualifies if he is GOAL-SIDE of the pickup, or can reach the HOUSE GATE
-# inside AIRushRead.LATE_MAN_WINDOW_S — the second because nothing can be
-# goal-side of a puck behind our own goal line.
-#
-# Never re-phrase this as a race to the pickup: behind our goal line the pickup
-# IS our net, so the collector is already home and nobody beats him there.
+# Is someone else covering the counter, so that leaving to chase is free?
 static func _has_containment_behind(snapshot: WorldSnapshot, team_id: int,
 		team_id_by_peer: Dictionary, self_pid: int, pickup: Vector3,
 		own_goal_dir: float) -> bool:
-	if own_goal_dir == 0.0:
-		return false
-	var gate := Vector3(0.0, 0.0, own_goal_dir
-			* (GameRules.GOAL_LINE_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M))
 	for pid: int in snapshot.skater_states:
 		if pid == self_pid or team_id_by_peer.get(pid, -1) != team_id:
 			continue
 		var mate: SkaterNetworkState = snapshot.skater_states[pid]
 		if mate.is_ghost:
 			continue
-		if own_goal_dir * (mate.position.z - pickup.z) \
-				> AIActionScoring.CHASE_CONTEST_MARGIN_M:
-			return true
-		if AIArrival.time_to_arrive(mate.position, gate, mate.velocity) \
-				<= AIRushRead.LATE_MAN_WINDOW_S:
+		if _contains(mate.position, mate.velocity, pickup, own_goal_dir):
 			return true
 	return false
+
+
+# Does a body at `pos` contain the counter from `pickup`? He does if he is
+# GOAL-SIDE of the pickup, or can reach the HOUSE GATE inside
+# AIRushRead.LATE_MAN_WINDOW_S — the second because nothing can be goal-side of
+# a puck behind our own goal line.
+#
+# Never re-phrase this as a race to the pickup: behind our goal line the pickup
+# IS our net, so the collector is already home and nobody beats him there.
+static func _contains(pos: Vector3, vel: Vector3, pickup: Vector3,
+		own_goal_dir: float) -> bool:
+	if own_goal_dir * (pos.z - pickup.z) > AIActionScoring.CHASE_CONTEST_MARGIN_M:
+		return true
+	var gate := Vector3(0.0, 0.0, own_goal_dir
+			* (GameRules.GOAL_LINE_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M))
+	return AIArrival.time_to_arrive(pos, gate, vel) <= AIRushRead.LATE_MAN_WINDOW_S

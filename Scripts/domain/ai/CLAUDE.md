@@ -1308,19 +1308,23 @@ reaches back into what remains.
   contest band. `path_intercept_time` asks whether a body *could* be there, never
   whether it is going. A lost race is then only *declined* when declining buys
   something: a body between the collector and our net, worth a chaser only when
-  there isn't already one. `_has_containment_behind` answers that with **two
-  reads OR'd**, because each is unobtainable in the regime the other covers — a
-  teammate goal-side of the pickup (the forecheck), or one who can reach the
-  house gate (`AIZoneCoverage.HOUSE_TOP_DEPTH_M` off our goal line) inside
+  there isn't already one, and only when the chaser would be that body himself.
+  One read (`_contains`) answers both, for him and for each teammate, with **two
+  reads OR'd**, because each is unobtainable in the regime the other covers —
+  goal-side of the pickup (the forecheck), or able to reach the house gate
+  (`AIZoneCoverage.HOUSE_TOP_DEPTH_M` off our goal line) inside
   `AIRushRead.LATE_MAN_WINDOW_S` (a puck rimmed behind our own net, where nobody
-  can be goal-side of it). Do not re-phrase containment as a race to
-  `best_opp_meet`: when the puck caroms behind our goal line that point IS our
-  net, so nobody beats the collector there. Doctrine: a LOOSE puck in our end is
+  can be goal-side of it). A chaser who is neither — deep in their zone with the
+  puck rimmed up-ice past him — covers nothing by stopping, so he runs the race;
+  the high man goal-side of the pickup still declines and contains it. Do not
+  re-phrase containment as a race to `best_opp_meet`: when the puck caroms
+  behind our goal line that point IS our net, so nobody beats the collector
+  there. Doctrine: a LOOSE puck in our end is
   always pressured — the nearest player goes and everyone else adjusts so the
   house stays covered. The question is never "may I go?" but "if I go, is the
   house still covered?". `test_loose_puck_engagement.gd` asserts the aggregate
   ("did *anybody* go?") over perturbation families, since every individual
-  decision in that failure is defensible. The attacking-zone mirror is #604.
+  decision in that failure is defensible.
 
 - **A dump-in is a race for where it is played** (`AICarrierDumpSearch`). From
   the neutral zone the carrier may release the puck into their zone with nobody's
