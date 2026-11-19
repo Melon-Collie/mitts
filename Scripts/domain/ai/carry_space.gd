@@ -58,15 +58,14 @@ static func board_gap_m(point: Vector3) -> float:
 # `time` — >0 means no defender's stick TIP nominally reaches it (that much
 # room), <0 means covered. Pure float math, no allocation.
 #
-# NOMINAL, not best-case: the defender's coverage is time_to_arrive's REDIRECT,
-# REVERSAL and PURSUIT phases in distance form — coast on momentum through the
+# NOMINAL, not best-case: the defender's coverage is the calibrated
+# time_to_arrive phase model in distance form — coast on momentum through the
 # reaction gate, shed excess cross-speed at the measured rate, brake out a
 # retreat (losing ground while braking), then the stride's pursuit ramp
 # (AIStrideRamp.distance_in) — plus the stick span. Never a best-case 0.5·a·t²
-# lunge: that over-reaches at long windows and under-reaches close in. It has no
-# TURN: a fast cut is priced by the shed alone, which reaches less far than the
-# stance carve a few metres out and further than a body that flies past its
-# point. The safety maps below carry the residual as a probability band.
+# lunge: that over-reaches at long windows and under-reaches close in. Optimistic
+# where time_to_arrive is: short perpendicular cuts at speed. The safety maps
+# below carry the residual as a probability band.
 # `abort_below`: exact argmax pruning for sample-scanning callers (the seam
 # search) — once the running worst drops below it, the exact value cannot
 # matter to the caller, so the defender loop stops early. Default −INF scans
