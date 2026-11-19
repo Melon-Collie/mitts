@@ -170,7 +170,7 @@ static func tip_ev(
 		accel = tip_caps.max_accel
 	var rip := Vector3(hx * speed, 0.0, hz * speed)
 	var t_meet: float = AITipPoint.meet_time(release, rip, tip_man, tip_vel, vmax, accel, reach,
-			attacking_goal.z)
+			attacking_goal.z, AIFeedReception.receiver_ceiling_mult(tip_caps))
 	if is_nan(t_meet):
 		return 0.0
 	var along: float = speed * maxf(t_meet, 0.0)

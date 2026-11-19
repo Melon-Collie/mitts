@@ -1528,7 +1528,8 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 				var give_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 				if give_state != null:
 					sv = give_state.velocity
-				give_brake = SkaterAgentReception.gives_with(pv, sv)
+				give_brake = SkaterAgentReception.gives_with(pv, sv,
+						AIFeedReception.receiver_ceiling_mult(_caps_by_peer.get(_peer_id)))
 	# Pass-receive setup, unless Mode B already set aim+steer; false falls through
 	# to the default chase.
 	if recv == _RECV_NONE and not _pass_receive_aim_and_steer(input, snapshot, self_pos):

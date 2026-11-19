@@ -445,6 +445,56 @@ func test_a_feed_to_a_curling_receiver_is_solved_for_his_blade() -> void:
 			"the hook's feed lands under his leaned ceiling")
 
 
+# Every feed the search commits to a P28 receiver (CURVE_OPEN, the lowest
+# reception ceiling) who plays it as a catch reaches him, in his frame, under
+# his own blade's catch ceiling at every contact a bot receiver's blade makes
+# (on the line, or at the measured off-line offset, AIFeedReception): caught,
+# never deflected. Read where the fired aim meets him
+# (AIPassLead.lead from the puck, as the press aims it, his skating through the
+# windup), across lengths, bearings and his skating: still, streaking away,
+# curling back at the passer, crossing.
+func test_every_committed_feed_to_a_p28_receiver_is_under_his_catch_ceiling() -> void:
+	var hook: float = PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_OPEN, 1, 1) \
+			.reception_ceiling_mult()
+	var catch_ceiling: float = hook * (AIFeedReception.RECEIVE_DEFLECT_MIN_M_S
+			+ AIFeedReception.RECEIVE_ALIGNMENT_BONUS_M_S
+			* (1.0 - AIFeedReception.RECEIVE_OFF_LINE_OFFSET))
+	var passer := Vector3(0, 0, 14)
+	var fired: int = 0
+	var over_hold: int = 0
+	for dist: float in [6.0, 12.0, 20.0]:
+		for bearing_deg: float in [0.0, 35.0, -70.0]:
+			var dir := Vector3(sin(deg_to_rad(bearing_deg)), 0, -cos(deg_to_rad(bearing_deg)))
+			var side := Vector3(-dir.z, 0, dir.x)
+			for vel: Vector3 in [Vector3.ZERO, dir * 7.0, -dir * 6.0, -dir * 9.0,
+					side * 6.0, (side - dir).normalized() * 8.0]:
+				var receiver: Vector3 = passer + dir * dist
+				var ctx: RoleContext = _make_ctx(passer, [
+						[1, TEAM_ID, passer],
+						[2, TEAM_ID, receiver, false, vel]])
+				var caps := AISkaterCaps.new()
+				caps.reception_ceiling_mult = hook
+				ctx.caps_by_peer = {2: caps}
+				ctx.ping_pass_target_peer = 2
+				var c: AIRoleCarrier = _decided(ctx)
+				if c.intended_action != AIRoleCarrier.INTENT_PASS:
+					continue
+				fired += 1
+				var state: SkaterNetworkState = ctx.snapshot.skater_states[2]
+				var meet: Vector3 = AIPassLead.lead(passer, state, c.pass_target_speed,
+						AICarrierPassSearch.PASS_LEAD_MAX_S,
+						AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)[0]
+				var closing: float = AIFeedReception.arrival_closing_speed(passer, meet,
+						c.pass_target_speed, vel)
+				if closing > AIFeedReception.RECEIVE_HOLD_CEILING_M_S * hook:
+					over_hold += 1
+				assert_lt(closing, catch_ceiling,
+						"%.0f m at %.0f deg, receiver skating %s: caught" % [dist, bearing_deg, vel])
+	assert_gt(fired, 0, "the sweep commits feeds to read")
+	gut.p("%d feeds committed, %d past his bobble line on the line (priced as bobbles)"
+			% [fired, over_hold])
+
+
 # The bobble odds of the feed the search picked, at the pace it fires.
 func _picked_feed_bobble_prob(defender: Vector3) -> float:
 	var ctx: RoleContext = _make_ctx(_FEED_PASSER, [

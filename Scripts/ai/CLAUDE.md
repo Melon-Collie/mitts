@@ -223,8 +223,9 @@ parking the blade on the line is what collects it and stopping is a wait rather
 than a technique. Bots
 receive in stride by default and brake only when arriving early enough to carry
 the blade past the meet, or when their own skating is what carries a feed past
-the bobble line (`SkaterAgentReception.gives_with`) — a feed already past it on
-its own bobbles however they skate.
+their own blade's bobble line (`SkaterAgentReception.gives_with`, leaned by the
+curve as the passer prices it) — a feed already past it on its own bobbles
+however they skate.
 
 **The stance rides the receiver's own skating.** The meet is a rendezvous, so a
 receiver driving into the feed stands where his skating takes him, a stance off

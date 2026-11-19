@@ -123,3 +123,53 @@ func test_the_regather_of_a_bobble_is_the_bounce_not_the_blade() -> void:
 		assert_eq(AIFeedReception.receiver_bobble_prob(closing, mult), 1.0)
 		assert_almost_eq(AIFeedReception.reception_hold_s(closing, mult),
 				AIFeedReception.bobble_regather_s(closing), 0.0001)
+
+
+# ── The receiver's own read of his blade ─────────────────────────────────────
+
+func test_a_receiver_gives_with_a_feed_at_his_own_blades_bobble_line() -> void:
+	var hook: float = _mult(PlayerAttributes.CURVE_OPEN)
+	# Standing he holds it on the line; skating into it carries it past the
+	# hook's bobble line but not a neutral blade's.
+	var puck_vel := Vector3(21, 0, 0)
+	var into_it := Vector3(-2.5, 0, 0)
+	assert_lt(23.5, AIFeedReception.RECEIVE_HOLD_CEILING_M_S, "under the neutral bobble line")
+	assert_gt(23.5, AIFeedReception.RECEIVE_HOLD_CEILING_M_S * hook, "past the hook's")
+	assert_false(SkaterAgentReception.gives_with(puck_vel, into_it), "a neutral blade takes it")
+	assert_true(SkaterAgentReception.gives_with(puck_vel, into_it, hook),
+			"the hook stops, which brings it back under his line")
+
+
+func test_the_give_reads_the_feed_against_his_ceiling_alone() -> void:
+	# Both its speeds are judged against the leaned ceiling, so it is the
+	# neutral read at speeds over the lean.
+	for mult: float in _curves():
+		for pv: Vector3 in [Vector3(18, 0, 0), Vector3(21, 0, 3), Vector3(24, 0, 0)]:
+			for sv: Vector3 in [Vector3.ZERO, Vector3(-3, 0, 0), Vector3(-6, 0, 2)]:
+				assert_eq(SkaterAgentReception.gives_with(pv, sv, mult),
+						SkaterAgentReception.gives_with(pv / mult, sv / mult))
+
+
+func test_a_shot_he_cannot_hold_on_his_own_blade_is_tipped() -> void:
+	# A rip at a man in front of the net: whatever a neutral blade tips, the
+	# hook tips too, and between the two bobble lines only the hook does.
+	var hook: float = _mult(PlayerAttributes.CURVE_OPEN)
+	var goal_z: float = GameRules.GOAL_LINE_Z
+	var release := Vector3(0, 0, goal_z - 16.0)
+	var tipper := Vector3(0.6, 0, goal_z - 4.0)
+	var only_hook: int = 0
+	var pace: float = 18.0
+	while pace <= 32.0:
+		var rip := Vector3(0, 0, pace)
+		var neutral_t: float = AITipPoint.meet_time(release, rip, tipper, Vector3.ZERO,
+				GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2,
+				AIBotMechanics.BLADE_REACH_M, goal_z)
+		var hook_t: float = AITipPoint.meet_time(release, rip, tipper, Vector3.ZERO,
+				GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2,
+				AIBotMechanics.BLADE_REACH_M, goal_z, hook)
+		if not is_nan(neutral_t):
+			assert_false(is_nan(hook_t), "the hook tips what a neutral blade tips, at %.1f" % pace)
+		elif not is_nan(hook_t):
+			only_hook += 1
+		pace += 0.5
+	assert_gt(only_hook, 0, "a pace between the two lines is held by one and tipped by the other")
