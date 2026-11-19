@@ -1,8 +1,8 @@
 extends GutTest
 
-# test_advantage_scenarios' 2-on-1 from z -8, D at x 1.5, traced tick by tick
-# from the carrier's side: his compete (the shot, the best pass and to whom, the
-# carry) and his intent, the pass read's parts (release clean, lane, the miss,
+# test_advantage_scenarios' 2-on-1 from z -8, D at x 1.5 (7 m/s, the mate level
+# at x 4), one the D wins (#928), traced tick by tick from the carrier's side:
+# his compete (the shot, the best pass and to whom, the carry) and his intent, the pass read's parts (release clean, lane, the miss,
 # the reception), and where the lone D's stick is against the lane to the mate:
 # how far it lies off the lane now, and how far down it from the puck. Real bot
 # agents in the duel harness against the real keeper, staged as that test is.
@@ -125,6 +125,6 @@ func test_trace_two_on_one_z8_d15() -> void:
 
 
 func test_trace_two_on_one_z8_d0() -> void:
-	# The start beside it, lost the same way (#928), to read against.
+	# The start beside it, which ends in a shot, to read against.
 	_trace(-8.0, 0.0, 2.0)
 	assert_true(true)

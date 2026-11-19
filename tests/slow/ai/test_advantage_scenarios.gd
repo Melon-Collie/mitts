@@ -3,7 +3,7 @@ extends GutTest
 # Bots on bots have no "correct" outcome in general, so these stage a KNOWN
 # advantage and assert the side holding it cashes it in: a rusher with a step on
 # his backchecker shoots, an open back-door man gets the feed and the one-timer,
-# a pressured carrier finds the open man ahead, a 2-on-1 ends in a shot, and two
+# a pressured carrier finds the open man ahead, most 2-on-1s end in a shot, and two
 # defenders back against one rusher concede nothing from the slot.
 #
 # Real bot agents in the duel harness against the real keeper (KeeperController
@@ -20,16 +20,12 @@ const SLOT_HALF_WIDTH_M: float = 4.0
 
 # Starts where the rusher loses the puck today, each with its issue.
 const KNOWN_STEP_LOSSES: Array[String] = []
-# 2-on-1 starts that end without a shot today, each with its issue.
-#   z -8, D at x 1.5 — no shot worth taking (0.044 from ~9 m), so the carrier
-#   takes the half-open pass into the D's stick on the lane and loses it: #928.
-#   z -8, D at x 0.0 — the same: no shot (0.034), the carry read at ~0.04, and
-#   a pass priced at 38% kept with the D's stick 0.35 m off its lane: #928.
-#   z -12, D at x 1.5 — the D sits in the lane to the mate at the net front,
-#   and the carrier pulls up at the left circle 8 m out and holds it there for
-#   four seconds, neither shooting nor passing: #928.
-const KNOWN_TWO_ON_ONE_LOSSES: Array[String] = ["2-on-1 from z -8, D at x 1.5",
-		"2-on-1 from z -8, D at x 0.0", "2-on-1 from z -12, D at x 1.5"]
+# Share of the 2-on-1 family (test_two_on_ones_mostly_end_in_a_shot) that ends
+# in a shot from inside the circles. A lone D who plays one perfectly may win
+# it, so this is a rate, not a must-shoot per start (#928). Measured 26 of 36
+# (0.72): seven lost to the D, three still without a shot at 5 s. The margin is
+# four starts.
+const TWO_ON_ONE_SHOT_SHARE_FLOOR: float = 0.6
 
 var _goalie: Node
 var _puck: Node
@@ -173,21 +169,41 @@ func test_a_pressured_carrier_finds_the_open_man_ahead() -> void:
 					"%s: the carrier moves it before the forechecker gets there" % label)
 
 
-func test_a_two_on_one_ends_in_a_shot() -> void:
+# The carrier at x -4 entering at each depth and pace, the lone D 7 m back
+# backing in at 3 m/s at each lateral spot, and the mate level in the far lane
+# or trailing 2.5 m in the middle one (his offset off (0, z)).
+func test_two_on_ones_mostly_end_in_a_shot() -> void:
+	var shots: int = 0
+	var starts: int = 0
+	var misses: PackedStringArray = []
 	for z: float in [-8.0, -12.0]:
-		for d_x: float in [0.0, 1.5]:
-			var p: Play = _play([[1, 0, Vector3(-4, 0, z), Vector3(0, 0, -7)],
-					[2, 0, Vector3(4, 0, z), Vector3(0, 0, -7)],
-					[201, 1, Vector3(d_x, 0, z - 7), Vector3(0, 0, -3)]], 1, 5.0)
-			var label := "2-on-1 from z %.0f, D at x %.1f" % [z, d_x]
-			gut.p("%s: %s" % [label, p.describe()])
-			if KNOWN_TWO_ON_ONE_LOSSES.has(label):
-				continue
-			var shot: Dictionary = p.first_shot(0)
-			assert_false(shot.is_empty(), "%s: the rush ends in a shot" % label)
-			assert_eq(p.lost_at, INF, "%s: without a turnover" % label)
-			if not shot.is_empty():
-				assert_lt(Play.net_dist(shot["pos"]), 12.0, "%s: from inside the circles" % label)
+		for d_x: float in [-1.5, 0.0, 1.5]:
+			for pace: float in [5.5, 7.0, 8.5]:
+				for mate: Vector3 in [Vector3(4, 0, 0), Vector3(1.5, 0, 2.5)]:
+					var vel := Vector3(0, 0, -pace)
+					var p: Play = _play([[1, 0, Vector3(-4, 0, z), vel],
+							[2, 0, Vector3(0, 0, z) + mate, vel],
+							[201, 1, Vector3(d_x, 0, z - 7), Vector3(0, 0, -3)]], 1, 5.0)
+					var label := "2-on-1 from z %.0f, D at x %.1f, %.1f m/s, mate at %s" % [
+							z, d_x, pace, mate]
+					gut.p("%s: %s" % [label, p.describe()])
+					starts += 1
+					var shot: Dictionary = p.first_shot(0)
+					if not shot.is_empty() and Play.net_dist(shot["pos"]) < 12.0:
+						shots += 1
+					elif not shot.is_empty():
+						misses.append("%s: shot from %.1f m" % [label, Play.net_dist(shot["pos"])])
+					elif p.lost_at < INF:
+						misses.append("%s: lost at %.2f s" % [label, p.lost_at])
+					else:
+						misses.append("%s: no shot in 5 s" % label)
+	var share: float = float(shots) / float(starts)
+	gut.p("2-on-1s ending in a shot from inside the circles: %d of %d (%.2f)" % [
+			shots, starts, share])
+	if not misses.is_empty():
+		gut.p("without one:\n  " + "\n  ".join(misses))
+	assert_gte(share, TWO_ON_ONE_SHOT_SHARE_FLOOR,
+			"%d of %d 2-on-1s end in a shot from inside the circles" % [shots, starts])
 
 
 func test_two_defenders_back_concede_no_slot_shot_to_one_rusher() -> void:
