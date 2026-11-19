@@ -146,10 +146,11 @@ signal shot_sound_received(position: Vector3, is_slapper: bool, power: float)
 # `force` is the VFX-scale impact force.
 signal body_check_landed(hitter_peer_id: int, victim_peer_id: int, force: float, hit_dir: Vector3)
 # Smart ping (context-sensitive team message). Fired on every peer (host
-# self-emits) with the sender's resolved ping; GameManager filters display to
-# the sender's team and — host-only — routes the bot directive. `ping_type`
-# is PingRules.Type; `target_peer_id` / `world_pos` meaning depends on it.
+# self-emits) with the sender's resolved ping. `ping_type` is PingRules.Type;
+# `target_peer_id` / `world_pos` meaning depends on it.
 signal smart_ping_received(sender_peer_id: int, ping_type: int, target_peer_id: int, world_pos: Vector3)
+# A bot has taken `pinger_peer_id`'s ping as its order. Fired on every peer.
+signal smart_ping_acknowledged(obeyer_peer_id: int, pinger_peer_id: int)
 signal input_batch_received(peer_id: int, inputs: Array[InputState])
 # Mid-game player → spectator transition. Host broadcasts to all peers; every
 # receiver despawns the demoted peer's skater locally (registry.remove handles
@@ -3123,7 +3124,7 @@ func notify_spectator_demoted(peer_id: int) -> void:
 # including the sender, then self-emits — so offline / free play degrades to
 # the local emit (connected_peer_ids() is empty) and bots still obey.
 # Reliable: a ping is a discrete message; a dropped one is a lost order.
-# Display filtering (team-only) and bot directives live in GameManager.
+# Display filtering (team-only) and the bot's order are SmartPingCoordinator's.
 
 var _last_smart_ping_ms: Dictionary = {}   # peer_id -> Time.get_ticks_msec()
 
@@ -3163,6 +3164,23 @@ func notify_smart_ping(sender_peer_id: int, ping_type: int,
 			func(pid: int, t: int, tgt: int, pos: Vector3) -> void:
 				smart_ping_received.emit(pid, t, tgt, pos),
 			[sender_peer_id, ping_type, target_peer_id, world_pos], true)
+
+
+# Host: tells every peer which bot took a ping as its order, itself included.
+func send_smart_ping_ack(obeyer_peer_id: int, pinger_peer_id: int) -> void:
+	if not is_host:
+		return
+	for remote_id: int in connected_peer_ids():
+		notify_smart_ping_ack.rpc_id(remote_id, obeyer_peer_id, pinger_peer_id)
+	smart_ping_acknowledged.emit(obeyer_peer_id, pinger_peer_id)
+
+
+@rpc("authority", "reliable")
+func notify_smart_ping_ack(obeyer_peer_id: int, pinger_peer_id: int) -> void:
+	NetworkSimManager.send(
+			func(obeyer: int, pinger: int) -> void:
+				smart_ping_acknowledged.emit(obeyer, pinger),
+			[obeyer_peer_id, pinger_peer_id], true)
 
 
 # Per-peer anti-spam gate; passing records the attempt. Wall clock is fine
