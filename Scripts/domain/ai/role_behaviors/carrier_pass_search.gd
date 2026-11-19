@@ -166,12 +166,13 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var scored_pass_dir: Vector3 = to_recv.normalized() \
 				if to_recv.length_squared() > 0.0001 else Vector3.ZERO
 		var receiver_caps: AISkaterCaps = ctx.caps_by_peer.get(peer_id)
+		var receiver_ceiling: float = AIFeedReception.receiver_ceiling_mult(receiver_caps)
 		# Released from the candidate pocket that carries the feed's hardest pace
 		# kept best (AIShotHolds.solve_pass_kept).
 		var full_need: float = AIPuckLane.pass_launch_speed(
 				pass_origin.distance_to(receiver_state.position), ctx.self_wrister_shot_speed,
-				ctx.pass_speed_scale, receiver_state.velocity, scored_pass_dir) \
-				/ maxf(ctx.self_wrister_shot_speed, 0.001)
+				ctx.pass_speed_scale, receiver_state.velocity, scored_pass_dir,
+				receiver_ceiling) / maxf(ctx.self_wrister_shot_speed, 0.001)
 		_hold_ctx = ctx
 		_hold_receiver = receiver_state.position
 		_hold_speed = full_need * ctx.self_wrister_shot_speed
@@ -223,7 +224,8 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		for i: int in range(fracs.size() - 1, -1, -1):
 			var frac: float = fracs[i]
 			var speed: float = AIPuckLane.pass_launch_speed(dist, launch_cap,
-					ctx.pass_speed_scale * frac, receiver_state.velocity, scored_pass_dir)
+					ctx.pass_speed_scale * frac, receiver_state.velocity, scored_pass_dir,
+					receiver_ceiling)
 			if speed == prev_speed:
 				continue   # clamped onto the last pace's launch: the same pass
 			# A softer pace only flies longer, so it can win only by tying the
@@ -232,7 +234,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			# horizon even with him skating flat out at the passer.
 			var hold: float = 0.0 if receiver_is_one_timer else AIFeedReception.reception_hold_s(
 					AIFeedReception.arrival_closing_speed(hold_origin, receiver_state.position,
-							speed, receiver_state.velocity))
+							speed, receiver_state.velocity), receiver_ceiling)
 			if frac < 1.0 and (hold >= prev_hold
 					or dist > (speed + receiver_top_speed) * PASS_LEAD_MAX_S):
 				continue
@@ -609,8 +611,9 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	if AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
 		receiver_value = _field.entry_value(receiver_spot, flight_t, receiver_vel,
 				receiver_value)
-	var settle_s: float = AIFeedReception.receiver_settle_s(closing)
-	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing)
+	var receiver_ceiling: float = AIFeedReception.receiver_ceiling_mult(receiver_caps)
+	var settle_s: float = AIFeedReception.receiver_settle_s(closing, receiver_ceiling)
+	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing, receiver_ceiling)
 	# Reception pressure on a catch: the reachable-set clearance at the reception
 	# spot when the puck arrives — defenders momentum-projected from their
 	# RELEASE-TIME spots over the flight, sticks maneuvering over the short

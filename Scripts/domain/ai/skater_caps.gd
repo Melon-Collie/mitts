@@ -67,8 +67,7 @@ var lateral_grip: float = 1.0
 
 # Reception ceiling lean (= Skater.reception_ceiling_mult, from the blade
 # curve): scales the deflect ceiling + on-the-line bonus this receiver's blade can
-# soak. Carried per-peer; the pass-speed solver does not read it and prices the
-# league constant.
+# soak. A passer reads it through AIFeedReception.receiver_ceiling_mult.
 var reception_ceiling_mult: float = 1.0
 
 # Backhand power coefficient (= SkaterController.backhand_power_coefficient — a

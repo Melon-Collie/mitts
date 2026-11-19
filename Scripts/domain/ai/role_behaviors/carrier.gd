@@ -956,7 +956,8 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 				pass_target_speed = AIPuckLane.pass_launch_speed(
 						puck_now.distance_to(receiver.position),
 						ctx.self_wrister_shot_speed * _pass.best_hold_cap,
-						ctx.pass_speed_scale * _phase_best_pass_frac, receiver.velocity, pass_dir)
+						ctx.pass_speed_scale * _phase_best_pass_frac, receiver.velocity, pass_dir,
+						AIFeedReception.receiver_ceiling_mult(ctx.caps_by_peer.get(best_pass_peer)))
 			else:
 				pass_target_speed = AIPuckLane.PASS_SPEED_M_S * ctx.pass_speed_scale
 			# A saucer's launch is capped at the receivability bound for the

@@ -82,7 +82,9 @@ const PASS_SPEED_M_S: float = GameRules.DEFAULT_QUICK_PASS_POWER_M_S
 # (blade at the rim of its reach ≤ deflect_min 22, on the puck's line ≤ 30), 20
 # catches wherever the blade meets it with margin, though it settles (AIFeedReception.receiver_settle_s); the carrier prices
 # softer steps of it (PASS_PACE_FRACS). pass_launch_speed holds it across
-# distance and receiver motion.
+# distance and receiver motion. A pace, not a ceiling, so a receiver's curve
+# does not lean it: what his blade makes of it is priced in the reception
+# (AIFeedReception's ceiling_mult), and it holds on the line on every curve.
 const PASS_TARGET_CLOSING_M_S: float = 20.0
 
 # The softest feed a bot fires: a pass's world arrival and its launch never go
@@ -104,7 +106,9 @@ const PASS_PACE_FRACS: Array[float] = [0.6, 0.8, 1.0]
 # curling back, which would otherwise floor at a min-wrister floater. A bot
 # receiver parks its blade on the puck's line (SkaterAgentReception), so its
 # ceiling sits above the rim's bar (22); 26 credits that with margin below the
-# on-the-line ceiling (30) for an imperfect setup.
+# on-the-line ceiling (30) for an imperfect setup. Both bars are a neutral
+# blade's: a receiver's curve leans them, and this with them (pass_launch_speed's
+# receive_ceiling_mult).
 const PASS_RECEIVE_CEILING_M_S: float = 26.0
 
 # Reference charged-pass speed (~mid-ramp) for callers that want one typical
@@ -124,7 +128,8 @@ const PASS_CHARGE_SPEED_M_S: float = (
 #   2. Receiver motion (when receiver_vel/pass_dir supplied): the WORLD arrival
 #      is the stationary-receiver target clamped between the two arrivals that
 #      close in the receiver's frame at the target (soft) and at
-#      PASS_RECEIVE_CEILING_M_S (crisp), each
+#      PASS_RECEIVE_CEILING_M_S × receive_ceiling_mult (crisp: his blade's,
+#      AIFeedReception.receiver_ceiling_mult), each
 #        w = (pass_dir·receiver_vel) + sqrt(max(0, closing² − |receiver_vel_⊥|²)).
 #      Streaking onto a lead feed fires harder; curling back softens only to
 #      what he can still catch. With no receiver_vel, w = the target.
@@ -141,7 +146,8 @@ const PASS_CHARGE_SPEED_M_S: float = (
 static func pass_launch_speed(distance: float, max_launch: float,
 		speed_scale: float = 1.0,
 		receiver_vel: Vector3 = Vector3.ZERO,
-		pass_dir: Vector3 = Vector3.ZERO) -> float:
+		pass_dir: Vector3 = Vector3.ZERO,
+		receive_ceiling_mult: float = 1.0) -> float:
 	var target_closing: float = PASS_TARGET_CLOSING_M_S * maxf(speed_scale, 0.01)
 	var world_arrival: float = target_closing
 	if pass_dir.length_squared() > 0.0001:
@@ -151,8 +157,8 @@ static func pass_launch_speed(distance: float, max_launch: float,
 		# can handle, not a choice about how hard to pass.
 		var soft_arrival: float = along + sqrt(maxf(0.0,
 				target_closing * target_closing - perp_sq))
-		var crisp_arrival: float = along + sqrt(maxf(0.0,
-				PASS_RECEIVE_CEILING_M_S * PASS_RECEIVE_CEILING_M_S - perp_sq))
+		var ceiling: float = PASS_RECEIVE_CEILING_M_S * receive_ceiling_mult
+		var crisp_arrival: float = along + sqrt(maxf(0.0, ceiling * ceiling - perp_sq))
 		world_arrival = clampf(target_closing, soft_arrival, crisp_arrival)
 		# A receiver charging the passer harder than the target could drive this
 		# negative/tiny; floor at the softest feed so we still fire a real pass.

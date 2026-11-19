@@ -417,6 +417,34 @@ const _FEED_PASSER := Vector3(-4, 0, 6)
 const _FEED_RECEIVER := Vector3(-4, 0, -6)     # 12 m up-ice
 
 
+# A receiver curling back at the passer is fed up to the crisp ceiling, and that
+# ceiling is his own blade's (AISkaterCaps.reception_ceiling_mult): the toe hook
+# is never fed past what it soaks. What is fired is the solve for his blade at
+# the pace the search priced.
+func test_a_feed_to_a_curling_receiver_is_solved_for_his_blade() -> void:
+	var hook: float = PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_OPEN, 1, 1) \
+			.reception_ceiling_mult()
+	var passer: Vector3 = _FEED_PASSER
+	var receiver: Vector3 = _FEED_RECEIVER
+	var curl_back := Vector3(0, 0, 9)
+	var ctx: RoleContext = _make_ctx(passer, [
+			[1, TEAM_ID, passer],
+			[2, TEAM_ID, receiver, false, curl_back]])
+	var caps := AISkaterCaps.new()
+	caps.reception_ceiling_mult = hook
+	ctx.caps_by_peer = {2: caps}
+	ctx.ping_pass_target_peer = 2
+	var c: AIRoleCarrier = _decided(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS, "the pinged feed is committed")
+	assert_almost_eq(c.pass_target_speed, AIPuckLane.pass_launch_speed(
+			passer.distance_to(receiver), ctx.self_wrister_shot_speed * c._pass.best_hold_cap,
+			ctx.pass_speed_scale * c._pass.best_pace_frac, curl_back,
+			(receiver - passer).normalized(), hook), 0.001)
+	assert_lt(AIFeedReception.arrival_closing_speed(passer, receiver, c.pass_target_speed,
+			curl_back), AIPuckLane.PASS_RECEIVE_CEILING_M_S * hook + 0.01,
+			"the hook's feed lands under his leaned ceiling")
+
+
 # The bobble odds of the feed the search picked, at the pace it fires.
 func _picked_feed_bobble_prob(defender: Vector3) -> float:
 	var ctx: RoleContext = _make_ctx(_FEED_PASSER, [
