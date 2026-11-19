@@ -1560,6 +1560,32 @@ func test_carry_holds_intent_against_carrier_flip() -> void:
 	assert_gt(sm._intent_wait_ticks, 0, "the pre-aim wait counter advances")
 
 
+func test_a_shot_puck_already_loaded_waits_where_it_sits() -> void:
+	# While the press waits for its planned point, a puck already carrying the
+	# pace the shot was priced at stays there; pulled on to the hold, its sweep
+	# across the body unloads it and the press waits on the load instead.
+	_stub_carry(AIRoleCarrier.INTENT_CARRY)
+	sm._intended_action = Agent.State.SHOOT_PRESSED
+	sm._locked_pre_aim_point = Vector3(0, 0, -20)
+	var hold := Vector3(-0.6, 0, -1.0)
+	sm._shot_hold_offset_locked = hold
+	var s := _self_snap(Vector3.ZERO, true)
+	var st: SkaterNetworkState = s.skater_states[SELF_ID]
+	var forehand := Vector3(0.6, 0, -0.9)
+	s.puck_state.position = forehand
+	var loaded_share: float = sm._share_as_is(s, Vector3.ZERO, st, sm._locked_pre_aim_point)
+	sm._shot_hold_share_locked = loaded_share
+	assert_eq(sm._pre_aim_target(s, Vector3.ZERO, st), forehand,
+			"loaded as it sits: the pre-aim leaves the puck there")
+	var behind := Vector3(0, 0, 0.6)
+	s.puck_state.position = behind
+	assert_lt(sm._share_as_is(s, Vector3.ZERO, st, sm._locked_pre_aim_point),
+			loaded_share - AIShotHolds.LOAD_READY_SHARE_SLACK,
+			"precondition: a puck behind the body is short of the load")
+	assert_eq(sm._pre_aim_target(s, Vector3.ZERO, st), hold,
+			"short of its load, the pre-aim takes it to the hold")
+
+
 func test_carry_pre_aim_times_out_and_fires() -> void:
 	# Even with the cursor never converging, the pre-aim commits once the wait
 	# counter reaches the timeout — the safety hatch against a never-arriving aim.

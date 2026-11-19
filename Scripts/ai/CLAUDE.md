@@ -213,7 +213,11 @@ look leads, or a pass is near the lead with nothing forcing him to evade (no
 man to beat, the shield barely on, the puck kept in the pocket as surely as
 carried), the carry cursor rests the puck in that release's hold, and it is
 the hold the carrier locks at commit, so the cursor does not jump when the
-press takes over (`SkaterAgentCarryCursor`).
+press takes over (`SkaterAgentCarryCursor`). A latched shot whose puck already
+carries its priced share where it sits stays there while the press waits for
+its planned point (`_pre_aim_target`): pulled on to the hold, the sweep across
+the body unloaded it, and a lower tier's press waited on the load until it was
+on the keeper.
 
 ## Reception doctrine
 

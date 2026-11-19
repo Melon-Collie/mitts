@@ -1807,7 +1807,7 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		# _step_carry_cursor is also re-run on throttle-skipped ticks.
 		_step_carry_cursor(input, snapshot, self_pos, self_state)
 	else:
-		var mouse_target: Vector3 = _aim_target_for_intent(snapshot, self_pos)
+		var mouse_target: Vector3 = _pre_aim_target(snapshot, self_pos, self_state)
 		# ARC pre-aim swing toward the FINAL target. A charged release's hold is
 		# a carry reach, not an aim: FRONT in front of the body, round to the hold
 		# itself behind it.
@@ -1859,6 +1859,23 @@ func _share_as_is(snapshot: WorldSnapshot, self_pos: Vector3,
 func _lock_pass_hold() -> void:
 	_pass_hold_offset = _carrier.pass_hold_offset
 	_pass_hold_share = _carrier.pass_hold_share
+
+
+# Where the pre-aim takes the puck: the latched release's hold
+# (_aim_target_for_intent), unless it is a shot whose puck already carries the
+# share of pace it was priced at where it sits. The wrister fires along its
+# committed aim from wherever the puck sits, so while the press waits for its
+# planned point the puck stays there: pulled on to the hold, its sweep across
+# the body unloads it, and the press then waits on the load with the body
+# skating on at the keeper.
+func _pre_aim_target(snapshot: WorldSnapshot, self_pos: Vector3,
+		self_state: SkaterNetworkState) -> Vector3:
+	if _intended_action == State.SHOOT_PRESSED and _pre_aim_holds_puck() \
+			and snapshot.puck_state != null and self_state != null \
+			and _load_ready(snapshot, self_pos, self_state):
+		var p: Vector3 = snapshot.puck_state.position
+		return Vector3(p.x, 0.0, p.z)
+	return _aim_target_for_intent(snapshot, self_pos)
 
 
 # True once the puck carries the share of pace the locked charged release was
