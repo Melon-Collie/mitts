@@ -520,17 +520,14 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 
 	_field.fill(ctx)
 
-	# Our current possession safety, read as EVADABILITY — the clearance at the
-	# best seam we could handle the puck into — so pressure we can dance out of
-	# doesn't read as danger while a stick on the puck does. Feeds the hold's
-	# keep-probability in the commit phase.
+	# Our current possession safety, read as EVADABILITY — the best odds of the
+	# cuts we could handle the puck through (AIEvadeRead) — so pressure we can
+	# dance out of doesn't read as danger while a stick on the puck does. Feeds the
+	# hold's keep-probability in the commit phase.
 	var cur_puck_pos: Vector3 = AICarrierField.puck_pos_at(self_pos, attacking_goal)
-	var evade_seam: Vector3 = AICarrySpace.best_evade_point(
+	_phase_current_safety = AIEvadeRead.evade_safety(
 			cur_puck_pos, ctx.self_velocity, _field.opponents, _field.opponent_vels,
 			ctx.self_handle_reach, _field.opponent_caps)
-	_phase_current_safety = AICarrySpace.clearance_to_safety(
-			AICarrySpace.reach_clearance(evade_seam, AICarrySpace.EVADE_HORIZON_S,
-					_field.opponents, _field.opponent_vels, _field.opponent_caps))
 	carry_keep = _phase_current_safety
 
 	# Puck-protect read (see protect_offset / protect_gain) against the

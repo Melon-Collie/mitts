@@ -25,7 +25,6 @@ static func make() -> RefCounted:
 			GameRules.INNER_CORNER_RADIUS, GameRules.CORNER_CENTER_X, GameRules.CORNER_CENTER_Z)
 	native.set_sweep(AICarrySpace.EVADE_HORIZON_S, AICarrySpace.EVADE_SAMPLE_ANGLES,
 			PackedFloat64Array(AICarrySpace.EVADE_SAMPLE_RINGS),
-			AICarrySpace.POKE_CONTACT_RADIUS_M + AICarrySpace.DWELL_HALF_BAND_M,
 			AICarrySpace.POKE_CONTACT_RADIUS_M, AICarrySpace.DWELL_HALF_BAND_M,
 			AICarrySpace.EVADE_BODY_CONTACT_M)
 	native.set_carry(AICarrySpace.TRANSIT_STRIP_CLEAR_M, AICarrySpace.TRANSIT_SAFE_CLEAR_M,

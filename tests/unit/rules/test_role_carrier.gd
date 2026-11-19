@@ -2098,6 +2098,24 @@ func test_a_frontal_stick_threat_earns_the_shield() -> void:
 			"a stick on the presented spot, with a safe hip to hide it, earns the shield")
 
 
+func test_keeping_the_puck_reads_the_evadability() -> void:
+	# The carrier's keep odds are his evadability (AIEvadeRead) at the puck: the
+	# best of his cuts, the stop among them.
+	var self_pos := Vector3(0, 0, 5)
+	var vel := Vector3(0, 0, -6)
+	for opp: Vector3 in [Vector3(-2, 0, 2), Vector3(0, 0, 2), Vector3(1.5, 0, 4)]:
+		var ctx: RoleContext = _make_ctx(self_pos, [
+				[1, TEAM_ID, self_pos, false, vel], [3, 1, opp]])
+		ctx.self_velocity = vel
+		var c: AIRoleCarrier = _decided(ctx)
+		var opps: Array[Vector3] = [opp]
+		var still: Array[Vector3] = [Vector3.ZERO]
+		var cut: float = AIEvadeRead.evade_safety(
+				AICarrierField.puck_pos_at(self_pos, ctx.attacking_goal_pos), vel, opps, still,
+				ctx.self_handle_reach)
+		assert_almost_eq(c.carry_keep, cut, 1e-6, "a man at %s" % opp)
+
+
 func test_a_stick_that_reaches_the_back_hip_leaves_no_shield() -> void:
 	# The poke reads no body (PuckInteractionRules.check_poke): a blade reaches
 	# through the carrier to a puck on his far hip as readily as round him. So

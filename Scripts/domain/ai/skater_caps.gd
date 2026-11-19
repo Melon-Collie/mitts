@@ -116,7 +116,7 @@ var body_check_transfer: float = 0.65
 var height_mult: float = 1.0
 
 # How far the carrier holds/protects the puck off its body while HANDLING it —
-# the reach that sets how tight an evasion seam it can thread (best_evade_point).
+# the reach that sets how tight an evasion seam it can thread (AIEvadeRead).
 # Scaled by the blade lever (max_blade_speed over its base). Puck HANDLING, not
 # pass reception. Default is the league carry-handle reach
 # (AIBotMechanics.EVADE_CARRY_HANDLE_M).

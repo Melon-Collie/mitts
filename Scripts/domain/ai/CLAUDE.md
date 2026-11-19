@@ -1126,7 +1126,7 @@ reaches back into what remains.
     history-blind, a deep keeper matches the in-tight decoy cells and a set
     keeper's shot reads as a near-certain goal.
 
-- **Carry safety** (`reach_clearance` / `best_evade_point`) — a reachable-set
+- **Carry safety** (`reach_clearance` / `AIEvadeRead`) — a reachable-set
   pursuit-evasion model. Each skater is a bounded-accel body: over a short
   horizon its stick can touch anywhere within (½·A·(T−reaction)² + stick) of its
   **momentum-projected** position. So a hard charger's reach rides downrange to
@@ -1162,13 +1162,18 @@ reaches back into what remains.
     the wind-up at the crease does not. Never read that man as coasting to a
     last lunge there: a backchecker out-skating a carrier who slows into the
     crease then sails past it on paper, and the drive in out-prices the shot.
-  - The **max-clearance seam** (`best_evade_point`, "can I keep the puck at
-    all") prices the carrier's current safety, and `AIEvadeRead.evade_safety`
-    is the same read for the possession value's keep odds. Its envelope is
-    centred where his momentum takes him, stopped where his body meets a
-    defender's (`AIArrival.body_contact_time`): he cannot skate through the man he is
-    evading. Only the seam's end is priced, not the route to it, so a seam past
-    a man he skates by inside his stick still reads clear (#777). Where the body goes to beat a
+  - **Evadability** (`AIEvadeRead.evade_safety`, "can I keep the puck at
+    all") prices the carrier's current safety and the possession value's keep
+    odds: the best cut of his handling envelope, centred where his momentum
+    takes him, stopped where his body meets a defender's
+    (`AIArrival.body_contact_time`). Each cut is priced along its ROUTE — the
+    body pushing off his momentum, the hands carrying the puck out — read a
+    quarter and half way through the horizon (transit) and at its end (dwell).
+    Never price a cut at its end alone: a cut through the man, or past him
+    inside his stick, then reads as the ice beyond him, and a closer man read
+    safer than a farther one (#777). The stop is one of the cuts (the hockey
+    stop is gentler than the envelope's thrust), so it is not read apart.
+    Where the body goes to beat a
     man is not a seam read: it is the carry's rolled moves, each priced at its
     own end (`docs/hybrid-carry-plan.md`).
   - **The boards bound the seam search** (`board_gap_m` rejects off-surface

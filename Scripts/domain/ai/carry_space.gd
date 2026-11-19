@@ -20,8 +20,8 @@ const EVADE_STICK_REACH_M: float = (   # how far a defender's stick touches from
 		GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLADE_LENGTH_M)
 # A full stick of clear room reads as fully safe; inside the reach reads as 0.
 const EVADE_SAFE_MARGIN_M: float = EVADE_STICK_REACH_M
-# Envelope sampling for the seam search (rings × angles). Coarse is fine — the
-# seam is a broad region, not a point.
+# Envelope sampling for the seam searches, here and AIEvadeRead's (rings ×
+# angles). Coarse is fine — the seam is a broad region, not a point.
 const EVADE_SAMPLE_RINGS: Array[float] = [0.4, 0.8, 1.0]
 const EVADE_SAMPLE_ANGLES: int = 12
 # The model reacts only once (the reaction gate) while a real defender re-reads
@@ -585,26 +585,6 @@ static func carry_strip_point_reference(from: Vector3, to: Vector3, arrival_time
 
 # Where two skaters' bodies meet, centre to centre: league bodies.
 const EVADE_BODY_CONTACT_M: float = 2.0 * AISkaterCaps.LEAGUE_BODY_RADIUS_M
-
-
-# The SEAM: the point in the carrier's handling envelope (where he can put the
-# puck over EVADE_HORIZON_S, `handle_reach` off his body) with the most clearance
-# from every defender, centred where his momentum takes him short of the first
-# body he skates into (AIArrival.body_contact_time). Only the seam's end is
-# priced, never the route: a seam past a man he skates by inside his stick reads
-# clear. Allocation-free.
-static func best_evade_point(
-		carrier_pos: Vector3, carrier_vel: Vector3,
-		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		handle_reach: float, opponent_caps: Array = []) -> Vector3:
-	var env: float = 0.5 * MANEUVER_ACCEL_M_S2 * EVADE_HORIZON_S * EVADE_HORIZON_S \
-			+ handle_reach
-	var t_c: float = AIArrival.body_contact_time(carrier_pos, carrier_vel, opponents,
-			opponent_vels, EVADE_BODY_CONTACT_M, EVADE_HORIZON_S)
-	return _best_clear_point(
-			carrier_pos.x + carrier_vel.x * t_c,
-			carrier_pos.z + carrier_vel.z * t_c,
-			env, opponents, opponent_vels, opponent_caps)
 
 
 # WHERE ON THE BLADE to hold the puck under pressure: a point in the carrier's
