@@ -89,6 +89,29 @@ func test_the_exact_cut_off_is_inside_the_walked_step() -> void:
 	assert_eq(exact_seen.size(), 4, "every start reads its own crossing")
 
 
+func test_a_carrier_cutting_onto_his_line_is_never_raced_slower_than_a_standing_one() -> void:
+	# Skating 45° off his line at 7.5 m/s he carves wide of its first strides
+	# rather than onto them, but his momentum toward our net can only bring him
+	# down it sooner than a standing start: a man off his line never cuts him
+	# off nearer.
+	var carrier := Vector3(-8.0, 0.0, 6.0)
+	var off_line := Vector3(5.3, 0.0, 5.3)
+	for d: Vector3 in [Vector3(-5.0, 0.0, 10.0), Vector3(-4.0, 0.0, 12.0),
+			Vector3(-10.0, 0.0, 11.0)]:
+		AIDefensiveVerbs.cut_off_m(d, Vector3.ZERO,
+				AIArrival.SKATER_REF_SPEED_M_S, AIArrival.SHED_ACCEL_DEFAULT_M_S2,
+				AIBotMechanics.BLADE_REACH_M, carrier, off_line, Vector3(0.0, 0.0, 1.0), 16.0,
+				null, true)
+		var moving: float = AIDefensiveVerbs._cut_at.z
+		AIDefensiveVerbs.cut_off_m(d, Vector3.ZERO,
+				AIArrival.SKATER_REF_SPEED_M_S, AIArrival.SHED_ACCEL_DEFAULT_M_S2,
+				AIBotMechanics.BLADE_REACH_M, carrier, Vector3.ZERO, Vector3(0.0, 0.0, 1.0), 16.0,
+				null, true)
+		var standing: float = AIDefensiveVerbs._cut_at.z
+		assert_gte(moving, standing, "defender at %s: cut off at z %.2f against a carrier cutting on, %.2f against one standing"
+				% [d, moving, standing])
+
+
 # Two of ours goal-side of a carrier coming up the middle at pace, both a few
 # metres in front of him and skating off to the left wall at his speed, so
 # neither gets back onto his line short of the crease: one a stick off it, one

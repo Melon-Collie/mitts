@@ -144,11 +144,15 @@ static func carrier_stand(ap: AICarrierApproach, gap: float) -> Vector3:
 	return shaded if AIStationSearch.is_legal_position(shaded) else stand
 
 
-# The cut-off's walk down the carrier's line to our net: under a stick, so the
+# The cut-off's walk along the carrier's route to our net: under a stick, so the
 # point taken is within a stick of the first one he can be cut off at.
 const CUT_OFF_STEP_M: float = 1.0
 # Bisections of the exact cut-off's last step: 1/64 of a metre.
 const CUT_OFF_BISECTIONS: int = 6
+# The carrier's first carve on his route (AIArrival.first_carve) and the point
+# cut_off_m last took on it: the AI worker's scratch, read before the next call.
+static var _route := AIArrival.Carve.new()
+static var _cut_at: Vector3 = Vector3.ZERO
 
 
 # Whether the middle is open on me: I do not stand between the carrier's line to
@@ -166,43 +170,45 @@ static func middle_open(ctx: RoleContext, ap: AICarrierApproach) -> bool:
 			or ctx.self_pos.x > maxf(line_x, mid_x) + reach
 
 
-# The first ice on the carrier's line to our net my stick gets to before he does
-# (cut_off_share), skated to facing travel and ridden as he moves: `d`'s
+# The first ice on the carrier's route to our net my stick gets to before he
+# does (cut_off_m), skated to facing travel and ridden as he moves: `d`'s
 # velocity and facing, and the point. Whichever way he goes to the net from
 # there, he meets the body or the reach-in.
 static func cut_off(ctx: RoleContext, ap: AICarrierApproach, d: RoleDecision) -> Vector3:
-	var f: float = cut_off_share(ctx, ap)
-	var to_net: Vector3 = ctx.defending_goal_pos - ap.carrier_pos
-	to_net.y = 0.0
-	# A point a fixed share of the way to a fixed net moves at the rest of the
-	# carrier's velocity.
-	d.target_velocity = ap.carrier_vel * (1.0 - f)
 	d.face_travel = true
-	return ap.carrier_pos + to_net * f
-
-
-# The share of the carrier's way to our net at which I first get there before
-# him (cut_off_m over his ice to the net).
-static func cut_off_share(ctx: RoleContext, ap: AICarrierApproach) -> float:
 	var finish: float = ap.net_dist - AIRoleRushD.RETREAT_FINISH_M
 	if finish <= 0.0:
-		return 0.0
+		d.target_velocity = ap.carrier_vel
+		return ap.carrier_pos
 	var peer: int = ctx.snapshot.puck_state.carrier_peer_id \
 			if ctx.snapshot != null and ctx.snapshot.puck_state != null else -1
 	var caps: AISkaterCaps = ctx.caps_by_peer.get(peer) if peer != -1 else null
-	return cut_off_m(ctx.self_pos, ctx.self_velocity, ctx.self_max_speed,
-			ctx.self_max_accel, AIRoleRushD.stick_m(ctx), ap.carrier_pos, ap.carrier_vel,
-			ap.dir_net, finish, caps) / ap.net_dist
+	cut_off_m(ctx.self_pos, ctx.self_velocity, ctx.self_max_speed, ctx.self_max_accel,
+			AIRoleRushD.stick_m(ctx), ap.carrier_pos, ap.carrier_vel, ap.dir_net, finish, caps)
+	var at: Vector3 = _cut_at
+	# A point a fixed share of the way to a fixed net moves at the rest of the
+	# carrier's velocity.
+	var left: float = Vector2(ctx.defending_goal_pos.x - at.x,
+			ctx.defending_goal_pos.z - at.z).length() / ap.net_dist
+	d.target_velocity = ap.carrier_vel * clampf(left, 0.0, 1.0)
+	return at
 
 
-# How far down the carrier's line to our net (`dir_net`, out to `finish_m`) the
-# first ice is that a body at `self_pos` gets his stick to before the carrier:
-# each on his arrival clock from where he is and how he is moving (the carrier at
-# his free top speed, `his_caps` or the league's, a slight over-read in the safe
-# direction), the stick reaching it `reach_m` at the body's top speed before the
-# body does. `finish_m` (the crease's top) where he beats him nowhere short of it.
-# Walked in CUT_OFF_STEP_M steps; `exact` bisects the last one, for a race
-# between bodies, where the step would tie men a step's width apart.
+# How far along the carrier's route to our net the first ice is that a body at
+# `self_pos` gets his stick to before the carrier, the point in _cut_at. The
+# route is the clock's own: his first carve (AIArrival.first_carve, along its
+# chord) and the straight from its exit to `finish_m` down his line to our net
+# (`dir_net`, the crease's top). The body is raced on its arrival clock from where
+# he is and how he moves, the stick reaching the ice `reach_m` at his top speed
+# before the body does; the carrier through the carve at its share of the
+# carve's time, and on from its exit at its velocity, at his free top speed
+# (`his_caps` or the league's, a slight over-read in the safe direction). Never
+# race him to the points of the straight line from where he stands: off it at
+# speed he skates wide of its first strides, and timed as the loop back onto
+# them the race handed them to a defender stepping onto him. The route's length
+# when he beats him nowhere short of the finish. Walked in CUT_OFF_STEP_M steps;
+# `exact` bisects the last one, for a race between bodies, where the step would
+# tie men a step's width apart.
 static func cut_off_m(self_pos: Vector3, self_vel: Vector3, self_vmax: float,
 		self_accel: float, reach_m: float, carrier_pos: Vector3, carrier_vel: Vector3,
 		dir_net: Vector3, finish_m: float, his_caps: AISkaterCaps,
@@ -211,34 +217,58 @@ static func cut_off_m(self_pos: Vector3, self_vel: Vector3, self_vmax: float,
 			else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 	var his_accel: float = his_caps.max_accel if his_caps != null \
 			else GameRules.DEFAULT_SKATER_THRUST_M_S2
+	var his_grip: float = his_caps.lateral_grip if his_caps != null else 1.0
+	var finish: Vector3 = carrier_pos + dir_net * finish_m
+	AIArrival.first_carve(_route, carrier_pos, finish, carrier_vel, his_speed, his_accel,
+			his_grip)
+	var carve_m: float = Vector2(_route.exit_pos.x - carrier_pos.x,
+			_route.exit_pos.z - carrier_pos.z).length()
+	var total: float = carve_m + Vector2(finish.x - _route.exit_pos.x,
+			finish.z - _route.exit_pos.z).length()
 	var stick_s: float = reach_m / maxf(self_vmax, 0.1)
 	var s: float = 0.0
-	while s < finish_m:
-		if _cuts_off_at(carrier_pos + dir_net * s, self_pos, self_vel, self_vmax,
-				self_accel, stick_s, carrier_pos, carrier_vel, his_speed, his_accel):
+	while s < total:
+		if _cuts_off_at(s, carve_m, total, carrier_pos, finish, self_pos, self_vel, self_vmax,
+				self_accel, stick_s, his_speed, his_accel, his_grip):
 			break
 		s += CUT_OFF_STEP_M
-	if s >= finish_m:
-		return finish_m
-	if not exact or s <= 0.0:
-		return s
-	var lost: float = s - CUT_OFF_STEP_M
-	for _i: int in CUT_OFF_BISECTIONS:
-		var mid: float = 0.5 * (lost + s)
-		if _cuts_off_at(carrier_pos + dir_net * mid, self_pos, self_vel, self_vmax,
-				self_accel, stick_s, carrier_pos, carrier_vel, his_speed, his_accel):
-			s = mid
-		else:
-			lost = mid
+	if s >= total:
+		_cut_at = finish
+		return total
+	if exact and s > 0.0:
+		var lost: float = s - CUT_OFF_STEP_M
+		for _i: int in CUT_OFF_BISECTIONS:
+			var mid: float = 0.5 * (lost + s)
+			if _cuts_off_at(mid, carve_m, total, carrier_pos, finish, self_pos, self_vel,
+					self_vmax, self_accel, stick_s, his_speed, his_accel, his_grip):
+				s = mid
+			else:
+				lost = mid
+	_cut_at = _route_point(s, carve_m, total, carrier_pos, finish)
 	return s
 
 
-static func _cuts_off_at(at: Vector3, self_pos: Vector3, self_vel: Vector3,
-		self_vmax: float, self_accel: float, stick_s: float, carrier_pos: Vector3,
-		carrier_vel: Vector3, his_speed: float, his_accel: float) -> bool:
+# The point `s` along the route cut_off_m filled _route for.
+static func _route_point(s: float, carve_m: float, total: float, carrier_pos: Vector3,
+		finish: Vector3) -> Vector3:
+	if s <= carve_m and carve_m > 0.0:
+		return carrier_pos.lerp(_route.exit_pos, s / carve_m)
+	var straight: float = total - carve_m
+	if straight <= 0.0:
+		return finish
+	return _route.exit_pos.lerp(finish, (s - carve_m) / straight)
+
+
+static func _cuts_off_at(s: float, carve_m: float, total: float, carrier_pos: Vector3,
+		finish: Vector3, self_pos: Vector3, self_vel: Vector3, self_vmax: float,
+		self_accel: float, stick_s: float, his_speed: float, his_accel: float,
+		his_grip: float) -> bool:
+	var at: Vector3 = _route_point(s, carve_m, total, carrier_pos, finish)
+	var his_t: float = _route.time * s / carve_m if s <= carve_m and carve_m > 0.0 \
+			else _route.time + AIArrival.time_to_arrive(_route.exit_pos, at, _route.exit_vel,
+					his_speed, his_accel, his_grip)
 	return AIArrival.time_to_arrive(self_pos, at, self_vel, self_vmax, self_accel) \
-			<= AIArrival.time_to_arrive(carrier_pos, at, carrier_vel, his_speed,
-					his_accel) + stick_s
+			<= his_t + stick_s
 
 
 # Fills `out` with the carrier a defender owns; false only when there is no puck

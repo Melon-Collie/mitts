@@ -685,8 +685,8 @@ So the TRANS_DEFENSE → DZONE re-election is not a geometry discontinuity: *the
 who gapped a carrier through the neutral zone keeps him into the zone; there is
 no handoff at the line.* The election keeps him too: while a carrier comes at
 our net at pace, the puck is owned by the body goal-side of him whose stick gets
-onto his line farthest from our net (`AIRoleSlots.carrier_owner`, the cut-off
-race solved inside its walk's step, last tick's owner or BACK_STRONG's holder
+onto his route to our net farthest from it (`AIRoleSlots.carrier_owner`, the
+cut-off race solved inside its walk's step, last tick's owner or BACK_STRONG's holder
 taking the hysteresis, a dead heat to the man nearest his line) — 3v3's
 PRESSURE, and in 5v5 the zone role that body holds, published as
 `TeamStrategyView.pressure_slot_override` over the area rule
@@ -710,10 +710,17 @@ at our net at pace draws within a stick of level in our zone
 inside is lost or about to be: the last man may check, and otherwise steps into
 his path at contact while still in front with the carrier's line to our net
 inside his stick; wider of that line, or behind him, he takes the first ice
-on it his stick gets to before the carrier does (`AIDefensiveVerbs.cut_off`,
-both on the arrival clock; the crease's top when he wins none short of it),
+on the carrier's route to our net his stick gets to before the carrier does
+(`AIDefensiveVerbs.cut_off`; the crease's top when he wins none short of it),
 facing the man while in front and skated to behind, so the body or the
-reach-in meets him on his way to the slot. Never step out onto a man whose
+reach-in meets him on his way to the slot. The route is the arrival clock's
+own: the carrier's first carve onto his line (`AIArrival.first_carve`) and the
+straight from its exit, the carrier timed along it and the defender on the
+arrival clock to each point of it. Never race the carrier to the points of
+the straight line from where he stands: a carrier at speed off that line
+carves wide of its first strides, and timed as the loop back onto them the
+race handed them to a defender stepping onto him, who was skated round
+(`test_speed_rush_defence.gd`). Never step out onto a man whose
 line he is wide of: level inside a carrier on the wall, that walks him out
 while the carrier cuts in across his front.
 Letting him go wide is fine; letting him into the slot is not. Never chase the
@@ -875,7 +882,7 @@ wide of a carrier down the middle, or across the middle from a wide one) holds
 depth in a lane the carrier is not in, and the slot is his: from the dots, a
 standing D against a carrier down the middle at 9 m/s kept his depth to our line
 and was 6 m wide of him the whole way. He takes the first ice on the carrier's
-line his stick gets to before the carrier does (`AIDefensiveVerbs.cut_off`, the
+route his stick gets to before the carrier does (`AIDefensiveVerbs.cut_off`, the
 same cut-off the level pressurer skates), facing travel, and the ladder takes
 over once he is on it. On the 5v5 back line the pair's bracket replaces it
 while the carrier's lead runs between the two D (`BACK_STRONG` above).

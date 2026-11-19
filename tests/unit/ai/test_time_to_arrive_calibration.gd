@@ -298,3 +298,30 @@ func test_low_grip_redirect_model_tracks_gripped_sim() -> void:
 	var tol: float = maxf(sim_gripped * TOL_FRAC, TOL_FLOOR_S)
 	assert_almost_eq(model_gripped, sim_gripped, tol,
 			"grip-aware model tracks the gripped sim within the band")
+
+
+# ── The first carve as a query ────────────────────────────────────────────────
+# AIArrival.first_carve hands a reader the carve the clock prices. Skated on from
+# its exit at its velocity, the clock adds up to its own read of the whole trip.
+
+func test_the_first_carve_is_the_clocks_own() -> void:
+	var carve := AIArrival.Carve.new()
+	var carved: int = 0
+	for speed: float in [4.5, 7.5, 9.0]:
+		for angle_deg: float in [30.0, 45.0, 60.0, 90.0]:
+			for dist: float in [10.0, 16.0, 25.0]:
+				var ang: float = deg_to_rad(angle_deg)
+				var v0 := Vector3(sin(ang), 0.0, -cos(ang)) * speed
+				var target: Vector3 = ORIGIN + Vector3(0.0, 0.0, -dist)
+				var whole: float = AIArrival._time_to_arrive_direct(ORIGIN, target, v0)
+				if not AIArrival.first_carve(carve, ORIGIN, target, v0):
+					assert_eq(carve.exit_pos, ORIGIN, "no carve leaves him where he is")
+					assert_eq(carve.time, 0.0, "at no time")
+					continue
+				carved += 1
+				var on: float = carve.time + AIArrival._time_to_arrive_direct(carve.exit_pos,
+						target, carve.exit_vel)
+				assert_almost_eq(on, whole, 0.0005,
+						"v0=%.1f at %.0f° over %.0f m: carve then on %.4fs, whole %.4fs" % [
+						speed, angle_deg, dist, on, whole])
+	assert_gt(carved, 20, "the sweep carves")
