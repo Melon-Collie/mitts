@@ -18,7 +18,8 @@ const SET_IN_ROUNDS: int = 3
 
 # `cover_priced`: the caller has already priced who picks the play up if the
 # challenge is beaten (the pinch's rotation), so the hit needs no man behind,
-# and with no hit to throw he closes on the carrier rather than gapping him.
+# and with no hit to throw he goes onto the carrier at contact rather than
+# gapping him or waiting on his line.
 static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision:
 	var d := RoleDecision.new()
 
@@ -41,7 +42,9 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 			d.commit_check = true
 			d.target_position = check.target
 			return d
-	if level or cover_priced:
+	if cover_priced:
+		return _onto_him(ctx, ap, d)
+	if level:
 		return _close_on_him(ctx, ap, d)
 
 	var our_net: Vector3 = ctx.defending_goal_pos
@@ -256,12 +259,20 @@ static func _close_on_him(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision) -> RoleDecision:
 	var depth: float = _depth_on(ctx, ap)
 	if depth > 0.0 and _off_his_line(ctx, ap, depth) <= AIRoleRushD.stick_m(ctx):
-		d.target_position = ap.carrier_pos + ap.dir_net * (2.0 * GameRules.OFFSIDE_LINE_SLACK)
-		d.target_velocity = ap.carrier_vel
-	else:
-		d.target_position = AIDefensiveVerbs.cut_off(ctx, ap, d)
-		if depth > 0.0:
-			d.face_travel = false
+		return _onto_him(ctx, ap, d)
+	d.target_position = AIDefensiveVerbs.cut_off(ctx, ap, d)
+	if depth > 0.0:
+		d.face_travel = false
+	d.arrive_at_speed = true
+	d.pressures_puck = true
+	d.engaged_peer_id = ctx.snapshot.puck_state.carrier_peer_id
+	return d
+
+
+# Into his path at contact, goal-side of him, riding him.
+static func _onto_him(ctx: RoleContext, ap: AICarrierApproach, d: RoleDecision) -> RoleDecision:
+	d.target_position = ap.carrier_pos + ap.dir_net * (2.0 * GameRules.OFFSIDE_LINE_SLACK)
+	d.target_velocity = ap.carrier_vel
 	d.arrive_at_speed = true
 	d.pressures_puck = true
 	d.engaged_peer_id = ctx.snapshot.puck_state.carrier_peer_id
