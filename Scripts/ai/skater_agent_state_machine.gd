@@ -3675,8 +3675,7 @@ func _update_acceleration_cache(snapshot: WorldSnapshot, delta: float) -> void:
 			smoothed.x *= scale
 			smoothed.z *= scale
 		_accel_by_peer[peer_id] = smoothed
-		# Heading turn rate: must match AIAccelerationTracker's, so a unit-test
-		# snapshot reads the same signal the host serves.
+		# Heading turn rate, as the tracker reads it (test_bot_mirrors.gd).
 		var raw_omega: float = 0.0
 		var prev_speed: float = sqrt(prev_v.x * prev_v.x + prev_v.z * prev_v.z)
 		var curr_speed: float = sqrt(curr_v.x * curr_v.x + curr_v.z * curr_v.z)

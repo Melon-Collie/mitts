@@ -571,8 +571,8 @@ func _refresh_threat_base_memo(snapshot: WorldSnapshot) -> void:
 
 
 # Our goalie's current world position, or the goal mouth as a first-frame
-# fallback. The brain has no RoleContext, so it cannot call
-# AIRoleReads.resolve_our_goalie_pos.
+# fallback: AIRoleReads.resolve_our_goalie_pos, which the brain cannot call
+# without a RoleContext (test_bot_mirrors.gd holds the two together).
 func _resolve_our_goalie_pos(snapshot: WorldSnapshot) -> Vector3:
 	var goalie: GoalieNetworkState = snapshot.goalie_states.get(team_id)
 	if goalie == null:

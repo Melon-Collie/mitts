@@ -494,12 +494,11 @@ static func carry_strip_point_reference(from: Vector3, to: Vector3, arrival_time
 		if ddist > 0.001:
 			carry_dir = Vector2(ddx / ddist, ddz / ddist)
 			carry_speed = ddist / arrival_time
-	# Sample windows must mirror carry_safety exactly so the strip point and
-	# the safety read agree on which sample is covered (crossing = the
-	# meeting-strip band's SHIFT-ADJUSTED core, mid = full pursuit, end =
-	# arrival lunge). The earliest core-hit crossing pre-empts the fixed
-	# samples when the meeting happens first — a pinch wall driven into
-	# strips at the wall.
+	# carry_safety's samples, so the two agree on which one is covered
+	# (test_carry_strip_point_mirrors_safety.gd): crossing = the meeting-strip
+	# band's SHIFT-ADJUSTED core, mid = full pursuit, end = arrival lunge. The
+	# earliest core-hit crossing pre-empts the fixed samples when the meeting
+	# happens first — a pinch wall driven into strips at the wall.
 	var cross_t: float = INF
 	var cross_pt: Vector3 = to
 	var seg_x: float = to.x - from.x
