@@ -501,6 +501,19 @@ func test_a_kept_body_holds_his_slot_against_the_race() -> void:
 		held[a[pid]] = true
 
 
+func test_the_zone_label_pairs_are_the_d_and_the_wingers() -> void:
+	for slot: int in [AIRoleSlots.Slot.ZONE_D_STRONG, AIRoleSlots.Slot.ZONE_D_WEAK,
+			AIRoleSlots.Slot.ZONE_W_STRONG, AIRoleSlots.Slot.ZONE_W_WEAK]:
+		var partner: int = AIRoleSlots5.zone_pair_partner(slot)
+		assert_ne(partner, slot)
+		assert_eq(AIRoleSlots5.zone_pair_partner(partner), slot, "the pair is mutual")
+	assert_eq(AIRoleSlots5.zone_pair_partner(AIRoleSlots.Slot.ZONE_D_STRONG),
+			AIRoleSlots.Slot.ZONE_D_WEAK)
+	assert_eq(AIRoleSlots5.zone_pair_partner(AIRoleSlots.Slot.ZONE_W_STRONG),
+			AIRoleSlots.Slot.ZONE_W_WEAK)
+	assert_eq(AIRoleSlots5.zone_pair_partner(AIRoleSlots.Slot.ZONE_C), AIRoleSlots.Slot.NONE)
+
+
 func test_missing_positions_default_to_forward_group() -> void:
 	# Peers with no lobby position (tests / degenerate rosters) are rovers:
 	# they can fill F jobs and cross-fill D posts, and nothing crashes.

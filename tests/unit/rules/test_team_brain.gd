@@ -499,6 +499,80 @@ func test_a_puck_in_the_low_battle_is_raced_whatever_man_the_d_had() -> void:
 	assert_eq(brain.get_slot(140), AIRoleSlots.Slot.ZONE_D_WEAK)
 
 
+# Their point man (200) walking the strong point toward the middle, our strong
+# winger (120, on the puck) drifting in with him, and our weak winger (110)
+# riding the weak-point man (240) in. `puck` moves the carrier; `drift` scales
+# the wingers' velocities.
+func _winger_swap_snapshot(puck: Vector3 = Vector3(2.8, 0.0, 15.7),
+		drift: float = 1.0) -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	for entry: Array in [
+			[100, 0, Vector3(1.3, 0.0, 20.0), Vector3.ZERO],
+			[110, 0, Vector3(-1.5, 0.0, 15.5), Vector3(7.0 * drift, 0.0, 0.0)],
+			[120, 0, Vector3(1.5, 0.0, 16.5), Vector3(-7.0 * drift, 0.0, 0.0)],
+			[130, 0, Vector3(-0.5, 0.0, 24.6), Vector3.ZERO],
+			[140, 0, Vector3(0.3, 0.0, 23.1), Vector3.ZERO],
+			[200, 1, puck, Vector3.ZERO],
+			[210, 1, Vector3(0.3, 0.0, 24.5), Vector3.ZERO],
+			[220, 1, Vector3(1.1, 0.0, 21.1), Vector3.ZERO],
+			[230, 1, Vector3(-7.5, 0.0, 19.8), Vector3.ZERO],
+			[240, 1, Vector3(-3.6, 0.0, 15.8), Vector3(1.2, 0.0, 0.0)]]:
+		var s := SkaterNetworkState.new()
+		s.position = entry[2]
+		s.velocity = entry[3]
+		snap.skater_states[entry[0]] = s
+	var p := PuckNetworkState.new()
+	p.carrier_peer_id = 200
+	p.position = puck
+	snap.puck_state = p
+	return snap
+
+
+func _winger_swap_brain() -> TeamBrain:
+	var team_map: Dictionary = {100: 0, 110: 0, 120: 0, 130: 0, 140: 0,
+			200: 1, 210: 1, 220: 1, 230: 1, 240: 1}
+	var brain := TeamBrain.new(TEAM_ID, team_map, {}, 5,
+			{100: 0, 110: 1, 120: 2, 130: 3, 140: 4})
+	brain.slot_assignments = {100: AIRoleSlots.Slot.ZONE_C,
+			110: AIRoleSlots.Slot.ZONE_W_WEAK, 120: AIRoleSlots.Slot.ZONE_W_STRONG,
+			130: AIRoleSlots.Slot.ZONE_D_WEAK, 140: AIRoleSlots.Slot.ZONE_D_STRONG}
+	brain.threat_assignments = {100: 220, 110: 240, 130: 210, 140: 230}
+	return brain
+
+
+func test_a_winger_whose_man_only_his_label_may_have_keeps_the_label() -> void:
+	# The two wingers converge on the middle: the weak winger reads nearer the
+	# strong post, but his man is on the weak side, outside the strong half.
+	# Swapped, the two would cross the ice to trade him.
+	var snap: WorldSnapshot = _winger_swap_snapshot()
+	var brain: TeamBrain = _winger_swap_brain()
+	var raced: Dictionary = AIRoleSlots5.assign(snap, TEAM_ID, OUR_NET_Z,
+			AIPossessionState.State.DZONE, brain._team_id_by_peer,
+			brain.slot_assignments, 1.0, {}, brain._position_by_peer)
+	assert_eq(raced[110], AIRoleSlots.Slot.ZONE_W_STRONG,
+			"fixture sanity: the race alone swaps the winger labels")
+	brain.force_retick()
+	brain.tick(0.001, snap)
+	assert_eq(brain.state, AIPossessionState.State.DZONE, "fixture sanity: DZONE")
+	assert_eq(brain.get_slot(110), AIRoleSlots.Slot.ZONE_W_WEAK)
+	assert_eq(brain.get_slot(120), AIRoleSlots.Slot.ZONE_W_STRONG)
+	assert_eq(brain.assigned_threat(110), 240, "the weak winger keeps his man")
+
+
+func test_a_strong_side_flip_still_mirrors_the_winger_labels() -> void:
+	# The puck goes across to the other point: the weak winger's man is on the
+	# new strong side, outside his own label's half, so nothing pins it and the
+	# winger standing there takes the strong label.
+	var snap: WorldSnapshot = _winger_swap_snapshot(Vector3(-3.0, 0.0, 15.7), 0.0)
+	var brain: TeamBrain = _winger_swap_brain()
+	brain.force_retick()
+	brain.tick(0.001, snap)
+	assert_eq(brain.state, AIPossessionState.State.DZONE, "fixture sanity: DZONE")
+	assert_eq(brain.strong_x(), -1.0, "fixture sanity: the strong side flipped")
+	assert_eq(brain.get_slot(110), AIRoleSlots.Slot.ZONE_W_STRONG)
+	assert_eq(brain.get_slot(120), AIRoleSlots.Slot.ZONE_W_WEAK)
+
+
 # ── A carrier at pace across our line ────────────────────────────────────────
 
 # 5v5: their carrier just across our line on the left wall at `carrier_vel`, his

@@ -1,12 +1,12 @@
 extends GutTest
 
-# Do the two 5v5 zone wingers swap labels in D-zone coverage, and what does it
-# cost? Each fixture runs twice on the real decision stack (the duel harness):
-# as shipped, where only a zone D keeps his label while his man needs it
-# (TeamBrain._keep_the_labels_men_need), and with that rule extended to the
-# ZONE_W_STRONG / ZONE_W_WEAK pair (WingerKeepBrain below, this file only).
+# Do the 5v5 zone label pairs swap in D-zone coverage, and what does it cost?
+# A body keeps his label while his man needs it
+# (TeamBrain._keep_the_labels_men_need), so the swaps left should be the
+# strong-side flip's mirror and a man on the seam handed across. Each fixture
+# runs on the real decision stack (the duel harness).
 #
-# Per fixture and rule, over the ticks the defence is in its D-zone shape:
+# Per fixture, over the ticks the defence is in its D-zone shape:
 #   W swaps — the two winger bodies exchanging ZONE_W_STRONG and ZONE_W_WEAK
 #     between brain ticks, split by whether the brain's strong side flipped
 #     the same tick (the labels mirror with it, and that swap is the shape
@@ -19,14 +19,13 @@ extends GutTest
 #   Whole run — men nobody has per tick and the share of ticks a man is
 #     double-covered, read off each defender's own lock as
 #     test_zone_coverage_shape.gd reads them.
-# Under the table, per run: the unattended ticks by man, and one line per swap
+# Under the table, per fixture: the unattended ticks by man, and one line per swap
 # (who, where, the strong side, each body's man before -> after, and for a
 # swap without a flip where the two stood when its window closed).
 #
-# Asserts nothing: it is read by a person deciding whether the winger pair
-# keeps its labels too. The low cycle's attack is bots, so its two rows are
-# two rollouts rather than one possession defended two ways; every other
-# attack is scripted.
+# Asserts nothing: it is read by a person deciding how the zone labels are
+# held. The low cycle's attack is bots, so any change to the defence lands it
+# in a different rollout; every other attack is scripted.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
@@ -39,32 +38,6 @@ const ZONE_SLOTS: Array[int] = [
 ]
 # Low pair, slot, points (test_zone_coverage_shape.gd's seats).
 const SEATS_5V5: Array[int] = [3, 4, 0, 1, 2]
-
-
-# The shipped brain plus the D rule extended to the winger pair.
-class WingerKeepBrain extends TeamBrain:
-	func _keep_the_labels_men_need(snapshot: WorldSnapshot) -> void:
-		super(snapshot)
-		if state != AIPossessionState.State.DZONE or snapshot == null \
-				or snapshot.puck_state == null:
-			return
-		var pressure_slot: int = AIZoneCoverage.pressure_slot(self, _strong_x, _own_goal_z,
-				snapshot.puck_state.position)
-		for pid: int in threat_assignments:
-			var label: int = slot_assignments.get(pid, AIRoleSlots.Slot.NONE)
-			var partner: int = AIRoleSlots.Slot.NONE
-			if label == AIRoleSlots.Slot.ZONE_W_STRONG:
-				partner = AIRoleSlots.Slot.ZONE_W_WEAK
-			elif label == AIRoleSlots.Slot.ZONE_W_WEAK:
-				partner = AIRoleSlots.Slot.ZONE_W_STRONG
-			var man: SkaterNetworkState = snapshot.skater_states.get(threat_assignments[pid])
-			if partner == AIRoleSlots.Slot.NONE or man == null:
-				continue
-			if _may_be_handed(label, pressure_slot, man.position,
-					AIZoneCoverage.AREA_RELEASE_MARGIN_M) \
-					and not _may_be_handed(partner, pressure_slot, man.position,
-							AIZoneCoverage.AREA_RELEASE_MARGIN_M):
-				_kept_zone_labels[pid] = label
 
 
 class Fixture:
@@ -190,7 +163,7 @@ func _fixtures() -> Array[Fixture]:
 	]
 
 
-func _run(f: Fixture, extended: bool) -> Tally:
+func _run(f: Fixture) -> Tally:
 	var duel := Duel.new()
 	duel.team_size = 5
 	for i: int in f.attackers.size():
@@ -205,8 +178,6 @@ func _run(f: Fixture, extended: bool) -> Tally:
 		duel.add_skater(50 + i, 1, f.defenders[i], BotSkillProfile.hard())
 		duel.positions[50 + i] = f.seats[i]
 	duel.start(1)
-	if extended:
-		_swap_in_winger_keep_brain(duel)
 
 	var r := Tally.new()
 	var brain: TeamBrain = duel.brains[1]
@@ -267,24 +238,6 @@ func _run(f: Fixture, extended: bool) -> Tally:
 				_close_all(duel, windows, r)
 	_close_all(duel, windows, r)
 	return r
-
-
-# Rebuilds team 1's brain as a WingerKeepBrain and re-seats its agents on it,
-# as Duel.start seats them.
-func _swap_in_winger_keep_brain(duel: Duel) -> void:
-	var brain := WingerKeepBrain.new(1, duel.team_map, duel.caps_by_peer, duel.team_size,
-			duel.positions)
-	duel.brains[1] = brain
-	var caps: AISkaterCaps = Duel.match_caps()
-	for s: Duel.SimSkater in duel.skaters:
-		if s.team_id != 1 or s.agent == null:
-			continue
-		s.agent = Duel.Agent.new()
-		s.agent.setup(s.peer_id, s.team_id, brain, duel.team_map, caps.is_left_handed,
-				duel.caps_by_peer)
-		s.agent.apply_capabilities(caps)
-		if s.profile != null:
-			s.agent.apply_profile(s.profile)
 
 
 # The two bodies that exchanged `slot_a` and `slot_b` since `before`, or [].
@@ -368,30 +321,27 @@ func _doubled(duel: Duel, brain: TeamBrain) -> bool:
 
 
 func test_winger_label_swaps() -> void:
-	gut.p("  ── 5v5 zone winger label swaps: as shipped vs the D rule extended to the wingers ──")
+	gut.p("  ── 5v5 zone label swaps ──")
 	gut.p("  W swaps: without / with a strong-side flip. After each swap without a flip, until"
 			+ " the next or %.1f s: winger |dx| mean/max, swaps where they crossed, ticks in"
 			% WINDOW_S + " the window with a man nobody has / a man two have.")
-	gut.p("  %-18s %-8s %5s | %-9s %3s | %-11s %-7s %-14s | %-9s %-7s"
-			% ["fixture", "rule", "dzone", "W swaps", "D", "|dx| m", "crossed",
+	gut.p("  %-18s %5s | %-9s %3s | %-11s %-7s %-14s | %-9s %-7s"
+			% ["fixture", "dzone", "W swaps", "D", "|dx| m", "crossed",
 			"window unc/dbl", "unc/tick", "dbl %"])
 	var details: Array[String] = []
 	for f: Fixture in _fixtures():
-		for extended: bool in [false, true]:
-			var r: Tally = _run(f, extended)
-			var rule: String = "extended" if extended else "shipped"
-			details.append("  %s, %s: unattended ticks by man %s" % [f.label, rule,
-					str(r.uncovered_by_man)])
-			for e: String in r.events:
-				details.append("    " + e)
-			var n: float = float(maxi(r.dzone_ticks, 1))
-			var travel: String = "-" if r.travel_n == 0 else "%.1f/%.1f" % [
-					r.travel_sum / r.travel_n, r.travel_max]
-			gut.p("  %-18s %-8s %5d | %3d / %-3d %3d | %-11s %-7s %3d/%-3d of %-4d | %-9.2f %-7.1f"
-					% [f.label, rule, r.dzone_ticks,
-					r.w_swaps, r.w_flip_swaps, r.d_swaps, travel,
-					"%d/%d" % [r.crossed, r.w_swaps], r.window_uncovered, r.window_doubled,
-					r.window_ticks, r.uncovered_sum / n, 100.0 * r.doubled_ticks / n])
+		var r: Tally = _run(f)
+		details.append("  %s: unattended ticks by man %s" % [f.label, str(r.uncovered_by_man)])
+		for e: String in r.events:
+			details.append("    " + e)
+		var n: float = float(maxi(r.dzone_ticks, 1))
+		var travel: String = "-" if r.travel_n == 0 else "%.1f/%.1f" % [
+				r.travel_sum / r.travel_n, r.travel_max]
+		gut.p("  %-18s %5d | %3d / %-3d %3d | %-11s %-7s %3d/%-3d of %-4d | %-9.2f %-7.1f"
+				% [f.label, r.dzone_ticks,
+				r.w_swaps, r.w_flip_swaps, r.d_swaps, travel,
+				"%d/%d" % [r.crossed, r.w_swaps], r.window_uncovered, r.window_doubled,
+				r.window_ticks, r.uncovered_sum / n, 100.0 * r.doubled_ticks / n])
 	for line: String in details:
 		gut.p(line)
 	assert_true(true)

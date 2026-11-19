@@ -548,12 +548,14 @@ func _may_be_handed(slot: int, pressure_slot: int, man_pos: Vector3, margin: flo
 	return AIZoneCoverage.in_area(slot, _strong_x, _own_goal_z, man_pos, margin, _man_down)
 
 
-# Fills _kept_zone_labels from last tick's labels and partition: a zone D keeps
-# his label while the man he covers is still his under it and his partner's
-# label could not be handed him. The election races the labels to their posts,
-# not to the men, so a D skating across to his man can read nearer his
-# partner's post; swapped, he is left with a man outside his new area, and the
-# partner holding the label that may have him is already on a man of his own.
+# Fills _kept_zone_labels from last tick's labels and partition: a body holding
+# one label of a strong/weak zone pair (AIRoleSlots5.zone_pair_partner) keeps it
+# while the man he covers is still his under it and the partner label could not
+# be handed him. The election races the labels to their posts, not to the men,
+# so a body skating across to his man can read nearer his partner's post;
+# swapped, he is left with a man outside his new area, and the partner holding
+# the label that may have him is already on a man of his own, or crosses the
+# ice to take him.
 func _keep_the_labels_men_need(snapshot: WorldSnapshot) -> void:
 	_kept_zone_labels.clear()
 	if state != AIPossessionState.State.DZONE or snapshot == null \
@@ -563,11 +565,7 @@ func _keep_the_labels_men_need(snapshot: WorldSnapshot) -> void:
 			snapshot.puck_state.position)
 	for pid: int in threat_assignments:
 		var label: int = slot_assignments.get(pid, AIRoleSlots.Slot.NONE)
-		var partner: int = AIRoleSlots.Slot.NONE
-		if label == AIRoleSlots.Slot.ZONE_D_STRONG:
-			partner = AIRoleSlots.Slot.ZONE_D_WEAK
-		elif label == AIRoleSlots.Slot.ZONE_D_WEAK:
-			partner = AIRoleSlots.Slot.ZONE_D_STRONG
+		var partner: int = AIRoleSlots5.zone_pair_partner(label)
 		var man: SkaterNetworkState = snapshot.skater_states.get(threat_assignments[pid])
 		if partner == AIRoleSlots.Slot.NONE or man == null:
 			continue

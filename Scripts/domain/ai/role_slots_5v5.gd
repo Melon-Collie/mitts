@@ -104,6 +104,22 @@ static func is_zone_slot(slot: int) -> bool:
 			or slot == AIRoleSlots.Slot.ZONE_W_WEAK
 
 
+# The other label of `slot`'s strong/weak zone pair (the D pair, the winger
+# pair), or NONE for any other slot.
+static func zone_pair_partner(slot: int) -> int:
+	match slot:
+		AIRoleSlots.Slot.ZONE_D_STRONG:
+			return AIRoleSlots.Slot.ZONE_D_WEAK
+		AIRoleSlots.Slot.ZONE_D_WEAK:
+			return AIRoleSlots.Slot.ZONE_D_STRONG
+		AIRoleSlots.Slot.ZONE_W_STRONG:
+			return AIRoleSlots.Slot.ZONE_W_WEAK
+		AIRoleSlots.Slot.ZONE_W_WEAK:
+			return AIRoleSlots.Slot.ZONE_W_STRONG
+		_:
+			return AIRoleSlots.Slot.NONE
+
+
 # Assigns each teammate to a 5v5 slot. Same contract as AIRoleSlots.assign
 # plus `position_by_peer` (peer_id → lobby team_slot). `kept` (peer_id → slot)
 # names bodies that hold their slot without racing for it — the brain's call

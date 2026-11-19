@@ -654,17 +654,22 @@ area's: the chaser leaves the matching and the area's owner covers a man
 (`AIZoneCoverage.chased_by_another`), or one body stands off both the puck and
 every man while the race is on (`test_zone_coverage_shape.gd`'s low cycle).
 
-**A D's label follows his man.** The D labels are raced to their posts (the
-puck, the net front), not to the men, so a strong D skating across to a man on
-the weak wall reads nearer the net-front post than his partner. Swapped, his man
-stands outside the box his new label owns, and the partner whose label could
-have him already has the net-front man, whom the house pin keeps, so nobody
-has him. A zone D whose man his partner's label
-could not be handed keeps his label through the election
-(`TeamBrain._keep_the_labels_men_need`). With the puck in the low battle its
-owner's area is everyone's, no man pins a label, and the D nearer the puck
+**A label follows its man.** The strong/weak zone labels — the D pair and the
+winger pair (`AIRoleSlots5.zone_pair_partner`) — are raced to their posts, not
+to the men. A strong D skating across to a man on the weak wall reads nearer
+the net-front post than his partner; swapped, his man stands outside the box
+his new label owns, and the partner whose label could have him already has the
+net-front man, whom the house pin keeps, so nobody has him. A weak winger
+riding his man in toward the middle reads nearer the strong post than the
+strong winger drifting the other way; swapped, the two cross the ice to trade
+the man (`tests/instruments/ai/test_zone_winger_swaps.gd`). So a body whose man
+the partner label could not be handed keeps his label through the election
+(`TeamBrain._keep_the_labels_men_need`). A strong-side flip still mirrors the
+labels: his man is then outside his own label's area. A man on the seam, in
+both areas, pins nothing and is handed across. With the puck in the low battle
+its owner's area is everyone's, no man pins a label, and the D nearer the puck
 takes it (`test_team_brain.gd`). Never hand the men across with a swap instead:
-each D then skates across the other to the man the other had.
+each body then skates across the other to the man the other had.
 
 ## The gap ladder is one ladder, and both puck-owners read it
 
