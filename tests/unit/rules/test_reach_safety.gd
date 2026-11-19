@@ -110,7 +110,8 @@ func test_the_carrier_never_projects_through_a_body() -> void:
 				var car_v := Vector3(pace, 0, 0)
 				var opps: Array[Vector3] = [Vector3(gap, 0, 0.2)]
 				var vels: Array[Vector3] = [d_vel]
-				var t: float = AICarrySpace.momentum_horizon_s(Vector3.ZERO, car_v, opps, vels)
+				var t: float = AIArrival.body_contact_time(Vector3.ZERO, car_v, opps, vels, contact,
+						AICarrySpace.EVADE_HORIZON_S)
 				assert_between(t, 0.0, AICarrySpace.EVADE_HORIZON_S)
 				var sep: float = (car_v * t).distance_to(opps[0] + d_vel * t)
 				assert_gte(sep, contact - SLACK,
@@ -126,8 +127,10 @@ func test_a_man_behind_or_beside_does_not_stop_the_carrier() -> void:
 	var behind: Array[Vector3] = [Vector3(-0.5, 0, 0)]
 	var beside: Array[Vector3] = [Vector3(1.5, 0, 1.0)]
 	var still: Array[Vector3] = [Vector3.ZERO]
-	assert_eq(AICarrySpace.momentum_horizon_s(Vector3.ZERO, car_v, behind, still), h)
-	assert_eq(AICarrySpace.momentum_horizon_s(Vector3.ZERO, car_v, beside, still), h)
+	assert_eq(AIArrival.body_contact_time(Vector3.ZERO, car_v, behind, still,
+			AICarrySpace.EVADE_BODY_CONTACT_M, h), h)
+	assert_eq(AIArrival.body_contact_time(Vector3.ZERO, car_v, beside, still,
+			AICarrySpace.EVADE_BODY_CONTACT_M, h), h)
 
 
 # A defender 2.2 m ahead of a 5 m/s carrier, skating with him at `pace`.

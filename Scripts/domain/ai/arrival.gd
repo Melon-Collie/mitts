@@ -1,7 +1,8 @@
 class_name AIArrival
 
 # The momentum-honest arrival clock the bots share: how long a body carrying
-# its current velocity takes to reach a point, routed around the nets. A leaf —
+# its current velocity takes to reach a point, routed around the nets, or to
+# meet another body. A leaf —
 # it reads GameRules, AIStrideRamp and AINetObstacle only — so the scorer and
 # AICarrySpace can both depend on it (test_scoring_split_stays_acyclic.gd).
 
@@ -219,3 +220,33 @@ static func _time_to_arrive_direct(from_pos: Vector3, dest: Vector3,
 		r += v0 * v0 / (2.0 * REVERSAL_BRAKE_DECEL_M_S2)
 		v0 = 0.0
 	return t + AIStrideRamp.time_to_cover(v0, r, vmax, accel_m_s2)
+
+
+# How long (s, at most `horizon_s`) a skater at `pos` carrying `vel` skates before
+# his body meets one of `others`, each dead-reckoned on his own velocity, their
+# centres `contact_m` apart then: nobody skates through a body. A man he is
+# already against counts only while he is still skating into him.
+static func body_contact_time(pos: Vector3, vel: Vector3, others: Array[Vector3],
+		other_vels: Array[Vector3], contact_m: float, horizon_s: float) -> float:
+	var t_c: float = horizon_s
+	var n: int = others.size()
+	if other_vels.size() != n:
+		return t_c
+	var contact_sq: float = contact_m * contact_m
+	for i: int in n:
+		var rx: float = pos.x - others[i].x
+		var rz: float = pos.z - others[i].z
+		var wx: float = vel.x - other_vels[i].x
+		var wz: float = vel.z - other_vels[i].z
+		var b: float = rx * wx + rz * wz
+		if b >= 0.0:
+			continue   # not closing on him
+		var c: float = rx * rx + rz * rz - contact_sq
+		if c <= 0.0:
+			return 0.0
+		var a: float = wx * wx + wz * wz
+		var disc: float = b * b - a * c
+		if disc < 0.0:
+			continue   # his line passes clear of the body
+		t_c = minf(t_c, (-b - sqrt(disc)) / a)
+	return t_c

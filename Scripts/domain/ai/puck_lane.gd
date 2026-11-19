@@ -248,25 +248,15 @@ static func expected_pass_speed(shooter: Vector3, receiver: Vector3) -> float:
 
 # ── Release contest: the pressure read, as a physical race ────────────────────
 # P(the release completes clean) in [0, 1] against every nearby opponent — the
-# factor the shot scorers multiply by. A physical
-# contest, never a density curve: an opponent's BLADE must reach the RELEASE
-# POINT (release_point_toward) while the puck is still on the blade.
-#
-# Per opponent, in lane_block_at's vocabulary (same reach convention, read
-# delay and lateral close pace):
+# factor the shot scorers multiply by: an opponent's BLADE must reach the
+# RELEASE POINT (release_point_toward) while the puck is still on the blade.
+# Per opponent, in lane_block_at's vocabulary:
 #
 #   reach_i  = stick_i + close_speed_i × max(0, T_window − read delay)
-#              — his stick, plus what he closes after a competitive read,
-#              over the real windup window
 #   block_i  = clamp((reach_i − d_i) / stick_i, 0, 1)
-#              — one full stick inside reach ⇒ certain blade-on-puck
 #   p_i      = block_i × (T_window − read delay)⁺ / T_window
-#              — a blade can only disrupt the fraction of the release
-#              that remains after its read: arriving as the puck leaves
-#              does nothing, arriving at the start of the windup kills it
-#
-#   clean    = Π (1 − p_i)      — independent contests compose as a
-#              product; no count normalizer, no saturation constant
+#              — only the share of the release left after his read
+#   clean    = Π (1 − p_i)      — independent contests
 #
 # T_window is the bot's real decision→puck-away time
 # (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S). Directionality is

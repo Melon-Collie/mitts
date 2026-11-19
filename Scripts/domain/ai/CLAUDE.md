@@ -1145,7 +1145,7 @@ reaches back into what remains.
     all") prices the carrier's current safety, and `AIEvadeRead.evade_safety`
     is the same read for the possession value's keep odds. Its envelope is
     centred where his momentum takes him, stopped where his body meets a
-    defender's (`momentum_horizon_s`): he cannot skate through the man he is
+    defender's (`AIArrival.body_contact_time`): he cannot skate through the man he is
     evading. Only the seam's end is priced, not the route to it, so a seam past
     a man he skates by inside his stick still reads clear (#777). Where the body goes to beat a
     man is not a seam read: it is the carry's rolled moves, each priced at its

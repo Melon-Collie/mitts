@@ -340,7 +340,7 @@ double NativeCarrySpace::crossing_keep(double fx, double fz, double tx, double t
 	return clamp01((eff + poke_contact) / poke_contact);
 }
 
-// AICarrySpace.momentum_horizon_s.
+// AIArrival.body_contact_time.
 double NativeCarrySpace::momentum_horizon(double cx, double cz, double cvx, double cvz,
 		const std::vector<Defender> &defs) const {
 	double t_c = horizon_s;

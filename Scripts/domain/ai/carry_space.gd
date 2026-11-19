@@ -12,11 +12,7 @@ class_name AICarrySpace
 # deviate from that line by at most ½·A·(T−reaction)² (a double integrator's
 # reachable set), with the stick reaching further. The carrier evades by placing
 # the puck in his handling envelope outside every defender's disk — the SEAM.
-#
-# The BOARDS bound the seam search, not the clearance itself: a wall doesn't
-# strip the puck, it removes escape options. So the seam samplers reject
-# off-surface samples, and a wall-pinned carrier's best seam runs along the wall
-# with honestly small clearance.
+# The boards bound the seam search, not the clearance (Scripts/domain/ai/CLAUDE.md).
 const MANEUVER_ACCEL_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 const EVADE_HORIZON_S: float = 0.40    # a cut's length — the evasion look-ahead
 const EVADE_REACTION_S: float = 0.15   # a defender reads a cut before he can redirect to it
@@ -586,58 +582,24 @@ static func carry_strip_point_reference(from: Vector3, to: Vector3, arrival_time
 	return mid if c_mid <= c_end else to
 
 
-# Centre-to-centre distance at which two skaters' bodies meet: league bodies, not
-# either build's own.
+# Where two skaters' bodies meet, centre to centre: league bodies.
 const EVADE_BODY_CONTACT_M: float = 2.0 * AISkaterCaps.LEAGUE_BODY_RADIUS_M
 
 
-# How long (s, at most EVADE_HORIZON_S) the carrier's momentum carries him before
-# his body meets a defender's, each dead-reckoned on his own velocity: he cannot
-# skate through the man he is evading, so his projection stops there. A man he is
-# already against counts only while he is still skating into him.
-static func momentum_horizon_s(carrier_pos: Vector3, carrier_vel: Vector3,
-		opponents: Array[Vector3], opponent_vels: Array[Vector3]) -> float:
-	var t_c: float = EVADE_HORIZON_S
-	var n: int = opponents.size()
-	if opponent_vels.size() != n:
-		return t_c
-	var contact_sq: float = EVADE_BODY_CONTACT_M * EVADE_BODY_CONTACT_M
-	for i: int in n:
-		var rx: float = carrier_pos.x - opponents[i].x
-		var rz: float = carrier_pos.z - opponents[i].z
-		var wx: float = carrier_vel.x - opponent_vels[i].x
-		var wz: float = carrier_vel.z - opponent_vels[i].z
-		var b: float = rx * wx + rz * wz
-		if b >= 0.0:
-			continue   # not closing on him
-		var c: float = rx * rx + rz * rz - contact_sq
-		if c <= 0.0:
-			return 0.0
-		var a: float = wx * wx + wz * wz
-		var disc: float = b * b - a * c
-		if disc < 0.0:
-			continue   # his line passes clear of the body
-		t_c = minf(t_c, (-b - sqrt(disc)) / a)
-	return t_c
-
-
-# The carrier's best evasion target — the point in his handling envelope (where he
-# can put/protect the puck over EVADE_HORIZON_S) with the most clearance from
-# every defender: the SEAM. The envelope is centred where his momentum takes him
-# (momentum_horizon_s). `handle_reach` is how far he holds the puck off his
-# body (scaled by the blade lever), so a longer reach threads a tighter seam. Returned as a
-# world point (y = 0); this max-clearance seam is the carrier's honest
-# evadability read (reach_clearance at this point = "can I keep the puck at
-# all"). Only the seam's end is priced, never the route to it: a seam past a man
-# the carrier skates by inside his stick reads as clear. Value-type math;
-# allocation-free.
+# The SEAM: the point in the carrier's handling envelope (where he can put the
+# puck over EVADE_HORIZON_S, `handle_reach` off his body) with the most clearance
+# from every defender, centred where his momentum takes him short of the first
+# body he skates into (AIArrival.body_contact_time). Only the seam's end is
+# priced, never the route: a seam past a man he skates by inside his stick reads
+# clear. Allocation-free.
 static func best_evade_point(
 		carrier_pos: Vector3, carrier_vel: Vector3,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		handle_reach: float, opponent_caps: Array = []) -> Vector3:
 	var env: float = 0.5 * MANEUVER_ACCEL_M_S2 * EVADE_HORIZON_S * EVADE_HORIZON_S \
 			+ handle_reach
-	var t_c: float = momentum_horizon_s(carrier_pos, carrier_vel, opponents, opponent_vels)
+	var t_c: float = AIArrival.body_contact_time(carrier_pos, carrier_vel, opponents,
+			opponent_vels, EVADE_BODY_CONTACT_M, EVADE_HORIZON_S)
 	return _best_clear_point(
 			carrier_pos.x + carrier_vel.x * t_c,
 			carrier_pos.z + carrier_vel.z * t_c,
