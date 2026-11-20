@@ -12,11 +12,7 @@ class_name AICarrySpace
 # deviate from that line by at most ½·A·(T−reaction)² (a double integrator's
 # reachable set), with the stick reaching further. The carrier evades by placing
 # the puck in his handling envelope outside every defender's disk — the SEAM.
-#
-# The BOARDS bound the seam search, not the clearance itself: a wall doesn't
-# strip the puck, it removes escape options. So the seam samplers reject
-# off-surface samples, and a wall-pinned carrier's best seam runs along the wall
-# with honestly small clearance.
+# The boards bound the seam search, not the clearance (Scripts/domain/ai/CLAUDE.md).
 const MANEUVER_ACCEL_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 const EVADE_HORIZON_S: float = 0.40    # a cut's length — the evasion look-ahead
 const EVADE_REACTION_S: float = 0.15   # a defender reads a cut before he can redirect to it
@@ -24,8 +20,8 @@ const EVADE_STICK_REACH_M: float = (   # how far a defender's stick touches from
 		GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLADE_LENGTH_M)
 # A full stick of clear room reads as fully safe; inside the reach reads as 0.
 const EVADE_SAFE_MARGIN_M: float = EVADE_STICK_REACH_M
-# Envelope sampling for the seam search (rings × angles). Coarse is fine — the
-# seam is a broad region, not a point.
+# Envelope sampling for the seam searches, here and AIEvadeRead's (rings ×
+# angles). Coarse is fine — the seam is a broad region, not a point.
 const EVADE_SAMPLE_RINGS: Array[float] = [0.4, 0.8, 1.0]
 const EVADE_SAMPLE_ANGLES: int = 12
 # The model reacts only once (the reaction gate) while a real defender re-reads
@@ -62,14 +58,15 @@ static func board_gap_m(point: Vector3) -> float:
 # `time` — >0 means no defender's stick TIP nominally reaches it (that much
 # room), <0 means covered. Pure float math, no allocation.
 #
-# NOMINAL, not best-case: the defender's coverage is the calibrated
-# time_to_arrive phase model in distance form — coast on momentum through the
+# NOMINAL, not best-case: the defender's coverage is time_to_arrive's REDIRECT,
+# REVERSAL and PURSUIT phases in distance form — coast on momentum through the
 # reaction gate, shed excess cross-speed at the measured rate, brake out a
 # retreat (losing ground while braking), then the stride's pursuit ramp
 # (AIStrideRamp.distance_in) — plus the stick span. Never a best-case 0.5·a·t²
-# lunge: that over-reaches at long windows and under-reaches close in. Optimistic
-# where time_to_arrive is: short perpendicular cuts at speed. The safety maps
-# below carry the residual as a probability band.
+# lunge: that over-reaches at long windows and under-reaches close in. It has no
+# TURN: a fast cut is priced by the shed alone, which reaches less far than the
+# stance carve a few metres out and further than a body that flies past its
+# point. The safety maps below carry the residual as a probability band.
 # `abort_below`: exact argmax pruning for sample-scanning callers (the seam
 # search) — once the running worst drops below it, the exact value cannot
 # matter to the caller, so the defender loop stops early. Default −INF scans
@@ -494,12 +491,11 @@ static func carry_strip_point_reference(from: Vector3, to: Vector3, arrival_time
 		if ddist > 0.001:
 			carry_dir = Vector2(ddx / ddist, ddz / ddist)
 			carry_speed = ddist / arrival_time
-	# Sample windows must mirror carry_safety exactly so the strip point and
-	# the safety read agree on which sample is covered (crossing = the
-	# meeting-strip band's SHIFT-ADJUSTED core, mid = full pursuit, end =
-	# arrival lunge). The earliest core-hit crossing pre-empts the fixed
-	# samples when the meeting happens first — a pinch wall driven into
-	# strips at the wall.
+	# carry_safety's samples, so the two agree on which one is covered
+	# (test_carry_strip_point_mirrors_safety.gd): crossing = the meeting-strip
+	# band's SHIFT-ADJUSTED core, mid = full pursuit, end = arrival lunge. The
+	# earliest core-hit crossing pre-empts the fixed samples when the meeting
+	# happens first — a pinch wall driven into strips at the wall.
 	var cross_t: float = INF
 	var cross_pt: Vector3 = to
 	var seg_x: float = to.x - from.x
@@ -587,23 +583,8 @@ static func carry_strip_point_reference(from: Vector3, to: Vector3, arrival_time
 	return mid if c_mid <= c_end else to
 
 
-# The carrier's best evasion target — the point in his handling envelope (where he
-# can put/protect the puck over EVADE_HORIZON_S) with the most clearance from
-# every defender: the SEAM. `handle_reach` is how far he holds the puck off his
-# body (scaled by the blade lever), so a longer reach threads a tighter seam. Returned as a
-# world point (y = 0); this max-clearance seam is the carrier's honest
-# evadability read (reach_clearance at this point = "can I keep the puck at
-# all"). Value-type math; allocation-free.
-static func best_evade_point(
-		carrier_pos: Vector3, carrier_vel: Vector3,
-		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		handle_reach: float, opponent_caps: Array = []) -> Vector3:
-	var env: float = 0.5 * MANEUVER_ACCEL_M_S2 * EVADE_HORIZON_S * EVADE_HORIZON_S \
-			+ handle_reach
-	return _best_clear_point(
-			carrier_pos.x + carrier_vel.x * EVADE_HORIZON_S,
-			carrier_pos.z + carrier_vel.z * EVADE_HORIZON_S,
-			env, opponents, opponent_vels, opponent_caps)
+# Where two skaters' bodies meet, centre to centre: league bodies.
+const EVADE_BODY_CONTACT_M: float = 2.0 * AISkaterCaps.LEAGUE_BODY_RADIUS_M
 
 
 # WHERE ON THE BLADE to hold the puck under pressure: a point in the carrier's

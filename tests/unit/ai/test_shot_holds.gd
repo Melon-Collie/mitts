@@ -286,6 +286,46 @@ func test_a_hold_beside_a_trailing_checker_keeps_less_than_the_far_side() -> voi
 	assert_lt(_h.keep[near], _h.keep[far], "his stick reaches the hold on his side")
 
 
+# A rusher with a step on a backchecker who trails him on his forehand side at
+# the same pace (#888's start): the pocket beside the hip is where the
+# checker's momentum carries his stick, the snapshot out in front is not.
+const _RUSH := Vector2(0.0, -8.5)
+const _PRESENTED := Vector2(0.13, -1.2)
+
+
+func _keep_on_the_rush(man: Vector3, man_vel: Vector3) -> AIShotHolds:
+	var h := AIShotHolds.new()
+	h.solve_shot(AHEAD, _PRESENTED, _RUSH, AHEAD)
+	var men: Array[Vector3] = [man]
+	var vels: Array[Vector3] = [man_vel]
+	h.price_keep(Vector3.ZERO, _RUSH, AHEAD, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, men, vels,
+			_NO_CAPS)
+	return h
+
+
+func test_a_pace_matched_backchecker_reaches_the_pocket_on_his_side_before_the_snapshot() -> void:
+	var h: AIShotHolds = _keep_on_the_rush(Vector3(0.8, 0.0, 2.5),
+			Vector3(0.0, 0.0, _RUSH.y))
+	var snap: int = _snap(h)
+	assert_gte(snap, 0)
+	assert_gt(h.offset[0].x, 0.5, "the pocket is beside the hip on his side")
+	assert_lt(h.keep[0], h.keep[snap], "his momentum keeps him level with the hip")
+
+
+func test_a_backchecker_left_standing_reaches_neither() -> void:
+	# The same spot behind, without the pace: the rusher skates out of his reach.
+	var h: AIShotHolds = _keep_on_the_rush(Vector3(0.8, 0.0, 2.5), Vector3.ZERO)
+	for k: int in h.count:
+		assert_almost_eq(h.keep[k], 1.0, 0.001, "hold %d" % k)
+
+
+func test_the_pocket_keeps_more_with_the_backchecker_on_the_far_side() -> void:
+	var vel := Vector3(0.0, 0.0, _RUSH.y)
+	var near: AIShotHolds = _keep_on_the_rush(Vector3(0.8, 0.0, 2.5), vel)
+	var far: AIShotHolds = _keep_on_the_rush(Vector3(-0.8, 0.0, 2.5), vel)
+	assert_gt(far.keep[0], near.keep[0], "the forehand pocket sits further off him")
+
+
 # Fast hands and no charge keep the press inside a man's reaction, so neither
 # end of the pull gives him time to close: only the route decides.
 func _quick_pull_across(man: Vector3) -> AIShotHolds:

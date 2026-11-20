@@ -142,9 +142,10 @@ static func meet_point(k: int, t: float) -> Vector3:
 
 # Can a receiver moving at `recv_vel` catch and hold launch `k` at time `t`: the
 # puck's speed in his frame under the pace a blade on its line, where a wall
-# kill puts it, holds (AIFeedReception.RECEIVE_HOLD_CEILING_M_S)? The heading is
-# the walked segment the meet falls in.
-static func catchable(k: int, t: float, recv_vel: Vector3) -> bool:
+# kill puts it, holds (AIFeedReception.RECEIVE_HOLD_CEILING_M_S, leaned by his
+# curve's `ceiling_mult`)? The heading is the walked segment the meet falls in.
+static func catchable(k: int, t: float, recv_vel: Vector3,
+		ceiling_mult: float = 1.0) -> bool:
 	var path: Array[Vector3] = paths[k]
 	var spd: Array[float] = speeds[k]
 	var i: int = clampi(int(ceil(t / STEP_DT)) - 1, 0, STEPS - 1)
@@ -154,7 +155,7 @@ static func catchable(k: int, t: float, recv_vel: Vector3) -> bool:
 		return true
 	var v: Vector3 = seg.normalized() * spd[i]
 	var rel := Vector2(v.x - recv_vel.x, v.z - recv_vel.z)
-	return rel.length() < AIFeedReception.RECEIVE_HOLD_CEILING_M_S
+	return rel.length() < AIFeedReception.RECEIVE_HOLD_CEILING_M_S * ceiling_mult
 
 
 # Path length up to time `t` — the distance the passer's aim error is spread over.

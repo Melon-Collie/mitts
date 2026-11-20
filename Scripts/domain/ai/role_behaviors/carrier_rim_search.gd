@@ -60,6 +60,7 @@ func launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			else AIBotMechanics.EVADE_CARRY_HANDLE_M
 	var receiver_speed: float = Vector2(
 			receiver_state.velocity.x, receiver_state.velocity.z).length()
+	var ceiling: float = AIFeedReception.receiver_ceiling_mult(receiver_caps)
 	if sure_by_k.size() != AIRimPass.MAX_LAUNCHES:
 		sure_by_k.resize(AIRimPass.MAX_LAUNCHES)
 		_t_by_k.resize(AIRimPass.MAX_LAUNCHES)
@@ -72,7 +73,7 @@ func launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 				receiver_state.velocity, speed)
 		if t == INF:
 			continue
-		if not AIRimPass.catchable(k, t, receiver_state.velocity):
+		if not AIRimPass.catchable(k, t, receiver_state.velocity, ceiling):
 			continue
 		if carrier_in_oz:
 			if not AIRimPass.stays_in_zone(k, t, ctx.attacking_goal_pos,

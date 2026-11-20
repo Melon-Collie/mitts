@@ -1528,7 +1528,8 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 				var give_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 				if give_state != null:
 					sv = give_state.velocity
-				give_brake = SkaterAgentReception.gives_with(pv, sv)
+				give_brake = SkaterAgentReception.gives_with(pv, sv,
+						AIFeedReception.receiver_ceiling_mult(_caps_by_peer.get(_peer_id)))
 	# Pass-receive setup, unless Mode B already set aim+steer; false falls through
 	# to the default chase.
 	if recv == _RECV_NONE and not _pass_receive_aim_and_steer(input, snapshot, self_pos):
@@ -1806,7 +1807,7 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		# _step_carry_cursor is also re-run on throttle-skipped ticks.
 		_step_carry_cursor(input, snapshot, self_pos, self_state)
 	else:
-		var mouse_target: Vector3 = _aim_target_for_intent(snapshot, self_pos)
+		var mouse_target: Vector3 = _pre_aim_target(snapshot, self_pos, self_state)
 		# ARC pre-aim swing toward the FINAL target. A charged release's hold is
 		# a carry reach, not an aim: FRONT in front of the body, round to the hold
 		# itself behind it.
@@ -1858,6 +1859,23 @@ func _share_as_is(snapshot: WorldSnapshot, self_pos: Vector3,
 func _lock_pass_hold() -> void:
 	_pass_hold_offset = _carrier.pass_hold_offset
 	_pass_hold_share = _carrier.pass_hold_share
+
+
+# Where the pre-aim takes the puck: the latched release's hold
+# (_aim_target_for_intent), unless it is a shot whose puck already carries the
+# share of pace it was priced at where it sits. The wrister fires along its
+# committed aim from wherever the puck sits, so while the press waits for its
+# planned point the puck stays there: pulled on to the hold, its sweep across
+# the body unloads it, and the press then waits on the load with the body
+# skating on at the keeper.
+func _pre_aim_target(snapshot: WorldSnapshot, self_pos: Vector3,
+		self_state: SkaterNetworkState) -> Vector3:
+	if _intended_action == State.SHOOT_PRESSED and _pre_aim_holds_puck() \
+			and snapshot.puck_state != null and self_state != null \
+			and _load_ready(snapshot, self_pos, self_state):
+		var p: Vector3 = snapshot.puck_state.position
+		return Vector3(p.x, 0.0, p.z)
+	return _aim_target_for_intent(snapshot, self_pos)
 
 
 # True once the puck carries the share of pace the locked charged release was
@@ -1952,17 +1970,14 @@ func _aim_ring_toward(self_pos: Vector3, aim_world: Vector3) -> Vector3:
 # A carrier's turn-around sweeps the puck along the arc the mouse walks, and the
 # SHORT way may drag it through a defender's poke reach where the LONG way keeps
 # the body between. When a big swing starts, both sides are read at their
-# midpoint against the nearest opposing blade; the long way is taken iff the
-# short side is inside poke threat and the long side is meaningfully clearer.
-# The sign is latched until the swing passes halfway or completes, or a per-tick
-# re-read would flip direction mid-sweep.
+# midpoint against every opposing stick (_opponent_poke_clearance); the long
+# way is taken iff a stick gets onto the short side's midpoint and the long
+# side is meaningfully clearer. The sign is latched until the swing passes
+# halfway or completes, or a per-tick re-read would flip direction mid-sweep.
 const PROTECT_TURN_MIN_SWING_RAD: float = deg_to_rad(100.0)
 # How far short of straight behind the body a turning-round cursor waits: inside
 # the gap between the reach edge and straight back, so it stays past the edge.
 const TURN_ROUND_BACK_MARGIN_RAD: float = deg_to_rad(10.0)
-# A stick's poke reach off the swept puck: a blade-length lunge plus the stick
-# itself, held out from the defender's body.
-const PROTECT_TURN_THREAT_RADIUS_M: float = 2.5
 # The long way must beat the short way's clearance by this much — a marginal
 # gain isn't worth the extra rotation time.
 const PROTECT_TURN_MARGIN_M: float = 0.5
@@ -1970,47 +1985,63 @@ const PROTECT_TURN_MARGIN_M: float = 0.5
 var _arc_protect_sign: float = 0.0
 
 
-# The sweep sign for a carry-arc swing of `diff` (wrapped desired−current):
-# signf(diff) (shortest way) unless the short sweep drags the puck into poke
-# threat and the long sweep is meaningfully clearer. Pure read, no state —
-# _arc_step_mouse_target owns the commitment.
+# The sweep sign for a carry-arc swing of `diff` (wrapped desired−current) at
+# `arc_rate` (rad/s): signf(diff) (shortest way) unless a stick gets onto the
+# short sweep's midpoint and the long sweep is meaningfully clearer. Pure read,
+# no state — _arc_step_mouse_target owns the commitment.
 func _protect_turn_direction(self_pos: Vector3, current_angle: float,
-		diff: float, snapshot: WorldSnapshot) -> float:
+		diff: float, snapshot: WorldSnapshot, arc_rate: float) -> float:
 	var short_sign: float = signf(diff)
-	if snapshot == null:
+	if snapshot == null or arc_rate <= 0.0:
 		return short_sign
+	var short_half: float = absf(diff) * 0.5
 	var short_mid: float = current_angle + diff * 0.5
 	var short_puck := Vector3(
 			self_pos.x + sin(short_mid) * _blade_reach, 0.0,
 			self_pos.z + cos(short_mid) * _blade_reach)
-	var short_clear: float = _nearest_opponent_blade_dist(snapshot, short_puck)
-	if short_clear >= PROTECT_TURN_THREAT_RADIUS_M:
+	var short_clear: float = _opponent_poke_clearance(snapshot, short_puck,
+			short_half / arc_rate)
+	if short_clear >= 0.0:
 		return short_sign
 	var long_mid: float = current_angle + (diff - short_sign * TAU) * 0.5
 	var long_puck := Vector3(
 			self_pos.x + sin(long_mid) * _blade_reach, 0.0,
 			self_pos.z + cos(long_mid) * _blade_reach)
-	var long_clear: float = _nearest_opponent_blade_dist(snapshot, long_puck)
+	var long_clear: float = _opponent_poke_clearance(snapshot, long_puck,
+			(PI - short_half) / arc_rate)
 	if long_clear > short_clear + PROTECT_TURN_MARGIN_M:
 		return -short_sign
 	return short_sign
 
 
-# Distance from `point` to the nearest opposing blade (body position when the
-# blade telemetry isn't populated yet). Pure read over the roster; no allocation.
-func _nearest_opponent_blade_dist(snapshot: WorldSnapshot, point: Vector3) -> float:
-	var nearest: float = INF
+# How far (m) the nearest opposing stick stays from a poke on a puck the sweep
+# brings to `point` in `sweep_s`; below zero, one gets on it. A stick gets there
+# when both hold: his blade traverses to within the poke's contact radius at his
+# blade speed over the sweep, and the point lies inside his reach of his body
+# (his full blade reach plus that radius), each by his own build. He is credited
+# with moving his hands as the sweep starts, with no read delay, and his skating
+# over the sweep is not modelled. His body stands in for his blade before blade
+# telemetry is populated. Pure read over the roster; no allocation.
+func _opponent_poke_clearance(snapshot: WorldSnapshot, point: Vector3,
+		sweep_s: float) -> float:
+	var least: float = INF
 	for peer_id: int in _opponent_ids(snapshot):
 		var opp_state: SkaterNetworkState = snapshot.skater_states[peer_id]
-		var threat_pos: Vector3 = opp_state.blade_contact_world
-		if threat_pos == Vector3.ZERO:
-			threat_pos = opp_state.position
-		var dx: float = threat_pos.x - point.x
-		var dz: float = threat_pos.z - point.z
-		var d: float = sqrt(dx * dx + dz * dz)
-		if d < nearest:
-			nearest = d
-	return nearest
+		var caps: AISkaterCaps = _caps_by_peer.get(peer_id)
+		var blade_speed: float = caps.blade_speed if caps != null \
+				else AISkaterCaps.LEAGUE_BLADE_SPEED_M_S
+		var reach: float = caps.max_blade_reach if caps != null \
+				else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
+		var body: Vector3 = opp_state.position
+		var blade: Vector3 = opp_state.blade_contact_world
+		if blade == Vector3.ZERO:
+			blade = body
+		var blade_gap: float = Vector2(blade.x - point.x, blade.z - point.z).length() \
+				- (blade_speed * sweep_s + GameRules.POKE_RADIUS_M)
+		var body_gap: float = Vector2(body.x - point.x, body.z - point.z).length() \
+				- (reach + GameRules.POKE_RADIUS_M)
+		least = minf(least, maxf(blade_gap, body_gap))
+	return least
 
 
 # Is the desired blade direction in the body's BACK hemisphere (>90° off the
@@ -2083,7 +2114,7 @@ func _arc_step_mouse_target(self_pos: Vector3, final_target: Vector3,
 		# front-hemisphere target is a protect REACH: take the short way and let
 		# the blade's ROM extend across the front.
 		var protect_sign: float = _protect_turn_direction(
-				self_pos, current_angle, diff, _current_snapshot)
+				self_pos, current_angle, diff, _current_snapshot, arc_rate)
 		if protect_sign != signf(diff):
 			_arc_protect_sign = protect_sign
 	var step: float = _arc_protect_sign * max_step if _arc_protect_sign != 0.0 \
@@ -3675,8 +3706,7 @@ func _update_acceleration_cache(snapshot: WorldSnapshot, delta: float) -> void:
 			smoothed.x *= scale
 			smoothed.z *= scale
 		_accel_by_peer[peer_id] = smoothed
-		# Heading turn rate: must match AIAccelerationTracker's, so a unit-test
-		# snapshot reads the same signal the host serves.
+		# Heading turn rate, as the tracker reads it (test_bot_mirrors.gd).
 		var raw_omega: float = 0.0
 		var prev_speed: float = sqrt(prev_v.x * prev_v.x + prev_v.z * prev_v.z)
 		var curr_speed: float = sqrt(curr_v.x * curr_v.x + curr_v.z * curr_v.z)

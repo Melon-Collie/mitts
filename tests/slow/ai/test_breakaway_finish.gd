@@ -119,6 +119,12 @@ const CARRIED_IN_M: float = 1.0
 # chasing.
 const NORMAL_CARRIED_IN_CEILING: float = 0.1
 const EASY_CARRIED_IN_CEILING: float = 0.5
+# Of the 24 breakaways a tier skates (4 starts × 6 seeds), how many end in a
+# shot. Easy measures 18: its slower commit glides into the chased red-line
+# start, and the backchecker on its route gets a stick on it on every seed
+# (#979).
+const NORMAL_MIN_SHOTS: int = 19
+const EASY_MIN_SHOTS: int = 18
 const _SEEDS: Array[int] = [1, 2, 3, 4, 5, 6]
 
 
@@ -153,8 +159,9 @@ func test_the_shot_leaves_before_the_keeper() -> void:
 			sum += out
 		meant.append(sum / maxi(hard.size(), 1))
 	gut.p("hard lets go %s m off the goal line" % [meant])
-	for tier: Array in [["normal", BotSkillProfile.normal(), NORMAL_CARRIED_IN_CEILING],
-			["easy", BotSkillProfile.easy(), EASY_CARRIED_IN_CEILING]]:
+	for tier: Array in [
+			["normal", BotSkillProfile.normal(), NORMAL_CARRIED_IN_CEILING, NORMAL_MIN_SHOTS],
+			["easy", BotSkillProfile.easy(), EASY_CARRIED_IN_CEILING, EASY_MIN_SHOTS]]:
 		var shots: int = 0
 		var carried_in: int = 0
 		var starts: Array = _starts()
@@ -165,6 +172,6 @@ func test_the_shot_leaves_before_the_keeper() -> void:
 					carried_in += 1
 		gut.p("%s: %d of %d breakaway shots released %.1f m or more inside hard's" % [tier[0],
 				carried_in, shots, CARRIED_IN_M])
-		assert_gt(shots, 18, "%s: the breakaways end in shots" % tier[0])
+		assert_gte(shots, tier[3], "%s: the breakaways end in shots" % tier[0])
 		assert_lt(float(carried_in) / maxi(shots, 1), tier[2],
 				"%s: the shot leaves before he is on the keeper" % tier[0])

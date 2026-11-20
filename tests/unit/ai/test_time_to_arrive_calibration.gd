@@ -2,34 +2,37 @@ extends GutTest
 
 # Calibrates AIArrival.time_to_arrive — the universal ETA every race,
 # election, lane, and chase read runs on — against ACTUAL arrival times under
-# the real skating physics (SkaterMovementRules.apply_movement at 120 Hz)
-# driven by the REAL bot steering (AISteering.compute_move_vector's
-# velocity-matched seek + the should_brake pivot).
+# the real skating physics (SkaterMovementRules.apply_movement at the tick)
+# driven by the bot's own steering (SkaterAgentSteering: the velocity-matched
+# seek, the pivot brake or its stance cut, and the stance carve).
 #
 # The contract is two-sided: the estimator IS the arrival time, within
-# tolerance, cell by cell — not an optimistic lower bound (the pre-phase-model
-# heuristic's contract; it under-priced standing starts by ~2× and credited a
-# full-speed closer with up to double top speed, which distorted every race at
-# the extremes). If the movement tuning drifts (thrust, friction, drag, brake,
-# top speed), cells here fail and the phase-model constants in action_scoring
-# (VM_FREE_SHED_M_S, VM_SHED_DECEL_M_S2, REVERSAL_BRAKE_DECEL_M_S2,
-# AIStrideRamp.EFFICIENCY) get re-measured — never silently absorbed.
+# tolerance, cell by cell — not an optimistic lower bound. If the movement
+# tuning drifts (thrust, friction, drag, brake, turn authority, the stance's
+# grip and scrape, top speed), cells here fail and the model's terms get
+# re-measured — never silently absorbed.
 #
-# Known soft spot, deliberately excluded from the tight band: SHORT DIAGONAL
-# cuts at full speed (≈45° off-velocity within ~8 m). There the controller
-# overflies the catch window laterally and loops once before converging —
-# reality runs up to ~3× the estimate. Those cells get a loose sanity band
-# instead; tightening them is steering work (a better cornering policy), not
-# estimator work.
+# One place is a knife edge rather than a cell: a short cut at speed whose
+# point the carve only just makes or only just flies past. A few tenths of a
+# metre there decide whether the body arrives on its first pass or loops back
+# for it, so that edge is held to a factor rather than the band.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
-# Pass-through tolerance: within one blade's contact of the target counts as
-# arrived (ETAs feed contests and races, not parking precision).
-const ARRIVE_RADIUS_M: float = 0.5
+# Pass-through tolerance: the clock's own arrival (ETAs feed contests and races,
+# not parking precision).
+const ARRIVE_RADIUS_M: float = AIArrival.ARRIVE_CONTACT_M
 const TOL_FRAC: float = AIArrival.ERROR_FRAC
 const TOL_FLOOR_S: float = AIArrival.ERROR_FLOOR_S
+const PEER_ID: int = 1
+# Every cell starts here and skates toward -z: open ice, clear of the boards'
+# and the creases' repels for the longest cell and the widest loop.
+const ORIGIN := Vector3(0.0, 0.0, 12.0)
 
 var _cfg: SkaterMovementRules.MovementConfig
+var _steering: SkaterAgentSteering
+var _snapshot: WorldSnapshot
+var _self_state: SkaterNetworkState
+var _input: InputState
 
 
 func before_each() -> void:
@@ -37,32 +40,38 @@ func before_each() -> void:
 	_cfg = ctrl.get_movement_config()
 	ctrl.free()
 	_cfg.puck_carry_speed_multiplier = 1.0
+	_steering = SkaterAgentSteering.new()
+	_steering.setup(PEER_ID, 0, {PEER_ID: 0})
+	_snapshot = WorldSnapshot.new()
+	_snapshot.puck_state = PuckNetworkState.new()
+	_self_state = SkaterNetworkState.new()
+	_snapshot.skater_states[PEER_ID] = _self_state
+	_input = InputState.new()
 
 
-# Measured arrival under the real controller: velocity-matched seek (the
-# carrier/station steering) + the pivot brake, facing aligned to the thrust
-# (a bot's facing tracks its travel in open ice). Fields are inert (no
-# bodies, boards far) for a clean one-body read.
+# Measured arrival under the real controller: the bot's steering to a station
+# with the velocity match on (the carrier/station steering), its stick dropped
+# under a brake as AIController drops it, facing aligned to the thrust (a bot's
+# facing tracks its travel in open ice). A lone body on the ice for a clean read.
 func _sim_arrival_s(v0: Vector3, target: Vector3) -> float:
-	var pos := Vector3.ZERO
+	var pos: Vector3 = ORIGIN
 	var vel: Vector3 = v0
 	var t: float = 0.0
-	var braking: bool = false
-	var no_v: Array[Vector3] = []
-	var big: float = 1000.0
-	for _i: int in 1800:  # 15 s cap
+	var upright_lateral_accel: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2 * _cfg.lateral_grip
+	for _i: int in 1800:  # 20 s cap
 		var to_t: Vector3 = target - pos
 		to_t.y = 0.0
 		if to_t.length() <= ARRIVE_RADIUS_M:
 			return t
-		var mi: Vector2 = AISteering.compute_move_vector(
-				pos, target, no_v, no_v, Vector3.ZERO, Vector3.ZERO, big, big,
-				AISteering.OPPONENT_REPEL_WEIGHT, no_v, no_v, vel,
-				GameRules.DEFAULT_SKATER_MAX_SPEED_M_S)
-		braking = AISteering.should_brake(mi, Vector2(vel.x, vel.z), braking)
+		_self_state.position = pos
+		_self_state.velocity = vel
+		_steering.steer(_input, _snapshot, pos, target, false,
+				GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, Vector3.ZERO, -1, Vector3.ZERO, 0.0,
+				Vector3.ZERO, upright_lateral_accel, AIBotMechanics.BLADE_REACH_M)
+		var mi: Vector2 = AIBotMechanics.braked_stick(_input.move_vector, _input.brake, vel)
 		var facing_y: float = atan2(-mi.x, -mi.y) if mi.length() > 0.001 else 0.0
-		vel = SkaterMovementRules.apply_movement(
-				vel, mi, facing_y, false, braking, DT, _cfg)
+		vel = SkaterMovementRules.apply_movement(vel, mi, facing_y, false, _input.brake, DT, _cfg,
+				SkaterMovementRules.posture_of(_input.stance_held, false))
 		pos += vel * DT
 		t += DT
 	return INF
@@ -70,7 +79,7 @@ func _sim_arrival_s(v0: Vector3, target: Vector3) -> float:
 
 func _model_s(v0: Vector3, target: Vector3) -> float:
 	return AIArrival.time_to_arrive(
-			Vector3.ZERO, target, v0,
+			ORIGIN, target, v0,
 			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
 			GameRules.DEFAULT_SKATER_THRUST_M_S2)
 
@@ -78,7 +87,7 @@ func _model_s(v0: Vector3, target: Vector3) -> float:
 func _cell(speed: float, angle_deg: float, dist: float) -> Array:
 	var ang: float = deg_to_rad(angle_deg)
 	var v0 := Vector3(sin(ang), 0.0, -cos(ang)) * speed
-	var target := Vector3(0.0, 0.0, -dist)
+	var target: Vector3 = ORIGIN + Vector3(0.0, 0.0, -dist)
 	var real: float = _sim_arrival_s(v0, target)
 	var model: float = _model_s(v0, target)
 	gut.p("  v=%.1f  %3.0f°  d=%4.1f:  model %.2fs  real %.2fs" % [
@@ -112,8 +121,8 @@ func test_half_speed_head_on() -> void:
 
 
 func test_perpendicular_cuts() -> void:
-	# The 90° family — the wing-curl read. The velocity-matched seek sheds
-	# moderate cross speed for free; only the excess pays.
+	# The 90° family — the wing-curl read: carved round on the stance's edges,
+	# the seek's skid tightening the turn as it bleeds the speed.
 	for speed: float in [4.5, 9.0]:
 		for dist: float in [4.0, 8.0, 16.0, 25.0]:
 			_check_cell(speed, 90.0, dist)
@@ -135,7 +144,7 @@ func test_full_reversal() -> void:
 
 
 func test_long_diagonals() -> void:
-	# 45° at range — past the miss-loop zone the model tracks.
+	# 45° at range.
 	_check_cell(4.5, 45.0, 4.0)
 	_check_cell(4.5, 45.0, 8.0)
 	_check_cell(4.5, 45.0, 16.0)
@@ -143,23 +152,56 @@ func test_long_diagonals() -> void:
 	_check_cell(9.0, 45.0, 25.0)
 
 
-func test_short_diagonal_miss_loop_sanity() -> void:
-	# The known soft spot: short diagonal cuts at speed overfly the catch
-	# window and loop (see header). The estimator stays an optimistic bound
-	# there; the loose ceiling catches a catastrophic steering regression
-	# without pinning the loop's exact cost.
-	for cell: Array in [[9.0, 45.0, 4.0], [9.0, 45.0, 8.0]]:
+func test_short_fast_diagonal_cuts() -> void:
+	# Short cuts at speed, both sides of the carve's reach: the cells the carve
+	# makes on its first pass, and those whose point it flies past and loops
+	# back for (9 m/s at 45° inside ~4 m, 10 m/s inside ~5 m).
+	for cell: Array in [[9.0, 45.0, 3.0], [9.0, 45.0, 3.5], [9.0, 45.0, 6.0],
+			[9.0, 45.0, 8.0], [9.0, 30.0, 4.5], [9.0, 30.0, 6.0], [9.0, 60.0, 3.0],
+			[9.0, 60.0, 6.0], [7.5, 45.0, 4.0], [7.5, 60.0, 4.0], [6.0, 45.0, 3.0],
+			[10.0, 45.0, 3.5], [10.0, 45.0, 6.0]]:
+		_check_cell(cell[0], cell[1], cell[2])
+
+
+func test_miss_loop_edge_stays_within_a_factor_of_two() -> void:
+	# The knife edge between a cut the carve makes and one it loops back for
+	# (see header): either side may be read as the other, by no more than the
+	# loop costs over the catch.
+	for cell: Array in [[9.0, 45.0, 4.0], [9.0, 45.0, 4.5]]:
 		var pair: Array = _cell(cell[0], cell[1], cell[2])
-		assert_lte(pair[0], pair[1] + 0.02,
-				"model stays a lower bound in the miss-loop zone")
-		assert_lt(pair[1], pair[0] * 3.5 + 0.6,
-				"miss-loop cost stays bounded (real %.2f vs model %.2f)"
-				% [pair[1], pair[0]])
+		assert_between(pair[0], pair[1] * 0.5, pair[1] * 2.0,
+				"v0=%.1f m/s at %.0f° over %.1f m: model %.2fs vs real %.2fs"
+				% [cell[0], cell[1], cell[2], pair[0], pair[1]])
+
+
+func test_a_point_the_carve_flies_past_costs_the_loop() -> void:
+	# Not monotone in distance: at speed, a point inside the carve's curl is
+	# reached later than one further out on the same bearing.
+	var v0 := Vector3(sin(PI / 4.0), 0.0, -cos(PI / 4.0)) * 9.0
+	var near: float = _model_s(v0, ORIGIN + Vector3(0.0, 0.0, -3.0))
+	var far: float = _model_s(v0, ORIGIN + Vector3(0.0, 0.0, -8.0))
+	assert_gt(near, far, "the point flown past is the slower one")
+
+
+func test_a_point_the_travel_passes_within_contact_of_needs_no_loop() -> void:
+	# A metre ahead at 20° off 9 m/s the travel line passes within contact: the
+	# body is on it at once (the sim) and the clock must not price the loop a
+	# point it flies wide of costs.
+	var v0 := Vector3(sin(PI / 9.0), 0.0, -cos(PI / 9.0)) * 9.0
+	var passed: float = _model_s(v0, ORIGIN + Vector3(0.0, 0.0, -1.0))
+	var looped: float = _model_s(Vector3(sin(PI / 4.0), 0.0, -cos(PI / 4.0)) * 9.0,
+			ORIGIN + Vector3(0.0, 0.0, -1.0))
+	assert_lt(passed * 2.0, looped, "passed within contact %.2fs vs looped for %.2fs"
+			% [passed, looped])
+	assert_lt(_sim_arrival_s(v0, ORIGIN + Vector3(0.0, 0.0, -1.0)) * 2.0,
+			_sim_arrival_s(Vector3(sin(PI / 4.0), 0.0, -cos(PI / 4.0)) * 9.0,
+					ORIGIN + Vector3(0.0, 0.0, -1.0)),
+			"and the body agrees")
 
 
 func test_momentum_direction_ordering() -> void:
 	# Direction is priced correctly whatever the calibration details.
-	var dest := Vector3(0.0, 0.0, -8.0)
+	var dest: Vector3 = ORIGIN + Vector3(0.0, 0.0, -8.0)
 	var aligned: float = _model_s(Vector3(0, 0, -6), dest)
 	var rest: float = _model_s(Vector3.ZERO, dest)
 	var perp: float = _model_s(Vector3(6, 0, 0), dest)
@@ -230,13 +272,13 @@ func test_retrieval_race_read_is_now_net_honest() -> void:
 
 # ── Lateral grip: planning matches the gripped body ──────────────────────────
 # The movement core turns on edge grip (MovementConfig.lateral_grip) and the
-# ETA's cross-momentum shed reads the same quantity. This pins the match: for a hard 90° redirect
+# ETA's carve reads the same quantity. This pins the match: for a hard 90° redirect
 # at speed, the LOW-grip body genuinely arrives later in the real sim, and
 # the grip-aware model tracks the gripped sim within the suite's band.
 
 func test_low_grip_redirect_model_tracks_gripped_sim() -> void:
-	var v0 := Vector3(8.0, 0.0, 0.0)          # flying +X
-	var target := Vector3(0.0, 0.0, 14.0)     # hard 90° redirect
+	var v0 := Vector3(8.0, 0.0, 0.0)                          # flying +X
+	var target: Vector3 = ORIGIN + Vector3(0.0, 0.0, -14.0)   # hard 90° redirect
 	_cfg.lateral_grip = 0.85
 	var sim_gripped: float = _sim_arrival_s(v0, target)
 	_cfg.lateral_grip = 1.0
@@ -244,11 +286,11 @@ func test_low_grip_redirect_model_tracks_gripped_sim() -> void:
 	assert_gt(sim_gripped, sim_neutral,
 			"the low-grip body really does arrive later on a redirect")
 	var model_gripped: float = AIArrival.time_to_arrive(
-			Vector3.ZERO, target, v0,
+			ORIGIN, target, v0,
 			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
 			GameRules.DEFAULT_SKATER_THRUST_M_S2, 0.85)
 	var model_neutral: float = AIArrival.time_to_arrive(
-			Vector3.ZERO, target, v0,
+			ORIGIN, target, v0,
 			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
 			GameRules.DEFAULT_SKATER_THRUST_M_S2, 1.0)
 	assert_gt(model_gripped, model_neutral,
@@ -256,3 +298,30 @@ func test_low_grip_redirect_model_tracks_gripped_sim() -> void:
 	var tol: float = maxf(sim_gripped * TOL_FRAC, TOL_FLOOR_S)
 	assert_almost_eq(model_gripped, sim_gripped, tol,
 			"grip-aware model tracks the gripped sim within the band")
+
+
+# ── The first carve as a query ────────────────────────────────────────────────
+# AIArrival.first_carve hands a reader the carve the clock prices. Skated on from
+# its exit at its velocity, the clock adds up to its own read of the whole trip.
+
+func test_the_first_carve_is_the_clocks_own() -> void:
+	var carve := AIArrival.Carve.new()
+	var carved: int = 0
+	for speed: float in [4.5, 7.5, 9.0]:
+		for angle_deg: float in [30.0, 45.0, 60.0, 90.0]:
+			for dist: float in [10.0, 16.0, 25.0]:
+				var ang: float = deg_to_rad(angle_deg)
+				var v0 := Vector3(sin(ang), 0.0, -cos(ang)) * speed
+				var target: Vector3 = ORIGIN + Vector3(0.0, 0.0, -dist)
+				var whole: float = AIArrival._time_to_arrive_direct(ORIGIN, target, v0)
+				if not AIArrival.first_carve(carve, ORIGIN, target, v0):
+					assert_eq(carve.exit_pos, ORIGIN, "no carve leaves him where he is")
+					assert_eq(carve.time, 0.0, "at no time")
+					continue
+				carved += 1
+				var on: float = carve.time + AIArrival._time_to_arrive_direct(carve.exit_pos,
+						target, carve.exit_vel)
+				assert_almost_eq(on, whole, 0.0005,
+						"v0=%.1f at %.0f° over %.0f m: carve then on %.4fs, whole %.4fs" % [
+						speed, angle_deg, dist, on, whole])
+	assert_gt(carved, 20, "the sweep carves")

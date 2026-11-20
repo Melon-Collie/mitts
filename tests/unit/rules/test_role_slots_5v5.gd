@@ -478,6 +478,42 @@ func test_strong_side_d_wins_the_corner_battle() -> void:
 	assert_eq(a[5], AIRoleSlots.Slot.ZONE_D_WEAK)
 
 
+func test_a_kept_body_holds_his_slot_against_the_race() -> void:
+	# The same corner battle, with RD named kept on ZONE_D_STRONG: he holds it
+	# though LD is nearer the puck, and LD takes the post left over.
+	var skaters: Array = [
+		[1, 0, Vector3(0, 0, 14)],
+		[2, 0, Vector3(-6, 0, 15)],
+		[3, 0, Vector3(6, 0, 15)],
+		[4, 0, Vector3(-5, 0, 21)],
+		[5, 0, Vector3(3, 0, 21)],
+		[10, 1, Vector3(-9, 0, 23)],
+	]
+	var snap: WorldSnapshot = _make_snapshot(skaters, 10)
+	var a: Dictionary = AIRoleSlots5.assign(snap, TEAM_ID, OUR_NET_Z,
+			AIPossessionState.State.DZONE, _resolver(skaters), {}, -1.0, {}, _positions(),
+			0, {5: AIRoleSlots.Slot.ZONE_D_STRONG})
+	assert_eq(a[5], AIRoleSlots.Slot.ZONE_D_STRONG)
+	assert_eq(a[4], AIRoleSlots.Slot.ZONE_D_WEAK)
+	var held: Dictionary = {}
+	for pid: int in a:
+		assert_false(held.has(a[pid]), "slot %d handed out twice: %s" % [a[pid], str(a)])
+		held[a[pid]] = true
+
+
+func test_the_zone_label_pairs_are_the_d_and_the_wingers() -> void:
+	for slot: int in [AIRoleSlots.Slot.ZONE_D_STRONG, AIRoleSlots.Slot.ZONE_D_WEAK,
+			AIRoleSlots.Slot.ZONE_W_STRONG, AIRoleSlots.Slot.ZONE_W_WEAK]:
+		var partner: int = AIRoleSlots5.zone_pair_partner(slot)
+		assert_ne(partner, slot)
+		assert_eq(AIRoleSlots5.zone_pair_partner(partner), slot, "the pair is mutual")
+	assert_eq(AIRoleSlots5.zone_pair_partner(AIRoleSlots.Slot.ZONE_D_STRONG),
+			AIRoleSlots.Slot.ZONE_D_WEAK)
+	assert_eq(AIRoleSlots5.zone_pair_partner(AIRoleSlots.Slot.ZONE_W_STRONG),
+			AIRoleSlots.Slot.ZONE_W_WEAK)
+	assert_eq(AIRoleSlots5.zone_pair_partner(AIRoleSlots.Slot.ZONE_C), AIRoleSlots.Slot.NONE)
+
+
 func test_missing_positions_default_to_forward_group() -> void:
 	# Peers with no lobby position (tests / degenerate rosters) are rovers:
 	# they can fill F jobs and cross-fill D posts, and nothing crashes.

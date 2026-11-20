@@ -457,6 +457,107 @@ func test_a_puck_behind_the_line_goes_out_behind_it() -> void:
 			"behind the line: %s" % out)
 
 
+# ── Behind our line, the stick stays on the body's side of our cage ──────────
+# Two own goals the staging caught (#961), mirrored onto team 0: the twine held
+# the blade on its own side of the cage, and the body's travel slid it along the
+# twine and round the post into the mouth.
+
+# Whether the line from the body to `p` passes through our cage (its frame plus
+# the puck's radius), walked in 1 cm steps short of `p`'s own radius.
+func _round_our_cage(body: Vector3, p: Vector3) -> bool:
+	var hw: float = GameRules.NET_BACK_HALF_WIDTH + GameRules.PUCK_COLLISION_RADIUS
+	var z0: float = _line_z() - GameRules.PUCK_COLLISION_RADIUS
+	var z1: float = _line_z() + GameRules.NET_DEPTH + GameRules.PUCK_COLLISION_RADIUS
+	var length: float = Vector2(p.x - body.x, p.z - body.z).length() \
+			- 2.0 * GameRules.PUCK_COLLISION_RADIUS
+	var steps: int = ceili(length / 0.01)
+	for i: int in range(steps + 1):
+		var q: Vector3 = body.lerp(p, length * float(i) / float(steps)
+				/ Vector2(p.x - body.x, p.z - body.z).length())
+		if absf(q.x) <= hw and q.z >= z0 and q.z <= z1:
+			return true
+	return false
+
+
+func _assert_held_this_side(body: Vector3, facing: Vector2, target: Vector3,
+		why: String) -> void:
+	for floor_m: float in [FLOOR.x, FLOOR.y]:
+		var held: Vector3 = _held(body, facing, target, floor_m)
+		assert_false(_round_our_cage(body, held), "%s: puck held at %s, round the cage"
+				% [why, held])
+
+
+func test_a_target_round_our_cage_from_behind_swings_round_its_back() -> void:
+	# Beside and behind our cage, skating in behind it, the puck on the side
+	# twine. The mouth guard sent it out at the front corner, and the stick
+	# reached round the post for it.
+	var body := Vector3(2.06, 0.0, _line_z() + 0.69)
+	var facing := Vector2(-0.66, 0.75).normalized()
+	var puck := Vector3(1.02, 0.0, _line_z() + 0.49)
+	var front_corner := Vector3(AINetObstacle.OWN_MOUTH_EXIT_HALF_WIDTH_M, 0.0,
+			_line_z() + 0.19)
+	var out: Vector3 = _safe(body, Vector3(-2.0, 0.0, 2.3), facing, front_corner, OWN, puck)
+	_assert_held_this_side(body, facing, out, "behind the cage")
+	assert_gt(out.z, body.z, "toward the back of the cage: %s" % out)
+
+
+func test_a_puck_round_our_cage_comes_back_round_its_back_corner() -> void:
+	# Straight behind our cage, the blade round its front corner on the side
+	# twine, the cursor behind the cage on the far side: straight there, the
+	# twine slid the blade across the front of the mouth.
+	var body := Vector3(-0.19, 0.0, _line_z() + 1.35)
+	var facing := Vector2(1.0, 0.0)
+	var puck := Vector3(-1.57, 0.0, _line_z() + 0.27)
+	var cursor := Vector3(1.14, 0.0, _line_z() + 1.12)
+	var out: Vector3 = _safe(body, Vector3(-4.0, 0.0, 0.0), facing, cursor, OWN, puck)
+	assert_almost_eq(out.x, -GameRules.NET_BACK_HALF_WIDTH
+			- AINetObstacle.OWN_CAGE_BACK_CORNER_OUT_M, 1e-4, "on the puck's side")
+	assert_almost_eq(out.z, _line_z() + GameRules.NET_DEPTH
+			+ AINetObstacle.OWN_CAGE_BACK_CORNER_OUT_M, 1e-4, "past the back of the cage")
+	_assert_held_this_side(body, facing, out, "the way back")
+
+
+func test_a_puck_on_his_own_side_of_our_cage_is_left_alone() -> void:
+	var body := Vector3(2.5, 0.0, _line_z() + 0.5)
+	var puck := Vector3(1.25, 0.0, _line_z() + 0.5)
+	var up_ice := Vector3(2.6, 0.0, _line_z() - 2.0)
+	assert_eq(_safe(body, Vector3.ZERO, Vector2(0.0, -OWN), up_ice, OWN, puck), up_ice,
+			"carried up the ice beside the cage")
+	var behind := Vector3(-1.5, 0.0, _line_z() + 1.9)
+	var behind_puck := Vector3(0.6, 0.0, _line_z() + 1.9)
+	var behind_body := Vector3(1.3, 0.0, _line_z() + 1.6)
+	assert_eq(_safe(behind_body, Vector3.ZERO, Vector2(-1.0, 0.0), behind, OWN, behind_puck),
+			behind, "carried across behind the cage")
+
+
+func test_from_behind_our_line_the_puck_is_never_held_round_our_cage() -> void:
+	# Every body spot behind our line clear of the cage, the puck where the
+	# target holds it, a ring of targets near and far.
+	var cage_hw: float = GameRules.NET_BACK_HALF_WIDTH + 0.35
+	var cage_back: float = GameRules.NET_DEPTH + 0.35
+	var failures: int = 0
+	for ix: int in range(-6, 7):
+		for iz: int in range(1, 8):
+			var body := Vector3(0.5 * ix, 0.0, _line_z() + 0.35 * iz)
+			if absf(body.x) < cage_hw and body.z - _line_z() < cage_back:
+				continue
+			for k: int in 16:
+				for reach: float in [0.5, 1.2, 3.0]:
+					var a: float = TAU * float(k) / 16.0
+					var target := body + Vector3(sin(a), 0.0, cos(a)) * reach
+					var facing := Vector2(sin(a), cos(a))
+					var puck: Vector3 = _held(body, facing, target, FLOOR.x)
+					if (_line_z() - puck.z) * OWN > 0.0:
+						continue
+					var out: Vector3 = _safe(body, Vector3.ZERO, facing, target, OWN, puck)
+					for floor_m: float in [FLOOR.x, FLOOR.y]:
+						if _round_our_cage(body, _held(body, facing, out, floor_m)):
+							failures += 1
+							if failures <= 3:
+								gut.p("body %s target %s -> %s" % [body, target, out])
+	assert_eq(failures, 0, "a held puck round our cage from behind our line")
+
+
 func test_a_carrier_taking_his_puck_deeper_into_our_mouth_brakes() -> void:
 	var line: float = _line_z()
 	var twine := Vector3(-0.99, 0.0, line + OWN * 0.4)

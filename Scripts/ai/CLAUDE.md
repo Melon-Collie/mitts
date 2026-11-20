@@ -158,7 +158,14 @@ blade (`blade_contact_world`); and the way the blade takes it from there to the
 target. Held in our mouth, in it already, or dragged into it by the body's
 travel in the blade's time to sweep it clear, it goes out wide of the post on
 the body's own side; taken through the mouth on its way (round the cage from in
-front of the line), it goes round the post on its own side. Beside our own
+front of the line), it goes round the post on its own side. From behind our
+line the stick never reaches round our cage, and that wins over the rest: the
+twine holds the blade on its own side, so the body skating on slid a stick
+reached round the cage along the twine and round the post into the mouth
+(#961). A target that asks for it round swings past the cage's back corner,
+never its front, and a puck already round comes back past the back corner on
+its side. So a carrier never walks the puck out on the far side of our post.
+Beside our own
 goalie the cursor holds the puck on the far side of the body from him: parked
 on the body, as beside theirs, the puck trailed behind the carrier along a
 bearing the lagging cursor made, into the goalie's pads, whose gear swept it
@@ -206,7 +213,11 @@ look leads, or a pass is near the lead with nothing forcing him to evade (no
 man to beat, the shield barely on, the puck kept in the pocket as surely as
 carried), the carry cursor rests the puck in that release's hold, and it is
 the hold the carrier locks at commit, so the cursor does not jump when the
-press takes over (`SkaterAgentCarryCursor`).
+press takes over (`SkaterAgentCarryCursor`). A latched shot whose puck already
+carries its priced share where it sits stays there while the press waits for
+its planned point (`_pre_aim_target`): pulled on to the hold, the sweep across
+the body unloaded it, and a lower tier's press waited on the load until it was
+on the keeper.
 
 ## Reception doctrine
 
@@ -216,8 +227,9 @@ parking the blade on the line is what collects it and stopping is a wait rather
 than a technique. Bots
 receive in stride by default and brake only when arriving early enough to carry
 the blade past the meet, or when their own skating is what carries a feed past
-the bobble line (`SkaterAgentReception.gives_with`) — a feed already past it on
-its own bobbles however they skate.
+their own blade's bobble line (`SkaterAgentReception.gives_with`, leaned by the
+curve as the passer prices it) — a feed already past it on its own bobbles
+however they skate.
 
 **The stance rides the receiver's own skating.** The meet is a rendezvous, so a
 receiver driving into the feed stands where his skating takes him, a stance off

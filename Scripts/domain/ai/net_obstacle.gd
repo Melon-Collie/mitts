@@ -18,6 +18,9 @@ class_name AINetObstacle
 # as the boards clamp).
 const CARRY_NET_CLEAR_MARGIN_M: float = 0.5
 const BLADE_NET_CLEAR_MARGIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
+# A bearing swung clear of a cage goes this far past the corner it is tangent
+# to, so the blade passes it with daylight rather than grazing the frame.
+const NET_TANGENT_DAYLIGHT_RAD: float = 0.05
 
 
 # True iff a carried traverse from → to would pass through either cage
@@ -75,7 +78,7 @@ static func net_safe_blade_target(from: Vector3, target: Vector3) -> Vector3:
 	# The chord crosses, so 0 ∈ [min_rel, max_rel]. Swing to the nearer edge,
 	# plus a small step of daylight past the corner.
 	var swing: float = min_rel if -min_rel <= max_rel else max_rel
-	var out_ang: float = target_ang + swing + signf(swing) * 0.05
+	var out_ang: float = target_ang + swing + signf(swing) * NET_TANGENT_DAYLIGHT_RAD
 	return Vector3(from.x + sin(out_ang) * dist, 0.0, from.z + cos(out_ang) * dist)
 
 
@@ -185,8 +188,22 @@ static func carried_puck_in_own_mouth(target: Vector3, self_velocity: Vector3,
 #     way round the post on the puck's side, wide of the cage at the target's
 #     depth, until the straight way on is clear.
 #
+# And from behind our goal line the stick never reaches round our cage
+# (_kept_this_side_of_own_cage), which wins over the three: the twine holds a
+# blade on its own side, so the body's travel slides one reached round the cage
+# along the twine and round the post into the mouth.
+#
 # Any other target returns unchanged.
 static func own_mouth_safe_blade_target(self_pos: Vector3, self_velocity: Vector3,
+		facing: Vector2, target: Vector3, floor_band: Vector2, own_goal_dir: float,
+		horizon_s: float, puck_at: Vector3) -> Vector3:
+	var out_of_mouth: Vector3 = _out_of_own_mouth(self_pos, self_velocity, facing, target,
+			floor_band, own_goal_dir, horizon_s, puck_at)
+	return _kept_this_side_of_own_cage(self_pos, facing, out_of_mouth, floor_band,
+			own_goal_dir, puck_at)
+
+
+static func _out_of_own_mouth(self_pos: Vector3, self_velocity: Vector3,
 		facing: Vector2, target: Vector3, floor_band: Vector2, own_goal_dir: float,
 		horizon_s: float, puck_at: Vector3) -> Vector3:
 	var offset := Vector2(target.x - self_pos.x, target.z - self_pos.z)
@@ -222,6 +239,91 @@ static func own_mouth_safe_blade_target(self_pos: Vector3, self_velocity: Vector
 		return Vector3((puck_side if puck_side != 0.0 else 1.0) * OWN_MOUTH_EXIT_HALF_WIDTH_M,
 				0.0, target.z)
 	return target
+
+
+# Where a puck round our cage is brought back to: past the back corner on its
+# side, wide of the frame by the blade standoff and the puck.
+const OWN_CAGE_BACK_CORNER_OUT_M: float = BLADE_NET_CLEAR_MARGIN_M \
+		+ GameRules.PUCK_COLLISION_RADIUS
+
+
+# A carrier with his body and the puck behind our goal line keeps the puck on
+# his own side of our cage. Two ways round:
+#
+#   - the puck round it already (the line from his body to it passes through
+#     the frame plus the puck's radius): the target is past our cage's back
+#     corner on the puck's side, the way it came;
+#   - the target asking for it round (the puck held along its bearing out to the
+#     far floor coming within the blade standoff of the frame, the heel-to-toe
+#     length the twine holds on its side, or within what the body itself stands
+#     off it): the bearing swings past the corner on the BACK edge of the
+#     cage's silhouette. The nearer edge can be the front, and round the front
+#     post is the mouth.
+#
+# A puck in front of our line is the mouth guard's alone. This rules out walking
+# the puck out with it on the far side of our post.
+static func _kept_this_side_of_own_cage(self_pos: Vector3, facing: Vector2,
+		target: Vector3, floor_band: Vector2, own_goal_dir: float,
+		puck_at: Vector3) -> Vector3:
+	var line_z: float = own_goal_dir * GameRules.GOAL_LINE_Z
+	if (line_z - self_pos.z) * own_goal_dir >= 0.0 or (line_z - puck_at.z) * own_goal_dir > 0.0:
+		return target
+	var back_z: float = own_goal_dir * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH)
+	var frame_x0: float = -GameRules.NET_BACK_HALF_WIDTH
+	var frame_x1: float = GameRules.NET_BACK_HALF_WIDTH
+	var frame_z0: float = minf(line_z, back_z)
+	var frame_z1: float = maxf(line_z, back_z)
+	var body_off: float = Vector2(maxf(absf(self_pos.x) - GameRules.NET_BACK_HALF_WIDTH, 0.0),
+			maxf(maxf(frame_z0 - self_pos.z, self_pos.z - frame_z1), 0.0)).length()
+	if body_off <= GameRules.PUCK_COLLISION_RADIUS:
+		return target
+	# A puck pressed on the twine from his own side touches the frame at the end
+	# of the line to it; only one the line meets short of the puck is round.
+	var r: float = GameRules.PUCK_COLLISION_RADIUS
+	var to_puck := Vector2(puck_at.x - self_pos.x, puck_at.z - self_pos.z)
+	var short_of_puck: float = to_puck.length() - 2.0 * r
+	if short_of_puck > 0.0:
+		var end: Vector2 = to_puck * (short_of_puck / to_puck.length())
+		if _segment_crosses_aabb_xz(self_pos.x, self_pos.z, self_pos.x + end.x,
+				self_pos.z + end.y, frame_x0 - r, frame_x1 + r, frame_z0 - r, frame_z1 + r):
+			var side: float = signf(puck_at.x) if puck_at.x != 0.0 else signf(self_pos.x)
+			target = Vector3((side if side != 0.0 else 1.0)
+					* (GameRules.NET_BACK_HALF_WIDTH + OWN_CAGE_BACK_CORNER_OUT_M), 0.0,
+					back_z + own_goal_dir * OWN_CAGE_BACK_CORNER_OUT_M)
+	var m: float = minf(BLADE_NET_CLEAR_MARGIN_M, maxf(body_off - r, r))
+	var hw: float = GameRules.NET_BACK_HALF_WIDTH + m
+	var z_front: float = line_z - own_goal_dir * m
+	var z_back: float = back_z + own_goal_dir * m
+	var z0: float = minf(z_front, z_back)
+	var z1: float = maxf(z_front, z_back)
+	var offset := Vector2(target.x - self_pos.x, target.z - self_pos.z)
+	var dist: float = offset.length()
+	var dir: Vector2 = offset / dist if dist >= 0.001 else facing
+	var reach: float = maxf(dist, floor_band.y)
+	if not _segment_crosses_aabb_xz(self_pos.x, self_pos.z, self_pos.x + dir.x * reach,
+			self_pos.z + dir.y * reach, -hw, hw, z0, z1):
+		return target
+	var ang: float = atan2(dir.x, dir.y)
+	var min_rel: float = INF
+	var max_rel: float = -INF
+	var min_on_back: bool = false
+	var max_on_back: bool = false
+	for corner_x: float in [-hw, hw]:
+		for corner_z: float in [z_front, z_back]:
+			var rel: float = wrapf(atan2(corner_x - self_pos.x, corner_z - self_pos.z) - ang,
+					-PI, PI)
+			if rel < min_rel:
+				min_rel = rel
+				min_on_back = corner_z == z_back
+			if rel > max_rel:
+				max_rel = rel
+				max_on_back = corner_z == z_back
+	var swing: float = min_rel if -min_rel <= max_rel else max_rel
+	if min_on_back != max_on_back:
+		swing = min_rel if min_on_back else max_rel
+	var out_ang: float = ang + swing + signf(swing) * NET_TANGENT_DAYLIGHT_RAD
+	var out_dist: float = dist if dist >= 0.001 else floor_band.x
+	return Vector3(self_pos.x + sin(out_ang) * out_dist, 0.0, self_pos.z + cos(out_ang) * out_dist)
 
 
 # Whether a puck released from `from` in front of our goal line, along `dir`,

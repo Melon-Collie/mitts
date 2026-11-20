@@ -599,6 +599,44 @@ func test_a_puck_rimmed_into_our_own_corner_is_still_chased() -> void:
 			"with nobody able to hold the house the last man covers the net front")
 
 
+func _rimmed_out_of_their_zone(chaser: Vector3) -> WorldSnapshot:
+	# Our net at +Z. The puck has come up their wall to their man at the point,
+	# past our two mates deep in their zone: neither is goal-side of it nor can
+	# get home in time, so nobody else contains.
+	var snap := WorldSnapshot.new()
+	snap.puck_state = PuckNetworkState.new()
+	snap.puck_state.position = Vector3(-11, 0, -12)
+	snap.puck_state.velocity = Vector3.ZERO
+	snap.skater_states[1] = _skater(chaser)
+	snap.skater_states[2] = _skater(Vector3(2, 0, -22))
+	snap.skater_states[3] = _skater(Vector3(5, 0, -19))
+	snap.skater_states[11] = _skater(Vector3(-11, 0, -9),
+			Vector3(0, 0, -3))                                      # opponent, winning
+	return snap
+
+
+func test_a_lost_race_behind_the_pickup_and_far_from_home_is_still_run() -> void:
+	# Declining buys a body between the collector and our net. A chaser behind
+	# the pickup, out of reach of the house, is not one: his decline covers
+	# nothing, so it is never the answer anywhere below the pickup.
+	var teams := {1: 0, 2: 0, 3: 0, 11: 1}
+	for x: float in [-8.0, -4.0, 0.0, 4.0, 8.0]:
+		for z: float in [-24.0, -20.0, -16.0]:
+			var chaser := Vector3(x, 0, z)
+			var lost: bool = AILoosePuckChase.loose_puck_race_lost(
+					_rimmed_out_of_their_zone(chaser), chaser, Vector3.ZERO, REF,
+					0, teams, {}, 1, 1.0)
+			assert_false(lost, "a chaser at %s behind the pickup runs the race" % chaser)
+
+	# The same lost race from goal-side of the pickup: there his decline IS the
+	# containment, so he still takes it.
+	var high := Vector3(6, 0, -6)
+	var lost_high: bool = AILoosePuckChase.loose_puck_race_lost(
+			_rimmed_out_of_their_zone(high), high, Vector3.ZERO, REF,
+			0, teams, {}, 1, 1.0)
+	assert_true(lost_high, "a chaser goal-side of the pickup declines to contain it")
+
+
 func test_a_ghosted_teammate_is_not_containment() -> void:
 	# A teammate serving an offside ghost can't play the puck or the body, so
 	# he can't be the reason we stop chasing.

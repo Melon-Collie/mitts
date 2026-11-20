@@ -4,8 +4,10 @@ extends GutTest
 # controller's slapper zone radius, blade speed and pickup radius, the puck's deflect
 # threshold and rest height, and the skater's body radius (scene nodes the
 # domain must not reach), the duel harness's copy of the puck's catch, and the
-# pairs two bot modules keep equal so their reads agree. Each was a "must
-# match" comment; this is the check.
+# pairs two bot modules keep equal so their reads agree — constants, and the
+# reads written twice (the agent's motion fallback against the host's tracker,
+# the brain's goalie against the roles'). Each was a "must match" comment;
+# this is the check.
 
 const SkaterControllerScript := preload("res://Scripts/controllers/skater_controller.gd")
 const PuckScript := preload("res://Scripts/actors/puck.gd")
@@ -165,3 +167,55 @@ func test_a_saucer_clears_the_body_a_skater_has() -> void:
 
 func test_the_wheel_exits_at_the_top_of_the_low_battle_ice() -> void:
 	assert_eq(AICarrierDestinations.WHEEL_EXIT_UP_ICE_M, AIZoneCoverage.LOW_ZONE_DEPTH_M)
+
+
+func _moving(vel: Vector3) -> SkaterNetworkState:
+	var s := SkaterNetworkState.new()
+	s.velocity = vel
+	return s
+
+
+func test_a_bot_without_the_hosts_cache_reads_motion_as_the_host_does() -> void:
+	# The agent's local fallback and the host's shared tracker over the same
+	# frames: a man cutting at 2 rad/s, one snapped by a collision past the
+	# clamp, one drifting under the heading floor who leaves and comes back.
+	var dt: float = 1.0 / Constants.PHYSICS_TICK
+	var tracker := AIAccelerationTracker.new()
+	var sm := SkaterAgentStateMachine.new()
+	for tick: int in 90:
+		var snap := WorldSnapshot.new()
+		var a: float = 2.0 * dt * tick
+		snap.skater_states[1] = _moving(Vector3(6.0 * cos(a), 0.0, 6.0 * sin(a)))
+		snap.skater_states[2] = _moving(Vector3(0.0, 0.0, 30.0 if tick == 20 else 5.0))
+		if tick < 40 or tick >= 50:
+			snap.skater_states[3] = _moving(Vector3(0.4 * cos(float(tick)), 0.0, 0.4))
+		tracker.update(snap.skater_states, dt)
+		sm._update_acceleration_cache(snap, dt)
+		for pid: int in [1, 2, 3]:
+			assert_eq(sm._accel_by_peer.has(pid), tracker.accel_by_peer.has(pid),
+					"peer %d tracked alike at tick %d" % [pid, tick])
+			if not tracker.accel_by_peer.has(pid):
+				continue
+			assert_almost_eq(sm._accel_by_peer[pid], tracker.accel_by_peer[pid],
+					Vector3.ONE * 1e-5, "peer %d's accel at tick %d" % [pid, tick])
+			assert_almost_eq(sm._heading_omega_by_peer[pid], tracker.heading_omega_by_peer[pid],
+					1e-5, "peer %d's turn rate at tick %d" % [pid, tick])
+
+
+func test_the_brain_and_the_roles_find_our_goalie_alike() -> void:
+	for team: int in [0, 1]:
+		var team_map: Dictionary = {1: team}
+		var brain := TeamBrain.new(team, team_map)
+		var sm := SkaterAgentStateMachine.new()
+		sm.setup(1, team, brain, team_map, false)
+		var snap := WorldSnapshot.new()
+		snap.skater_states[1] = SkaterNetworkState.new()
+		var ctx: RoleContext = sm._build_role_context(snap, Vector3.ZERO, snap.skater_states[1])
+		assert_eq(brain._resolve_our_goalie_pos(snap), AIRoleReads.resolve_our_goalie_pos(ctx),
+				"team %d with no goalie yet: the goal mouth" % team)
+		var goalie := GoalieNetworkState.new()
+		goalie.position_x = 0.7
+		goalie.position_z = 25.0 if team == 0 else -25.0
+		snap.goalie_states[team] = goalie
+		assert_eq(brain._resolve_our_goalie_pos(snap), AIRoleReads.resolve_our_goalie_pos(ctx),
+				"team %d's goalie where he stands" % team)

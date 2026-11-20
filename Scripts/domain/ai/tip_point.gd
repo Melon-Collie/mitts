@@ -19,14 +19,17 @@ const BLADE_OUT_M: float = AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 # along the bearing, so that standing there he reads the same point; else, when
 # his stick cannot be there in time, where it comes nearest his body, the stick
 # reached out to it. Never where it crosses his z-plane: a rip across the slot
-# crosses it metres to his side while passing in reach.
+# crosses it metres to his side while passing in reach. `ceiling_mult` is his
+# blade's reception lean (AIFeedReception.receiver_ceiling_mult), which sets the
+# pace he holds a catch at rather than tipping it.
 static func meet_time(puck_pos: Vector3, puck_vel: Vector3, me: Vector3, me_vel: Vector3,
-		max_speed: float, max_accel: float, blade_reach: float, opp_goal_z: float) -> float:
+		max_speed: float, max_accel: float, blade_reach: float, opp_goal_z: float,
+		ceiling_mult: float = 1.0) -> float:
 	var t: float = _candidate(puck_pos, puck_vel, me, me_vel, max_speed, max_accel, blade_reach,
-			opp_goal_z, BLADE_OUT_M)
+			opp_goal_z, BLADE_OUT_M, ceiling_mult)
 	if is_nan(t):
 		t = _candidate(puck_pos, puck_vel, me, me_vel, max_speed, max_accel, blade_reach,
-				opp_goal_z, 0.0)
+				opp_goal_z, 0.0, ceiling_mult)
 	return t
 
 
@@ -46,7 +49,7 @@ static func bearing(travel: Vector2, tip: Vector2, opp_goal_z: float) -> Vector2
 # the contact.
 static func _candidate(puck_pos: Vector3, puck_vel: Vector3, me: Vector3, me_vel: Vector3,
 		max_speed: float, max_accel: float, blade_reach: float, opp_goal_z: float,
-		blade_out: float) -> float:
+		blade_out: float, ceiling_mult: float) -> float:
 	var pv := Vector2(puck_vel.x, puck_vel.z)
 	var speed: float = pv.length()
 	var rel_v := Vector2(puck_vel.x - me_vel.x, puck_vel.z - me_vel.z)
@@ -77,10 +80,10 @@ static func _candidate(puck_pos: Vector3, puck_vel: Vector3, me: Vector3, me_vel
 			Vector2(signf(x_at_goal) * mouth, opp_goal_z) - tip)) > MAX_TURN_RAD:
 		return NAN
 	# A shot he can hold is received, not tipped: only one arriving in his frame
-	# faster than he holds a catch on the line goes off the face.
+	# faster than his blade holds a catch on the line goes off the face.
 	var tip3 := Vector3(tip.x, 0.0, tip.y)
 	if AIFeedReception.arrival_closing_speed(puck_pos, tip3, speed, me_vel) \
-			<= AIFeedReception.RECEIVE_HOLD_CEILING_M_S:
+			<= AIFeedReception.RECEIVE_HOLD_CEILING_M_S * ceiling_mult:
 		return NAN
 	# A tip his blade cannot be on before the puck gets there, stick out, is no
 	# tip: the crash is his play instead.

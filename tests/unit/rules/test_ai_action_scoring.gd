@@ -931,7 +931,7 @@ func test_friction_traverse_time_exceeds_frictionless() -> void:
 	# frictionless baseline and the kinematic identity dist = v0·T − ½·a·T².
 	var dist: float = 18.0
 	var v0: float = 20.0
-	var t: float = AIPuckLane._friction_traverse_time(dist, v0)
+	var t: float = AIPuckLane.friction_traverse_time(dist, v0)
 	assert_gt(t, dist / v0, "friction makes the traversal take longer than dist/v0")
 	var a: float = GameRules.PUCK_ICE_DECEL_M_S2
 	assert_almost_eq(v0 * t - 0.5 * a * t * t, dist, 0.001,

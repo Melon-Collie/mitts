@@ -698,10 +698,12 @@ NEXT spot, not the puck:
   band) and if the shot we would get from winning it is worth more than the
   station he leaves. Last-man discipline still binds him
   (`offensive_station_target`), so a point never becomes the second man.
-- **#604's decline.** The chase decline that fires by default deep in the
-  attacking zone is reworked in this step. In their zone a lost race is
-  declined only when the second man's read says nobody of ours can contest
-  the next spot either.
+- **#604's decline.** It no longer fires by default deep in the attacking
+  zone: a chaser declines only when he would himself contain the pickup
+  (goal-side of it, or home inside the late-man window), so one behind a puck
+  rimmed up-ice past him runs the race (`AILoosePuckChase._contains`). What
+  this step would add on top: the high man's decline too is taken only when
+  the second man's read says nobody of ours can contest the next spot either.
 
 The election stays one chaser a team. The second man is a role decision read
 off the election's result, so the two never send the same body.

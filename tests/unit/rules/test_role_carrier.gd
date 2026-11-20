@@ -417,6 +417,84 @@ const _FEED_PASSER := Vector3(-4, 0, 6)
 const _FEED_RECEIVER := Vector3(-4, 0, -6)     # 12 m up-ice
 
 
+# A receiver curling back at the passer is fed up to the crisp ceiling, and that
+# ceiling is his own blade's (AISkaterCaps.reception_ceiling_mult): the toe hook
+# is never fed past what it soaks. What is fired is the solve for his blade at
+# the pace the search priced.
+func test_a_feed_to_a_curling_receiver_is_solved_for_his_blade() -> void:
+	var hook: float = PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_OPEN, 1, 1) \
+			.reception_ceiling_mult()
+	var passer: Vector3 = _FEED_PASSER
+	var receiver: Vector3 = _FEED_RECEIVER
+	var curl_back := Vector3(0, 0, 9)
+	var ctx: RoleContext = _make_ctx(passer, [
+			[1, TEAM_ID, passer],
+			[2, TEAM_ID, receiver, false, curl_back]])
+	var caps := AISkaterCaps.new()
+	caps.reception_ceiling_mult = hook
+	ctx.caps_by_peer = {2: caps}
+	ctx.ping_pass_target_peer = 2
+	var c: AIRoleCarrier = _decided(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS, "the pinged feed is committed")
+	assert_almost_eq(c.pass_target_speed, AIPuckLane.pass_launch_speed(
+			passer.distance_to(receiver), ctx.self_wrister_shot_speed * c._pass.best_hold_cap,
+			ctx.pass_speed_scale * c._pass.best_pace_frac, curl_back,
+			(receiver - passer).normalized(), hook), 0.001)
+	assert_lt(AIFeedReception.arrival_closing_speed(passer, receiver, c.pass_target_speed,
+			curl_back), AIPuckLane.PASS_RECEIVE_CEILING_M_S * hook + 0.01,
+			"the hook's feed lands under his leaned ceiling")
+
+
+# Every feed the search commits to a P28 receiver (CURVE_OPEN, the lowest
+# reception ceiling) who plays it as a catch reaches him, in his frame, under
+# his own blade's catch ceiling at every contact a bot receiver's blade makes
+# (on the line, or at the measured off-line offset, AIFeedReception): caught,
+# never deflected. Read where the fired aim meets him
+# (AIPassLead.lead from the puck, as the press aims it, his skating through the
+# windup), across lengths, bearings and his skating: still, streaking away,
+# curling back at the passer, crossing.
+func test_every_committed_feed_to_a_p28_receiver_is_under_his_catch_ceiling() -> void:
+	var hook: float = PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_OPEN, 1, 1) \
+			.reception_ceiling_mult()
+	var catch_ceiling: float = hook * (AIFeedReception.RECEIVE_DEFLECT_MIN_M_S
+			+ AIFeedReception.RECEIVE_ALIGNMENT_BONUS_M_S
+			* (1.0 - AIFeedReception.RECEIVE_OFF_LINE_OFFSET))
+	var passer := Vector3(0, 0, 14)
+	var fired: int = 0
+	var over_hold: int = 0
+	for dist: float in [6.0, 12.0, 20.0]:
+		for bearing_deg: float in [0.0, 35.0, -70.0]:
+			var dir := Vector3(sin(deg_to_rad(bearing_deg)), 0, -cos(deg_to_rad(bearing_deg)))
+			var side := Vector3(-dir.z, 0, dir.x)
+			for vel: Vector3 in [Vector3.ZERO, dir * 7.0, -dir * 6.0, -dir * 9.0,
+					side * 6.0, (side - dir).normalized() * 8.0]:
+				var receiver: Vector3 = passer + dir * dist
+				var ctx: RoleContext = _make_ctx(passer, [
+						[1, TEAM_ID, passer],
+						[2, TEAM_ID, receiver, false, vel]])
+				var caps := AISkaterCaps.new()
+				caps.reception_ceiling_mult = hook
+				ctx.caps_by_peer = {2: caps}
+				ctx.ping_pass_target_peer = 2
+				var c: AIRoleCarrier = _decided(ctx)
+				if c.intended_action != AIRoleCarrier.INTENT_PASS:
+					continue
+				fired += 1
+				var state: SkaterNetworkState = ctx.snapshot.skater_states[2]
+				var meet: Vector3 = AIPassLead.lead(passer, state, c.pass_target_speed,
+						AICarrierPassSearch.PASS_LEAD_MAX_S,
+						AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)[0]
+				var closing: float = AIFeedReception.arrival_closing_speed(passer, meet,
+						c.pass_target_speed, vel)
+				if closing > AIFeedReception.RECEIVE_HOLD_CEILING_M_S * hook:
+					over_hold += 1
+				assert_lt(closing, catch_ceiling,
+						"%.0f m at %.0f deg, receiver skating %s: caught" % [dist, bearing_deg, vel])
+	assert_gt(fired, 0, "the sweep commits feeds to read")
+	gut.p("%d feeds committed, %d past his bobble line on the line (priced as bobbles)"
+			% [fired, over_hold])
+
+
 # The bobble odds of the feed the search picked, at the pace it fires.
 func _picked_feed_bobble_prob(defender: Vector3) -> float:
 	var ctx: RoleContext = _make_ctx(_FEED_PASSER, [
@@ -2018,6 +2096,47 @@ func test_a_frontal_stick_threat_earns_the_shield() -> void:
 	# the puck is the snapshot's row.)
 	assert_gt(_frontal_threat(1.6).protect_gain, 0.0,
 			"a stick on the presented spot, with a safe hip to hide it, earns the shield")
+
+
+func test_keeping_the_puck_reads_the_evadability() -> void:
+	# The carrier's keep odds are his evadability (AIEvadeRead) at the puck: the
+	# best of his cuts, the stop among them.
+	var self_pos := Vector3(0, 0, 5)
+	var vel := Vector3(0, 0, -6)
+	for opp: Vector3 in [Vector3(-2, 0, 2), Vector3(0, 0, 2), Vector3(1.5, 0, 4)]:
+		var ctx: RoleContext = _make_ctx(self_pos, [
+				[1, TEAM_ID, self_pos, false, vel], [3, 1, opp]])
+		ctx.self_velocity = vel
+		var c: AIRoleCarrier = _decided(ctx)
+		var opps: Array[Vector3] = [opp]
+		var still: Array[Vector3] = [Vector3.ZERO]
+		var cut: float = AIEvadeRead.evade_safety(
+				AICarrierField.puck_pos_at(self_pos, ctx.attacking_goal_pos), vel, opps, still,
+				ctx.self_handle_reach)
+		assert_almost_eq(c.carry_keep, cut, 1e-6, "a man at %s" % opp)
+
+
+func test_a_stick_that_reaches_the_back_hip_leaves_no_shield() -> void:
+	# The poke reads no body (PuckInteractionRules.check_poke): a blade reaches
+	# through the carrier to a puck on his far hip as readily as round him. So
+	# wherever a checker on the play line still reaches the spot furthest from
+	# him the blade can hold the puck — straight behind the body — the shield
+	# buys nothing, however close he stands: the gain is zero there, and every
+	# stand inside contact range is such a stand.
+	var handle: float = _make_ctx(_PROTECT_SPOT).self_handle_reach
+	var back_hip: Vector3 = _PROTECT_SPOT + Vector3(0, 0, handle)
+	var still: Array[Vector3] = [Vector3.ZERO]
+	for ahead_m: float in [0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 2.0, 2.5]:
+		var checker: Array[Vector3] = [_PROTECT_SPOT + Vector3(0, 0, -ahead_m)]
+		var hip_safety: float = AICarrySpace.clearance_to_safety(AICarrySpace.reach_clearance(
+				back_hip, AICarrySpace.EVADE_HORIZON_S, checker, still))
+		if ahead_m <= 1.2:
+			assert_eq(hip_safety, 0.0,
+					"a checker %.1f m ahead reaches the back hip through the body" % ahead_m)
+		if hip_safety <= 0.0:
+			assert_eq(_frontal_threat(ahead_m).protect_gain, 0.0,
+					"checker %.1f m ahead reaches the back hip: the shield buys nothing"
+					% ahead_m)
 
 
 func test_the_shield_never_moves_the_puck_toward_the_checker() -> void:

@@ -104,9 +104,26 @@ static func is_zone_slot(slot: int) -> bool:
 			or slot == AIRoleSlots.Slot.ZONE_W_WEAK
 
 
+# The other label of `slot`'s strong/weak zone pair (the D pair, the winger
+# pair), or NONE for any other slot.
+static func zone_pair_partner(slot: int) -> int:
+	match slot:
+		AIRoleSlots.Slot.ZONE_D_STRONG:
+			return AIRoleSlots.Slot.ZONE_D_WEAK
+		AIRoleSlots.Slot.ZONE_D_WEAK:
+			return AIRoleSlots.Slot.ZONE_D_STRONG
+		AIRoleSlots.Slot.ZONE_W_STRONG:
+			return AIRoleSlots.Slot.ZONE_W_WEAK
+		AIRoleSlots.Slot.ZONE_W_WEAK:
+			return AIRoleSlots.Slot.ZONE_W_STRONG
+		_:
+			return AIRoleSlots.Slot.NONE
+
+
 # Assigns each teammate to a 5v5 slot. Same contract as AIRoleSlots.assign
-# plus `position_by_peer` (peer_id → lobby team_slot). Returns
-# Dictionary[peer_id, AIRoleSlots.Slot].
+# plus `position_by_peer` (peer_id → lobby team_slot). `kept` (peer_id → slot)
+# names bodies that hold their slot without racing for it — the brain's call
+# (TeamBrain._keep_the_labels_men_need). Returns Dictionary[peer_id, AIRoleSlots.Slot].
 static func assign(
 		snapshot: WorldSnapshot,
 		team_id: int,
@@ -117,7 +134,8 @@ static func assign(
 		strong_x: float,
 		caps_by_peer: Dictionary,
 		position_by_peer: Dictionary,
-		carrier_lane: int = 0) -> Dictionary[int, int]:
+		carrier_lane: int = 0,
+		kept: Dictionary = {}) -> Dictionary[int, int]:
 	var result: Dictionary[int, int] = {}
 	if snapshot == null:
 		return result
@@ -171,6 +189,7 @@ static func assign(
 	var short_handed: bool = teammates.size() < specs.size()
 	if short_handed and state == AIPossessionState.State.TRANS_DEFENSE:
 		_keep_the_high_man(specs)
+	_seat_the_kept(specs, kept, teammates, result, assigned)
 	var carrier_depth_z: float = NAN
 	if carrier_pid != -1 and snapshot.skater_states.has(carrier_pid):
 		carrier_depth_z = snapshot.skater_states[carrier_pid].position.z
@@ -414,6 +433,21 @@ static func _keep_the_high_man(specs: Array[SlotSpec]) -> void:
 		var middle: SlotSpec = specs[mid]
 		specs[mid] = specs[high]
 		specs[high] = middle
+
+
+# Seats each `kept` body on his slot ahead of every race, and takes the slot out
+# of the election.
+static func _seat_the_kept(specs: Array[SlotSpec], kept: Dictionary,
+		teammates: Array[int], result: Dictionary[int, int], assigned: Dictionary) -> void:
+	for pid: int in kept:
+		if assigned.has(pid) or not teammates.has(pid):
+			continue
+		for i: int in specs.size():
+			if specs[i].slot == kept[pid]:
+				result[pid] = specs[i].slot
+				assigned[pid] = true
+				specs.remove_at(i)
+				break
 
 
 # Sets each back-line post's deadline: the carrier's arrival there less the

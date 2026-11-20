@@ -247,8 +247,8 @@ static func is_level(ctx: RoleContext, ap: AICarrierApproach) -> bool:
 # The angle's finish, the level pressurer's last play. Still in front of him with
 # his line to our net inside my stick, step into his path at contact, facing
 # him, so he skates through the body. Otherwise — wider of his line than that,
-# or behind him — the first ice on that line I get to before he does
-# (AIDefensiveVerbs.cut_off_share), riding it as he moves, so whichever way he
+# or behind him — the first ice on his route to our net I get to before he does
+# (AIDefensiveVerbs.cut_off), riding it as he moves, so whichever way he
 # goes to the net, down the wall and in or straight across, he meets the body
 # or the reach-in there: in front, taken facing him; behind, skated to (not
 # backpedalled). Never step out onto a man whose line I am wide of: level

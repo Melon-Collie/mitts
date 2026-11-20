@@ -67,6 +67,13 @@ var opponent_blades_release: Array[Vector3] = []
 var our_defenders: Array[Vector3] = []
 var our_defender_caps: Array[AISkaterCaps] = []
 var our_defender_vels: Array[Vector3] = []
+# Those of them who may play the puck, whom a feed can meet on its way: where
+# they stand now and where at the release (as opponents_release), with their
+# velocities and caps, index-matched.
+var mates_now: Array[Vector3] = []
+var mates_release: Array[Vector3] = []
+var mate_vels: Array[Vector3] = []
+var mate_caps: Array[AISkaterCaps] = []
 # Teammate ETAs to the counter point (5v5), candidate-invariant across a phase,
 # and the counter-threat memo by covering-body count, -1-seeded with them.
 var exposure_mate_etas: Array[float] = []
@@ -124,6 +131,10 @@ func fill(ctx: RoleContext) -> void:
 	our_defenders.clear()
 	our_defender_caps.clear()
 	our_defender_vels.clear()
+	mates_now.clear()
+	mates_release.clear()
+	mate_vels.clear()
+	mate_caps.clear()
 	for peer_id: int in ctx.snapshot.skater_states:
 		if peer_id == ctx.peer_id:
 			continue
@@ -140,6 +151,12 @@ func fill(ctx: RoleContext) -> void:
 			our_defenders.append(s.position)
 			our_defender_caps.append(ctx.caps_by_peer.get(peer_id))
 			our_defender_vels.append(s.velocity)
+			if not ctx.snapshot.is_out_of_play(peer_id):
+				mates_now.append(s.position)
+				mates_release.append(AITrajectory.predict_at(
+						s.position, s.velocity, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S))
+				mate_vels.append(s.velocity)
+				mate_caps.append(ctx.caps_by_peer.get(peer_id))
 	screens_release.assign(opponents_release)
 	screens_release.append_array(our_defenders)
 	if ctx.team_size >= 5:

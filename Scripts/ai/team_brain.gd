@@ -107,6 +107,9 @@ var forecheck_depth_margin_s: float = -INF
 var _pressure_slot_override: int = AIRoleSlots.Slot.NONE
 var _pressure_owner_peer: int = -1
 var _zone_peers: Array[int] = []
+# 5v5 DZONE: zone D who hold their label through this tick's election
+# (_keep_the_labels_men_need), peer → slot.
+var _kept_zone_labels: Dictionary[int, int] = {}
 # Where the puck was last carried, read every batch so a release is placed to
 # within one; INF until it has been.
 var _last_carry_pos: Vector3 = Vector3.INF
@@ -309,10 +312,11 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 
 	var prev_assignments: Dictionary = slot_assignments
 	if team_size >= 5:
+		_keep_the_labels_men_need(snapshot)
 		slot_assignments = AIRoleSlots5.assign(
 				snapshot, team_id, _own_goal_z, state, _team_id_by_peer,
 				prev_assignments, _strong_x, _caps_by_peer, _position_by_peer,
-				_carrier_lane)
+				_carrier_lane, _kept_zone_labels)
 	else:
 		slot_assignments = AIRoleSlots.assign(
 				snapshot, team_id, _own_goal_z, state, _team_id_by_peer,
@@ -498,18 +502,11 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 		# Area eligibility, built as the men are collected. The incumbent gets a
 		# release margin so a man skating a seam is held a metre past the edge
 		# rather than flickering between two defenders; the matcher's own switch
-		# margin covers the rest. The puck owner's area is everyone's while he is
-		# on the puck, or a man in it is in nobody's.
-		# A man down, the one's area is the perimeter the wedge has given up:
-		# while he is on the puck the men out there are nobody's, and no wedge
-		# man leaves the house for them.
-		var in_pressure_area: bool = not _one_owns(pressure_slot) and AIZoneCoverage.in_area(
-				pressure_slot, _strong_x, _own_goal_z, mp, 0.0, _man_down)
+		# margin covers the rest.
 		for def_pid: int in zone_slot_by_def:
 			var margin: float = AIZoneCoverage.AREA_RELEASE_MARGIN_M \
 					if prev.get(def_pid, -1) == pid else 0.0
-			if in_pressure_area or AIZoneCoverage.in_area(zone_slot_by_def[def_pid],
-					_strong_x, _own_goal_z, mp, margin, _man_down):
+			if _may_be_handed(zone_slot_by_def[def_pid], pressure_slot, mp, margin):
 				if not eligible_men.has(def_pid):
 					eligible_men[def_pid] = {}
 				(eligible_men[def_pid] as Dictionary)[pid] = true
@@ -537,6 +534,45 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 			defenders, defender_pos, defender_vel,
 			men, man_pos, man_value, our_net, prev, defender_caps, man_danger,
 			eligible_men)
+
+
+# Whether zone role `slot` may be handed a man at `man_pos` (`margin`: the
+# incumbent's release margin). The puck owner's area is everyone's while he is
+# on the puck, or a man in it is in nobody's — except a man down, where the
+# one's area is the perimeter the wedge has given up, and no wedge man leaves
+# the house for it.
+func _may_be_handed(slot: int, pressure_slot: int, man_pos: Vector3, margin: float) -> bool:
+	if not _one_owns(pressure_slot) and AIZoneCoverage.in_area(
+			pressure_slot, _strong_x, _own_goal_z, man_pos, 0.0, _man_down):
+		return true
+	return AIZoneCoverage.in_area(slot, _strong_x, _own_goal_z, man_pos, margin, _man_down)
+
+
+# Fills _kept_zone_labels from last tick's labels and partition: a body holding
+# one label of a strong/weak zone pair (AIRoleSlots5.zone_pair_partner) keeps it
+# while the man he covers is still his under it and the partner label could not
+# be handed him. The election races the labels to their posts, not to the men,
+# so a body skating across to his man can read nearer his partner's post;
+# swapped, he is left with a man outside his new area, and the partner holding
+# the label that may have him is already on a man of his own, or crosses the
+# ice to take him.
+func _keep_the_labels_men_need(snapshot: WorldSnapshot) -> void:
+	_kept_zone_labels.clear()
+	if state != AIPossessionState.State.DZONE or snapshot == null \
+			or snapshot.puck_state == null:
+		return
+	var pressure_slot: int = AIZoneCoverage.pressure_slot(self, _strong_x, _own_goal_z,
+			snapshot.puck_state.position)
+	for pid: int in threat_assignments:
+		var label: int = slot_assignments.get(pid, AIRoleSlots.Slot.NONE)
+		var partner: int = AIRoleSlots5.zone_pair_partner(label)
+		var man: SkaterNetworkState = snapshot.skater_states.get(threat_assignments[pid])
+		if partner == AIRoleSlots.Slot.NONE or man == null:
+			continue
+		if _may_be_handed(label, pressure_slot, man.position, AIZoneCoverage.AREA_RELEASE_MARGIN_M) \
+				and not _may_be_handed(partner, pressure_slot, man.position,
+						AIZoneCoverage.AREA_RELEASE_MARGIN_M):
+			_kept_zone_labels[pid] = label
 
 
 func _refresh_threat_base_memo(snapshot: WorldSnapshot) -> void:
@@ -571,8 +607,8 @@ func _refresh_threat_base_memo(snapshot: WorldSnapshot) -> void:
 
 
 # Our goalie's current world position, or the goal mouth as a first-frame
-# fallback. The brain has no RoleContext, so it cannot call
-# AIRoleReads.resolve_our_goalie_pos.
+# fallback: AIRoleReads.resolve_our_goalie_pos, which the brain cannot call
+# without a RoleContext (test_bot_mirrors.gd holds the two together).
 func _resolve_our_goalie_pos(snapshot: WorldSnapshot) -> Vector3:
 	var goalie: GoalieNetworkState = snapshot.goalie_states.get(team_id)
 	if goalie == null:

@@ -82,7 +82,7 @@ var self_settle_s: float = 0.0
 # Where the teammate whose release the puck reached this bot on stood when it
 # was seen loose off him: the pass it was fed. INF: it did not come by a pass.
 var fed_from: Vector3 = Vector3.INF
-# Lever-scaled carry-handle reach, m — how tight a seam best_evade_point threads.
+# Lever-scaled carry-handle reach, m — how tight a seam AIEvadeRead threads.
 var self_handle_reach: float = 0.9
 # Stick + blade reach, m — the "one stick length" unit of the gap ladder.
 var self_blade_reach: float = AIBotMechanics.BLADE_REACH_M

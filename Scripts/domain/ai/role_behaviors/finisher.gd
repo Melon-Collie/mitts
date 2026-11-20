@@ -176,7 +176,8 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 
 	# Where he tips it (AITipPoint, the point the carrier's rip is priced at).
 	var t_meet: float = AITipPoint.meet_time(puck_pos, puck_vel, ctx.self_pos, ctx.self_velocity,
-			ctx.self_max_speed, ctx.self_max_accel, ctx.self_blade_reach, opp_goal_z)
+			ctx.self_max_speed, ctx.self_max_accel, ctx.self_blade_reach, opp_goal_z,
+			AIFeedReception.receiver_ceiling_mult(ctx.caps_by_peer.get(ctx.peer_id)))
 	if is_nan(t_meet):
 		return null
 	var tip := Vector2(puck_pos.x + puck_vel.x * t_meet, puck_pos.z + puck_vel.z * t_meet)

@@ -67,8 +67,7 @@ var lateral_grip: float = 1.0
 
 # Reception ceiling lean (= Skater.reception_ceiling_mult, from the blade
 # curve): scales the deflect ceiling + on-the-line bonus this receiver's blade can
-# soak. Carried per-peer; the pass-speed solver does not read it and prices the
-# league constant.
+# soak. A passer reads it through AIFeedReception.receiver_ceiling_mult.
 var reception_ceiling_mult: float = 1.0
 
 # Backhand power coefficient (= SkaterController.backhand_power_coefficient — a
@@ -117,7 +116,7 @@ var body_check_transfer: float = 0.65
 var height_mult: float = 1.0
 
 # How far the carrier holds/protects the puck off its body while HANDLING it —
-# the reach that sets how tight an evasion seam it can thread (best_evade_point).
+# the reach that sets how tight an evasion seam it can thread (AIEvadeRead).
 # Scaled by the blade lever (max_blade_speed over its base). Puck HANDLING, not
 # pass reception. Default is the league carry-handle reach
 # (AIBotMechanics.EVADE_CARRY_HANDLE_M).
