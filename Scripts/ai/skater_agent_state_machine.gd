@@ -902,6 +902,7 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	_current_self_state = self_state
 	_current_snapshot = snapshot
 	_current_delta = input.delta
+	input.mouse_world_pos = _resting_cursor(self_pos, self_state)
 	_prev_role_target_age_s += input.delta
 	# EVERY dispatch-path brain read must go through this, so dispatch can run
 	# off-thread.
@@ -3053,6 +3054,22 @@ const _STEP_ARC: int = 1
 const _STEP_FACE: int = 2
 const _STEP_FRONT: int = 3
 const _STEP_HOLD_ARC: int = 4
+
+# Where the cursor is on a tick whose path does not step it (a puck just lost, a
+# press that bails or releases, a skipped tick with no aim cached): where it was
+# last stepped to, carried with the body, or ahead of him on the aim ring before
+# any step. Never the input's zeroed scratch: a cursor at the world origin sends
+# the blade reaching for centre ice for the tick.
+func _resting_cursor(self_pos: Vector3, self_state: SkaterNetworkState) -> Vector3:
+	if not _mouse_pos_initialized:
+		var ahead: Vector2 = self_state.facing.normalized() \
+				if self_state.facing.length_squared() > 1e-6 else Vector2(0.0, -_own_goal_dir)
+		return self_pos + Vector3(ahead.x, 0.0, ahead.y) * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
+	if not _mouse_body_at.is_finite():
+		return Vector3(_mouse_pos.x, 0.0, _mouse_pos.z)
+	return Vector3(_mouse_pos.x + self_pos.x - _mouse_body_at.x, 0.0,
+			_mouse_pos.z + self_pos.z - _mouse_body_at.z)
+
 
 func _step_mouse_aim(target: Vector3) -> Vector3:
 	return _step_mouse_internal(target, _STEP_ARC, _mouse_max_speed_m_s, _mouse_arc_rate_rad_s)
