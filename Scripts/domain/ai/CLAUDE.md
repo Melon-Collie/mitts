@@ -1474,9 +1474,9 @@ reaches back into what remains.
   one that gets by him dies sooner. The walk is the chase election's own, so the
   receiver a rim is priced to reach is the one the election will send to it. The
   LANE is a race along that path in `arrival_race`'s contest band — the
-  receiver against the soonest opponent, and against their keeper behind his own
-  net by the live goalie's trip gates. Arrivals over the receiver's catch
-  threshold are dropped. Zone rules mirror the straight feed's. Under NHL rules
+  receiver against the soonest opponent. Their keeper plays no rim behind his
+  net, so he is not in it. Arrivals over the receiver's catch threshold are
+  dropped. Zone rules mirror the straight feed's. Under NHL rules
   a rim that gets by our receiver, or that their man reaches first, goes on down
   its path: from our half and across their goal line before their soonest man
   meets it, with their side first to the dots, it is an icing, and both loss
