@@ -87,6 +87,33 @@ func test_a_loose_puck_he_must_still_pick_up_is_forechecked() -> void:
 			"we are on him as he collects it")
 
 
+# When their man has a hard puck away, his blade taking `ceiling_mult` of the
+# league's load: a rim at 14 m/s to their D on his wall, ours far off.
+func _hard_puck_away_s(ceiling_mult: float) -> float:
+	var skaters: Array = [
+		[1, 0, Vector3(4.0, 0.0, -2.0)],
+		[200, 1, Vector3(-8.0, 0.0, -22.0)],
+	]
+	var blade := AISkaterCaps.new()
+	blade.reception_ceiling_mult = ceiling_mult
+	var read := AIForecheckRead.LoosePlay.new()
+	var from := Vector3(0.0, 0.0, -15.0)
+	assert_true(AIForecheckRead.read_loose(
+			_snap(skaters, -1, from, (skaters[1][2] - from).normalized() * 14.0),
+			TEAM_ID, _teams(skaters), {200: blade}, read))
+	return read.away_s
+
+
+func test_the_collectors_own_blade_settles_the_puck() -> void:
+	# The settle is the time our forechecker is given, and a blade that holds
+	# less of a hard puck takes longer over it. Read on the league's blade, a
+	# collector with a deep curve was priced as moving the puck sooner than he can.
+	assert_gt(_hard_puck_away_s(0.7), _hard_puck_away_s(1.0),
+			"a blade that takes less of it has it away later")
+	assert_lte(_hard_puck_away_s(1.3), _hard_puck_away_s(1.0),
+			"and one that takes more of it, no later")
+
+
 func test_a_carrier_already_skating_out_past_us_is_not() -> void:
 	# He is at his line with speed, our nearest man deep behind him.
 	var skaters: Array = [

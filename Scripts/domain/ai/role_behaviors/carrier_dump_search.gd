@@ -317,7 +317,8 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float, lead_s:
 		var next: Vector3 = AILoosePuckChase.path_intercept_point(_path, STEP_DT, origin,
 				t_theirs + STEP_DT)
 		_away[k] = t_theirs + AIFeedReception.receiver_settle_s(
-				meet_theirs.distance_to(next) / STEP_DT) \
+				meet_theirs.distance_to(next) / STEP_DT,
+				AIFeedReception.receiver_ceiling_mult(_rival_caps[k])) \
 				+ AIForecheckRead.CARRIER_READ_S + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 		_regain[k] = _regain_odds(meet_theirs, _away[k], lead_s)
 	_dumper_then[k] = Vector3.INF
