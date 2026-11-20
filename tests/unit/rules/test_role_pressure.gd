@@ -540,6 +540,37 @@ func test_support_behind_a_defender_in_front_of_the_puck_reads_as_before() -> vo
 			skaters)), "a partner deeper than me, the puck up the ice of us both")
 
 
+# Me standing at the top of our zone, the carrier up the ice of us both, and one
+# teammate at `mate` skating at `mate_vel`.
+func _support_from(mate: Vector3, mate_vel: Vector3) -> bool:
+	var self_pos := Vector3(0, 0, 10)
+	return AILastManDiscipline.has_support_behind(_make_ctx(self_pos, 10, [
+			[1, TEAM_ID, self_pos], [2, TEAM_ID, mate, mate_vel], [10, 1, Vector3(0, 0, 4)]]))
+
+
+func test_support_behind_is_a_race_home_not_a_place() -> void:
+	var net := Vector3(0.0, 0.0, OUR_NET_Z)
+	# A metre nearer our net than I am: behind me standing, not skating away.
+	var nearer := Vector3(3, 0, 11.5)
+	assert_true(_support_from(nearer, Vector3.ZERO), "nearer our net and standing")
+	assert_false(_support_from(nearer, Vector3(0, 0, -8.0)),
+			"nearer our net and skating up the ice at pace, he is not home first")
+	# A metre further out than I am: beaten with me standing, behind me skating home.
+	var further := Vector3(3, 0, 8.5)
+	assert_false(_support_from(further, Vector3.ZERO), "further out and standing")
+	assert_true(_support_from(further, (net - further).normalized() * 8.0),
+			"further out and skating home at pace, he is")
+
+
+func test_the_man_in_the_slot_is_behind_a_challenge_low_in_the_corner() -> void:
+	# The carrier is deeper than the slot, and the man standing in it is between
+	# him and our net all the same.
+	var self_pos := Vector3(-7.5, 0.0, OUR_NET_Z - 3.5)
+	assert_true(AILastManDiscipline.has_support_behind(_make_ctx(self_pos, 10, [
+			[1, TEAM_ID, self_pos], [2, TEAM_ID, Vector3(0.5, 0.0, OUR_NET_Z - 4.0)],
+			[10, 1, Vector3(-10.0, 0.0, OUR_NET_Z - 2.0)]])))
+
+
 # ── A carrier at or below our goal line ──────────────────────────────────────
 
 # The pressurer in the slot, an opposing carrier standing at `carrier`.
@@ -647,8 +678,6 @@ func test_the_last_man_back_holds_the_ladders_gap_whatever_he_does_with_the_puck
 
 
 func test_a_teammate_at_our_net_front_covers_a_challenge_low_in_the_corner() -> void:
-	# The carrier is deeper than the man in the slot, who is between him and our
-	# net all the same: read by depth, the man on him was the last man back.
 	var carrier := Vector3(-10.0, 0.0, OUR_NET_Z - 2.0)
 	var self_pos := Vector3(-7.5, 0.0, OUR_NET_Z - 3.5)
 	var away: Vector3 = (carrier - self_pos).normalized()

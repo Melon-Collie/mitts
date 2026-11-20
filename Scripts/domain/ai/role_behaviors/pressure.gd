@@ -42,11 +42,11 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	var low: bool = carrier_depth <= 0.0
 	if low:
 		_route_round_our_cage(ctx, ap)
+	var supported: bool = AILastManDiscipline.has_support_behind(ctx)
 	# Whether a challenge of mine that is beaten is picked up: he is inside our
-	# line with a teammate between us and our net, or below our goal line, where
-	# every teammate in front of it is. The last man back contains, as he does
-	# not hit.
-	var covered: bool = in_zone and (low or _teammate_nearer_our_net(ctx, carrier_pos))
+	# line with a teammate home behind me, or below our goal line, where every
+	# teammate in front of it is. The last man back contains, as he does not hit.
+	var covered: bool = in_zone and (low or supported)
 
 	# A hunted check skates him at the carrier's body with his stick in, off the
 	# cutoff, so a carrier who cuts is gone: the last man back never throws one
@@ -54,7 +54,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	# until the carrier has drawn level with him in our zone, when the inside he
 	# was keeping is lost or about to be.
 	var level: bool = is_level(ctx, ap)
-	if cover_priced or level or AILastManDiscipline.has_support_behind(ctx):
+	if cover_priced or level or supported:
 		var check: AIBodyCheck.Result = AIDefensiveVerbs.evaluate_body_check(ctx)
 		if check.commit:
 			d.commit_check = true
@@ -119,7 +119,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	var min_depth: float = -INF
 	var depth_dir: Vector3 = Vector3.ZERO
 	if not gapping_up and AIRoleReads.stand_ride_velocity(ctx) == Vector3.ZERO \
-			and not AILastManDiscipline.has_support_behind(ctx):
+			and not supported:
 		if ap.dir_net != Vector3.ZERO:
 			var net_dir: Vector3 = ap.dir_net
 			var want: float = (search_center.x - carrier_pos.x) * net_dir.x \
@@ -334,23 +334,6 @@ static func _depth_on(ctx: RoleContext, ap: AICarrierApproach) -> float:
 static func _off_his_line(ctx: RoleContext, ap: AICarrierApproach, depth: float) -> float:
 	var on_line: Vector3 = ap.carrier_pos + ap.dir_net * depth
 	return Vector2(ctx.self_pos.x - on_line.x, ctx.self_pos.z - on_line.z).length()
-
-
-# A teammate nearer our net than I am and than the carrier is. By distance, not
-# depth: a carrier low in the corner is level with our net front, and the man
-# standing there is between him and the net all the same.
-static func _teammate_nearer_our_net(ctx: RoleContext, carrier_pos: Vector3) -> bool:
-	if ctx.snapshot == null:
-		return false
-	var net: Vector3 = ctx.defending_goal_pos
-	var nearest: float = minf(AIRoleReads.xz_distance(ctx.self_pos, net),
-			AIRoleReads.xz_distance(carrier_pos, net))
-	for pid: int in ctx.snapshot.skater_states:
-		if pid != ctx.peer_id and ctx.team_id_by_peer.get(pid, -1) == ctx.team_id \
-				and AIRoleReads.xz_distance(ctx.snapshot.skater_states[pid].position, net) \
-						< nearest:
-			return true
-	return false
 
 
 # The ladder's `gap` held to the puck an opposing carrier has, inside our line,

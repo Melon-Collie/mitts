@@ -549,6 +549,15 @@ heavy pressure" belongs to SUPPORT's own positioning, which already prices
 pressure. **SUPPORT** (`has_support_behind`) and **NUMBERS** (an attacker behind
 my stand) are the two that bind.
 
+**Support behind is a race home.** A teammate is behind me when his trip to our
+net is shorter than mine and than the puck's (its carrier's, or a man's setting
+off from a loose one), each on the arrival clock from where he is and how he is
+moving. Never read it as depth down the ice: a carrier low in the corner is
+level with our net front, so by depth the man on him is the last man back with
+a teammate standing in the slot. And never as distance alone: a teammate nearer
+our net who is skating away up the ice is not home first, and one a stride
+further out who is skating back is.
+
 The D-vs-forward asymmetry needs **no per-position appetite scalar** — it emerges
 from who is physically rearmost. In an O-zone cycle the POINTS are the rearmost
 bodies (~9 m from our blue line), so they read no support and respect any man who
@@ -755,15 +764,11 @@ man on a carrier who skated away from our net, up the wall or out to the point,
 to a couple of metres a second, slower than the carrier walked. The cap's other
 half, the least retreat from a carrier gaining on him, stays.
 
-Covered (`covered`) is a teammate nearer our net than both of them
-(`_teammate_nearer_our_net`), or the carrier below our goal line, where every
-teammate in front of it is between him and the slot. It is read by distance to
-our net, where the hit's licence (`AILastManDiscipline.has_support_behind`)
-reads depth: a carrier low in the corner is level with our net front, and by
-depth the man on him is the last man back with a teammate standing in the slot.
-The last man back keeps the ladder's gap and its cap: he contains, as he does
-not hit. Up the ice the ladder is a skating gap and reads the carrier's body
-alone.
+Covered (`covered`) is the hit's own licence, a teammate home behind him
+(`AILastManDiscipline.has_support_behind`), or the carrier below our goal line,
+where every teammate in front of it is between him and the slot. The last man
+back keeps the ladder's gap and its cap: he contains, as he does not hit. Up the
+ice the ladder is a skating gap and reads the carrier's body alone.
 
 **The puck's owner goes below our goal line.** A carrier at or below it has no
 middle to be shaded off and walks nobody back, so his stand is unshaded on his
