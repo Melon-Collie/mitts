@@ -2566,6 +2566,20 @@ func test_behind_net_candidates_stay_on_the_playing_surface() -> void:
 			"and the rounded corner is honoured, not a bounding box")
 
 
+func test_the_rounded_corner_is_honoured_in_front_of_the_goal_line_too() -> void:
+	# A body's width inside the side boards and a stride short of the goal line
+	# is off the surface: the corner's arc starts well up the ice from there.
+	var c := AIRoleCarrier.new()
+	var in_the_arc := Vector3(GameRules.INNER_HALF_WIDTH - 2.0 * AIStationSearch.RINK_INSET_M,
+			0.0, OPP_NET_Z + 2.0 * AIStationSearch.GOAL_LINE_BUFFER_M)
+	assert_gt(absf(in_the_arc.z), GameRules.CORNER_CENTER_Z, "the point is in the corner")
+	for allow_behind: bool in [false, true]:
+		assert_false(c._carry._candidate_ice_legal(in_the_arc, allow_behind),
+				"outside the corner's arc is not ice")
+	assert_true(c._carry._candidate_ice_legal(Vector3(in_the_arc.x, 0.0, -18.0), false),
+			"the same distance off the straight boards is")
+
+
 func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 	# Scoped change: nothing about front-of-net carrying moves.
 	var c := AIRoleCarrier.new()
