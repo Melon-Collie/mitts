@@ -538,3 +538,111 @@ func test_support_behind_a_defender_in_front_of_the_puck_reads_as_before() -> vo
 			[10, 1, Vector3(0, 0, 4)]]
 	assert_true(AILastManDiscipline.has_support_behind(_make_ctx(Vector3(0, 0, 10), 10,
 			skaters)), "a partner deeper than me, the puck up the ice of us both")
+
+
+# ── A carrier at or below our goal line ──────────────────────────────────────
+
+# The pressurer in the slot, an opposing carrier standing at `carrier`.
+func _low_ctx(carrier: Vector3) -> RoleContext:
+	var self_pos := Vector3(1.0, 0.0, OUR_NET_Z - 4.0)
+	var ctx: RoleContext = _make_ctx(self_pos, 200, [
+			[1, TEAM_ID, self_pos],
+			[200, 1 - TEAM_ID, carrier],
+	])
+	ctx.check_aggression = 0.0
+	return ctx
+
+
+func test_a_carrier_behind_our_net_is_closed_on_round_his_nearer_post() -> void:
+	# His line to our net runs through the cage, so every stand down it is inside
+	# the net: read that way he had no owner at all, and stood there untouched.
+	var carrier := Vector3(-1.5, 0.0, OUR_NET_Z + GameRules.NET_DEPTH + 1.0)
+	var ctx: RoleContext = _low_ctx(carrier)
+	var d: RoleDecision = AIRolePressure.decide(ctx)
+	assert_ne(d.target_position, ctx.self_pos, "he has a stand to take, not a hold")
+	assert_eq(d.engaged_peer_id, 200, "and the carrier is his")
+	assert_true(AIStationSearch.is_legal_ice(d.target_position),
+			"on ice a body can stand on; got %s" % d.target_position)
+	assert_lte(d.target_position.distance_to(carrier), AIRoleRushD.stick_m(ctx) + 0.01,
+			"within a stick of him; got %s" % d.target_position)
+	var post: Vector3 = AIArrival.post_waypoint(-1.0, 1.0)
+	assert_gt((d.target_position - carrier).dot(post - carrier), 0.0,
+			"toward the post he is nearer, the way he comes out")
+	assert_lt((d.target_position - carrier).length(), (post - carrier).length() + 0.01,
+			"no further round than that post")
+
+
+func test_a_carrier_behind_our_net_is_met_at_the_post_he_skates_for() -> void:
+	# Dead centre behind the cage neither post is nearer: his skating picks it.
+	var carrier := Vector3(0.0, 0.0, OUR_NET_Z + GameRules.NET_DEPTH + 1.0)
+	for side: float in [-1.0, 1.0]:
+		var ctx: RoleContext = _low_ctx(carrier)
+		ctx.snapshot.skater_states[200].velocity = Vector3(side * 4.0, 0.0, 0.0)
+		var d: RoleDecision = AIRolePressure.decide(ctx)
+		assert_gt((d.target_position.x - carrier.x) * side, 0.0,
+				"skating %+.0f in x, the stand is on that side of him; got %s" % [
+						side, d.target_position])
+
+
+func test_a_carrier_below_our_goal_line_in_the_corner_is_closed_on() -> void:
+	# Out wide his line to our net is clear of the cage, and the stand down it is
+	# ice past the goal line, where no station is taken but the puck's owner goes.
+	var carrier := Vector3(-8.0, 0.0, OUR_NET_Z + 1.0)
+	var ctx: RoleContext = _low_ctx(carrier)
+	var d: RoleDecision = AIRolePressure.decide(ctx)
+	assert_ne(d.target_position, ctx.self_pos, "he has a stand to take, not a hold")
+	assert_gt(d.target_position.x, carrier.x, "between him and our net")
+	assert_almost_eq(d.target_position.distance_to(carrier), AIRoleRushD.stick_m(ctx), 0.05,
+			"a stick off him; got %s" % d.target_position)
+	assert_true(AIStationSearch.is_legal_ice(d.target_position))
+
+
+# ── The gap is held to the puck ──────────────────────────────────────────────
+
+# How far off a carrier standing in our zone the pressurer's stand is taken, the
+# puck held `puck_off` from his body.
+func _stand_off(puck_off: Vector3, standoff_m: float = 0.0) -> float:
+	var carrier := Vector3(-6.0, 0.0, 18.0)
+	var self_pos := Vector3(-3.0, 0.0, 22.0)
+	var ctx: RoleContext = _make_ctx(self_pos, 200, [
+			[1, TEAM_ID, self_pos],
+			[200, 1 - TEAM_ID, carrier],
+	])
+	ctx.check_aggression = 0.0
+	ctx.pursuit_standoff_m = standoff_m
+	ctx.snapshot.puck_state.position = carrier + puck_off
+	return AIRolePressure.decide(ctx).target_position.distance_to(carrier)
+
+
+func test_a_puck_turned_away_draws_the_stand_in_after_it() -> void:
+	# A stick off his body with the puck a carry's reach past it is two sticks
+	# off the puck: he shields it and is never played.
+	var away: Vector3 = (Vector3(-6.0, 0.0, 18.0) - Vector3(-3.0, 0.0, 22.0)).normalized()
+	var at_his_body: float = _stand_off(Vector3.ZERO)
+	var shielded: float = _stand_off(away * 0.8)
+	assert_lt(shielded, at_his_body - 0.2,
+			"the stand closes after a puck held past him; %.2f -> %.2f" % [at_his_body, shielded])
+	assert_almost_eq(_stand_off(-away * 0.8), at_his_body, 0.001,
+			"a puck on my side of him is in reach already: the gap is the ladder's")
+	assert_lt(_stand_off(away * 0.8, 0.75), _stand_off(Vector3.ZERO, 0.75) - 0.2,
+			"and a tier that concedes a standoff closes after it too")
+
+
+func test_the_stand_never_closes_past_contact() -> void:
+	var away: Vector3 = (Vector3(-6.0, 0.0, 18.0) - Vector3(-3.0, 0.0, 22.0)).normalized()
+	var onto_him: float = _stand_off(away * 3.0)
+	assert_between(onto_him, AIRolePressure.CONTACT_STAND_M - 0.001,
+			AIRolePressure.CONTACT_STAND_M + 0.3,
+			"a puck far past him: onto him, body to body; got %.2f" % onto_him)
+	assert_gte(_stand_off(away * 3.0, 0.75), AIRolePressure.CONTACT_STAND_M + 0.75 - 0.001,
+			"and a tier's standoff is still conceded")
+
+
+func test_outside_our_zone_the_gap_stays_the_ladders() -> void:
+	# Up the ice the ladder is a skating gap, not a stick's reach.
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var held_away: Dictionary = _rush_ctx_at(carrier, 7.0)
+	var plain: Dictionary = _rush_ctx_at(carrier, 7.0)
+	held_away["ctx"].snapshot.puck_state.position = carrier + Vector3(0.0, 0.0, -1.0)
+	assert_almost_eq(_stand_depth(AIRolePressure.decide(held_away["ctx"]), carrier),
+			_stand_depth(AIRolePressure.decide(plain["ctx"]), carrier), 0.01)

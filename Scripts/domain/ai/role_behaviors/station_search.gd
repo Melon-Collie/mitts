@@ -81,6 +81,18 @@ static func is_legal_position(c: Vector3) -> bool:
 	return true
 
 
+# is_legal_position without its goal lines: the ice past them is legal too, on
+# the playing surface (rounded corners honoured) and outside the cages. For a
+# stand taken on a man who is down there himself.
+static func is_legal_ice(c: Vector3) -> bool:
+	var xz := Vector2(c.x, c.z)
+	if not GameRules.clamp_to_rink_inner(xz, RINK_INSET_M).is_equal_approx(xz):
+		return false
+	if CreaseRules.is_in_crease(xz):
+		return false
+	return GameRules.push_out_of_net(xz).is_equal_approx(xz)
+
+
 # `teammate_positions` must exclude self (AIRoleReads.collect_teammates_excluding_self).
 static func too_close_to_teammate(c: Vector3,
 		teammate_positions: Array[Vector3]) -> bool:

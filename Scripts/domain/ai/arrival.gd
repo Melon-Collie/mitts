@@ -157,6 +157,14 @@ static func _time_to_arrive_routed(from_pos: Vector3, dest: Vector3,
 			lateral_grip)
 
 
+# The route's waypoint beside a post: on the `side` of the ice (the sign of x)
+# at the `end` of the rink (the sign of z), at mid-cage depth.
+static func post_waypoint(side: float, end: float) -> Vector3:
+	return Vector3(side * (GameRules.NET_BACK_HALF_WIDTH
+			+ AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M), 0.0,
+			end * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH * 0.5))
+
+
 # The waypoint of the quickest route round the cage from `from_pos` to `dest`
 # (see _time_to_arrive_routed). A carrier round his OWN cage (`carrier_own_goal_dir`,
 # 0 for anyone else) skates the side and front waypoints at the edge of the
@@ -168,15 +176,14 @@ static func cage_waypoint(from_pos: Vector3, dest: Vector3, from_velocity: Vecto
 	# The cage being crossed is on the side the route actually reaches.
 	var s: float = signf(from_pos.z) \
 			if absf(from_pos.z) >= absf(dest.z) else signf(dest.z)
-	var side_x: float = GameRules.NET_BACK_HALF_WIDTH \
-			+ AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M
+	var side_x: float = post_waypoint(1.0, 1.0).x
 	var front_in: float = AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M
 	if carrier_own_goal_dir != 0.0 and s == carrier_own_goal_dir:
 		side_x = maxf(side_x,
 				AINetObstacle.OWN_MOUTH_HALF_WIDTH_M + AINetObstacle.OWN_MOUTH_KEEP_OUT_M)
 		front_in = maxf(front_in,
 				AINetObstacle.OWN_MOUTH_DEPTH_M + AINetObstacle.OWN_MOUTH_KEEP_OUT_M)
-	var mid_z: float = s * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH * 0.5)
+	var mid_z: float = post_waypoint(1.0, s).z
 	var back_z: float = s * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH \
 			+ AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M)
 	var front_z: float = s * (GameRules.GOAL_LINE_Z - front_in)

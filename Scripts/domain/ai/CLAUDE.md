@@ -730,6 +730,32 @@ goal-side stand instead. `test_one_on_one_to_the_crease.gd` drives a scripted
 carrier who ignores the defence at the net, alone and two back, and a bot
 carrier who goes wide and cuts in.
 
+**Inside our line the gap is held to the puck.** The ladder's last rung is a
+stick because that is the reach his stick plays the puck from, so with the
+carrier inside our line `AIRolePressure` brings the gap in by what he holds the
+puck past his own body, seen from where the defender stands
+(`_puck_behind_him_m`), down to contact plus the tier's standoff. Held to his
+body, a carrier who turns the puck a carry's reach away is two sticks off it:
+he shields it, the defender holds his gap, and nobody plays him. The inside
+shade is the angle taken on him at a stick's gap, so it shrinks with a gap
+closed inside one; left whole, the shade alone holds the stand a metre and a
+half off him. Up the ice the ladder is a skating gap and reads his body alone.
+
+**The puck's owner goes below our goal line.** A carrier at or below it has no
+middle to be shaded off and walks nobody back, so his stand is unshaded on his
+route and takes no retreat floor, facing or cap. Its candidates are held to
+`AIStationSearch.is_legal_ice`, never `is_legal_position`: that rule keeps
+stations in front of the goal lines, and held to it a carrier low in the corner
+or behind our net had no legal stand and his owner stood where he was.
+Behind the cage his line to our net runs through it, so the approach is re-aimed
+down his way to the post he is sooner to (`_route_round_our_cage`,
+`AIArrival.post_waypoint`) and ends there: the stand is between him and the post
+he would come out at, at the post once he is within a gap of it, and the far
+post is the net front's. Never read that post off `AIArrival.cage_waypoint`:
+from behind the cage its front waypoint is the quickest, through the net.
+`tests/instruments/ai/test_dzone_pressure.gd` sweeps a standing and a skating
+carrier round the zone, each tier and both sizes.
+
 Three things have to be true together, and each is load-bearing:
 
 - **No anticipation lead in the anchor.** The route carries the man's velocity as
