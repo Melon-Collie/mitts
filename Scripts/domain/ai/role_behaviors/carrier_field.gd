@@ -200,6 +200,9 @@ func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
 			continue
 		if ctx.team_id_by_peer.get(peer_id, -1) == ctx.team_id:
 			teammate_ids.append(peer_id)
+	# Peer id order: equal reads go to the same man whatever order the snapshot
+	# was filled in.
+	teammate_ids.sort()
 
 	# Pass-OPTION cache: each legal receiver's spot value at his CURRENT position
 	# (goalie arc-squared to it). Legality approximates AICarrierPassSearch.search's: no

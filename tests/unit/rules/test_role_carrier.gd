@@ -2259,6 +2259,21 @@ func _sealed_corner_ctx() -> RoleContext:
 	return ctx
 
 
+func test_receivers_are_read_in_peer_id_order_whatever_the_snapshots() -> void:
+	# The pass search keeps the first of equal reads, so the order it reads its
+	# receivers in is the tie-break.
+	var self_pos := Vector3(0.0, 0.0, -8.0)
+	for order: Array in [[2, 3, 4], [4, 3, 2], [3, 4, 2]]:
+		var skaters: Array = [[1, TEAM_ID, self_pos]]
+		for pid: int in order:
+			skaters.append([pid, TEAM_ID, Vector3(-9.0 + 3.0 * pid, 0.0, -14.0)])
+		var ctx := _make_ctx(self_pos, skaters)
+		var c := AIRoleCarrier.new()
+		c._field.fill_receivers(ctx, self_pos)
+		assert_eq(c._field.teammate_ids, [2, 3, 4] as Array[int],
+				"filled %s" % [order])
+
+
 # ─── behind the net ─────────────────────────────────────────────────────────
 
 const _BEHIND_THEIR_CAGE := Vector3(0.4, 0.0, OPP_NET_Z - 1.9)
