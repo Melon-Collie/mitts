@@ -1293,7 +1293,16 @@ func _stick_gap(a: SimSkater, b: SimSkater) -> float:
 
 
 func _hand(s: SimSkater) -> Vector3:
+	if s.agent == null:
+		return _stand_in_hand(s)
 	return s.arm.hand if s.blade_reach == INF else s.pos
+
+
+# The top hand a body with no arm rig holds its stick by (a puppet, a scripted
+# skater; what a plain blade ring publishes too): at its chest, a third of the
+# way out to its blade.
+func _stand_in_hand(s: SimSkater) -> Vector3:
+	return Vector3(s.pos.x, GameRules.FACEOFF_SPAWN_HEIGHT, s.pos.z) + (s.blade - s.pos) * 0.3
 
 
 # Skater.get_blade_face_normal: the face square to `toward` across the shaft.
@@ -1509,7 +1518,7 @@ func _build_snapshot() -> WorldSnapshot:
 		st.facing = s.facing
 		st.blade_contact_world = s.blade
 		st.top_hand_world = s.arm.hand if s.agent != null and s.blade_reach == INF \
-				else Vector3(s.pos.x, GameRules.FACEOFF_SPAWN_HEIGHT, s.pos.z) + (s.blade - s.pos) * 0.3
+				else _stand_in_hand(s)
 		st.facing_angular_velocity = s.facing_ang_vel
 		st.shot_state = _shot_state(s)
 		st.elevation_level = s.input.elevation_level
