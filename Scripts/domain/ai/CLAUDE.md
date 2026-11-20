@@ -784,7 +784,8 @@ down his way to the post he is sooner to (`_route_round_our_cage`,
 `AIArrival.post_waypoint`) and ends there: the stand is between him and the post
 he would come out at, at the post once he is within a gap of it, and the far
 post is the net front's. Never read that post off `AIArrival.cage_waypoint`:
-from behind the cage its front waypoint is the quickest, through the net.
+it answers a route's first waypoint, which from square behind the cage is the
+corner behind a post.
 `tests/instruments/ai/test_dzone_pressure.gd` sweeps a standing and a skating
 carrier round the zone, each tier and both sizes.
 

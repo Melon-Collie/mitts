@@ -248,6 +248,70 @@ func test_behind_net_traverse_prices_the_alley() -> void:
 			"a 4 m behind-net skate routes through the alley, not around the world")
 
 
+const _LEAGUE_SPEED: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+const _LEAGUE_ACCEL: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
+
+
+# The points a skater steering by cage_waypoint goes through from `from` to
+# `dest`, as the carry search and the chase use it: the waypoint while the
+# straight line is blocked, then `dest`.
+func _skated_route(from: Vector3, dest: Vector3) -> Array[Vector3]:
+	var route: Array[Vector3] = [from]
+	for _hop: int in 4:
+		var at: Vector3 = route[-1]
+		var next: Vector3 = dest
+		if AINetObstacle.carry_path_blocked_by_net(at, dest):
+			next = AIArrival.cage_waypoint(at, dest, Vector3.ZERO, _LEAGUE_SPEED, _LEAGUE_ACCEL)
+			if next.distance_to(at) < 0.01:
+				next = dest
+		route.append(next)
+		if next == dest:
+			break
+	return route
+
+
+func test_no_leg_of_a_route_round_the_cage_runs_through_it() -> void:
+	# The front lip is the shortest waypoint on paper, and from behind the cage
+	# the leg to it is through the net; square behind it, close in, so is the
+	# straight leg to either post.
+	for end: float in [-1.0, 1.0]:
+		for x: float in [-3.0, -1.0, 0.0, 0.4, 2.5]:
+			for behind_m: float in [0.6, 0.9, 1.4, 2.4]:
+				var back := Vector3(x, 0, end * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH
+						+ behind_m))
+				for front_x: float in [-2.0, 0.0, 2.0]:
+					var front := Vector3(front_x, 0, end * (GameRules.GOAL_LINE_Z - 1.6))
+					for ends: Array in [[back, front], [front, back]]:
+						var route: Array[Vector3] = _skated_route(ends[0], ends[1])
+						assert_eq(route[-1], ends[1], "%s never gets there" % [route])
+						for i: int in route.size() - 1:
+							assert_false(
+									AINetObstacle.pass_lane_blocked_by_net(route[i], route[i + 1]),
+									"%s: leg %d is through the frame" % [route, i])
+
+
+func test_square_behind_the_cage_the_way_out_is_the_post_on_that_side() -> void:
+	# Half a metre right of centre and a stride behind the frame, to the left
+	# post's front: the straight leg to the left post clips the back corner by
+	# centimetres, and the right post is the long way round.
+	var from := Vector3(0.4, 0, GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH + 0.9)
+	var dest := Vector3(-1.8, 0, GameRules.GOAL_LINE_Z - 0.7)
+	var wp: Vector3 = AIArrival.cage_waypoint(from, dest, Vector3.ZERO, _LEAGUE_SPEED,
+			_LEAGUE_ACCEL)
+	assert_lt(wp.x, -GameRules.NET_BACK_HALF_WIDTH, "round the left of the cage")
+	assert_gt(wp.z, GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH, "by its back corner first")
+
+
+func test_from_behind_the_cage_the_way_to_its_front_is_round_a_post() -> void:
+	var from := Vector3(-1.0, 0, GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH + 1.4)
+	var dest := Vector3(0.0, 0, GameRules.GOAL_LINE_Z - 1.6)
+	var t: float = AIArrival.time_to_arrive(from, dest, Vector3.ZERO)
+	var by_the_post: float = AIArrival._time_via(from, AIArrival.post_waypoint(-1.0, 1.0),
+			dest, Vector3.ZERO, AIArrival.SKATER_REF_SPEED_M_S,
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2, 1.0)
+	assert_almost_eq(t, by_the_post, 0.001, "the near post is the quickest way there is")
+
+
 func test_retrieval_race_read_is_now_net_honest() -> void:
 	# The harness-caught bug: a defender in FRONT of his net racing an
 	# attacker to a puck BEHIND it. Straight-line the defender is much
