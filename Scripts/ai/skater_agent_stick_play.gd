@@ -187,7 +187,7 @@ func _opposing_carrier(snapshot: WorldSnapshot) -> SkaterNetworkState:
 # or INF, and keeps the tie hold in step for the per-tick button.
 func tie_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 		self_state: SkaterNetworkState, decision: RoleDecision, ties_sticks: bool,
-		stick_lift_reach: float, blade_reach: float) -> Vector3:
+		tie_reach: float, blade_reach: float) -> Vector3:
 	var man: SkaterNetworkState = null
 	if ties_sticks and decision != null and decision.locked_man_pid != -1:
 		man = snapshot.skater_states.get(decision.locked_man_pid)
@@ -198,7 +198,7 @@ func tie_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 			or not _man_is_a_live_target(snapshot, self_pos, decision.locked_man_pid, man,
 					blade_reach, self_tied) \
 			or not AIStickTieRead.shaft_in_reach(self_pos, man.top_hand_world,
-					man.blade_contact_world, stick_lift_reach):
+					man.blade_contact_world, tie_reach):
 		_stick_tie_holding = false
 		_tie_follow = Vector3.INF
 		return Vector3.INF

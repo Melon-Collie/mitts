@@ -425,7 +425,10 @@ The cursor that carries the stick is a facing aim: it sits on the aim ring
 toward its point (`AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M`), so the blade is
 on a point only when the point is that far off his body. Getting the puck there
 is the stand's job (`AIRolePressure._gap_to_the_puck`, below), never the read's:
-a path point a stick's length away is a direction to it.
+a path point a stick's length away is a direction to it. The lift and the tie
+are started only on a shaft that blade gets to (`AIBotMechanics.STICK_HELD_M`
+plus the lift's radius, or the tie's contact): from further off, the button
+held for one that cannot land takes the stick off the ice for nothing.
 
 **A defensive-zone coverer's extra is the stick tie** (`AIStickTieRead`), and its
 price is its own stick. The man is tied only while the puck is coming to him — a loose

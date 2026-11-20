@@ -75,10 +75,13 @@ const _RECV_ONE_TIME: int = 2       # Mode A transitioned to ONE_TIMER_PRESSED; 
 # apply_capabilities; the default is the league baseline. Never the stick alone:
 # a reach-in is the arm's, and hand-to-toe falls the arm's length short.
 var _poke_reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + GameRules.POKE_RADIUS_M
-var _stick_lift_reach: float = (
-		GameRules.DEFAULT_STICK_LENGTH_M
-		+ GameRules.DEFAULT_BLADE_LENGTH_M
-		+ GameRules.STICK_LIFT_RADIUS_M)
+# How far off his body a shaft can be and still be played: a lift lands with the
+# blade within the lift radius of it, a tie with the two sticks touching, and
+# the blade is held AIBotMechanics.STICK_HELD_M out. Read at the stick's full
+# span, a lift or a tie was started on a shaft the blade never got to, and held
+# the stick off the ice for nothing.
+var _stick_lift_reach: float = AIBotMechanics.STICK_HELD_M + GameRules.STICK_LIFT_RADIUS_M
+var _stick_tie_reach: float = AIBotMechanics.STICK_HELD_M + StickCheckRules.TIE_CONTACT_M
 
 # Longest a one-timer-ready stance is held across a carrier gap (pass/shot in
 # flight). A real pass flight is well under this; the cap catches passes that die
@@ -666,7 +669,6 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_blade_reach = caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M
 	_receive_body_offset = caps.blade_span - SkaterAgentReception.RECEIVE_BODY_INSET_M
 	_poke_reach = caps.max_blade_reach + GameRules.POKE_RADIUS_M
-	_stick_lift_reach = caps.blade_span + GameRules.STICK_LIFT_RADIUS_M
 	_self_wrister_shot_speed = caps.wrister_shot_speed
 	_self_lateral_grip = caps.lateral_grip
 	_self_weight = caps.weight
@@ -2876,7 +2878,7 @@ func _carrier_stick_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 func _stick_tie_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 		self_state: SkaterNetworkState, decision: RoleDecision) -> Vector3:
 	return _stick_play.tie_aim(snapshot, self_pos, self_state, decision, _ties_sticks,
-			_stick_lift_reach, _blade_reach)
+			_stick_tie_reach, _blade_reach)
 
 
 func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,

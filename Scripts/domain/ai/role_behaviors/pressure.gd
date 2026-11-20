@@ -14,9 +14,6 @@ const PRESSURE_INNER_RING_RANGE_M: float = 4.5
 # Two bodies touching, centre to centre (the skater collision disc's half-width
 # each): as near a man as a stand is taken.
 const CONTACT_STAND_M: float = 2.0 * GameRules.OFFSIDE_LINE_SLACK
-# How far off his body a pressurer's blade is held toward the puck: the aim ring
-# his stick's cursor sits on off the puck.
-const STICK_HELD_M: float = AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 # Rounds of the rendezvous with a stand that rides the carrier: each skates to
 # where the stand will have got to by the last round's arrival.
 const SET_IN_ROUNDS: int = 3
@@ -339,7 +336,7 @@ static func _off_his_line(ctx: RoleContext, ap: AICarrierApproach, depth: float)
 # The ladder's `gap` held to the puck an opposing carrier has, inside our line,
 # where it is down to a stick and the stick is for the puck: the nearest of the
 # ladder's gap and the stand that puts the puck at the blade he holds out
-# (STICK_HELD_M), from where I stand. Held to his body, a carrier with the puck
+# (AIBotMechanics.STICK_HELD_M), from where I stand. Held to his body, a carrier with the puck
 # beside him or a carry's reach past him is a stick and more off it, and is
 # never played. Never nearer than contact, where a puck he shields is his
 # body's to play, and the tier's standoff is conceded either way.
@@ -359,7 +356,8 @@ static func _gap_to_the_puck(ctx: RoleContext, carrier_pos: Vector3, gap: float)
 	var off := Vector2(puck.x - carrier_pos.x, puck.z - carrier_pos.z)
 	var past_him: float = off.dot(to_him)
 	var beside_him: float = absf(off.x * to_him.y - off.y * to_him.x)
-	var in_reach: float = sqrt(maxf(STICK_HELD_M * STICK_HELD_M - beside_him * beside_him, 0.0)) \
+	var in_reach: float = sqrt(maxf(AIBotMechanics.STICK_HELD_M * AIBotMechanics.STICK_HELD_M
+			- beside_him * beside_him, 0.0)) \
 			- past_him + ctx.pursuit_standoff_m
 	return clampf(in_reach, onto_him, maxf(gap, onto_him))
 

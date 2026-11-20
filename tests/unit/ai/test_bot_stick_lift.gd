@@ -54,12 +54,36 @@ func _held_ticks() -> int:
 func test_a_shielded_puck_draws_a_lift_from_behind() -> void:
 	var s: WorldSnapshot = _carrier_snap()
 	# From here the puck is out of the blade's reach but the shaft is not.
-	var aim: Vector3 = sm._lift_aim(s, Vector3(0.0, 0.0, 1.2))
+	var aim: Vector3 = sm._lift_aim(s, Vector3(0.0, 0.0, 0.9))
 	assert_true(aim.is_finite(), "the shaft in reach: the bot reaches in")
 	var lift_point: Vector3 = AIStickLiftRead.shaft_lift_point(
 			s.skater_states[OPP_ID].top_hand_world, s.skater_states[OPP_ID].blade_contact_world)
 	assert_almost_eq(aim.distance_to(lift_point), 0.0, 1e-4, "it aims under the shaft")
 	assert_eq(_held_ticks(), SkaterAgentStickPlay.STICK_LIFT_HOLD_TICKS, "and holds the button through the hook")
+
+
+func test_a_lift_is_only_started_where_the_blade_gets_under_the_shaft() -> void:
+	# The blade is held on the aim ring toward the shaft's liftable point, and a
+	# lift lands within the lift radius of it. Started from further off, the
+	# stick is up for the lift's window and its cooldown, off the puck, for
+	# nothing.
+	var lifts: int = 0
+	var declines: int = 0
+	for step: int in 12:
+		before_each()
+		var s: WorldSnapshot = _carrier_snap()
+		var me := Vector3(0.0, 0.0, 0.5 + 0.2 * step)
+		var aim: Vector3 = sm._lift_aim(s, me)
+		if not aim.is_finite():
+			declines += 1
+			continue
+		lifts += 1
+		var blade: Vector3 = sm._face_ring_point(me, aim)
+		assert_lte(Vector2(blade.x - aim.x, blade.z - aim.z).length(),
+				GameRules.STICK_LIFT_RADIUS_M + 0.001,
+				"from %.1f m behind him the blade gets under the shaft" % me.z)
+	assert_gt(lifts, 0, "close behind him, he lifts")
+	assert_gt(declines, 0, "and from further off he does not start one")
 
 
 # Me beside the open puck, facing it, the stick wherever the snapshot puts it.
@@ -177,6 +201,11 @@ func _feed_snap() -> WorldSnapshot:
 	return s
 
 
+# On the man's off side, by his hands: his shaft inside my stick, and the feed's
+# line past where my free blade could stop it.
+const _BY_HIS_HANDS := Vector3(-1.02, 0.0, 0.1)
+
+
 func _covering_the_man() -> RoleDecision:
 	var d := RoleDecision.new()
 	d.locked_man_pid = OPP_ID
@@ -185,15 +214,24 @@ func _covering_the_man() -> RoleDecision:
 
 func test_a_covering_bot_ties_the_man_a_feed_is_coming_to() -> void:
 	var s: WorldSnapshot = _feed_snap()
-	# Out of reach of the feed's line, but the man's shaft is in reach.
-	var x: float = 0.9 + (sm._blade_reach + sm._stick_lift_reach) * 0.5
-	var me := Vector3(x, 0.0, -0.6)
+	# Out of reach of the feed's line, with the man's shaft inside my stick.
+	var me: Vector3 = _BY_HIS_HANDS
 	s.skater_states[SELF_ID].position = me
 	var aim: Vector3 = sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man())
 	assert_true(aim.is_finite(), "the bot goes for the man's stick")
 	var input := InputState.new()
 	sm.apply_stick_lift_input(input)
 	assert_true(input.stick_check_held and input.stick_check_pressed, "and holds the button")
+
+
+func test_a_tie_is_not_started_on_a_shaft_the_stick_does_not_reach() -> void:
+	# A stick's span off his blade, on its side of him: the stick-check button
+	# held for a tie that cannot connect takes this stick off the ice for nothing.
+	var s: WorldSnapshot = _feed_snap()
+	var me := Vector3(0.9 + AIBotMechanics.BLADE_REACH_M + 0.1, 0.0, -0.6)
+	s.skater_states[SELF_ID].position = me
+	assert_false(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite(),
+			"his shaft is past the blade this bot holds out")
 
 
 func test_a_bot_that_can_reach_the_feed_does_not_tie() -> void:
@@ -207,8 +245,7 @@ func test_a_bot_that_can_reach_the_feed_does_not_tie() -> void:
 func test_a_bot_ties_nobody_with_the_puck_nowhere_near_the_man() -> void:
 	var s: WorldSnapshot = _feed_snap()
 	s.puck_state.velocity = Vector3(12.0, 0.0, 0.0)
-	var x: float = 0.9 + (sm._blade_reach + sm._stick_lift_reach) * 0.5
-	var me := Vector3(x, 0.0, -0.6)
+	var me: Vector3 = _BY_HIS_HANDS
 	assert_false(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite())
 
 
@@ -219,8 +256,7 @@ func test_a_puck_already_on_his_blade_starts_no_tie() -> void:
 	var s: WorldSnapshot = _feed_snap()
 	s.puck_state.position = s.skater_states[OPP_ID].blade_contact_world
 	s.puck_state.velocity = Vector3(0.0, 0.0, -6.0)
-	var x: float = 0.9 + (sm._blade_reach + sm._stick_lift_reach) * 0.5
-	var me := Vector3(x, 0.0, -0.6)
+	var me: Vector3 = _BY_HIS_HANDS
 	s.skater_states[SELF_ID].position = me
 	assert_false(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite(),
 			"a puck already at his blade is not a feed to deny")
@@ -231,8 +267,7 @@ func test_a_tie_already_made_holds_through_the_arrival() -> void:
 	# the tie exists to deny, so the hold must not let go as it lands.
 	var s: WorldSnapshot = _feed_snap()
 	s.puck_state.position = Vector3(0.9, 0.0, 0.0)
-	var x: float = 0.9 + (sm._blade_reach + sm._stick_lift_reach) * 0.5
-	var me := Vector3(x, 0.0, -0.6)
+	var me: Vector3 = _BY_HIS_HANDS
 	s.skater_states[SELF_ID].position = me
 	s.skater_states[SELF_ID].stick_tied = true
 	s.skater_states[OPP_ID].stick_tied = true
@@ -277,8 +312,7 @@ func test_a_tied_bot_the_feed_is_not_for_holds_on() -> void:
 
 func test_a_covering_bot_keeps_holding_the_tie_it_made() -> void:
 	var s: WorldSnapshot = _feed_snap()
-	var x: float = 0.9 + (sm._blade_reach + sm._stick_lift_reach) * 0.5
-	var me := Vector3(x, 0.0, -0.6)
+	var me: Vector3 = _BY_HIS_HANDS
 	s.skater_states[SELF_ID].position = me
 	s.skater_states[SELF_ID].stick_tied = true
 	s.skater_states[OPP_ID].stick_tied = true

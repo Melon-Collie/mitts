@@ -623,7 +623,7 @@ func test_a_carrier_below_our_goal_line_in_the_corner_is_closed_on() -> void:
 	var d: RoleDecision = AIRolePressure.decide(ctx)
 	assert_ne(d.target_position, ctx.self_pos, "he has a stand to take, not a hold")
 	assert_gt(d.target_position.x, carrier.x, "between him and our net")
-	assert_almost_eq(d.target_position.distance_to(carrier), AIRolePressure.STICK_HELD_M, 0.05,
+	assert_almost_eq(d.target_position.distance_to(carrier), AIBotMechanics.STICK_HELD_M, 0.05,
 			"his blade on the puck at the man's feet; got %s" % d.target_position)
 	assert_true(AIStationSearch.is_legal_ice(d.target_position))
 

@@ -17,6 +17,11 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # machine's stickhandle offset must be rescaled with it
 # (aim errors are stored in radians on BotSkillProfile so they don't move).
 const CARRY_BLADE_AIM_FORWARD_M: float = 1.3
+# How far off his body a bot's blade is held when it is aimed at something off
+# the puck: the facing cursor sits on the aim ring, and the blade follows it
+# there. A stick play that needs the blade somewhere (the pressurer's stand, a
+# lift, a tie) works inside this, whatever the arm could reach.
+const STICK_HELD_M: float = CARRY_BLADE_AIM_FORWARD_M
 
 # Blade-reach radius. Inside it the stick can reach the puck where it is, so the
 # blade aims at its CURRENT position rather than the lead intercept (which rides
