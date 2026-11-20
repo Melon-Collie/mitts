@@ -417,10 +417,15 @@ shaft's liftable point is still in reach. Reading the path is the
 `reads_puck_path` cognition gate and the lift the `lifts_sticks` one, both
 closed on Easy: its stick reads only where the puck and its own body are now, so
 a carrier skating past outruns it, and a shielded puck draws a jab, never a
-lift. The jab reaches through the carrier's body as any poke does
-(`check_poke` reads no body), so a shield is worth only the distance it
-puts the puck from the stick, and the carrier's protect read prices it so:
-against a man whose stick reaches the back hip it buys nothing.
+lift. The game's poke reads no body (`check_poke`), so a shield is worth only
+the distance it puts the puck from the stick, and the carrier's protect read
+prices it so: against a man whose stick reaches the back hip it buys nothing.
+
+The cursor that carries the stick is a facing aim: it sits on the aim ring
+toward its point (`AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M`), so the blade is
+on a point only when the point is that far off his body. Getting the puck there
+is the stand's job (`AIRolePressure._gap_to_the_puck`, below), never the read's:
+a path point a stick's length away is a direction to it.
 
 **A defensive-zone coverer's extra is the stick tie** (`AIStickTieRead`), and its
 price is its own stick. The man is tied only while the puck is coming to him — a loose
@@ -730,16 +735,35 @@ goal-side stand instead. `test_one_on_one_to_the_crease.gd` drives a scripted
 carrier who ignores the defence at the net, alone and two back, and a bot
 carrier who goes wide and cuts in.
 
-**Inside our line the gap is held to the puck.** The ladder's last rung is a
-stick because that is the reach his stick plays the puck from, so with the
-carrier inside our line `AIRolePressure` brings the gap in by what he holds the
-puck past his own body, seen from where the defender stands
-(`_puck_behind_him_m`), down to contact plus the tier's standoff. Held to his
-body, a carrier who turns the puck a carry's reach away is two sticks off it:
-he shields it, the defender holds his gap, and nobody plays him. The inside
-shade is the angle taken on him at a stick's gap, so it shrinks with a gap
-closed inside one; left whole, the shade alone holds the stand a metre and a
-half off him. Up the ice the ladder is a skating gap and reads his body alone.
+**Inside our line the gap is held to the puck, once a beaten challenge is
+covered.** The ladder's last rung is a stick because that is where his stick
+plays the puck, and his blade is held on the aim ring toward it, 1.3 m off his
+body (the cursor off the puck is a facing aim). So with the carrier inside our
+line the stand is taken where that blade is on the puck
+(`AIRolePressure._gap_to_the_puck`): no wider than the ladder's gap, which
+already reaches a puck held out toward him, and nearer for one held beside the
+carrier or past him, down to contact plus the tier's standoff, where a puck he
+shields is the body's to play. Held to his body, a carrier with the puck beside
+him or a carry's reach past him is a stick and more off the blade: the defender
+held his gap and nobody played him. The inside shade is the angle taken on him
+at a stick's gap, so it shrinks with a gap closed inside one; left whole, the
+shade alone holds the stand a metre and a half off him.
+
+The same cover lifts the advance cap: no more speed up the ice than he can turn
+out of if the carrier bursts past is the last man's bound, and kept, it held the
+man on a carrier who skated away from our net, up the wall or out to the point,
+to a couple of metres a second, slower than the carrier walked. The cap's other
+half, the least retreat from a carrier gaining on him, stays.
+
+Covered (`covered`) is a teammate nearer our net than both of them
+(`_teammate_nearer_our_net`), or the carrier below our goal line, where every
+teammate in front of it is between him and the slot. It is read by distance to
+our net, where the hit's licence (`AILastManDiscipline.has_support_behind`)
+reads depth: a carrier low in the corner is level with our net front, and by
+depth the man on him is the last man back with a teammate standing in the slot.
+The last man back keeps the ladder's gap and its cap: he contains, as he does
+not hit. Up the ice the ladder is a skating gap and reads the carrier's body
+alone.
 
 **The puck's owner goes below our goal line.** A carrier at or below it has no
 middle to be shaded off and walks nobody back, so his stand is unshaded on his

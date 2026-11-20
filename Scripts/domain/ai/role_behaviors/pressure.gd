@@ -14,6 +14,9 @@ const PRESSURE_INNER_RING_RANGE_M: float = 4.5
 # Two bodies touching, centre to centre (the skater collision disc's half-width
 # each): as near a man as a stand is taken.
 const CONTACT_STAND_M: float = 2.0 * GameRules.OFFSIDE_LINE_SLACK
+# How far off his body a pressurer's blade is held toward the puck: the aim ring
+# his stick's cursor sits on off the puck.
+const STICK_HELD_M: float = AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 # Rounds of the rendezvous with a stand that rides the carrier: each skates to
 # where the stand will have got to by the last round's arrival.
 const SET_IN_ROUNDS: int = 3
@@ -39,6 +42,11 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	var low: bool = carrier_depth <= 0.0
 	if low:
 		_route_round_our_cage(ctx, ap)
+	# Whether a challenge of mine that is beaten is picked up: he is inside our
+	# line with a teammate between us and our net, or below our goal line, where
+	# every teammate in front of it is. The last man back contains, as he does
+	# not hit.
+	var covered: bool = in_zone and (low or _teammate_nearer_our_net(ctx, carrier_pos))
 
 	# A hunted check skates him at the carrier's body with his stick in, off the
 	# cutoff, so a carrier who cuts is gone: the last man back never throws one
@@ -82,12 +90,8 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	else:
 		gap += AIRoleRushD.ladder_gap_m(
 				carrier_pos, ctx.own_goal_dir, ctx.self_blade_reach, cushion)
-	# Inside our line the ladder is down to a stick, and the stick is for the puck.
-	# Held to his body, a carrier who turns the puck a carry's reach past himself
-	# is two sticks off it, so the gap comes in by what he holds it past him.
-	if in_zone:
-		gap = maxf(gap - _puck_behind_him_m(ctx, carrier_pos),
-				ctx.pursuit_standoff_m + CONTACT_STAND_M)
+	if covered:
+		gap = _gap_to_the_puck(ctx, carrier_pos, gap)
 	# The stand is angled (AIDefensiveVerbs.carrier_stand), as BACK_STRONG's is.
 	var inside_dir := Vector3.ZERO
 	var inside_shade: float = 0.0
@@ -242,6 +246,9 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 			AIRoleRushD.set_retreat_floor(ctx, ap, d)
 		if retreating:
 			AIRoleRushD.set_advance_cap(ctx, ap, d, gap, not gapping_up)
+			# The cap on a step up the ice is the last man's.
+			if covered and d.advance_cap_m_s >= 0.0:
+				d.advance_cap_m_s = INF
 		# The gap we just sized is ours to hold (RoleDecision.engaged_peer_id).
 		if ctx.snapshot != null and ctx.snapshot.puck_state != null:
 			var pid: int = ctx.snapshot.puck_state.carrier_peer_id
@@ -329,21 +336,49 @@ static func _off_his_line(ctx: RoleContext, ap: AICarrierApproach, depth: float)
 	return Vector2(ctx.self_pos.x - on_line.x, ctx.self_pos.z - on_line.z).length()
 
 
-# How far past an opposing carrier's body, from where I stand, he holds the puck
-# (m; nil with it on my side of him, or with nobody of theirs carrying it).
-static func _puck_behind_him_m(ctx: RoleContext, carrier_pos: Vector3) -> float:
+# A teammate nearer our net than I am and than the carrier is. By distance, not
+# depth: a carrier low in the corner is level with our net front, and the man
+# standing there is between him and the net all the same.
+static func _teammate_nearer_our_net(ctx: RoleContext, carrier_pos: Vector3) -> bool:
+	if ctx.snapshot == null:
+		return false
+	var net: Vector3 = ctx.defending_goal_pos
+	var nearest: float = minf(AIRoleReads.xz_distance(ctx.self_pos, net),
+			AIRoleReads.xz_distance(carrier_pos, net))
+	for pid: int in ctx.snapshot.skater_states:
+		if pid != ctx.peer_id and ctx.team_id_by_peer.get(pid, -1) == ctx.team_id \
+				and AIRoleReads.xz_distance(ctx.snapshot.skater_states[pid].position, net) \
+						< nearest:
+			return true
+	return false
+
+
+# The ladder's `gap` held to the puck an opposing carrier has, inside our line,
+# where it is down to a stick and the stick is for the puck: the nearest of the
+# ladder's gap and the stand that puts the puck at the blade he holds out
+# (STICK_HELD_M), from where I stand. Held to his body, a carrier with the puck
+# beside him or a carry's reach past him is a stick and more off it, and is
+# never played. Never nearer than contact, where a puck he shields is his
+# body's to play, and the tier's standoff is conceded either way.
+static func _gap_to_the_puck(ctx: RoleContext, carrier_pos: Vector3, gap: float) -> float:
 	if ctx.snapshot == null or ctx.snapshot.puck_state == null:
-		return 0.0
+		return gap
 	var pid: int = ctx.snapshot.puck_state.carrier_peer_id
 	if pid == -1 or ctx.team_id_by_peer.get(pid, -1) == ctx.team_id:
-		return 0.0
-	var puck: Vector3 = ctx.snapshot.puck_state.position
+		return gap
+	var onto_him: float = ctx.pursuit_standoff_m + CONTACT_STAND_M
 	var to_him := Vector2(carrier_pos.x - ctx.self_pos.x, carrier_pos.z - ctx.self_pos.z)
 	var dist: float = to_him.length()
 	if dist < 0.001:
-		return 0.0
-	return maxf((puck.x - carrier_pos.x) * to_him.x + (puck.z - carrier_pos.z) * to_him.y, 0.0) \
-			/ dist
+		return onto_him
+	to_him /= dist
+	var puck: Vector3 = ctx.snapshot.puck_state.position
+	var off := Vector2(puck.x - carrier_pos.x, puck.z - carrier_pos.z)
+	var past_him: float = off.dot(to_him)
+	var beside_him: float = absf(off.x * to_him.y - off.y * to_him.x)
+	var in_reach: float = sqrt(maxf(STICK_HELD_M * STICK_HELD_M - beside_him * beside_him, 0.0)) \
+			- past_him + ctx.pursuit_standoff_m
+	return clampf(in_reach, onto_him, maxf(gap, onto_him))
 
 
 # True if `c` is down the carrier's route to our net from him (`dir_net`; with
