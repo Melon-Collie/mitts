@@ -541,6 +541,7 @@ static func counter_time(loss_point: Vector3, our_net: Vector3,
 	var carry_dist: float = loss_point.distance_to(counter_point)
 	var t_counter: float = INF
 	var t_collect_best: float = INF
+	var collector: int = -1
 	var has_vels: bool = opponent_vels.size() == opponents.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	for i: int in opponents.size():
@@ -549,6 +550,7 @@ static func counter_time(loss_point: Vector3, our_net: Vector3,
 		var t_collect: float = AIArrival.time_to_arrive(opponents[i], loss_point, vel, speed)
 		if t_collect < t_collect_best:
 			t_collect_best = t_collect
+			collector = i
 		var t: float = t_collect + carry_dist / maxf(speed, 0.001)
 		if t < t_counter:
 			t_counter = t
@@ -560,8 +562,9 @@ static func counter_time(loss_point: Vector3, our_net: Vector3,
 	var has_home: bool = opp_home.size() == opponents.size()
 	for j: int in opponents.size():
 		# The feed only helps when the outlet is genuinely AHEAD of the
-		# lug — skip receivers whose own carry isn't shorter.
-		if opponents[j].distance_to(counter_point) >= carry_dist:
+		# lug — skip receivers whose own carry isn't shorter. The collector is at
+		# the loss point by then, not where he set out from.
+		if j == collector or opponents[j].distance_to(counter_point) >= carry_dist:
 			continue
 		var home: float = opp_home[j] if has_home else AIArrival.time_to_arrive(
 				opponents[j], counter_point, Vector3.ZERO,
