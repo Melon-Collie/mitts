@@ -1613,8 +1613,7 @@ func _windup_midpoint(agent: SkaterAgentStateMachine, aim_dir: Vector3, side_sig
 	return (e.start as Vector3 + e.target as Vector3) * 0.5
 
 func _forehand_dir(aim_dir: Vector3, is_left_handed: bool) -> Vector3:
-	var left_dir := Vector3(aim_dir.z, 0.0, -aim_dir.x)
-	return left_dir if is_left_handed else -left_dir
+	return SkaterAgentReception.forehand_dir(aim_dir, is_left_handed)
 
 func test_windup_forehand_side_right_handed() -> void:
 	# sm from before_each is right-handed. For several aim directions the wind-up

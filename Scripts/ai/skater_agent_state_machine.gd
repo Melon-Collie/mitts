@@ -728,11 +728,8 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	# roster doesn't run every expensive re-eval on the SAME physics tick (host
 	# FPS is set by the worst tick).
 	_stagger_cadence_phases()
-	# Must match the forehand convention of the release classifier
-	# (skater_controller.gd: RH forehand = skater-local +X) and
-	# SkaterAgentReception.read_shot (RH forehand = -left_dir): a right-hander's wind-up perp is
-	# Vector3(-aim.z, 0, aim.x), i.e. -1. Inverted, every bot winds up on the
-	# backhand and silently pays the backhand power penalty.
+	# The sign that puts a wind-up's perp, Vector3(aim.z, 0, -aim.x), on the
+	# forehand side of the aim.
 	_handedness_perp_sign = 1.0 if _is_left_handed else -1.0
 	# peer_id × prime spreads the bot id range across the seed space; host_tick at
 	# spawn salts it per session.
