@@ -116,26 +116,23 @@ var _beam_move: Array[int] = []
 # search.
 var _beam_prune_bound: float = -INF
 
-# Is a carry candidate on ice this bot can legally stand and handle on? In
-# front of the net: rink side of both goal lines, a body's width off the boards.
+# Is a carry candidate on ice this bot can legally stand and handle on? On the
+# playing surface (rounded corners honoured) a body's width off the boards, and
+# rink side of both goal lines.
 #
 # With `allow_behind` (the carrier is already behind a goal line) the ice back
-# there is legal too, except what is genuinely illegal: off the playing surface
-# (corners included) and inside the cage. Without it a carrier behind the net
+# there is legal too, outside the cage. Without it a carrier behind the net
 # has no lateral move in the search — every local candidate fails the goal-line
 # clamp — and plants on the end wall until stripped. The route to each candidate
 # is still checked against the net by _score_move_candidate_base.
 func _candidate_ice_legal(candidate: Vector3, allow_behind: bool) -> bool:
-	if absf(candidate.x) > GameRules.RINK_HALF_WIDTH - AIStationSearch.RINK_INSET_M:
+	var xz := Vector2(candidate.x, candidate.z)
+	if not GameRules.clamp_to_rink_inner(xz, AIStationSearch.RINK_INSET_M) \
+			.is_equal_approx(xz):
 		return false
 	if absf(candidate.z) <= GameRules.GOAL_LINE_Z - AIStationSearch.GOAL_LINE_BUFFER_M:
 		return true
 	if not allow_behind:
-		return false
-	# On the surface (rounded corners honoured) with a body's clearance.
-	var xz := Vector2(candidate.x, candidate.z)
-	if not GameRules.clamp_to_rink_inner(xz, AIStationSearch.RINK_INSET_M) \
-			.is_equal_approx(xz):
 		return false
 	# Outside the cage (the same exclusion box the skater body is held clear of).
 	return GameRules.push_out_of_net(xz).is_equal_approx(xz)

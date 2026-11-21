@@ -69,6 +69,32 @@ func test_container_duel_resolves_with_possession() -> void:
 			"the puck got past the container's starting line in team-0 hands — the duel resolved")
 
 
+func test_no_bots_cursor_is_ever_left_at_the_origin() -> void:
+	# The input scratch is zeroed every tick, and a dispatch path that returns
+	# without stepping the cursor (a puck just lost, a press that bails or
+	# releases) left it there: the blade was sent reaching for centre ice for the
+	# tick. Three on two in one end, far from centre, through passes, shots and
+	# strips.
+	var duel: RefCounted = DuelHarness.new()
+	duel.add_skater(CARRIER, 0, Vector3(-6.0, 0, -14.0), null, Vector3(0, 0, -5.0))
+	duel.add_skater(102, 0, Vector3(6.0, 0, -15.0), null, Vector3(0, 0, -5.0))
+	duel.add_skater(103, 0, Vector3(0.0, 0, -11.0), null, Vector3(0, 0, -4.0))
+	duel.add_skater(DEFENDER, 1, Vector3(-3.0, 0, -20.0))
+	duel.add_skater(DEFENDER_2, 1, Vector3(3.0, 0, -21.0))
+	duel.start(CARRIER)
+	var at_origin: int = 0
+	var releases_seen: int = 0
+	for _i: int in int(6.0 / DuelHarness.DT):
+		duel.step()
+		for s: Object in duel.skaters:
+			if s.input.mouse_world_pos == Vector3.ZERO:
+				at_origin += 1
+		releases_seen = duel.releases.size()
+	assert_gt(releases_seen + duel.strips, 0,
+			"the fixture has the puck change hands, which is where a tick used to skip the cursor")
+	assert_eq(at_origin, 0, "bot-ticks with the cursor at the world origin")
+
+
 func test_cornered_carrier_escapes() -> void:
 	# A patient scripted container holds the line to the net while a real
 	# defender pressures from behind — retreat denied, forward contained. The

@@ -69,16 +69,27 @@ static func generate_candidates_around(self_pos: Vector3,
 	return result
 
 
-# Rejects candidates outside the playable rink, in either crease, or past either
-# goal line.
+# Rejects candidates off the playing surface (rounded corners honoured), in
+# either crease, or past either goal line.
 static func is_legal_position(c: Vector3) -> bool:
-	if absf(c.x) > GameRules.RINK_HALF_WIDTH - RINK_INSET_M:
+	var xz := Vector2(c.x, c.z)
+	if not GameRules.clamp_to_rink_inner(xz, RINK_INSET_M).is_equal_approx(xz):
 		return false
 	if absf(c.z) > GameRules.GOAL_LINE_Z - GOAL_LINE_BUFFER_M:
 		return false
-	if CreaseRules.is_in_crease(Vector2(c.x, c.z)):
+	return not CreaseRules.is_in_crease(xz)
+
+
+# is_legal_position without its goal lines: the ice past them is legal too, on
+# the playing surface (rounded corners honoured) and outside the cages. For a
+# stand taken on a man who is down there himself.
+static func is_legal_ice(c: Vector3) -> bool:
+	var xz := Vector2(c.x, c.z)
+	if not GameRules.clamp_to_rink_inner(xz, RINK_INSET_M).is_equal_approx(xz):
 		return false
-	return true
+	if CreaseRules.is_in_crease(xz):
+		return false
+	return GameRules.push_out_of_net(xz).is_equal_approx(xz)
 
 
 # `teammate_positions` must exclude self (AIRoleReads.collect_teammates_excluding_self).

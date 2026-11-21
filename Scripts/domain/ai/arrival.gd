@@ -94,7 +94,7 @@ class Carve:
 # build redirects and ramps faster, so it reaches an off-axis cut sooner).
 #
 # NET-AWARE: a route whose straight line crosses a cage prices the real
-# around-the-cage detour (_time_to_arrive_routed). The common open-ice case
+# around-the-cage detour (_route_s). The common open-ice case
 # pays only the cheap z-gate below (a segment that never reaches the goal line
 # cannot cross a cage).
 static func time_to_arrive(from_pos: Vector3, dest: Vector3,
@@ -110,9 +110,8 @@ static func time_to_arrive(from_pos: Vector3, dest: Vector3,
 			and AINetObstacle.carry_path_blocked_by_net(from_pos, dest) \
 			and not AINetObstacle.point_in_cage_box(from_pos) \
 			and not AINetObstacle.point_in_cage_box(dest):
-		return _time_to_arrive_routed(
-				from_pos, dest, from_velocity, ref_speed_m_s, accel_m_s2,
-				lateral_grip)
+		return _route_s(from_pos, dest, from_velocity, ref_speed_m_s, accel_m_s2,
+				lateral_grip, 0.0)
 	return _time_to_arrive_direct(
 			from_pos, dest, from_velocity, ref_speed_m_s, accel_m_s2,
 			lateral_grip)
@@ -140,74 +139,127 @@ static func reach_eta(from_pos: Vector3, point: Vector3, vel: Vector3,
 
 # Extra lateral/depth clearance the net-aware ETA's corner waypoints keep
 # beyond the inflated frame — a body's half-width, the corner is skated
-# around, not clipped (see _time_to_arrive_routed).
+# around, not clipped (see _route_s).
 const NET_ROUTE_CLEAR_M: float = 0.4
 
 
-# The around-the-cage route: the best of four waypoints — beside either post at
-# mid-cage depth, the behind-net alley, and the front lip — which together give
-# every crossing geometry its small detour. Each leg runs the calibrated direct
-# model, carrying pace through the waypoint. Legs are not re-checked for
-# blockage: the waypoints sit a body's clearance outside the inflated frame.
-static func _time_to_arrive_routed(from_pos: Vector3, dest: Vector3,
-		from_velocity: Vector3, ref_speed_m_s: float,
-		accel_m_s2: float, lateral_grip: float = 1.0) -> float:
-	return _time_via(from_pos, cage_waypoint(from_pos, dest, from_velocity, ref_speed_m_s,
-			accel_m_s2, lateral_grip), dest, from_velocity, ref_speed_m_s, accel_m_s2,
-			lateral_grip)
+# The route's waypoint beside a post: on the `side` of the ice (the sign of x)
+# at the `end` of the rink (the sign of z), at mid-cage depth.
+static func post_waypoint(side: float, end: float) -> Vector3:
+	return Vector3(side * (GameRules.NET_BACK_HALF_WIDTH
+			+ AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M), 0.0,
+			end * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH * 0.5))
 
 
-# The waypoint of the quickest route round the cage from `from_pos` to `dest`
-# (see _time_to_arrive_routed). A carrier round his OWN cage (`carrier_own_goal_dir`,
+# The first waypoint of the quickest route round the cage from `from_pos` to
+# `dest` (see _route_s). A carrier round his OWN cage (`carrier_own_goal_dir`,
 # 0 for anyone else) skates the side and front waypoints at the edge of the
 # keep-out of his own mouth (AINetObstacle.own_mouth_keep_out_depth), so the puck
 # on his stick cannot reach it on the way.
 static func cage_waypoint(from_pos: Vector3, dest: Vector3, from_velocity: Vector3,
 		ref_speed_m_s: float, accel_m_s2: float, lateral_grip: float = 1.0,
 		carrier_own_goal_dir: float = 0.0) -> Vector3:
+	_route_s(from_pos, dest, from_velocity, ref_speed_m_s, accel_m_s2, lateral_grip,
+			carrier_own_goal_dir)
+	return _route_wp
+
+
+# The first waypoint of the route _route_s last timed.
+static var _route_wp: Vector3 = Vector3.ZERO
+
+
+# Seconds by the quickest route round the cage none of whose legs runs through
+# the frame: beside either post at mid-cage depth, the behind-net alley, or the
+# front lip, each leg the calibrated direct model with pace carried through the
+# waypoint. A post whose straight leg from the start (or on to `dest`) clips the
+# frame is skated by the corner outside it first: from square behind the cage
+# that is the alley's depth beside the post, then the post.
+static func _route_s(from_pos: Vector3, dest: Vector3, from_velocity: Vector3,
+		ref_speed_m_s: float, accel_m_s2: float, lateral_grip: float,
+		carrier_own_goal_dir: float) -> float:
 	# The cage being crossed is on the side the route actually reaches.
 	var s: float = signf(from_pos.z) \
 			if absf(from_pos.z) >= absf(dest.z) else signf(dest.z)
-	var side_x: float = GameRules.NET_BACK_HALF_WIDTH \
-			+ AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M
+	var side_x: float = post_waypoint(1.0, 1.0).x
 	var front_in: float = AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M
 	if carrier_own_goal_dir != 0.0 and s == carrier_own_goal_dir:
 		side_x = maxf(side_x,
 				AINetObstacle.OWN_MOUTH_HALF_WIDTH_M + AINetObstacle.OWN_MOUTH_KEEP_OUT_M)
 		front_in = maxf(front_in,
 				AINetObstacle.OWN_MOUTH_DEPTH_M + AINetObstacle.OWN_MOUTH_KEEP_OUT_M)
-	var mid_z: float = s * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH * 0.5)
+	var mid_z: float = post_waypoint(1.0, s).z
 	var back_z: float = s * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH \
 			+ AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M)
 	var front_z: float = s * (GameRules.GOAL_LINE_Z - front_in)
 	var best: float = INF
-	var best_wp: Vector3 = dest
-	for wp: Vector3 in [
-			Vector3(-side_x, 0.0, mid_z), Vector3(side_x, 0.0, mid_z),
-			Vector3(0.0, 0.0, back_z), Vector3(0.0, 0.0, front_z)]:
-		var t: float = _time_via(from_pos, wp, dest, from_velocity, ref_speed_m_s,
-				accel_m_s2, lateral_grip)
+	_route_wp = dest
+	for i: int in 4:
+		var wp := Vector3(0.0, 0.0, back_z if i == 2 else front_z)
+		if i < 2:
+			wp = Vector3(side_x if i == 1 else -side_x, 0.0, mid_z)
+		var from_cut: bool = AINetObstacle.pass_lane_blocked_by_net(from_pos, wp)
+		var dest_cut: bool = AINetObstacle.pass_lane_blocked_by_net(wp, dest)
+		var first: Vector3 = wp
+		var t: float = INF
+		if not from_cut and not dest_cut:
+			t = _time_via(from_pos, wp, dest, from_velocity, ref_speed_m_s, accel_m_s2,
+					lateral_grip)
+		elif i < 2 and from_cut != dest_cut:
+			var cut_end: Vector3 = from_pos if from_cut else dest
+			var corner := Vector3(wp.x, 0.0,
+					back_z if absf(cut_end.z) > absf(mid_z) else front_z)
+			if AINetObstacle.pass_lane_blocked_by_net(cut_end, corner):
+				continue
+			if from_cut:
+				first = corner
+			t = _time_via_two(from_pos, first, wp if from_cut else corner, dest, from_velocity,
+					ref_speed_m_s, accel_m_s2, lateral_grip)
 		if t < best:
 			best = t
-			best_wp = wp
-	return best_wp
+			_route_wp = first
+	if best < INF:
+		return best
+	# An end against the mesh, which nothing reaches clear: the nearer post.
+	_route_wp = Vector3(side_x * (1.0 if from_pos.x + dest.x >= 0.0 else -1.0), 0.0, mid_z)
+	return _time_via(from_pos, _route_wp, dest, from_velocity, ref_speed_m_s, accel_m_s2,
+			lateral_grip)
+
+
+# The pace a skater `secs` over the leg from `from_pos` to `at` carries on toward
+# `toward`: his mean over the leg, turned onto the next.
+static func _pace_through(from_pos: Vector3, at: Vector3, toward: Vector3, secs: float,
+		ref_speed_m_s: float) -> Vector3:
+	var on: Vector3 = toward - at
+	on.y = 0.0
+	if on.length_squared() <= 0.0001:
+		return Vector3.ZERO
+	return on.normalized() * minf(from_pos.distance_to(at) / maxf(secs, 0.001),
+			maxf(ref_speed_m_s, MIN_TRAVEL_SPEED_M_S))
+
+
+# The three direct legs from_pos → wp1 → wp2 → dest, pace carried through each.
+static func _time_via_two(from_pos: Vector3, wp1: Vector3, wp2: Vector3, dest: Vector3,
+		from_velocity: Vector3, ref_speed_m_s: float, accel_m_s2: float,
+		lateral_grip: float) -> float:
+	var t1: float = _time_to_arrive_direct(
+			from_pos, wp1, from_velocity, ref_speed_m_s, accel_m_s2, lateral_grip)
+	var t2: float = _time_to_arrive_direct(wp1, wp2,
+			_pace_through(from_pos, wp1, wp2, t1, ref_speed_m_s), ref_speed_m_s, accel_m_s2,
+			lateral_grip)
+	return t1 + t2 + _time_to_arrive_direct(wp2, dest,
+			_pace_through(wp1, wp2, dest, t2, ref_speed_m_s), ref_speed_m_s, accel_m_s2,
+			lateral_grip)
 
 
 # The two direct legs from_pos → wp → dest, pace carried through the waypoint.
 static func _time_via(from_pos: Vector3, wp: Vector3, dest: Vector3,
 		from_velocity: Vector3, ref_speed_m_s: float, accel_m_s2: float,
 		lateral_grip: float) -> float:
-	var vmax: float = maxf(ref_speed_m_s, MIN_TRAVEL_SPEED_M_S)
 	var t1: float = _time_to_arrive_direct(
 			from_pos, wp, from_velocity, ref_speed_m_s, accel_m_s2, lateral_grip)
-	var to_dest: Vector3 = dest - wp
-	to_dest.y = 0.0
-	var v_wp := Vector3.ZERO
-	if to_dest.length_squared() > 0.0001:
-		v_wp = to_dest.normalized() * minf(
-				from_pos.distance_to(wp) / maxf(t1, 0.001), vmax)
-	return t1 + _time_to_arrive_direct(
-			wp, dest, v_wp, ref_speed_m_s, accel_m_s2, lateral_grip)
+	return t1 + _time_to_arrive_direct(wp, dest,
+			_pace_through(from_pos, wp, dest, t1, ref_speed_m_s), ref_speed_m_s, accel_m_s2,
+			lateral_grip)
 
 
 # The calibrated direct-route travel model (no net awareness — the public

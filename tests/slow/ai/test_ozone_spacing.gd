@@ -39,6 +39,9 @@ class Result:
 	var low_sum: int = 0
 	# Ticks two attackers stood inside the stations' anti-crowd radius.
 	var stacked_ticks: int = 0
+	# The least the fourth-highest attacker stood under HIGH_DEPTH_M on a tick
+	# three stood high (negative: four high). INF when three never did.
+	var fourth_under_m: float = INF
 	# Per slot over its OZONE ticks: [ticks, Σ depth, Σ weak-side x, Σ nearest
 	# defender, Σ nearest teammate]. Weak-side x is metres across from the middle
 	# away from the puck's side (the brain's strong_x), so negative is strong-side.
@@ -99,9 +102,11 @@ func _run(attackers: Array, carrier: int) -> Result:
 		r.ozone_ticks += 1
 		var high: int = 0
 		var stacked: bool = false
+		var depths: Array[float] = []
 		for a: int in range(1, 6):
 			var pa: Vector3 = duel._skater(a).pos
 			var d: float = _depth(pa)
+			depths.append(d)
 			if d >= HIGH_DEPTH_M:
 				high += 1
 			elif d <= LOW_DEPTH_M:
@@ -111,6 +116,9 @@ func _run(attackers: Array, carrier: int) -> Result:
 				if Vector2(pa.x - pb.x, pa.z - pb.z).length() < stack_r:
 					stacked = true
 		r.high_hist[high] += 1
+		depths.sort()
+		if depths[2] >= HIGH_DEPTH_M:
+			r.fourth_under_m = minf(r.fourth_under_m, HIGH_DEPTH_M - depths[1])
 		if stacked:
 			r.stacked_ticks += 1
 		_tally_slots(duel, brain, r)
@@ -150,6 +158,8 @@ func _report(label: String, r: Result) -> void:
 			r.low_per_tick(), roundi(100.0 * r.stacked_ticks / float(maxi(r.ozone_ticks, 1)))])
 	gut.p("  %-24s off-puck nearest defender %.2f m, nearest teammate %.2f m"
 			% ["", r.off_puck_gap(), r.off_puck_mate()])
+	gut.p("  %-24s with three high, the fourth came no nearer the high line than %s"
+			% ["", "%.2f m" % r.fourth_under_m if r.fourth_under_m < INF else "(never three high)"])
 	for slot: int in r.by_slot:
 		var row: Array = r.by_slot[slot]
 		var n: float = float(maxi(row[0], 1))

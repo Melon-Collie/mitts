@@ -232,6 +232,10 @@ class SimSkater:
 	# knockdown stops his script while he is down — a carrier who simply ignores
 	# the defence, rather than one who cannot lose the puck.
 	var script_strippable: bool = false
+	# True: a scripted carrier keeps his body between the puck and the nearest
+	# opponent, turning as fast as that man moves round him: the best shield there
+	# is, for a fixture whose question is what a defender does about one.
+	var script_shields: bool = false
 	# The arm the rig places the blade with (duel_rig.gd). A fixture may set
 	# `blade_reach` to place the blade on a plain ring of that radius instead, and
 	# a per-tick write over the decided input (`func(s: SimSkater) -> void`), run
@@ -1166,8 +1170,23 @@ func _script_step(s: SimSkater) -> void:
 	var to_net := Vector2(-s.pos.x, attacked_net_z - s.pos.z)
 	if to_net.length() > 0.05:
 		s.facing = to_net.normalized()
+	if s.script_shields:
+		_face_away_from_nearest_opponent(s)
 	s.prev_blade = s.blade
 	s.blade = s.pos + Vector3(s.facing.x, 0.0, s.facing.y) * SCRIPT_CARRY_REACH_M
+
+
+func _face_away_from_nearest_opponent(s: SimSkater) -> void:
+	var nearest: SimSkater = null
+	for o: SimSkater in skaters:
+		if o.team_id != s.team_id and (nearest == null \
+				or o.pos.distance_squared_to(s.pos) < nearest.pos.distance_squared_to(s.pos)):
+			nearest = o
+	if nearest == null:
+		return
+	var away := Vector2(s.pos.x - nearest.pos.x, s.pos.z - nearest.pos.z)
+	if away.length() > 0.05:
+		s.facing = away.normalized()
 
 
 # The real stride toward the waypoint, facing travel, never past script_speed:
@@ -1274,7 +1293,16 @@ func _stick_gap(a: SimSkater, b: SimSkater) -> float:
 
 
 func _hand(s: SimSkater) -> Vector3:
+	if s.agent == null:
+		return _stand_in_hand(s)
 	return s.arm.hand if s.blade_reach == INF else s.pos
+
+
+# The top hand a body with no arm rig holds its stick by (a puppet, a scripted
+# skater; what a plain blade ring publishes too): at its chest, a third of the
+# way out to its blade.
+func _stand_in_hand(s: SimSkater) -> Vector3:
+	return Vector3(s.pos.x, GameRules.FACEOFF_SPAWN_HEIGHT, s.pos.z) + (s.blade - s.pos) * 0.3
 
 
 # Skater.get_blade_face_normal: the face square to `toward` across the shaft.
@@ -1490,7 +1518,7 @@ func _build_snapshot() -> WorldSnapshot:
 		st.facing = s.facing
 		st.blade_contact_world = s.blade
 		st.top_hand_world = s.arm.hand if s.agent != null and s.blade_reach == INF \
-				else Vector3(s.pos.x, GameRules.FACEOFF_SPAWN_HEIGHT, s.pos.z) + (s.blade - s.pos) * 0.3
+				else _stand_in_hand(s)
 		st.facing_angular_velocity = s.facing_ang_vel
 		st.shot_state = _shot_state(s)
 		st.elevation_level = s.input.elevation_level

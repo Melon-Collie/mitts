@@ -164,7 +164,7 @@ static func assign(
 	if state == AIPossessionState.State.OZONE and assigned.has(carrier_pid) \
 			and _group_of(carrier_pid, position_by_peer) == Group.D \
 			and snapshot.skater_states.has(carrier_pid):
-		_drop_point_he_holds(specs, snapshot.skater_states[carrier_pid].position,
+		_settle_the_carriers_point(specs, snapshot.skater_states[carrier_pid].position,
 				own_goal_z, _point_given_to_a_forward(prev_assignments, position_by_peer))
 
 	# TRANS_DEFENSE: our line's posts are held only by a body that can be SET on
@@ -231,8 +231,7 @@ static func assign(
 		result[pid] = spec.slot
 		assigned[pid] = true
 
-	# Pass 2 — cross-fill: deferred slots take whoever is left, any group (a D
-	# carrier's point falls to the leftover forward).
+	# Pass 2 — cross-fill: deferred slots take whoever is left, any group.
 	for spec: SlotSpec in deferred:
 		var pid: int = _pick_soonest(snapshot, teammates, assigned,
 				prev_assignments, spec, caps_by_peer, position_by_peer, false)
@@ -247,7 +246,7 @@ static func assign(
 	#
 	# The OUR-POSSESSION states spec only four, because CARRIER is assigned only
 	# while one of ours really holds the puck — so every pass in flight leaves a
-	# body over, and so does a D carrying on his point (_drop_point_he_holds).
+	# body over, and so does a D carrying on his point (_settle_the_carriers_point).
 	# Never MARK: the threat partition does not run outside DZONE /
 	# TRANS_DEFENSE, so MARK would fall to its recovery argmax, a defender's read
 	# pointed at our own end. In the O-zone he is the third low forward, a
@@ -612,14 +611,12 @@ static func _group_of(pid: int, position_by_peer: Dictionary) -> int:
 # A D carrying the puck on his point IS that point: the point slot nearer him
 # leaves the election, and the forward it would have pulled up to the line stays
 # low as the spare. Once he has left it (the pinch rotation's read,
-# AIRoleDefenseman.carrier_off_the_point) both points are elected and a forward
-# covers his. `covered` (a forward held a point last tick) drops the read's
-# slack, so a cover already made holds until he is back on the stand.
-static func _drop_point_he_holds(specs: Array[SlotSpec], carrier_pos: Vector3,
+# AIRoleDefenseman.carrier_off_the_point) that point is the forwards', raced for
+# on the whole trip up to it, and his partner keeps the other. `covered` (a
+# forward held a point last tick) drops the read's slack, so a cover already
+# made holds until he is back on the stand.
+static func _settle_the_carriers_point(specs: Array[SlotSpec], carrier_pos: Vector3,
 		own_goal_z: float, covered: bool) -> void:
-	var depth_inside: float = -signf(own_goal_z) * carrier_pos.z - GameRules.BLUE_LINE_Z
-	if AIRoleDefenseman.carrier_off_the_point(depth_inside, covered):
-		return
 	var nearest: int = -1
 	var nearest_dx: float = INF
 	for i: int in specs.size():
@@ -630,8 +627,15 @@ static func _drop_point_he_holds(specs: Array[SlotSpec], carrier_pos: Vector3,
 		if dx < nearest_dx:
 			nearest_dx = dx
 			nearest = i
-	if nearest != -1:
+	if nearest == -1:
+		return
+	var depth_inside: float = -signf(own_goal_z) * carrier_pos.z - GameRules.BLUE_LINE_Z
+	if not AIRoleDefenseman.carrier_off_the_point(depth_inside, covered):
 		specs.remove_at(nearest)
+		return
+	specs[nearest].group = Group.F
+	specs[nearest].home_slot = -1
+	specs[nearest].lateral_race = false
 
 
 static func _point_given_to_a_forward(prev_assignments: Dictionary,

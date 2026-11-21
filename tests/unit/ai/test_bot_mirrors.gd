@@ -13,6 +13,28 @@ const SkaterControllerScript := preload("res://Scripts/controllers/skater_contro
 const PuckScript := preload("res://Scripts/actors/puck.gd")
 const SkaterScript := preload("res://Scripts/actors/skater.gd")
 const DuelHarness := preload("res://tests/unit/ai/duel_harness.gd")
+const AgentScript := preload("res://Scripts/ai/skater_agent_state_machine.gd")
+
+
+func test_the_bots_forehand_side_is_the_releases() -> void:
+	# The reception's one-timer side and the wind-up's perp are both the side the
+	# release classifier (WristerLoad, in the skater's frame: forward -Z, right
+	# +X) loads a forehand from. Inverted, a bot winds up on the backhand and
+	# pays its power for it.
+	var forward := Vector3(0.0, 0.0, -1.0)
+	var cfg := WristerLoad.Config.new()
+	var hand := WristerLoad.Result.new()
+	for left_handed: bool in [false, true]:
+		var side: Vector3 = SkaterAgentReception.forehand_dir(forward, left_handed)
+		WristerLoad.solve(hand, side * 0.9, forward, left_handed, cfg)
+		assert_false(hand.is_backhand,
+				"left-handed %s: a puck on the reception's forehand side is a forehand" % left_handed)
+		WristerLoad.solve(hand, -side * 0.9, forward, left_handed, cfg)
+		assert_true(hand.is_backhand, "left-handed %s: and one on the other side is not" % left_handed)
+		var agent: SkaterAgentStateMachine = AgentScript.new()
+		agent.setup(1, 0, TeamBrain.new(0, {1: 0}), {1: 0}, left_handed)
+		assert_eq(Vector3(forward.z, 0.0, -forward.x) * agent._handedness_perp_sign, side,
+				"left-handed %s: the wind-up's perp is on that side" % left_handed)
 
 
 func test_the_two_defensive_leads_agree() -> void:

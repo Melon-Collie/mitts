@@ -133,11 +133,12 @@ static func inside_dir(carrier_pos: Vector3, dir_net: Vector3) -> Vector3:
 
 
 # The stand for a defender who owns the carrier: `gap` metres along the
-# carrier→our-net line, shaded to the inside; unshaded when the shade is illegal.
-static func carrier_stand(ap: AICarrierApproach, gap: float) -> Vector3:
+# carrier→our-net line, shaded to the inside by `shade_share` of the shade;
+# unshaded when the shade is illegal.
+static func carrier_stand(ap: AICarrierApproach, gap: float, shade_share: float = 1.0) -> Vector3:
 	# Never past the net: beyond his own route there is no ice to hold.
 	var stand: Vector3 = ap.carrier_pos + ap.dir_net * minf(gap, ap.net_dist)
-	var depth: float = inside_shade_m(ap.carrier_pos)
+	var depth: float = inside_shade_m(ap.carrier_pos) * shade_share
 	if depth < 0.001:
 		return stand
 	var shaded: Vector3 = stand + inside_dir(ap.carrier_pos, ap.dir_net) * depth

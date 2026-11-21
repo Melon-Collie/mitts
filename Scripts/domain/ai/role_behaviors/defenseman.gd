@@ -22,7 +22,10 @@ class_name AIRoleDefenseman
 # rotate_up_to_point from his own role. The strong D gone, the weak D also
 # slides to the middle of the line; the weak D gone, the strong D keeps his
 # wall. Only one D is ever off the line: each leaves it only with his partner on
-# it and a forward able to take his point.
+# it and a forward able to take his point. A D who CARRIES off his point holds
+# no point slot to read, so that cover is the election's
+# (AIRoleSlots5._settle_the_carriers_point), and a point a forward holds is
+# never filled a second time from here.
 
 # How far inside the offensive zone the points stand: a full puck-handling
 # radius, so a backswing never drags the puck back across the line, and past
@@ -475,9 +478,14 @@ static func strong_point_stand(ctx: RoleContext, strong_slot: int) -> Vector3:
 # drops the slack, so a rotation already made holds while he stays down. False
 # when nobody holds the slot or no brain is wired.
 static func point_vacated(ctx: RoleContext, slot: int, covering: bool) -> bool:
-	var holder: SkaterNetworkState = _slot_holder(ctx, slot)
-	if holder == null:
+	var holder_pid: int = _slot_holder_pid(ctx, slot)
+	if holder_pid == -1:
 		return false
+	# A forward on a point is the cover already made (a D carrier's, by the
+	# election), wherever he is on his way to it.
+	if not PlayerRules.is_defense_slot(ctx.team_brain.position_of(holder_pid)):
+		return false
+	var holder: SkaterNetworkState = ctx.snapshot.skater_states[holder_pid]
 	if not off_the_point(_depth_inside_attacked_zone(ctx, holder.position),
 			_stand_depth_m(ctx, slot), covering):
 		return false
@@ -552,14 +560,20 @@ static func _partner_vacated(ctx: RoleContext, partner_slot: int) -> bool:
 
 # The teammate (not me) the brain has in `slot`, or null.
 static func _slot_holder(ctx: RoleContext, slot: int) -> SkaterNetworkState:
+	var pid: int = _slot_holder_pid(ctx, slot)
+	return ctx.snapshot.skater_states[pid] if pid != -1 else null
+
+
+# His peer id, or -1.
+static func _slot_holder_pid(ctx: RoleContext, slot: int) -> int:
 	if ctx.team_brain == null or ctx.snapshot == null:
-		return null
+		return -1
 	for pid: int in ctx.snapshot.skater_states:
 		if pid == ctx.peer_id or ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
 			continue
 		if ctx.team_brain.get_slot(pid) == slot:
-			return ctx.snapshot.skater_states[pid]
-	return null
+			return pid
+	return -1
 
 
 # Metres inside the zone we attack, past its blue line (negative = outside it).

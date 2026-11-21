@@ -372,6 +372,13 @@ static func skating_point(pos: Vector3, vel: Vector3, puck_pos: Vector3,
 	return Vector3(pos.x + vel.x * drift_s, 0.0, pos.z + vel.z * drift_s)
 
 
+# The side of a body squared to `aim_dir` its forehand is on: left of the aim
+# (up × aim_dir) for a left-hander, right of it for a right-hander.
+static func forehand_dir(aim_dir: Vector3, is_left_handed: bool) -> Vector3:
+	var left_dir := Vector3(aim_dir.z, 0.0, -aim_dir.x)
+	return left_dir if is_left_handed else -left_dir
+
+
 # Shot-aware reception read (the shot-aware block above) into the shot_*
 # results. False when this feed is not a shot reception (the caller runs the
 # normal catch); true with the net-forward stand and whether its geometry allows
@@ -427,11 +434,8 @@ func read_shot(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
 	# Mode A (one-time) eligibility: lateral redirect (in the band), forehand
 	# side, far enough out, and not already driving hard at the net.
 	var redirect_angle: float = acos(clampf(puck_dir.dot(net_dir), -1.0, 1.0))
-	# Left of the net direction (up × net_dir); RH forehand = -left_dir, LH =
-	# +left_dir (the convention the state machine's handedness also follows).
-	var left_dir: Vector3 = Vector3(net_dir.z, 0.0, -net_dir.x)
-	var forehand_dir: Vector3 = left_dir if _is_left_handed else -left_dir
-	var from_forehand: bool = (puck_pos - self_pos).dot(forehand_dir) > 0.0
+	var from_forehand: bool = (puck_pos - self_pos).dot(
+			forehand_dir(net_dir, _is_left_handed)) > 0.0
 	shot_self_vel = Vector3.ZERO
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state != null:

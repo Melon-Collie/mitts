@@ -97,3 +97,29 @@ func test_a_scripted_park_drops_the_carrier() -> void:
 	_pc.apply_scripted_grant(_receiver)
 	_pc.stage_scripted(_PARKED)
 	assert_null(_puck.carrier, "parking takes the puck off whoever held it")
+
+
+func _gd_files(root: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var dir: DirAccess = DirAccess.open(root)
+	if dir == null:
+		return out
+	for d: String in dir.get_directories():
+		out.append_array(_gd_files("%s/%s" % [root, d]))
+	for f: String in dir.get_files():
+		if f.ends_with(".gd"):
+			out.append("%s/%s" % [root, f])
+	return out
+
+
+func test_only_the_pucks_controller_parks_it() -> void:
+	# The game and the tools run a PuckController, so a puck they park goes
+	# through it (stage_scripted, GameManager.tutorial_place_puck).
+	var parks := RegEx.create_from_string("\\.stage_at\\(")
+	var bare := PackedStringArray()
+	for root: String in ["res://Scripts", "res://tools"]:
+		for path: String in _gd_files(root):
+			if path != "res://Scripts/controllers/puck_controller.gd" \
+					and parks.search(FileAccess.get_file_as_string(path)) != null:
+				bare.append(path)
+	assert_eq(bare, PackedStringArray(), "parks the puck past its controller's sweep")

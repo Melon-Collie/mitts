@@ -170,9 +170,8 @@ func test_a_pinching_strong_point_keeps_his_job() -> void:
 # ── Cross-fill: the emergent cover rotation ──────────────────────────────────
 
 func test_d_carrier_vacated_point_is_covered_by_a_forward() -> void:
-	# LD carries in the O-zone: only one D remains for two point slots — the
-	# leftover forward must cross-fill the second point ("D activates, F3
-	# covers", plan §2).
+	# LD carries in the O-zone: only one D remains for two point slots, and a
+	# forward takes the second ("D activates, F3 covers", plan §2).
 	var skaters: Array = [
 		[1, 0, Vector3(0, 0, -18)],
 		[2, 0, Vector3(-8, 0, -20)],
@@ -188,7 +187,33 @@ func test_d_carrier_vacated_point_is_covered_by_a_forward() -> void:
 	assert_has(point_holders, 5, "the remaining D holds one point")
 	var filler: int = point_holders[0] if point_holders[1] == 5 else point_holders[1]
 	assert_true(filler in [1, 2, 3],
-			"a forward cross-fills the vacated point, got peer %d" % filler)
+			"a forward takes the vacated point, got peer %d" % filler)
+
+
+func test_a_d_carriers_own_point_goes_to_the_soonest_forward() -> void:
+	# The LD has carried it down the strong wall, off his point. That point is the
+	# one a forward covers, the forward soonest up to it; his partner keeps the
+	# point on his own side. Given the strong point as the one D left, the partner
+	# crossed the ice to stand behind the carrier and the weak point he had left
+	# went to whichever forward the net front and the high slot had not taken.
+	var skaters: Array = [
+		[1, 0, Vector3(-2, 0, -16)],    # C, nearest the carrier's point
+		[2, 0, Vector3(-9, 0, -23)],
+		[3, 0, Vector3(6, 0, -22)],
+		[4, 0, Vector3(-10, 0, -15)],   # LD, 7 m inside the line with the puck
+		[5, 0, Vector3(4, 0, -9.5)],    # RD on the weak point
+	]
+	var a: Dictionary = _assign(skaters, AIPossessionState.State.OZONE, 4, 0.0, 0.0, {}, -1.0)
+	assert_eq(a[4], AIRoleSlots.Slot.CARRIER)
+	assert_eq(a[5], AIRoleSlots.Slot.POINT_WEAK,
+			"his partner keeps his own side; got %s" % str(a))
+	assert_eq(a[1], AIRoleSlots.Slot.POINT_STRONG,
+			"the forward soonest to the carrier's point covers it; got %s" % str(a))
+	var low: Array[int] = [a[2], a[3]]
+	low.sort()
+	var want: Array[int] = [AIRoleSlots.Slot.NET_FRONT, AIRoleSlots.Slot.HIGH_SLOT]
+	want.sort()
+	assert_eq(low, want, "the other two forwards stay low")
 
 
 func test_a_d_carrying_on_his_point_holds_it() -> void:

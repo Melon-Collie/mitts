@@ -23,6 +23,9 @@ const D_SPEEDS: Array[float] = [0.0, 5.0]
 const FORECHECK_FROM := Vector2(-1.0, 8.0)
 const FORECHECK_SPEED: float = 4.0
 
+# A staged puck moving faster than this a tick later did not stay staged.
+const STAGED_REST_M_S: float = 0.1
+
 var _team_size: int = 5
 var _trial_own_goal: bool = false
 var _trial_goal_against: bool = false
@@ -121,7 +124,11 @@ func _stage(defending: int, side: float, px: float, behind: float, start: Vector
 		return -1
 	_trial_own_goal = false
 	_trial_goal_against = false
-	GameManager.puck.stage_at(Vector3(puck_at.x, GameManager.puck.ice_height, puck_at.z))
+	# Through the puck's controller, which restarts its swept contact tests where
+	# the puck lands: parked with Puck.stage_at alone, the next tick sweeps the
+	# whole jump and every blade along it plays the puck.
+	GameManager.puck_controller.stage_scripted(
+			Vector3(puck_at.x, GameManager.puck.ice_height, puck_at.z))
 	for gc: GoalieController in GameManager.goalie_controllers:
 		gc.reset_to_crease()
 	_place(reg.get_record(d_peer), _at(own, side * start.x, start.y), puck_at, speed)
@@ -164,6 +171,11 @@ func _watch(defending: int, d_peer: int) -> Array:
 	for i: int in int(TRIAL_S * Engine.physics_ticks_per_second):
 		await get_tree().physics_frame
 		var carrier: Skater = GameManager.get_puck_carrier()
+		# Nobody is set within a tick of the puck, so one played already was
+		# played by the staging.
+		if i == 0 and (carrier != null
+				or GameManager.puck.linear_velocity.length() > STAGED_REST_M_S):
+			return ["staging_fault", false, "nobody"]
 		if carrier != null and reg.resolve_peer_id(carrier) == d_peer:
 			played = true
 		var toucher: int = tracker.get_last_toucher() if tracker != null else -1

@@ -2259,6 +2259,21 @@ func _sealed_corner_ctx() -> RoleContext:
 	return ctx
 
 
+func test_receivers_are_read_in_peer_id_order_whatever_the_snapshots() -> void:
+	# The pass search keeps the first of equal reads, so the order it reads its
+	# receivers in is the tie-break.
+	var self_pos := Vector3(0.0, 0.0, -8.0)
+	for order: Array in [[2, 3, 4], [4, 3, 2], [3, 4, 2]]:
+		var skaters: Array = [[1, TEAM_ID, self_pos]]
+		for pid: int in order:
+			skaters.append([pid, TEAM_ID, Vector3(-9.0 + 3.0 * pid, 0.0, -14.0)])
+		var ctx := _make_ctx(self_pos, skaters)
+		var c := AIRoleCarrier.new()
+		c._field.fill_receivers(ctx, self_pos)
+		assert_eq(c._field.teammate_ids, [2, 3, 4] as Array[int],
+				"filled %s" % [order])
+
+
 # ─── behind the net ─────────────────────────────────────────────────────────
 
 const _BEHIND_THEIR_CAGE := Vector3(0.4, 0.0, OPP_NET_Z - 1.9)
@@ -2564,6 +2579,20 @@ func test_behind_net_candidates_stay_on_the_playing_surface() -> void:
 			Vector3(GameRules.CORNER_CENTER_X + GameRules.INNER_CORNER_RADIUS,
 					0.0, GameRules.CORNER_CENTER_Z + 3.0), true),
 			"and the rounded corner is honoured, not a bounding box")
+
+
+func test_the_rounded_corner_is_honoured_in_front_of_the_goal_line_too() -> void:
+	# A body's width inside the side boards and a stride short of the goal line
+	# is off the surface: the corner's arc starts well up the ice from there.
+	var c := AIRoleCarrier.new()
+	var in_the_arc := Vector3(GameRules.INNER_HALF_WIDTH - 2.0 * AIStationSearch.RINK_INSET_M,
+			0.0, OPP_NET_Z + 2.0 * AIStationSearch.GOAL_LINE_BUFFER_M)
+	assert_gt(absf(in_the_arc.z), GameRules.CORNER_CENTER_Z, "the point is in the corner")
+	for allow_behind: bool in [false, true]:
+		assert_false(c._carry._candidate_ice_legal(in_the_arc, allow_behind),
+				"outside the corner's arc is not ice")
+	assert_true(c._carry._candidate_ice_legal(Vector3(in_the_arc.x, 0.0, -18.0), false),
+			"the same distance off the straight boards is")
 
 
 func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:

@@ -75,10 +75,13 @@ const _RECV_ONE_TIME: int = 2       # Mode A transitioned to ONE_TIMER_PRESSED; 
 # apply_capabilities; the default is the league baseline. Never the stick alone:
 # a reach-in is the arm's, and hand-to-toe falls the arm's length short.
 var _poke_reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + GameRules.POKE_RADIUS_M
-var _stick_lift_reach: float = (
-		GameRules.DEFAULT_STICK_LENGTH_M
-		+ GameRules.DEFAULT_BLADE_LENGTH_M
-		+ GameRules.STICK_LIFT_RADIUS_M)
+# How far off his body a shaft can be and still be played: a lift lands with the
+# blade within the lift radius of it, a tie with the two sticks touching, and
+# the blade is held AIBotMechanics.STICK_HELD_M out. Read at the stick's full
+# span, a lift or a tie was started on a shaft the blade never got to, and held
+# the stick off the ice for nothing.
+var _stick_lift_reach: float = AIBotMechanics.STICK_HELD_M + GameRules.STICK_LIFT_RADIUS_M
+var _stick_tie_reach: float = AIBotMechanics.STICK_HELD_M + StickCheckRules.TIE_CONTACT_M
 
 # Longest a one-timer-ready stance is held across a carrier gap (pass/shot in
 # flight). A real pass flight is well under this; the cap catches passes that die
@@ -666,7 +669,6 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_blade_reach = caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M
 	_receive_body_offset = caps.blade_span - SkaterAgentReception.RECEIVE_BODY_INSET_M
 	_poke_reach = caps.max_blade_reach + GameRules.POKE_RADIUS_M
-	_stick_lift_reach = caps.blade_span + GameRules.STICK_LIFT_RADIUS_M
 	_self_wrister_shot_speed = caps.wrister_shot_speed
 	_self_lateral_grip = caps.lateral_grip
 	_self_weight = caps.weight
@@ -728,11 +730,8 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	# roster doesn't run every expensive re-eval on the SAME physics tick (host
 	# FPS is set by the worst tick).
 	_stagger_cadence_phases()
-	# Must match the forehand convention of the release classifier
-	# (skater_controller.gd: RH forehand = skater-local +X) and
-	# SkaterAgentReception.read_shot (RH forehand = -left_dir): a right-hander's wind-up perp is
-	# Vector3(-aim.z, 0, aim.x), i.e. -1. Inverted, every bot winds up on the
-	# backhand and silently pays the backhand power penalty.
+	# The sign that puts a wind-up's perp, Vector3(aim.z, 0, -aim.x), on the
+	# forehand side of the aim.
 	_handedness_perp_sign = 1.0 if _is_left_handed else -1.0
 	# peer_id × prime spreads the bot id range across the seed space; host_tick at
 	# spawn salts it per session.
@@ -905,6 +904,7 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	_current_self_state = self_state
 	_current_snapshot = snapshot
 	_current_delta = input.delta
+	input.mouse_world_pos = _resting_cursor(self_pos, self_state)
 	_prev_role_target_age_s += input.delta
 	# EVERY dispatch-path brain read must go through this, so dispatch can run
 	# off-thread.
@@ -2878,7 +2878,7 @@ func _carrier_stick_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 func _stick_tie_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 		self_state: SkaterNetworkState, decision: RoleDecision) -> Vector3:
 	return _stick_play.tie_aim(snapshot, self_pos, self_state, decision, _ties_sticks,
-			_stick_lift_reach, _blade_reach)
+			_stick_tie_reach, _blade_reach)
 
 
 func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
@@ -3056,6 +3056,22 @@ const _STEP_ARC: int = 1
 const _STEP_FACE: int = 2
 const _STEP_FRONT: int = 3
 const _STEP_HOLD_ARC: int = 4
+
+# Where the cursor is on a tick whose path does not step it (a puck just lost, a
+# press that bails or releases, a skipped tick with no aim cached): where it was
+# last stepped to, carried with the body, or ahead of him on the aim ring before
+# any step. Never the input's zeroed scratch: a cursor at the world origin sends
+# the blade reaching for centre ice for the tick.
+func _resting_cursor(self_pos: Vector3, self_state: SkaterNetworkState) -> Vector3:
+	if not _mouse_pos_initialized:
+		var ahead: Vector2 = self_state.facing.normalized() \
+				if self_state.facing.length_squared() > 1e-6 else Vector2(0.0, -_own_goal_dir)
+		return self_pos + Vector3(ahead.x, 0.0, ahead.y) * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
+	if not _mouse_body_at.is_finite():
+		return Vector3(_mouse_pos.x, 0.0, _mouse_pos.z)
+	return Vector3(_mouse_pos.x + self_pos.x - _mouse_body_at.x, 0.0,
+			_mouse_pos.z + self_pos.z - _mouse_body_at.z)
+
 
 func _step_mouse_aim(target: Vector3) -> Vector3:
 	return _step_mouse_internal(target, _STEP_ARC, _mouse_max_speed_m_s, _mouse_arc_rate_rad_s)

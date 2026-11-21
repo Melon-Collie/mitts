@@ -417,10 +417,18 @@ shaft's liftable point is still in reach. Reading the path is the
 `reads_puck_path` cognition gate and the lift the `lifts_sticks` one, both
 closed on Easy: its stick reads only where the puck and its own body are now, so
 a carrier skating past outruns it, and a shielded puck draws a jab, never a
-lift. The jab reaches through the carrier's body as any poke does
-(`check_poke` reads no body), so a shield is worth only the distance it
-puts the puck from the stick, and the carrier's protect read prices it so:
-against a man whose stick reaches the back hip it buys nothing.
+lift. The game's poke reads no body (`check_poke`), so a shield is worth only
+the distance it puts the puck from the stick, and the carrier's protect read
+prices it so: against a man whose stick reaches the back hip it buys nothing.
+
+The cursor that carries the stick is a facing aim: it sits on the aim ring
+toward its point (`AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M`), so the blade is
+on a point only when the point is that far off his body. Getting the puck there
+is the stand's job (`AIRolePressure._gap_to_the_puck`, below), never the read's:
+a path point a stick's length away is a direction to it. The lift and the tie
+are started only on a shaft that blade gets to (`AIBotMechanics.STICK_HELD_M`
+plus the lift's radius, or the tie's contact): from further off, the button
+held for one that cannot land takes the stick off the ice for nothing.
 
 **A defensive-zone coverer's extra is the stick tie** (`AIStickTieRead`), and its
 price is its own stick. The man is tied only while the puck is coming to him — a loose
@@ -544,6 +552,15 @@ heavy pressure" belongs to SUPPORT's own positioning, which already prices
 pressure. **SUPPORT** (`has_support_behind`) and **NUMBERS** (an attacker behind
 my stand) are the two that bind.
 
+**Support behind is a race home.** A teammate is behind me when his trip to our
+net is shorter than mine and than the puck's (its carrier's, or a man's setting
+off from a loose one), each on the arrival clock from where he is and how he is
+moving. Never read it as depth down the ice: a carrier low in the corner is
+level with our net front, so by depth the man on him is the last man back with
+a teammate standing in the slot. And never as distance alone: a teammate nearer
+our net who is skating away up the ice is not home first, and one a stride
+further out who is skating back is.
+
 The D-vs-forward asymmetry needs **no per-position appetite scalar** — it emerges
 from who is physically rearmost. In an O-zone cycle the POINTS are the rearmost
 bodies (~9 m from our blue line), so they read no support and respect any man who
@@ -587,6 +604,19 @@ role reads it for itself: the weak D holds the middle of the line, HIGH_SLOT /
 F3_WALL takes the vacated point. So it fires however he got deep (pinch, chase,
 battle), and releases when he is back. The D slots race the lateral trip
 (`SlotSpec.lateral_race`) precisely so a pinching D keeps his job while it runs.
+
+**A D who carries off his point is covered by the election, once.** He holds
+CARRIER, not a point, so no role can read his slot. His own point (the one
+nearer him) is raced for by the forwards, on the whole trip up to it and ahead
+of the net front and the high slot, and his partner keeps the other
+(`AIRoleSlots5._settle_the_carriers_point`). A point a forward holds is the
+cover already made, so HIGH_SLOT's read leaves it alone
+(`AIRoleDefenseman.point_vacated`). Never hand the one D left the points in
+their listed order: the strong point is the carrier's, so his partner crossed
+the ice to stand behind him, the weak point he left went to whichever forward
+the low jobs had not taken, and the high slot filled the strong point on top of
+both, four high and one low (`tests/slow/ai/test_ozone_spacing.gd`;
+`tests/instruments/ai/test_ozone_spread_sweep.gd` runs more starts).
 
 ### A man down, the shape is a wedge and one
 
@@ -729,6 +759,48 @@ across the slot in front of him. A carrier who is not coming gets the
 goal-side stand instead. `test_one_on_one_to_the_crease.gd` drives a scripted
 carrier who ignores the defence at the net, alone and two back, and a bot
 carrier who goes wide and cuts in.
+
+**Inside our line the gap is held to the puck, once a beaten challenge is
+covered.** The ladder's last rung is a stick because that is where his stick
+plays the puck, and his blade is held on the aim ring toward it, 1.3 m off his
+body (the cursor off the puck is a facing aim). So with the carrier inside our
+line the stand is taken where that blade is on the puck
+(`AIRolePressure._gap_to_the_puck`): no wider than the ladder's gap, which
+already reaches a puck held out toward him, and nearer for one held beside the
+carrier or past him, down to contact plus the tier's standoff, where a puck he
+shields is the body's to play. Held to his body, a carrier with the puck beside
+him or a carry's reach past him is a stick and more off the blade: the defender
+held his gap and nobody played him. The inside shade is the angle taken on him
+at a stick's gap, so it shrinks with a gap closed inside one; left whole, the
+shade alone holds the stand a metre and a half off him.
+
+The same cover lifts the advance cap: no more speed up the ice than he can turn
+out of if the carrier bursts past is the last man's bound, and kept, it held the
+man on a carrier who skated away from our net, up the wall or out to the point,
+to a couple of metres a second, slower than the carrier walked. The cap's other
+half, the least retreat from a carrier gaining on him, stays.
+
+Covered (`covered`) is the hit's own licence, a teammate home behind him
+(`AILastManDiscipline.has_support_behind`), or the carrier below our goal line,
+where every teammate in front of it is between him and the slot. The last man
+back keeps the ladder's gap and its cap: he contains, as he does not hit. Up the
+ice the ladder is a skating gap and reads the carrier's body alone.
+
+**The puck's owner goes below our goal line.** A carrier at or below it has no
+middle to be shaded off and walks nobody back, so his stand is unshaded on his
+route and takes no retreat floor, facing or cap. Its candidates are held to
+`AIStationSearch.is_legal_ice`, never `is_legal_position`: that rule keeps
+stations in front of the goal lines, and held to it a carrier low in the corner
+or behind our net had no legal stand and his owner stood where he was.
+Behind the cage his line to our net runs through it, so the approach is re-aimed
+down his way to the post he is sooner to (`_route_round_our_cage`,
+`AIArrival.post_waypoint`) and ends there: the stand is between him and the post
+he would come out at, at the post once he is within a gap of it, and the far
+post is the net front's. Never read that post off `AIArrival.cage_waypoint`:
+it answers a route's first waypoint, which from square behind the cage is the
+corner behind a post.
+`tests/instruments/ai/test_dzone_pressure.gd` sweeps a standing and a skating
+carrier round the zone, each tier and both sizes.
 
 Three things have to be true together, and each is load-bearing:
 
@@ -1419,9 +1491,9 @@ reaches back into what remains.
   one that gets by him dies sooner. The walk is the chase election's own, so the
   receiver a rim is priced to reach is the one the election will send to it. The
   LANE is a race along that path in `arrival_race`'s contest band — the
-  receiver against the soonest opponent, and against their keeper behind his own
-  net by the live goalie's trip gates. Arrivals over the receiver's catch
-  threshold are dropped. Zone rules mirror the straight feed's. Under NHL rules
+  receiver against the soonest opponent. Their keeper plays no rim behind his
+  net, so he is not in it. Arrivals over the receiver's catch threshold are
+  dropped. Zone rules mirror the straight feed's. Under NHL rules
   a rim that gets by our receiver, or that their man reaches first, goes on down
   its path: from our half and across their goal line before their soonest man
   meets it, with their side first to the dots, it is an icing, and both loss
