@@ -448,9 +448,18 @@ func test_weak_dp_keeps_a_clear_in_on_his_own_wall() -> void:
 
 class StubStrategy extends TeamStrategyView:
 	var slots: Dictionary = {}
+	# The peers on a line slot who are forwards (a point the election gave one):
+	# everyone else on one is a defenseman.
+	var forwards_on_the_line: Array[int] = []
 
 	func get_slot(peer_id: int) -> int:
 		return slots.get(peer_id, AIRoleSlots.Slot.NONE)
+
+	func position_of(peer_id: int) -> int:
+		var on_the_line: bool = get_slot(peer_id) in [AIRoleSlots.Slot.POINT_STRONG,
+				AIRoleSlots.Slot.POINT_WEAK, AIRoleSlots.Slot.DP_STRONG, AIRoleSlots.Slot.DP_WEAK]
+		return PlayerRules.FIRST_DEFENSE_SLOT \
+				if on_the_line and not forwards_on_the_line.has(peer_id) else 0
 
 
 const PARTNER := 3
@@ -578,6 +587,31 @@ func test_high_slot_fills_the_point_while_the_strong_d_battles_low() -> void:
 			ctx, AIRoleSlots.Slot.POINT_STRONG)
 	assert_lt(d.target_position.distance_to(stand), 1.0,
 			"F3 rotates up to the strong point; got %s" % d.target_position)
+
+
+func test_high_slot_leaves_a_point_a_forward_holds() -> void:
+	# Our strong D carries it low and the election has given his point to a
+	# forward, who is still on his way up to it. He is the cover: a second
+	# forward going up for the same point is two of them on the line.
+	var ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -16.0), [
+		[2, TEAM_ID, Vector3(8.0, 0.0, -20.0)],          # the forward given the point
+		[3, TEAM_ID, Vector3(-4.5, 0.0, -9.3)],          # weak D on his line
+		[5, TEAM_ID, Vector3(10.5, 0.0, -18.0)],         # strong D, carrying low
+	], 5)
+	ctx.self_is_defense = false
+	var strategy := StubStrategy.new()
+	strategy.slots = {1: AIRoleSlots.Slot.HIGH_SLOT, 2: AIRoleSlots.Slot.POINT_STRONG,
+			3: AIRoleSlots.Slot.POINT_WEAK, 5: AIRoleSlots.Slot.CARRIER}
+	strategy.forwards_on_the_line = [2]
+	ctx.team_brain = strategy
+	var stand: Vector3 = AIRoleDefenseman.strong_point_stand(
+			ctx, AIRoleSlots.Slot.POINT_STRONG)
+	assert_gt(AIRoleHighSlot.decide(ctx).target_position.distance_to(stand), 3.0,
+			"F3 keeps his own ice")
+	# The same man on the point as its D, as far off it and not coming: vacated.
+	strategy.forwards_on_the_line = []
+	assert_lt(AIRoleHighSlot.decide(ctx).target_position.distance_to(stand), 1.0,
+			"F3 takes a point its D has left")
 
 
 # The O-zone rotation with our carrier low on the strong side: me (peer 1) on

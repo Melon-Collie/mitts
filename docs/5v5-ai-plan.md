@@ -158,8 +158,9 @@ Per-state specs (behavior module in parentheses; **bold = new code**, others reu
   toward the circle top (depth ~10.7–13) as the cycle goes low; weak-side point holds
   just inside the blue line shaded to middle — the researched staggered/diagonal point
   pair. Election: D group fills the points (strong = soonest-to-strong-point), F group
-  fills NET_FRONT then HIGH_SLOT; a D **carrier** cross-fills his vacated point with the
-  leftover F (the "F3 covers" half of the pinch rotation, emergent). A D carrying on his
+  fills NET_FRONT then HIGH_SLOT; a D **carrier** off his point hands it to the forward
+  soonest up to it, elected ahead of the low jobs, and his partner keeps the other point
+  (the "F3 covers" half of the pinch rotation). A D carrying on his
   point has not vacated it (the rotation's own read): only the other point is elected,
   and the leftover F plays low as a FINISHER, as does the spare body while a pass is in
   flight (#942).

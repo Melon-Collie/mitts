@@ -605,6 +605,19 @@ F3_WALL takes the vacated point. So it fires however he got deep (pinch, chase,
 battle), and releases when he is back. The D slots race the lateral trip
 (`SlotSpec.lateral_race`) precisely so a pinching D keeps his job while it runs.
 
+**A D who carries off his point is covered by the election, once.** He holds
+CARRIER, not a point, so no role can read his slot. His own point (the one
+nearer him) is raced for by the forwards, on the whole trip up to it and ahead
+of the net front and the high slot, and his partner keeps the other
+(`AIRoleSlots5._settle_the_carriers_point`). A point a forward holds is the
+cover already made, so HIGH_SLOT's read leaves it alone
+(`AIRoleDefenseman.point_vacated`). Never hand the one D left the points in
+their listed order: the strong point is the carrier's, so his partner crossed
+the ice to stand behind him, the weak point he left went to whichever forward
+the low jobs had not taken, and the high slot filled the strong point on top of
+both, four high and one low (`tests/slow/ai/test_ozone_spacing.gd`;
+`tests/instruments/ai/test_ozone_spread_sweep.gd` runs more starts).
+
 ### A man down, the shape is a wedge and one
 
 A team with fewer skaters on the ice than the other (`TeamBrain.man_down`,
