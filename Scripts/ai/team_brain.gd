@@ -506,7 +506,9 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 		for def_pid: int in zone_slot_by_def:
 			var margin: float = AIZoneCoverage.AREA_RELEASE_MARGIN_M \
 					if prev.get(def_pid, -1) == pid else 0.0
-			if _may_be_handed(zone_slot_by_def[def_pid], pressure_slot, mp, margin):
+			if _may_be_handed(zone_slot_by_def[def_pid], pressure_slot, mp, margin) \
+					or AIZoneCoverage.behind_every_holder(snapshot, slot_assignments,
+							_strong_x, _own_goal_z, mp, margin > 0.0, _man_down):
 				if not eligible_men.has(def_pid):
 					eligible_men[def_pid] = {}
 				(eligible_men[def_pid] as Dictionary)[pid] = true

@@ -266,3 +266,78 @@ func test_the_wedge_mirrors_with_the_strong_side() -> void:
 func test_at_even_strength_the_coverage_is_unchanged() -> void:
 	assert_eq(AIZoneCoverage.pressure_owner(1.0, NET_Z, _pt(9.0, 3.0)),
 			AIRoleSlots.Slot.ZONE_D_STRONG, "the corner is still the battle D's")
+
+
+# ── A man behind the holders of the ice he stands in ─────────────────────────
+
+const C_PID: int = 1
+const W_STRONG_PID: int = 2
+const D_WEAK_PID: int = 3
+const FULL_SLOTS: Dictionary = {C_PID: AIRoleSlots.Slot.ZONE_C,
+		W_STRONG_PID: AIRoleSlots.Slot.ZONE_W_STRONG,
+		D_WEAK_PID: AIRoleSlots.Slot.ZONE_D_WEAK}
+
+
+# Our centre and strong winger at these depths, in the middle of the ice, and
+# the weak D on the crease.
+func _holders_at(centre_depth: float, winger_depth: float) -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	var at: Dictionary = {C_PID: _pt(0.0, centre_depth),
+			W_STRONG_PID: _pt(3.0, winger_depth), D_WEAK_PID: _pt(0.0, 1.5)}
+	for pid: int in at:
+		var s := SkaterNetworkState.new()
+		s.position = at[pid]
+		snap.skater_states[pid] = s
+	return snap
+
+
+func _behind(snap: WorldSnapshot, slots: Dictionary, man: Vector3,
+		incumbent: bool = false, man_down: bool = false) -> bool:
+	return AIZoneCoverage.behind_every_holder(snap, slots, 1.0, NET_Z, man, incumbent,
+			man_down)
+
+
+func test_a_man_in_the_ice_of_holders_still_up_the_ice_is_behind_them() -> void:
+	# The high slot, strong side of centre: the centre's corridor and the
+	# strong winger's half, and no D's.
+	var man: Vector3 = _pt(0.5, 8.8)
+	assert_true(_behind(_holders_at(18.0, 20.0), FULL_SLOTS, man))
+	assert_false(_behind(_holders_at(7.0, 20.0), FULL_SLOTS, man),
+			"one holder goal-side of him has him")
+	assert_false(_behind(_holders_at(18.0, 6.0), FULL_SLOTS, man),
+			"whichever of them it is")
+
+
+func test_a_holder_within_a_cover_envelope_of_him_still_has_him() -> void:
+	# The centre a stride above his man in settled coverage steps down to him:
+	# the man is not the D's for that.
+	var man: Vector3 = _pt(0.5, 6.0)
+	var near: float = 6.0 + AIRushRead.cover_envelope_m() - 0.5
+	assert_false(_behind(_holders_at(near, 20.0), FULL_SLOTS, man))
+	assert_true(_behind(_holders_at(near + 1.0, 20.0), FULL_SLOTS, man))
+
+
+func test_the_incumbent_keeps_him_until_a_holder_is_clear_goal_side() -> void:
+	# A backchecker on the man's hip is near him and still behind him.
+	var man: Vector3 = _pt(0.5, 8.8)
+	assert_true(_behind(_holders_at(10.0, 20.0), FULL_SLOTS, man, true))
+	assert_true(_behind(_holders_at(8.3, 20.0), FULL_SLOTS, man, true),
+			"goal-side by less than the release margin")
+	assert_false(_behind(_holders_at(8.3, 20.0), FULL_SLOTS, man))
+	assert_false(_behind(_holders_at(7.0, 20.0), FULL_SLOTS, man, true))
+
+
+func test_a_man_in_no_held_area_is_behind_nobody() -> void:
+	# The strong point with only the weak D's label held: an empty set of
+	# holders is not a set he is behind.
+	assert_false(_behind(_holders_at(18.0, 20.0),
+			{D_WEAK_PID: AIRoleSlots.Slot.ZONE_D_WEAK}, _pt(6.0, 16.0)))
+
+
+func test_a_man_down_the_perimeter_stays_given_up() -> void:
+	var slots: Dictionary = {C_PID: TIP, W_STRONG_PID: THE_ONE, D_WEAK_PID: BASE_WEAK}
+	var snap: WorldSnapshot = _holders_at(18.0, 20.0)
+	assert_false(_behind(snap, slots, _pt(6.0, 16.0), false, true),
+			"the one up the ice does not hand his point man to the wedge")
+	assert_true(_behind(snap, slots, _pt(0.5, 7.0), false, true),
+			"a man in the tip's third with the tip not back is the base's")

@@ -698,7 +698,18 @@ overlap on purpose, and independent argmaxes double-cover (most D-zone ticks)
 while leaving the best man open. The areas tile the zone, so a man can stand in
 nobody's coverable area only when his area's owner is on the puck: the pressure
 owner's area is therefore every zone defender's while he is (a strong D in the
-corner leaves his net-front man to whoever the matching sends). A loose puck
+corner leaves his net-front man to whoever the matching sends). An area's
+holder who is not back is the same case: a man nearer our net than the holder
+of every area he stands in, with none of them inside a cover envelope of him,
+is every zone defender's (`AIZoneCoverage.behind_every_holder`). The defender
+handed him keeps him until a holder is goal-side of him, however near one comes
+from behind: a backchecker on his hip does not have him. Held to the areas
+alone, an odd-man rush turning into coverage found the man driving the high
+slot in the ice of forwards still outside our line, and the D riding him in was
+handed the wide man in his place (`test_odd_man_net_drive.gd`). It is settled
+coverage's rule too: with the wingers out on the points, a man in the high slot
+above the centre's corridor is the centre's. A man down the one's area is left
+out, as it is when the one is on the puck. A loose puck
 with a teammate elected to race it (`closest_to_puck_by_team`) is HIS, not the
 area's: the chaser leaves the matching and the area's owner covers a man
 (`AIZoneCoverage.chased_by_another`), or one body stands off both the puck and

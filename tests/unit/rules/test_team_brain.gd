@@ -364,7 +364,8 @@ func test_a_zone_defender_is_only_given_a_man_in_his_own_area() -> void:
 	# Areas enter the matcher as ELIGIBILITY. Whatever the reward says, a
 	# defender may not be handed a body standing outside the ice he owns —
 	# chasing out of the structure is the thing the zone exists to prevent. The
-	# puck owner's area is everyone's while he is on the puck.
+	# puck owner's area is everyone's while he is on the puck, and so is a man
+	# who is behind the holder of every area he stands in.
 	var brain: TeamBrain = _zone_brain()
 	brain.force_retick()
 	var snap: WorldSnapshot = _make_5v5_zone_snapshot()
@@ -382,9 +383,77 @@ func test_a_zone_defender_is_only_given_a_man_in_his_own_area() -> void:
 				GameRules.GOAL_LINE_Z, man_pos, AIZoneCoverage.AREA_RELEASE_MARGIN_M)
 		var in_owners: bool = AIZoneCoverage.in_area(owner_slot, brain.strong_x(),
 				GameRules.GOAL_LINE_Z, man_pos)
-		assert_true(in_own or in_owners,
+		assert_true(in_own or in_owners or _behind_every_holder(brain, snap, man_pos),
 				"peer %d (slot %d) was given a man outside its area at %s"
 				% [def_pid, slot, str(man_pos)])
+
+
+func _behind_every_holder(brain: TeamBrain, snap: WorldSnapshot, man_pos: Vector3) -> bool:
+	return AIZoneCoverage.behind_every_holder(snap, brain.slot_assignments,
+			brain.strong_x(), OUR_NET_Z, man_pos, false, false)
+
+
+# ── A man behind the bodies whose ice he is in ───────────────────────────────
+# An odd-man rush just turned into zone coverage: their carrier (200) low on
+# the strong wall with our strong D (130) on him, a man (210) driving the high
+# slot with our weak D (140) beside him, a third (220) low on the weak side.
+# Our centre (100) is at `centre`; our wingers are still outside the line.
+func _net_drive_snapshot(centre: Vector3) -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	for entry: Array in [
+			[100, 0, centre, Vector3(0.0, 0.0, 6.0)],
+			[110, 0, Vector3(-6.0, 0.0, 4.0), Vector3(0.0, 0.0, 6.0)],
+			[120, 0, Vector3(6.0, 0.0, 3.0), Vector3(0.0, 0.0, 6.0)],
+			[130, 0, Vector3(6.8, 0.0, 22.4), Vector3.ZERO],
+			[140, 0, Vector3(1.6, 0.0, 18.6), Vector3(0.0, 0.0, 5.5)],
+			[200, 1, Vector3(9.0, 0.0, 21.5), Vector3.ZERO],
+			[210, 1, Vector3(0.5, 0.0, 18.3), Vector3(0.0, 0.0, 6.5)],
+			[220, 1, Vector3(-6.0, 0.0, 21.0), Vector3.ZERO]]:
+		var s := SkaterNetworkState.new()
+		s.position = entry[2]
+		s.velocity = entry[3]
+		snap.skater_states[entry[0]] = s
+	var p := PuckNetworkState.new()
+	p.carrier_peer_id = 200
+	p.position = Vector3(9.0, 0.0, 21.5)
+	snap.puck_state = p
+	return snap
+
+
+func _net_drive_brain() -> TeamBrain:
+	var brain: TeamBrain = _entry_brain()
+	brain.slot_assignments = {100: AIRoleSlots.Slot.ZONE_C,
+			110: AIRoleSlots.Slot.ZONE_W_WEAK, 120: AIRoleSlots.Slot.ZONE_W_STRONG,
+			130: AIRoleSlots.Slot.ZONE_D_STRONG, 140: AIRoleSlots.Slot.ZONE_D_WEAK}
+	return brain
+
+
+func test_a_man_behind_his_areas_holders_is_the_d_beside_hims() -> void:
+	# The high slot is the centre's ice and the strong winger's, and neither is
+	# back: held to the areas, the D beside the driver is handed the wide man
+	# and leaves him.
+	var brain: TeamBrain = _net_drive_brain()
+	var snap: WorldSnapshot = _net_drive_snapshot(Vector3(0.0, 0.0, 9.0))
+	brain.force_retick()
+	brain.tick(0.001, snap)
+	assert_eq(brain.state, AIPossessionState.State.DZONE, "fixture sanity: DZONE")
+	assert_eq(brain.get_slot(140), AIRoleSlots.Slot.ZONE_D_WEAK, "fixture sanity: labels")
+	assert_false(AIZoneCoverage.in_area(AIRoleSlots.Slot.ZONE_D_WEAK, brain.strong_x(),
+			OUR_NET_Z, snap.skater_states[210].position),
+			"fixture sanity: the driver is outside the weak D's own box")
+	assert_eq(brain.assigned_threat(140), 210,
+			"the D beside the driver has him; got %s" % str(brain.threat_assignments))
+
+
+func test_a_man_whose_areas_holder_is_goal_side_of_him_stays_that_holders() -> void:
+	var brain: TeamBrain = _net_drive_brain()
+	brain.force_retick()
+	brain.tick(0.001, _net_drive_snapshot(Vector3(0.3, 0.0, 20.2)))
+	assert_eq(brain.state, AIPossessionState.State.DZONE, "fixture sanity: DZONE")
+	assert_eq(brain.assigned_threat(100), 210,
+			"the centre, home below him, has the slot man; got %s"
+			% str(brain.threat_assignments))
+	assert_ne(brain.assigned_threat(140), 210)
 
 
 func test_the_area_owning_the_puck_covers_nobody() -> void:

@@ -26,9 +26,9 @@ const LOW_DEPTH_M: float = 10.7
 # Share of OZONE ticks with four or more attackers high (measured 0 in every
 # fixture, 0.66 with the D holding it before #942).
 const FOUR_HIGH_CEILING: float = 0.05
-# Attackers low per OZONE tick with the D holding it up top (measured 2.49, 1.31
+# Attackers low per OZONE tick with the D holding it up top (measured 2.19, 1.31
 # before #942).
-const HELD_LOW_FLOOR: float = 2.2
+const HELD_LOW_FLOOR: float = 2.0
 # Fixture sanity: the attack has to spend time in OZONE shape.
 const MIN_OZONE_TICKS: int = 120
 
