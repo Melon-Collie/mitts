@@ -1437,7 +1437,7 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 		AIRoleSlots.Slot.F3_WALL:
 			decision = AIRoleForecheck.decide_wall(ctx)
 		AIRoleSlots.Slot.BREAKOUT_D2:
-			# Net-front reverse valve — the weak-side breakout outlet's job.
+			# The reverse valve: the weak-side breakout outlet's job.
 			decision = AIRoleBreakout.decide(ctx, false)
 		AIRoleSlots.Slot.BREAKOUT_STRETCH:
 			# Weak winger's stretch: OUTLET paces the far blue line legally.

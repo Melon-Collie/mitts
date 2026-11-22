@@ -798,3 +798,23 @@ func test_at_full_strength_the_set_shape_keeps_both_ones() -> void:
 	var a: Dictionary = _set_shape_short(["C", "LW", "RW", "LD", "RD"])
 	assert_ne(_slot_of(a, AIRoleSlots.Slot.NZ_F1), -1)
 	assert_ne(_slot_of(a, AIRoleSlots.Slot.NZ_MID), -1)
+
+
+# ── BREAKOUT_D2 is raced to where its role stands ────────────────────────────
+
+func test_the_d_on_the_weak_side_is_the_reverse_valve() -> void:
+	# A forward carries low in the strong corner with both D free: one beside
+	# our net on the strong side, one already low on the weak side, where the
+	# reverse valve stands (AIRoleBreakout, weak). Raced to the net front, the
+	# strong-side D won it and crossed the ice to where his partner stood.
+	var skaters: Array = [
+		[1, 0, Vector3(9.0, 0.0, OUR_NET_Z - 3.0)],
+		[2, 0, Vector3(-6.0, 0.0, 12.0)],
+		[3, 0, Vector3(10.0, 0.0, 14.0)],
+		[4, 0, Vector3(-8.0, 0.0, OUR_NET_Z - 4.0)],
+		[5, 0, Vector3(2.5, 0.0, OUR_NET_Z - 2.0)],
+	]
+	var a: Dictionary = _assign(skaters, AIPossessionState.State.BREAKOUT, 1)
+	assert_eq(_slot_of(a, AIRoleSlots.Slot.BREAKOUT_D2), 4,
+			"the weak-side D holds the valve; got %s" % str(a))
+
