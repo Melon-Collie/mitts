@@ -1656,6 +1656,31 @@ func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
 			"the projected up-ice spot out-values the spot the outlet is leaving")
 
 
+func test_a_pass_never_released_costs_the_same_whatever_its_lane() -> void:
+	# 5v5, a feed up the wall from our end with their men placed to counter.
+	# With no odds of keeping the puck to the release (`keep` 0) every loss is
+	# the one at the blade, so the lane the pass would have flown is nothing to
+	# its price: each loss mode's counter exposure is weighed by its own share.
+	var self_pos := Vector3(2, 0, 20)
+	var spot := Vector3(9, 0, 12)
+	var ctx := _make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos],
+			[2, TEAM_ID, spot],
+			[3, 1, Vector3(6, 0, 15)],
+			[4, 1, Vector3(-3, 0, 14)]])
+	ctx.team_size = 5
+	var c := AIRoleCarrier.new()
+	c._field.fill(ctx)
+	assert_gt(c._field.counter_exposure_cost(ctx, spot, 1.0, self_pos,
+			ctx.defending_goal_pos), 0.0, "fixture sanity: a loss there is a counter")
+	var ev: Array[float] = []
+	for lane: float in [0.2, 0.9]:
+		ev.append(c._pass._pass_ev(ctx, spot, 14.0, 0.6, 0.735, 0.6,
+				ctx.defending_goal_pos, null, lane, AIPuckLane.PASS_MISS_BASE_PROB,
+				Vector3.ZERO, -INF, Vector3.ZERO, Vector3.INF, 0.0, false, Vector3.INF, 0.0))
+	assert_almost_eq(ev[0], ev[1], 0.0001)
+
+
 # Pressured deep in our zone by a charging forechecker: the strong-side outlet
 # skating its route, and a deep valve behind us as backpass bait.
 func _developing_outlet_and_valve_ctx() -> RoleContext:

@@ -666,16 +666,18 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 			release_clean * clean_lane * (1.0 - reception_kept))
 	cost += _field.turnover_cost(mate_spot, release_clean * met * (1.0 - mate_reception.y))
 	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
-	# it hands over — the carrier stays at self_pos through a pass, so his
-	# own recovery race starts from here (plan §6).
+	# it hands over, at that mode's own share — the carrier stays at self_pos
+	# through a pass, so his own recovery race starts from here (plan §6).
+	cost += _field.counter_exposure_cost(ctx, origin, 1.0 - release_clean,
+			self_pos, our_goalie)
 	if not rim_iced:
-		cost += _field.counter_exposure_cost(ctx, loss_point, 1.0 - lane,
-				self_pos, our_goalie)
+		cost += _field.counter_exposure_cost(ctx, loss_point,
+				release_clean * (1.0 - lane), self_pos, our_goalie)
 	cost += _field.counter_exposure_cost(ctx, receiver_spot,
-			clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
+			release_clean * clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
 	if met > 0.0:
 		cost += _field.counter_exposure_cost(ctx, mate_spot,
-				met * (1.0 - mate_reception.y), self_pos, our_goalie)
+				release_clean * met * (1.0 - mate_reception.y), self_pos, our_goalie)
 	if benefit - cost > _debug_best_ev:
 		_debug_best_ev = benefit - cost
 		debug_completion = Vector4(release_clean, reached, miss_prob, reception_kept)
