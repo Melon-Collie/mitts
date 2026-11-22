@@ -146,10 +146,11 @@ signal shot_sound_received(position: Vector3, is_slapper: bool, power: float)
 # `force` is the VFX-scale impact force.
 signal body_check_landed(hitter_peer_id: int, victim_peer_id: int, force: float, hit_dir: Vector3)
 # Smart ping (context-sensitive team message). Fired on every peer (host
-# self-emits) with the sender's resolved ping; GameManager filters display to
-# the sender's team and — host-only — routes the bot directive. `ping_type`
-# is PingRules.Type; `target_peer_id` / `world_pos` meaning depends on it.
+# self-emits) with the sender's resolved ping. `ping_type` is PingRules.Type;
+# `target_peer_id` / `world_pos` meaning depends on it.
 signal smart_ping_received(sender_peer_id: int, ping_type: int, target_peer_id: int, world_pos: Vector3)
+# A bot has taken `pinger_peer_id`'s ping as its order. Fired on every peer.
+signal smart_ping_acknowledged(obeyer_peer_id: int, pinger_peer_id: int)
 signal input_batch_received(peer_id: int, inputs: Array[InputState])
 # Mid-game player → spectator transition. Host broadcasts to all peers; every
 # receiver despawns the demoted peer's skater locally (registry.remove handles
@@ -328,7 +329,10 @@ var _pending_handshake: Dictionary[int, float] = {}
 const _HANDSHAKE_TIMEOUT_S: float = 10.0
 const _KICK_FLUSH_DELAY_S: float = 0.5
 # Host: last time (local_time()) each connected peer sent us anything — input
-# batches (~input rate) or clock-sync pings (every 2s). Swept in _process; a peer
+# batches (~input rate), its clock-sync pings (every second) and its answers to
+# the host's own (every 2 s). In the lobby and for a spectator the two probe streams are
+# all there is, and both are unreliable, so a peer is dropped only when both lose
+# every packet for the whole timeout, never on one lost probe. Swept in _process; a peer
 # silent past _PEER_LIVENESS_TIMEOUT_S is force-disconnected. ENet's per-peer
 # timeout used to cover this; Steam's relay keepalive does eventually, but ~2x
 # slower, so a hard-crashed or network-yanked peer's skater lingers frozen on
@@ -386,7 +390,7 @@ var _peer_snapshot_acks: Dictionary = {}
 # Stored once so the client receive path doesn't allocate a bound
 # Callable per packet.
 var _snapshot_event_dispatch: Callable = _dispatch_snapshot_event
-var _session_start_ms: int = 0
+var _session_start_us: int = 0
 var _replay_mode: bool = false
 var _replay_clock: float = 0.0
 
@@ -625,7 +629,7 @@ func is_drill_mode() -> bool:
 
 
 func local_time() -> float:
-	return (Time.get_ticks_msec() - _session_start_ms) / 1000.0
+	return (Time.get_ticks_usec() - _session_start_us) / 1000000.0
 
 # Lobby-phase transport attach: turns the running offline host session into an
 # online one. Every hosted session now starts via start_offline (the unified
@@ -638,7 +642,7 @@ func local_time() -> float:
 # Host is still peer id 1, so all downstream RPC / slot / spawn code is
 # unchanged.
 func attach_online(public: bool) -> void:
-	_session_start_ms = Time.get_ticks_msec()
+	_session_start_us = Time.get_ticks_usec()
 	SteamManager.lobby_created.connect(_on_steam_lobby_created, CONNECT_ONE_SHOT)
 	SteamManager.lobby_create_failed.connect(_on_steam_lobby_create_failed, CONNECT_ONE_SHOT)
 	SteamManager.create_lobby(GameRules.MAX_CONNECTIONS, public)
@@ -662,7 +666,7 @@ func detach_online() -> void:
 	_invalidate_peer_cache()
 	SteamManager.leave_lobby()
 	is_offline_mode = true
-	_session_start_ms = 0
+	_session_start_us = 0
 
 func _on_steam_lobby_created(_lobby_id: int) -> void:
 	if SteamManager.lobby_create_failed.is_connected(_on_steam_lobby_create_failed):
@@ -820,9 +824,9 @@ func _on_peer_disconnected(id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	_connect_timer = -1.0
-	_session_start_ms = Time.get_ticks_msec()
+	_session_start_us = Time.get_ticks_usec()
 	_clock_sync = _ClockSyncScript.new()
-	_clock_sync.init_session(_session_start_ms)
+	_clock_sync.init_session(_session_start_us)
 	var local_attrs: PlayerAttributes = PlayerPrefs.get_player_attributes()
 	# Stamp the local peer's OWN entry, not [1] (which is the host from a
 	# client's view): on_slot_assigned spawns the local skater via
@@ -985,7 +989,7 @@ func reset() -> void:
 	_last_broadcast_us = 0
 	_connect_timer = -1.0
 	_clock_sync = null
-	_session_start_ms = 0
+	_session_start_us = 0
 	_last_ws_seq_received = -1
 	_replay_mode = false
 	_replay_clock = 0.0
@@ -1174,6 +1178,14 @@ func is_broadcast_due() -> bool:
 # after StateBufferManager.capture(). The cadence counter advances in
 # `_physics_process` whether or not this runs, so a host stall's physics catch-up
 # still emits one broadcast per eligible tick.
+# Whether a gap between snapshots measures the send cadence. One past a second
+# is a designed pause — a goal replay or an intermission stops the broadcast —
+# and recorded it read as seconds of jitter: the host's interval p95 saturated,
+# and a client's jitter window and arrival histogram after every pause.
+static func is_cadence_gap(gap_s: float) -> bool:
+	return gap_s < 1.0
+
+
 func try_broadcast() -> void:
 	if not is_host:
 		return
@@ -1183,10 +1195,7 @@ func try_broadcast() -> void:
 	var now_us: int = Time.get_ticks_usec()
 	if _last_broadcast_us != 0:
 		var gap_us: int = now_us - _last_broadcast_us
-		# Gaps > 1 s are designed pauses (goal replay / intermission stop the
-		# broadcast entirely), not send-cadence sag — recording them saturated
-		# broadcast_interval_p95 at seconds and buried the real cadence signal.
-		if gap_us < 1_000_000:
+		if is_cadence_gap(gap_us / 1000000.0):
 			NetworkTelemetry.record_broadcast_interval_us(gap_us)
 	_last_broadcast_us = now_us
 	_broadcast_state()
@@ -1516,8 +1525,7 @@ func receive_input_batch(data: PackedByteArray) -> void:
 		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	# Liveness: stamp actual receipt time (before any NetworkSimManager delay).
-	if _peer_last_seen.has(sender_id):
-		_peer_last_seen[sender_id] = maxf(_peer_last_seen[sender_id], local_time())
+	_note_peer_alive(sender_id)
 	if not _rate_ok(sender_id, _INPUT_BATCH_RATE_CAP_PER_S,
 			_input_rate_window_start, _input_rate_count):
 		return
@@ -1617,7 +1625,7 @@ func _apply_world_state(packed: PackedByteArray) -> void:
 	var keepers: PackedByteArray = s.slice(keepers_at.x, keepers_at.y)
 	s = KeeperWireTail.without(s, keepers_at)
 	var now: float = local_time()
-	if _last_ws_arrival_time > 0.0:
+	if _last_ws_arrival_time > 0.0 and is_cadence_gap(now - _last_ws_arrival_time):
 		var expected_interval: float = 1.0 / Constants.STATE_RATE
 		var gap: float = now - _last_ws_arrival_time
 		var jitter: float = absf(gap - expected_interval)
@@ -1661,19 +1669,21 @@ func _apply_world_state(packed: PackedByteArray) -> void:
 	world_state_received.emit(s)
 
 # ── Clock Sync ────────────────────────────────────────────────────────────────
-@rpc("any_peer", "reliable")
+# Unreliable, both ways: a probe that waits on a retransmit, or queues behind
+# other reliable traffic, comes back with that wait in its round trip and skews
+# the offset by half of it. A lost probe only skips a sample.
+@rpc("any_peer", "unreliable")
 func send_ping(client_send_time: float) -> void:
 	if not is_host:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
-	if _peer_last_seen.has(peer_id):
-		_peer_last_seen[peer_id] = maxf(_peer_last_seen[peer_id], local_time())
+	_note_peer_alive(peer_id)
 	NetworkSimManager.send(
 		func(cst: float, pid: int) -> void:
 			receive_pong.rpc_id(pid, cst, local_time()),
-		[client_send_time, peer_id], true)
+		[client_send_time, peer_id], false)
 
-@rpc("authority", "reliable")
+@rpc("authority", "unreliable")
 func receive_pong(client_send_time: float, host_time: float) -> void:
 	if is_host or _clock_sync == null:
 		return
@@ -1683,7 +1693,7 @@ func receive_pong(client_send_time: float, host_time: float) -> void:
 			_clock_sync.record_pong(cst, ht, local_time())
 			if not was_ready and _clock_sync.is_ready:
 				clock_ready.emit(),
-		[client_send_time, host_time], true)
+		[client_send_time, host_time], false)
 
 # ── Host-measured peer RTT ────────────────────────────────────────────────────
 # The host times a round trip to each peer ITSELF so lag-comp claim validation
@@ -1714,6 +1724,7 @@ func host_pong(host_send_time: float) -> void:
 		return
 	# Capture the sender before the sim defers the callable (it loses RPC context).
 	var peer_id: int = multiplayer.get_remote_sender_id()
+	_note_peer_alive(peer_id)
 	NetworkSimManager.send(
 		func(pid: int, sent: float) -> void:
 			_record_host_measured_rtt(pid, (local_time() - sent) * 1000.0),
@@ -2650,6 +2661,11 @@ func sync_lobby_roster(roster: Array) -> void:
 	pending_lobby_roster = roster
 	lobby_roster_synced.emit(roster)
 
+func _note_peer_alive(peer_id: int) -> void:
+	if _peer_last_seen.has(peer_id):
+		_peer_last_seen[peer_id] = maxf(_peer_last_seen[peer_id], local_time())
+
+
 func _grant_load_grace(peer_id: int) -> void:
 	if _peer_last_seen.has(peer_id):
 		_peer_last_seen[peer_id] = maxf(_peer_last_seen[peer_id],
@@ -3108,7 +3124,7 @@ func notify_spectator_demoted(peer_id: int) -> void:
 # including the sender, then self-emits — so offline / free play degrades to
 # the local emit (connected_peer_ids() is empty) and bots still obey.
 # Reliable: a ping is a discrete message; a dropped one is a lost order.
-# Display filtering (team-only) and bot directives live in GameManager.
+# Display filtering (team-only) and the bot's order are SmartPingCoordinator's.
 
 var _last_smart_ping_ms: Dictionary = {}   # peer_id -> Time.get_ticks_msec()
 
@@ -3148,6 +3164,23 @@ func notify_smart_ping(sender_peer_id: int, ping_type: int,
 			func(pid: int, t: int, tgt: int, pos: Vector3) -> void:
 				smart_ping_received.emit(pid, t, tgt, pos),
 			[sender_peer_id, ping_type, target_peer_id, world_pos], true)
+
+
+# Host: tells every peer which bot took a ping as its order, itself included.
+func send_smart_ping_ack(obeyer_peer_id: int, pinger_peer_id: int) -> void:
+	if not is_host:
+		return
+	for remote_id: int in connected_peer_ids():
+		notify_smart_ping_ack.rpc_id(remote_id, obeyer_peer_id, pinger_peer_id)
+	smart_ping_acknowledged.emit(obeyer_peer_id, pinger_peer_id)
+
+
+@rpc("authority", "reliable")
+func notify_smart_ping_ack(obeyer_peer_id: int, pinger_peer_id: int) -> void:
+	NetworkSimManager.send(
+			func(obeyer: int, pinger: int) -> void:
+				smart_ping_acknowledged.emit(obeyer, pinger),
+			[obeyer_peer_id, pinger_peer_id], true)
 
 
 # Per-peer anti-spam gate; passing records the attempt. Wall clock is fine

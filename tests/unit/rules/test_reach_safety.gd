@@ -3,9 +3,10 @@ extends GutTest
 # Reachable-set (pursuit-evasion) possession safety. Whether a defender threatens
 # the puck is "can he get a stick to it given his momentum + reaction," not raw
 # proximity. These pin the behaviours the old proximity model couldn't express:
-# a hard charger is evadable (he overshoots), a contained/jockeying defender can't
-# strip a careful carrier, a stick on the puck is a real threat, and handling
-# (how far the carrier holds the puck off his body) threads tighter seams. The
+# a charger aimed where the carrier was overshoots, a contained/jockeying defender
+# can't strip a careful carrier, a stick on the puck is a real threat, a cut is
+# priced along its route (never through or past the man), and handling (how far
+# the carrier holds the puck off his body) threads tighter seams. The
 # safety values the current calibration gives at the reference looks are the
 # snapshot, test_reach_safety_calibration_snapshot.
 
@@ -16,13 +17,11 @@ const HANDLE: float = 0.9   # base puck-protect reach (Hands scales this)
 const SLACK: float = 1e-4
 
 
-# Carrier's evadability [0,1]: safety at the best seam in his handling envelope.
+# Carrier's evadability [0,1]: the best cut in his handling envelope, priced along
+# its route.
 func _evade(car: Vector3, car_v: Vector3, opps: Array[Vector3],
 		vels: Array[Vector3], handle: float = HANDLE) -> float:
-	var seam: Vector3 = AICarrySpace.best_evade_point(car, car_v, opps, vels, handle)
-	var clear: float = AICarrySpace.reach_clearance(
-			seam, AICarrySpace.EVADE_HORIZON_S, opps, vels)
-	return AICarrySpace.clearance_to_safety(clear)
+	return AIEvadeRead.evade_safety_reference(car, car_v, opps, vels, handle)
 
 
 func test_no_defenders_is_fully_safe() -> void:
@@ -61,54 +60,80 @@ func _charge(start: Vector3, speed: float) -> float:
 	return _evade(Vector3.ZERO, Vector3(5, 0, 0), opps, vels)
 
 
-func test_momentum_overshoot_raises_evadability() -> void:
-	# Over charge speed, evadability is a valley: closing first brings his reach
-	# onto the puck, then his momentum carries it past where the carrier was. Past
-	# the worst speed more pace only takes him further past, and the full charge
-	# reads more evadable than the worst one.
-	for start: Vector3 in [Vector3(3, 0, 0), Vector3(3, 0, 1)]:
-		var row: Array[float] = []
-		for k: int in range(25):
-			row.append(_charge(start, 0.5 * k))
-		var worst: int = row.find(row.min())
-		for i: int in range(1, worst + 1):
-			assert_lte(row[i], row[i - 1] + SLACK,
-					"closing from %s: evadability rises before the worst speed" % start)
-		for i: int in range(worst + 1, row.size()):
-			assert_gte(row[i], row[i - 1] - SLACK,
-					"charging from %s at %.1f m/s: more pace never reads harder to evade"
-					% [start, 0.5 * i])
-		assert_gt(row[row.size() - 1], row[worst],
-				"the committed charger from %s overshoots" % start)
+# A defender from `start` charging at `aim` at `speed`, the carrier skating +X at
+# 5 m/s from the origin.
+func _charge_at(start: Vector3, aim: Vector3, speed: float) -> float:
+	var opps: Array[Vector3] = [start]
+	var vels: Array[Vector3] = [(aim - start).normalized() * speed]
+	return _evade(Vector3.ZERO, Vector3(5, 0, 0), opps, vels)
 
 
-func test_approach_lowers_evadability_for_a_standing_carrier() -> void:
-	# No momentum on either side: the nearer a stationary defender's stick, the
-	# less room the seam has.
-	var prev: float = INF
-	for gap: float in [3.0, 2.5, 2.0, 1.6, 1.2, 1.0, 0.8, 0.6, 0.4]:
-		var opps: Array[Vector3] = [Vector3(gap, 0, 0.3)]
-		var vels: Array[Vector3] = [Vector3.ZERO]
-		var safety: float = _evade(Vector3.ZERO, Vector3.ZERO, opps, vels)
-		assert_lte(safety, prev + SLACK, "a defender %.1f m off never leaves more room" % gap)
-		prev = safety
-	assert_lt(prev, 1.0, "a stick at the puck takes room away")
+func test_a_charger_aimed_where_he_was_overshoots() -> void:
+	# His momentum carries his reach where he is going, so a man charging at the
+	# ice the carrier is leaving is never harder to evade than the same man
+	# charging at the ice he is skating into; at a committed pace, easier.
+	for start: Vector3 in [Vector3(2, 0, 2), Vector3(3, 0, 2), Vector3(0, 0, 3)]:
+		for k: int in range(2, 25):
+			var pace: float = 0.5 * k
+			var behind: float = _charge_at(start, Vector3(-1.5, 0, 0), pace)
+			var ahead: float = _charge_at(start, Vector3(1.5, 0, 0), pace)
+			assert_gte(behind, ahead - SLACK,
+					"from %s at %.1f m/s: aimed behind him %.2f, ahead %.2f"
+					% [start, pace, behind, ahead])
+		assert_gt(_charge_at(start, Vector3(-1.5, 0, 0), 10.0),
+				_charge_at(start, Vector3(1.5, 0, 0), 10.0),
+				"the committed charger from %s aimed where he was flies past" % start)
 
 
-func test_stick_on_the_puck_is_a_real_threat() -> void:
-	# Defender's stick right on the puck, no momentum — the carrier can't just
-	# skate out of it in one cut.
-	var opps: Array[Vector3] = [Vector3(0.8, 0, 0.3)]
-	var vels: Array[Vector3] = [Vector3.ZERO]
-	assert_lt(_evade(Vector3.ZERO, Vector3(3, 0, 0), opps, vels), 0.35,
-			"a stick on the puck is genuine pressure")
+func test_a_closer_defender_ahead_is_never_safer() -> void:
+	# A stationary defender on or beside the carrier's line: the nearer he stands,
+	# the less room any cut has, standing or skating at him. The carrier cannot
+	# skate through him, nor past him inside his stick, to the ice beyond him.
+	for pace: float in [0.0, 3.0, 5.0, 7.0]:
+		for off: float in [0.0, 0.3, 0.8]:
+			var prev: float = INF
+			for gap: float in [4.0, 3.5, 3.0, 2.5, 2.0, 1.6, 1.2, 1.0, 0.8, 0.6]:
+				var opps: Array[Vector3] = [Vector3(gap, 0, off)]
+				var vels: Array[Vector3] = [Vector3.ZERO]
+				var safety: float = _evade(Vector3.ZERO, Vector3(pace, 0, 0), opps, vels)
+				assert_lte(safety, prev + SLACK,
+						"carrier at %.0f m/s, defender %.1f m ahead (%.1f off the line): never more room"
+						% [pace, gap, off])
+				prev = safety
+			assert_lt(prev, 1.0, "at %.0f m/s a stick at the puck takes room away" % pace)
 
 
-func test_stationary_wall_ahead_is_tight() -> void:
-	var opps: Array[Vector3] = [Vector3(1.5, 0, 0)]
-	var vels: Array[Vector3] = [Vector3.ZERO]
-	assert_lt(_evade(Vector3.ZERO, Vector3(5, 0, 0), opps, vels), 0.35,
-			"skating into a stationary defender 1.5 m ahead is tight")
+func test_the_carrier_never_projects_through_a_body() -> void:
+	# Wherever his momentum is read to take him, his body is no nearer a defender
+	# (dead-reckoned to the same instant) than their bodies meet.
+	var contact: float = AICarrySpace.EVADE_BODY_CONTACT_M
+	for pace: float in [3.0, 5.0, 7.0, 9.0]:
+		for gap: float in [0.8, 1.0, 1.5, 2.0, 3.0, 4.0]:
+			for d_vel: Vector3 in [Vector3.ZERO, Vector3(-3, 0, 0), Vector3(2, 0, 0.5)]:
+				var car_v := Vector3(pace, 0, 0)
+				var opps: Array[Vector3] = [Vector3(gap, 0, 0.2)]
+				var vels: Array[Vector3] = [d_vel]
+				var t: float = AIArrival.body_contact_time(Vector3.ZERO, car_v, opps, vels, contact,
+						AICarrySpace.EVADE_HORIZON_S)
+				assert_between(t, 0.0, AICarrySpace.EVADE_HORIZON_S)
+				var sep: float = (car_v * t).distance_to(opps[0] + d_vel * t)
+				assert_gte(sep, contact - SLACK,
+						"%.0f m/s at a man %.1f m ahead moving %s: %.2f m apart at %.2f s"
+						% [pace, gap, d_vel, sep, t])
+
+
+func test_a_man_behind_or_beside_does_not_stop_the_carrier() -> void:
+	# Only a body he skates into ends his momentum: one he is pulling away from,
+	# or one his line clears, leaves the whole horizon.
+	var h: float = AICarrySpace.EVADE_HORIZON_S
+	var car_v := Vector3(6, 0, 0)
+	var behind: Array[Vector3] = [Vector3(-0.5, 0, 0)]
+	var beside: Array[Vector3] = [Vector3(1.5, 0, 1.0)]
+	var still: Array[Vector3] = [Vector3.ZERO]
+	assert_eq(AIArrival.body_contact_time(Vector3.ZERO, car_v, behind, still,
+			AICarrySpace.EVADE_BODY_CONTACT_M, h), h)
+	assert_eq(AIArrival.body_contact_time(Vector3.ZERO, car_v, beside, still,
+			AICarrySpace.EVADE_BODY_CONTACT_M, h), h)
 
 
 # A defender 2.2 m ahead of a 5 m/s carrier, skating with him at `pace`.
@@ -193,7 +218,7 @@ func test_seam_points_into_open_space() -> void:
 	# to the right of the carrier's line.
 	var opps: Array[Vector3] = [Vector3(1.0, 0, 2.0)]
 	var vels: Array[Vector3] = [Vector3.ZERO]
-	var seam: Vector3 = AICarrySpace.best_evade_point(
+	var seam: Vector3 = AIEvadeRead.best_evade_point(
 			Vector3.ZERO, Vector3(4, 0, 0), opps, vels, HANDLE)
 	assert_lt(seam.z, 0.5, "seam leans away from the defender on the +Z side")
 
@@ -262,7 +287,7 @@ func test_evade_seam_never_leaves_the_playing_surface() -> void:
 	var carrier := Vector3(GameRules.INNER_HALF_WIDTH - 0.4, 0, 0)
 	var opps: Array[Vector3] = [carrier + Vector3(-2.0, 0, 0)]
 	var vels: Array[Vector3] = [Vector3.ZERO]
-	var seam: Vector3 = AICarrySpace.best_evade_point(
+	var seam: Vector3 = AIEvadeRead.best_evade_point(
 			carrier, Vector3.ZERO, opps, vels, HANDLE)
 	assert_lte(seam.x, GameRules.INNER_HALF_WIDTH, "seam stays on the playing surface")
 	assert_gt(absf(seam.z), 0.5, "with the wall at the back, the escape runs along the boards")

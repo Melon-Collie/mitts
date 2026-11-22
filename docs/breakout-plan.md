@@ -331,7 +331,8 @@ Same methodology as the duel harness (#27):
   2. ~~The retrieval race read is net-blind~~ — **LANDED as the net-aware
      ETA**: `time_to_arrive` itself now routes around the cage when the
      straight segment crosses it (four corner waypoints — both posts, the
-     back alley, the front lip — each priced as two calibrated direct legs;
+     back alley, the front lip — each priced as calibrated direct legs, none
+     of them through the frame;
      a near-free z-gate keeps open ice bit-identical, and endpoints INSIDE
      the frame box keep the direct model — race-home reads target the net
      center as their home proxy). Every consumer inherits honest routing:

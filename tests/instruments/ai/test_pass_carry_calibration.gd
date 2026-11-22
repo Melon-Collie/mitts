@@ -292,7 +292,7 @@ func _commit_row(view: Dictionary, commit: Array, interceptor: int, release_tick
 			var t_down: float = (vy + root) / GameRules.GRAVITY_M_S2
 			var flown: float = priced_speed * t_down
 			var landed_len: float = line_len - flown
-			var landed_speed: float = landed_len / AIPuckLane._friction_traverse_time(landed_len,
+			var landed_speed: float = landed_len / AIPuckLane.friction_traverse_time(landed_len,
 					priced_speed) if landed_len > 0.01 else priced_speed
 			var caps_j: AISkaterCaps = commit[3][j]
 			var reach: float = AILaneReach.defender_reach(caps_j)
@@ -305,7 +305,7 @@ func _commit_row(view: Dictionary, commit: Array, interceptor: int, release_tick
 			var landed: float = AILaneReach.block(from.x, from.z, dir.x, dir.z, read_len,
 					landed_speed, opps[j].x, opps[j].z, vels[j].x, vels[j].z, reach, vmax, acc,
 					delay, flown, t_down).x
-			var eff: float = line_len / AIPuckLane._friction_traverse_time(line_len, priced_speed)
+			var eff: float = line_len / AIPuckLane.friction_traverse_time(line_len, priced_speed)
 			var whole: float = AILaneReach.block(from.x, from.z, dir.x, dir.z, read_len, eff,
 					opps[j].x, opps[j].z, vels[j].x, vels[j].z, reach, vmax, acc,
 					delay).x
@@ -695,7 +695,7 @@ func _receiver_row(duel: Object, view: Dictionary, rec: Dictionary, interceptor:
 	v.y = 0.0
 	var speed: float = maxf(v.length(), 1.0)
 	var dist: float = Vector2(spot.x - from.x, spot.z - from.z).length()
-	var flight: float = AIPuckLane._friction_traverse_time(dist, speed)
+	var flight: float = AIPuckLane.friction_traverse_time(dist, speed)
 	var receiver: Object = _sim(duel, int(rec["pass_peer"]))
 	var r_vel: Vector3 = receiver.vel if receiver != null else Vector3.ZERO
 	var settle: float = AIFeedReception.receiver_settle_s(
@@ -733,7 +733,7 @@ func _lead_start(duel: Object, rec: Dictionary, tick: int, commit: Array) -> Dic
 		return {}
 	var from: Vector3 = duel.puck_pos
 	var speed: float = maxf(Vector2(duel.puck_vel.x, duel.puck_vel.z).length(), 1.0)
-	var flight: float = AIPuckLane._friction_traverse_time(
+	var flight: float = AIPuckLane.friction_traverse_time(
 			Vector2(spot.x - from.x, spot.z - from.z).length(), speed)
 	var at_commit: Array = commit[15] if commit.size() > 15 else []
 	var since: float = (tick - int(commit[0])) * Duel.DT if not commit.is_empty() else 0.0

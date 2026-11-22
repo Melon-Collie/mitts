@@ -183,7 +183,7 @@ The foundation is unusually complete for a game that hasn't tried to ship
 analytics. Two assets do most of the work:
 
 **The boxscore + persistence rails.** `PlayerStats` already carries goals,
-assists, SOG, hits/hits-taken, takeaways, interceptions, giveaways, blocks, faceoff W/L, TOI,
+assists, SOG, hits/hits-taken, takeaways, giveaways, blocks, faceoff W/L, TOI,
 and goal-flavor tags (one-timer / tip / OT / GWG), all host-authoritative and
 broadcast. `career_stats` persists them to Supabase, `career_totals` aggregates
 lifetime + per-60 rates, `recent_games_for()` returns per-game history. Adding a
@@ -450,7 +450,7 @@ disagree.
    individual map is the career heatmap (§7.2).
 2. **Tale of the tape.** Head-to-head comparison bars (home ↔ away) for the
    broadcast box a viewer already knows: goals, shots on goal, faceoff %, hits,
-   blocked shots, takeaways, interceptions, giveaways, and icings under NHL rules. A past game
+   blocked shots, takeaways, giveaways, and icings under NHL rules. A past game
    shows the rows its record can fill: the shot log gives goals, shots and
    blocks; a local replay's footer box score adds the rest; a backend game has
    no box score, since `career_stats` holds humans only.

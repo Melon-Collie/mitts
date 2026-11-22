@@ -2,10 +2,11 @@ class_name AIStickLiftRead
 extends RefCounted
 
 # Whether an on-puck defender lifts the carrier's stick rather than jabbing at
-# the puck. The jab needs a blade path to the puck; a carrier who has the puck on
-# the far side of his body has taken that path away. The lift needs only the
-# shaft, which crosses in front of the body from his hands — so it is the answer
-# exactly when the puck is shielded and the shaft is still in reach.
+# the puck. The game's poke reads no body, so a jab through the carrier still
+# strips a puck in reach; a bot does not throw one, as a real defender cannot.
+# The lift needs only the shaft, which crosses in front of the body from his
+# hands — so it is the bot's play exactly when the carrier's body stands on the
+# line to the puck and the shaft is still in reach.
 
 # Where a lifted blade's contact point sits: SkaterController.blade_height plus
 # blade_lift_height (test_stick_lift_read.gd holds the pair).

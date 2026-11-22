@@ -67,8 +67,7 @@ var lateral_grip: float = 1.0
 
 # Reception ceiling lean (= Skater.reception_ceiling_mult, from the blade
 # curve): scales the deflect ceiling + on-the-line bonus this receiver's blade can
-# soak. Carried per-peer; the pass-speed solver does not read it and prices the
-# league constant.
+# soak. A passer reads it through AIFeedReception.receiver_ceiling_mult.
 var reception_ceiling_mult: float = 1.0
 
 # Backhand power coefficient (= SkaterController.backhand_power_coefficient — a
@@ -117,11 +116,20 @@ var body_check_transfer: float = 0.65
 var height_mult: float = 1.0
 
 # How far the carrier holds/protects the puck off its body while HANDLING it —
-# the reach that sets how tight an evasion seam it can thread (best_evade_point).
+# the reach that sets how tight an evasion seam it can thread (AIEvadeRead).
 # Scaled by the blade lever (max_blade_speed over its base). Puck HANDLING, not
 # pass reception. Default is the league carry-handle reach
 # (AIBotMechanics.EVADE_CARRY_HANDLE_M).
 var handle_reach: float = 0.9
+
+# How near his centre a carried puck comes (SkaterController.carry_reach_min_m,
+# m), and how much further out the floor sits under the skating fold
+# (carry_reach_fold_m): a cursor nearer than that holds the puck out to it along
+# its bearing (CarryPostureRules.held_out). Defaults are the league build's.
+const LEAGUE_CARRY_REACH_MIN_M: float = 0.97
+const LEAGUE_CARRY_REACH_FOLD_M: float = 0.15
+var carry_reach_min_m: float = LEAGUE_CARRY_REACH_MIN_M
+var carry_reach_fold_m: float = LEAGUE_CARRY_REACH_FOLD_M
 
 # Half-angle of the blade's reach cone: how far off its FACING the body can
 # place the blade WITHOUT turning — arm ROM plus torso twist
@@ -142,8 +150,9 @@ var facing_drag_speed_braking: float = 10.0
 # How fast it winds a turn up, rad/s² (FacingRules.turn_rate).
 var facing_turn_accel_max: float = 300.0
 # The body's contact disc (girth-scaled): how close to the boards and the cage its
-# centre can get.
-var body_radius: float = 0.35
+# centre can get. LEAGUE_BODY_RADIUS_M is the unscaled build's.
+const LEAGUE_BODY_RADIUS_M: float = 0.35
+var body_radius: float = LEAGUE_BODY_RADIUS_M
 # A carrier on the boards squares up along them (BoardPlayRules
 # .board_shield_facing): the probe distance it starts at and the most it turns.
 var board_shield_probe: float = 1.1

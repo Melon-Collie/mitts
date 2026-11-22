@@ -202,6 +202,18 @@ static func predict_at(pos: Vector3, vel: Vector3, lead_time_s: float,
 # straight-line guess against the predicted intercept point. Clamped to
 # `max_lead_s` so a target fleeing faster than the projectile doesn't diverge.
 # Returns 0 for a non-positive projectile speed.
+# `pos` moving at `vel`, `time_s` on, for a man who gives up no more ice than his
+# stop takes: carried along his motion no further than he slides braking at
+# `decel_m_s2`.
+static func predict_stopping(pos: Vector3, vel: Vector3, time_s: float,
+		decel_m_s2: float) -> Vector3:
+	var speed: float = Vector2(vel.x, vel.z).length()
+	if speed < 1e-4:
+		return pos
+	var slide: float = minf(speed * time_s, speed * speed / (2.0 * decel_m_s2))
+	return pos + Vector3(vel.x, 0.0, vel.z) * (slide / speed)
+
+
 static func intercept_time(shooter_pos: Vector3, target_pos: Vector3,
 		target_vel: Vector3, accel: Vector3,
 		proj_speed: float, max_lead_s: float, steps: int = 6,

@@ -8,6 +8,7 @@ PING_PICK_HIM_UP,Pick him up!,¡Márcalo!
 PING_GET_HIM,Get him!,¡A por él!
 PING_COVER_HIM,Cover him!,¡Cúbrelo!
 PING_OVER_THERE,Over there!,¡Por allí!
+PING_ACK,On it!,¡Voy!
 STAR_FIRST,1ST STAR,1.ª ESTRELLA
 STAR_SECOND,2ND STAR,2.ª ESTRELLA
 STAR_THIRD,3RD STAR,3.ª ESTRELLA
@@ -264,7 +265,6 @@ TAPE_FACEOFF_PCT,Faceoff %,% de saques ganados
 TAPE_HITS,Hits,Cargas
 TAPE_BLOCKED_SHOTS,Blocked shots,Tiros bloqueados
 TAPE_TAKEAWAYS,Takeaways,Robos
-TAPE_INTERCEPTIONS,Interceptions,Intercepciones
 TAPE_GIVEAWAYS,Giveaways,Pérdidas
 TAPE_ADVANCED,Advanced,Avanzadas
 TAPE_CORSI,Shot attempts (Corsi),Intentos de tiro (Corsi)
@@ -299,8 +299,6 @@ STAT_FEED_SHOT_ON_GOAL,SHOT ON GOAL,TIRO A PUERTA
 STAT_FEED_BLOCKED_SHOT,BLOCKED SHOT,TIRO BLOQUEADO
 STAT_FEED_HIT,HIT,CARGA
 STAT_FEED_TAKEAWAY,TAKEAWAY,ROBO
-STAT_FEED_INTERCEPTION,INTERCEPTION,INTERCEPCIÓN
-CAREER_INTERCEPTIONS,Interceptions,Intercepciones
 CAREER_GROUP_SPECIAL_TEAMS,Special teams,Equipos especiales
 CAREER_PP_GOALS,Power-play goals,Goles en superioridad
 CAREER_SH_GOALS,Short-handed goals,Goles en inferioridad
@@ -393,6 +391,8 @@ OPTIONS_POSSESSION_PULSE,Possession Pulse,Pulso de posesión
 OPTIONS_POSSESSION_PULSE_NOTE,"Sends a pulse across the ice when the puck changes hands, bigger on a turnover.","Lanza un pulso por el hielo cuando el disco cambia de manos, más grande en una pérdida."
 OPTIONS_LOOSE_PUCK_HALO,Loose Puck Halo,Halo del disco suelto
 OPTIONS_LOOSE_PUCK_HALO_NOTE,Circles the puck while nobody has it.,Rodea el disco mientras nadie lo tiene.
+OPTIONS_TEAMMATE_PINGS,Teammate Pings,Avisos de compañeros
+OPTIONS_TEAMMATE_PINGS_NOTE,"Shows and plays other players' call-outs. Your own are always shown, and bots obey either way.","Muestra y reproduce los avisos de otros jugadores. Los tuyos siempre se muestran, y los bots obedecen igualmente."
 OPTIONS_IMPACT_NONE,None,Ninguno
 OPTIONS_IMPACT_LOW,Low,Bajo
 OPTIONS_IMPACT_MEDIUM,Medium,Medio
@@ -438,8 +438,6 @@ PUCK_POINTS,Point Producer,Productor de puntos
 PUCK_POINTS_DESC,Put up %d points.,Suma %d puntos.
 PUCK_HITS,Hitter,Pegador
 PUCK_HITS_DESC,Land %d hits.,Da %d cargas.
-PUCK_INTERCEPTIONS,Lane Reader,Lector de pases
-PUCK_INTERCEPTIONS_DESC,Intercept %d passes.,Intercepta %d pases.
 PUCK_TAKEAWAYS,Thief,Ladrón
 PUCK_TAKEAWAYS_DESC,Record %d takeaways.,Consigue %d robos.
 PUCK_SHOTS_BLOCKED,Shot Blocker,Bloqueador

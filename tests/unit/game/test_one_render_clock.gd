@@ -32,9 +32,8 @@ func _body_instant(rtt_ms: float) -> float:
 func test_the_local_stamp_lead_is_the_lead_every_consumer_reads() -> void:
 	for rtt: float in RTTS_MS:
 		var cs: RefCounted = ClockSyncScript.new()
-		cs.record_pong(0.0, 0.05, 0.1)
-		cs.record_pong(0.0, 0.05, 0.1)
-		cs.record_pong(0.0, 0.05, 0.1)
+		for _i in range(cs.INITIAL_PING_COUNT):
+			cs.record_pong(0.0, 0.05, 0.1)
 		cs.rtt_ms = rtt
 		cs.advance_input_lead()
 		assert_almost_eq(cs.current_input_lead_s(),

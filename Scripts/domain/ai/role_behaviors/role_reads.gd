@@ -171,6 +171,7 @@ static func collect_teammates_excluding_self(ctx: RoleContext,
 	out.clear()
 	ctx.scratch_teammate_caps.clear()
 	ctx.scratch_teammate_vels.clear()
+	ctx.scratch_teammate_ids.clear()
 	for pid: int in ctx.snapshot.skater_states:
 		if pid == ctx.peer_id:
 			continue
@@ -178,6 +179,7 @@ static func collect_teammates_excluding_self(ctx: RoleContext,
 			out.append(ctx.snapshot.skater_states[pid].position)
 			ctx.scratch_teammate_caps.append(ctx.caps_by_peer.get(pid))
 			ctx.scratch_teammate_vels.append(ctx.snapshot.skater_states[pid].velocity)
+			ctx.scratch_teammate_ids.append(pid)
 
 
 # The opposing attack's possession read (AIPossessionValue) against our skaters

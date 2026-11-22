@@ -252,8 +252,9 @@ func test_a_defender_is_not_walked_into_his_own_net() -> void:
 			n += 1
 			conceded_sum += c
 			worst = minf(worst, c)
+			var label := "z%.0f/x%.0f" % [dz, cx]
 			if c < MIN_CONCEDED_DEPTH_M:
-				walked.append("z%.0f/x%.0f" % [dz, cx])
+				walked.append(label)
 			row += "  x%+5.1f closest to own net %5.1f m" % [cx, c]
 		gut.p(row)
 	gut.p("  → defender's closest approach to his own net: mean %.1f m, worst %.1f m" % [

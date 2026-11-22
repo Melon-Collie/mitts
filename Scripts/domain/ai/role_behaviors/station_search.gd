@@ -69,16 +69,27 @@ static func generate_candidates_around(self_pos: Vector3,
 	return result
 
 
-# Rejects candidates outside the playable rink, in either crease, or past either
-# goal line.
+# Rejects candidates off the playing surface (rounded corners honoured), in
+# either crease, or past either goal line.
 static func is_legal_position(c: Vector3) -> bool:
-	if absf(c.x) > GameRules.RINK_HALF_WIDTH - RINK_INSET_M:
+	var xz := Vector2(c.x, c.z)
+	if not GameRules.clamp_to_rink_inner(xz, RINK_INSET_M).is_equal_approx(xz):
 		return false
 	if absf(c.z) > GameRules.GOAL_LINE_Z - GOAL_LINE_BUFFER_M:
 		return false
-	if CreaseRules.is_in_crease(Vector2(c.x, c.z)):
+	return not CreaseRules.is_in_crease(xz)
+
+
+# is_legal_position without its goal lines: the ice past them is legal too, on
+# the playing surface (rounded corners honoured) and outside the cages. For a
+# stand taken on a man who is down there himself.
+static func is_legal_ice(c: Vector3) -> bool:
+	var xz := Vector2(c.x, c.z)
+	if not GameRules.clamp_to_rink_inner(xz, RINK_INSET_M).is_equal_approx(xz):
 		return false
-	return true
+	if CreaseRules.is_in_crease(xz):
+		return false
+	return GameRules.push_out_of_net(xz).is_equal_approx(xz)
 
 
 # `teammate_positions` must exclude self (AIRoleReads.collect_teammates_excluding_self).
@@ -91,6 +102,235 @@ static func too_close_to_teammate(c: Vector3,
 		if dx * dx + dz * dz < r2:
 			return true
 	return false
+
+
+# ── What a spot adds to the attack ───────────────────────────────────────────
+# Two attackers closer than this are one option to the defence: a defender
+# standing between them gets his stick to a feed to either.
+const ONE_DEFENDER_SPAN_M: float = 2.0 * AIBotMechanics.BLADE_REACH_M
+
+# Off-puck teammates' feed values, refilled by fill_feed_values (one worker).
+static var _mate_values: Array[float] = []
+
+
+# The one-timer off our carrier's feed at each of `teammates` (0 for the
+# carrier himself), into this file's scratch for shared_cover.
+static func fill_feed_values(ctx: RoleContext, carrier_pos: Vector3,
+		goalie_pos: Vector3, opp_positions: Array[Vector3],
+		teammates: Array[Vector3]) -> void:
+	_mate_values.clear()
+	for t: Vector3 in teammates:
+		if Vector2(t.x - carrier_pos.x, t.z - carrier_pos.z).length() < 0.5:
+			_mate_values.append(0.0)
+			continue
+		_mate_values.append(AIActionScoring.score_pass_value(carrier_pos, t,
+				ctx.attacking_goal_pos, goalie_pos, opp_positions,
+				AIPuckLane.expected_pass_speed(carrier_pos, t), ctx.scratch_opp_caps, true))
+
+
+# Per defender (index-matched to the opponents fill_opened_values read), the
+# best feed to a teammate with him gone from the ice: what his leaving to cover a
+# man elsewhere opens. Refilled by fill_opened_values (one worker).
+static var _opened: Array[float] = []
+static var _opps_less: Array[Vector3] = []
+static var _caps_less: Array = []
+
+
+# What each of the defence's bodies holds shut in our carrier's feeds to
+# `teammates` (the one-timer off each, the carrier himself left out), read with
+# that body gone from the ice, into this file's scratch for drawn_open.
+# `opp_positions` and the context's scratch_opp_caps are the same men.
+static func fill_opened_values(ctx: RoleContext, carrier_pos: Vector3,
+		goalie_pos: Vector3, opp_positions: Array[Vector3],
+		teammates: Array[Vector3]) -> void:
+	_opened.clear()
+	for i: int in opp_positions.size():
+		_opps_less.clear()
+		_caps_less.clear()
+		for j: int in opp_positions.size():
+			if j == i:
+				continue
+			_opps_less.append(opp_positions[j])
+			_caps_less.append(ctx.scratch_opp_caps[j] if j < ctx.scratch_opp_caps.size() else null)
+		var best: float = 0.0
+		for t: Vector3 in teammates:
+			if Vector2(t.x - carrier_pos.x, t.z - carrier_pos.z).length() < 0.5:
+				continue
+			best = maxf(best, AIActionScoring.score_pass_value(carrier_pos, t,
+					ctx.attacking_goal_pos, goalie_pos, _opps_less,
+					AIPuckLane.expected_pass_speed(carrier_pos, t), _caps_less, true))
+		_opened.append(best)
+
+
+# What a man at `c` makes the defence give up elsewhere: the body nearest him
+# (of the `opp_positions` fill_opened_values read) is the one who comes to cover
+# him there, and his leaving opens the best feed without him. INF with nobody
+# to come.
+static func drawn_open(c: Vector3, opp_positions: Array[Vector3]) -> float:
+	var nearest: int = -1
+	var best_d2: float = INF
+	for i: int in mini(opp_positions.size(), _opened.size()):
+		var dx: float = c.x - opp_positions[i].x
+		var dz: float = c.z - opp_positions[i].z
+		if dx * dx + dz * dz < best_d2:
+			best_d2 = dx * dx + dz * dz
+			nearest = i
+	return _opened[nearest] if nearest >= 0 else INF
+
+
+# The best feed value (fill_feed_values) of a teammate within ONE_DEFENDER_SPAN_M
+# of `c`: what the carrier already has in the option a spot at `c` would share
+# with him. A spot is worth its own value less this. 0 with nobody in reach.
+static func shared_cover(c: Vector3, teammates: Array[Vector3]) -> float:
+	var r2: float = ONE_DEFENDER_SPAN_M * ONE_DEFENDER_SPAN_M
+	var best: float = 0.0
+	for i: int in mini(teammates.size(), _mate_values.size()):
+		var dx: float = c.x - teammates[i].x
+		var dz: float = c.z - teammates[i].z
+		if dx * dx + dz * dz < r2:
+			best = maxf(best, _mate_values[i])
+	return best
+
+
+# Our shots a body in front of their net could help, refilled by
+# fill_shot_plays (one worker): each one's release, the keeper square on it,
+# the odds it is taken and saved, and its rebound raced against both teams but
+# the man asking. The carrier's own is his miss; a teammate's is the lane to
+# him times his one-timer's miss off the feed.
+static var _play_release: Array[Vector3] = []
+# Each play's shooter: the carrier's peer id, or the teammate's (an index
+# stand-in when `teammates` is not the context's scratch_teammates).
+static var _play_shooter: Array[int] = []
+# What each station append_net_front_stations added is (station_key),
+# index-matched to what it appended. The same station keeps its key while the
+# play moves it.
+static var station_keys: Array[int] = []
+# How a station stands in front of its shot.
+const AT_REBOUND: int = 0
+const ON_SCREEN_LINE: int = 1
+const ON_TIP_LINE: int = 2
+# The crease top on the shot's line: the net-front man's one station, which
+# moves with the shooter's angle.
+const ON_SHOT_LINE: int = 3
+static var _play_keeper: Array[Vector3] = []
+static var _play_weight: Array[float] = []
+static var _play_rebound: Array[AIReboundValue] = []
+static var _play_rebound_base: Array[float] = []
+static var _play_rebound_gain_cap: Array[float] = []
+static var _screen_cfg := GoalieScreenRules.ScreenConfig.new()
+static var _no_vels: Array[Vector3] = []
+
+
+# The shots a body in front could help: our carrier's from where he stands, the
+# keeper as he is, and with `mates_shoot` each of `teammates` off a feed to him,
+# the keeper square on him. Their rebounds are raced against `teammates` and
+# the opponents where collect_teammates_excluding_self and collect_opponents
+# left them.
+static func fill_shot_plays(ctx: RoleContext, carrier_pos: Vector3,
+		goalie_pos: Vector3, opp_positions: Array[Vector3],
+		teammates: Array[Vector3], mates_shoot: bool = true) -> void:
+	_play_release.clear()
+	_play_shooter.clear()
+	_play_keeper.clear()
+	_play_weight.clear()
+	_play_rebound_base.clear()
+	_play_rebound_gain_cap.clear()
+	var goal: Vector3 = ctx.attacking_goal_pos
+	var release: Vector3 = AIPuckLane.release_point_toward(carrier_pos, goal)
+	var carrier: int = ctx.snapshot.puck_state.carrier_peer_id \
+			if ctx.snapshot != null and ctx.snapshot.puck_state != null else -1
+	_play_shooter.append(carrier)
+	_add_play(ctx, release, goalie_pos if goalie_pos.is_finite() else _keeper_square_on(goal, release),
+			1.0 - AIShotValue.set_keeper(release, goal), opp_positions, teammates)
+	if not mates_shoot:
+		return
+	var ids_match: bool = ctx.scratch_teammate_ids.size() == teammates.size()
+	var ti: int = -1
+	for t: Vector3 in teammates:
+		ti += 1
+		if Vector2(t.x - carrier_pos.x, t.z - carrier_pos.z).length() < 0.5 \
+				or (t.z - goal.z) * signf(goal.z) >= 0.0:
+			continue
+		var speed: float = AIPuckLane.expected_pass_speed(carrier_pos, t)
+		var lane: float = AIPuckLane.lane_clear(carrier_pos, t, opp_positions, speed, _no_vels,
+				ctx.scratch_opp_caps)
+		if lane <= 0.0:
+			continue
+		_play_shooter.append(ctx.scratch_teammate_ids[ti] if ids_match else -1000 - ti)
+		_add_play(ctx, t, _keeper_square_on(goal, t), lane * (1.0 - AIShotValue.feed(
+				carrier_pos, t, speed, goal, goalie_pos, true)), opp_positions, teammates)
+
+
+static func _add_play(ctx: RoleContext, release: Vector3, keeper: Vector3, weight: float,
+		opp_positions: Array[Vector3], teammates: Array[Vector3]) -> void:
+	var i: int = _play_release.size()
+	_play_release.append(release)
+	_play_keeper.append(keeper)
+	_play_weight.append(weight)
+	if _play_rebound.size() <= i:
+		_play_rebound.append(AIReboundValue.new())
+	_play_rebound[i].fill(release, ctx.attacking_goal_pos, teammates, ctx.scratch_teammate_vels,
+			opp_positions, ctx.scratch_opp_vels)
+	_play_rebound_base.append(_play_rebound[i].value_with(Vector3.INF))
+	_play_rebound_gain_cap.append(maxf(_play_rebound[i].ceiling() - _play_rebound_base[i], 0.0))
+
+
+# Where a man in front stands for each play (fill_shot_plays): on its release's
+# line to the net, as far out as the screen field measured a body worth most,
+# and where its rebounds are first played (AIReboundField.crash_point_at).
+static func append_net_front_stations(ctx: RoleContext, candidates: Array[Vector3]) -> void:
+	var goal: Vector3 = ctx.attacking_goal_pos
+	station_keys.clear()
+	for i: int in _play_release.size():
+		var crash: Vector3 = AIReboundField.crash_point_at(_play_release[i], false, goal)
+		if crash.is_finite():
+			candidates.append(crash)
+			station_keys.append(station_key(_play_shooter[i], AT_REBOUND))
+		var along: float = AIScreenField.best_station_along(_play_release[i], goal)
+		var line: Vector3 = _play_release[i] - goal
+		line.y = 0.0
+		if is_finite(along) and line.length() > along:
+			candidates.append(goal + line * (along / line.length()))
+			station_keys.append(station_key(_play_shooter[i], ON_SCREEN_LINE))
+
+
+# A station's identity: whose shot (`shooter`'s peer id, or a negative
+# stand-in) it is in front of, and `how` (AT_REBOUND, ON_SCREEN_LINE,
+# ON_TIP_LINE, ON_SHOT_LINE). Never -1, which is a place's.
+static func station_key(shooter: int, how: int) -> int:
+	return (shooter + 2000) * 4 + how
+
+
+# What a body at `c` adds to our attack in front of their net (fill_shot_plays),
+# for the best of the plays, one puck being one shot: of the shots the keeper
+# would save, the share his screen there turns into goals, and of the rest,
+# what he adds to winning the rebound. A play that could not beat `beat` (or
+# the best so far) even with every rebound ours is not raced, and reads as no
+# more than that.
+static func net_front_value(ctx: RoleContext, c: Vector3, beat: float = 0.0) -> float:
+	var best: float = 0.0
+	for i: int in _play_release.size():
+		var screen: float = AIScreenField.uplift(_play_release[i], ctx.attacking_goal_pos,
+				_play_keeper[i], c, _screen_cfg)
+		var w: float = _play_weight[i]
+		best = maxf(best, w * screen)
+		if w * (screen + (1.0 - screen) * _play_rebound_gain_cap[i]) <= maxf(best, beat):
+			continue
+		var rebound: float = maxf(_play_rebound[i].value_with(c) - _play_rebound_base[i], 0.0)
+		best = maxf(best, w * (screen + (1.0 - screen) * rebound))
+	return best
+
+
+# Where their keeper stands set for a shot from `release` (AIGoalieModel
+# .keeper_depth along its line); in his net for one behind the goal line.
+static func _keeper_square_on(goal: Vector3, release: Vector3) -> Vector3:
+	var forward: float = (release.z - goal.z) * -signf(goal.z)
+	var depth: float = AIGoalieModel.keeper_depth(goal, release)
+	if not is_finite(depth):
+		return goal
+	var at: Vector3 = goal + (release - goal) * (depth / forward)
+	at.y = 0.0
+	return at
 
 
 # ── Target switch-hysteresis ─────────────────────────────────────────────────

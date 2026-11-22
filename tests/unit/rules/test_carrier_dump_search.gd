@@ -99,6 +99,45 @@ func test_a_dump_into_their_d_is_worth_less() -> void:
 			"the race to the spot decides what the dump is worth")
 
 
+# Per launch, when their collector has the dump away, every skater of theirs on
+# a blade taking `ceiling_mult` of the league's load; INF where they do not
+# collect it.
+func _away_times(ceiling_mult: float) -> Array[float]:
+	var ctx: RoleContext = _rush(-24.0)
+	for pid: int in [10, 11, 12]:
+		var blade := AISkaterCaps.new()
+		blade.reception_ceiling_mult = ceiling_mult
+		ctx.caps_by_peer[pid] = blade
+	var field := AICarrierField.new()
+	field.fill(ctx)
+	field.fill_receivers(ctx, ctx.self_pos)
+	var dump := AICarrierDumpSearch.new(field)
+	dump.search(ctx)
+	var out: Array[float] = []
+	for k: int in dump._count:
+		out.append(dump._away[k] if dump._racer[k] != -1 else INF)
+	return out
+
+
+func test_the_dump_is_priced_at_their_collectors_own_blade() -> void:
+	# The forecheck a dump starts has until his first play is away, and that
+	# waits on his settle: a blade that holds less of a hard dump gives us longer.
+	var league: Array[float] = _away_times(1.0)
+	var soft: Array[float] = _away_times(0.7)
+	assert_eq(soft.size(), league.size())
+	var later: int = 0
+	var collected: int = 0
+	for k: int in league.size():
+		if not is_finite(league[k]):
+			continue
+		collected += 1
+		assert_gte(soft[k], league[k] - 1e-6, "launch %d: never away sooner" % k)
+		if soft[k] > league[k] + 1e-6:
+			later += 1
+	assert_gt(collected, 0, "the fixture's D collect some of the dumps")
+	assert_gt(later, 0, "and on the hard ones a softer blade has it away later")
+
+
 func test_no_dump_from_their_zone_or_ours() -> void:
 	var inside: RoleContext = _ctx(Vector3(0.0, 0.0, -12.0), Vector3.ZERO,
 			[[10, 1, Vector3(0.0, 0.0, -20.0)]])

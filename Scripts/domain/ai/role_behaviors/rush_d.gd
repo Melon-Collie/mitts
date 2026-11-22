@@ -45,6 +45,8 @@ const LANE_PLAY_DANGER_BAR: float = 0.5
 const D2_MID_LANE_HALF_WIDTH_M: float = GameRules.END_ZONE_FACEOFF_DOT_X
 
 # A threat with no caps of his own is a league skater.
+# Our two retreats, by retreat_max_speed's `forward`: backpedal, turned to skate.
+const RETREATS: Array[bool] = [false, true]
 static var _league_caps := AISkaterCaps.new()
 
 
@@ -156,6 +158,7 @@ static func _decide_d1(ctx: RoleContext, bracket: float = 0.0,
 	d.target_position = _clamp_to_house(ctx, stand)
 	set_retreat_floor(ctx, ap, d)
 	set_advance_cap(ctx, ap, d, gap, not gapping_up and not holding_line)
+	AIBackLineRunners.hold_depth(ctx, d)
 	# The arrival brake only matters with no man to ride (a moving stand stands it
 	# down). A retreat is paced rather than braked; a step-up wants the brake,
 	# since the approach bound placed that stand as its trigger; the gap-up drives
@@ -336,23 +339,13 @@ static func _gate_brake_m(ctx: RoleContext, from_net: float) -> float:
 
 
 # Bounds a ridden stand's step toward the carrier, set with the retreat floor:
-# the route may command no more speed up-ice than the defender can still turn
-# into the carrier's pace before the carrier has eaten the depth he holds past
-# `gap` (AILastManDiscipline.approach_speed_cap, the step-up bound with its
-# pivot), the carrier's pace being his whole speed turned at our net and his
-# burst from it while the defender brakes. A stalled carrier is no invitation to
-# charge: he starts the moment the defender commits. The stand
-# keeps its place and the ride its lateral; only the charge is bounded. Without
-# it the moving-frame closing term walks a stepping-up defender up-ice at a
-# carrier who is crossing rather than coming, and the turn down beats him.
-#
-# While a carrier coming at pace gains on him down his line and he still holds
-# a gap outside the house gate (set_retreat_floor), the cap turns into a floor on the
-# retreat (`may_give_ice`: the route is a retreat at all, not a gap-up or a held
-# line): no slower than the carrier's pace there, or his retreat's top speed.
-# The closing term spends depth by slowing the retreat, and the stride,
-# power-limited at speed, rebuilds that pace far slower than the carrier eats the
-# depth it gave away.
+# no more speed up-ice than the defender can still turn into the carrier's pace
+# before the carrier eats the depth he holds past `gap`
+# (AILastManDiscipline.approach_speed_cap), and, while a carrier coming at pace
+# gains on a retreat (`may_give_ice`: a retreat at all, not a gap-up or a held
+# line) outside the house gate, no slower down the line than his pace or the
+# retreat's top speed. Only the command is bounded; the stand keeps its place.
+# Why both halves: Scripts/domain/ai/CLAUDE.md, "The gap ladder is one ladder".
 static func set_advance_cap(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision, gap: float, may_give_ice: bool = true) -> void:
 	if d.retreat_floor_radius_m <= 0.0:
@@ -427,16 +420,18 @@ static func _self_movement(ctx: RoleContext) -> SkaterMovementRules.MovementConf
 # The ground the threat gains on each of a defender's two retreats (head_start_on_me):
 # x backpedalling facing the play, y turned and skating down the ice. Each first
 # turns his body from where it points now, at his facing turn rate.
+# `self_v_along` overrides the pace down the line he starts from (NAN: his own).
 static func retreat_gains(ctx: RoleContext, dir_net: Vector3, threat_vel: Vector3,
-		net_dist: float, threat_peer: int, finish_m: float) -> Vector2:
+		net_dist: float, threat_peer: int, finish_m: float,
+		self_v_along: float = NAN) -> Vector2:
 	var facing: Vector2 = _self_facing(ctx, -dir_net)
 	return Vector2(
 			_threat_gain(ctx, dir_net, threat_vel, net_dist, threat_peer, finish_m,
 					retreat_max_speed(ctx, false), retreat_max_accel(ctx, false),
-					_turn_s(ctx, facing, -dir_net)),
+					_turn_s(ctx, facing, -dir_net), self_v_along),
 			_threat_gain(ctx, dir_net, threat_vel, net_dist, threat_peer, finish_m,
 					retreat_max_speed(ctx, true), retreat_max_accel(ctx, true),
-					_turn_s(ctx, facing, dir_net)))
+					_turn_s(ctx, facing, dir_net), self_v_along))
 
 
 # Where this bot's body points; `fallback` when it cannot be read.
@@ -455,8 +450,7 @@ static func _turn_s(ctx: RoleContext, facing: Vector2, dir: Vector3) -> float:
 
 
 # ramp_cushion_m's race for any threat: `dir_net` his line to our net,
-# `net_dist` his ice to it, finishing `finish_m` off the net. Also what "behind
-# me" means to an offensive station (race_depth_to_net), finishing at the gate.
+# `net_dist` his ice to it, finishing `finish_m` off the net.
 #
 # Both drive flat out down the line (AIStrideRamp.head_start; our opposing
 # momentum braked out first), the threat from the better of two starts: his pace
@@ -466,10 +460,9 @@ static func _turn_s(ctx: RoleContext, facing: Vector2, dir: Vector3) -> float:
 # turn costs him the ground the arc gives up against the straight run.
 # `threat_peer` -1 (a loose puck) prices a league skater. A carrier is priced at
 # his free top speed — a slight over-read, in the safe direction. We are priced
-# skating straight there at our forward stride, with no turn: the cushion a
-# step-up reads, which a straight race cannot price on the backward caps (a
-# carrier bursting from a stick away goes through the defender, not past him in
-# a race), so retreat_gains prices the two real retreats separately.
+# at our forward stride, no turn: the cushion a step-up reads (a carrier
+# bursting from a stick away goes through the defender, not past him in a
+# race); retreat_gains and race_depth_to_net price the two real retreats.
 static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
 		threat_vel: Vector3, net_dist: float, threat_peer: int,
 		finish_m: float = AIZoneCoverage.HOUSE_TOP_DEPTH_M) -> float:
@@ -542,10 +535,36 @@ static func _head_start_from(lead_v: float, caps: AISkaterCaps, self_v: float,
 			AIArrival.REVERSAL_BRAKE_DECEL_M_S2, horizon, self_turn_s)
 
 
-# An attacker's distance from our net less the ground he gains on us while we
-# build to his pace — "behind me" as a race, since a man level with a standing
-# station at speed is past it by the time it moves.
+# An attacker's distance from our net less what he gains on us building to his
+# pace, on our better retreat from where we face, less his own turn to our net
+# (a facing unknown turns as ours does).
 static func race_depth_to_net(ctx: RoleContext, pid: int) -> float:
+	var s: SkaterNetworkState = ctx.snapshot.skater_states.get(pid)
+	if s == null:
+		return INF
+	var d: float = AIRoleReads.xz_distance(s.position, ctx.defending_goal_pos)
+	if d < 0.001:
+		return 0.0
+	var dir_net: Vector3 = (ctx.defending_goal_pos - s.position).normalized()
+	var caps: AISkaterCaps = ctx.caps_by_peer.get(pid, _league_caps)
+	var his_turn: float = INF if s.facing.length_squared() < 0.0001 else absf(s.facing \
+			.angle_to(Vector2(dir_net.x, dir_net.z))) / maxf(caps.facing_turn_rate, 0.1)
+	var facing: Vector2 = _self_facing(ctx, -dir_net)
+	var v: float = ctx.self_velocity.dot(dir_net)
+	var gain: float = INF
+	for fwd: bool in RETREATS:
+		gain = minf(gain, _threat_gain(ctx, dir_net, s.velocity, d, pid,
+				AIZoneCoverage.HOUSE_TOP_DEPTH_M, retreat_max_speed(ctx, fwd),
+				retreat_max_accel(ctx, fwd),
+				maxf(_turn_s(ctx, facing, dir_net if fwd else -dir_net) - his_turn, 0.0), v))
+	return maxf(d - gain, 0.0)
+
+
+# race_depth_to_net against any body of ours: one moving at `body_vel` with
+# `body_vmax` and `body_accel`, the race finishing `finish_m` off our net.
+static func race_depth_on(ctx: RoleContext, pid: int, body_vel: Vector3,
+		body_vmax: float, body_accel: float,
+		finish_m: float = AIZoneCoverage.HOUSE_TOP_DEPTH_M) -> float:
 	var s: SkaterNetworkState = ctx.snapshot.skater_states.get(pid)
 	if s == null:
 		return INF
@@ -555,8 +574,8 @@ static func race_depth_to_net(ctx: RoleContext, pid: int) -> float:
 		return 0.0
 	var dir_net := Vector3((our_net.x - s.position.x) / d, 0.0,
 			(our_net.z - s.position.z) / d)
-	return maxf(d - head_start_on_me(ctx, dir_net, s.velocity, d,
-			pid), 0.0)
+	return maxf(d - _threat_gain(ctx, dir_net, s.velocity, d, pid, finish_m, body_vmax,
+			body_accel, 0.0, body_vel.x * dir_net.x + body_vel.z * dir_net.z), 0.0)
 
 
 # The gap ladder plus its modifiers, in metres. The modifiers run BOTH ways and

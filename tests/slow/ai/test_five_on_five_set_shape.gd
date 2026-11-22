@@ -2,8 +2,8 @@ extends GutTest
 
 # ── The 1-1-3 holds a rush as a team ─────────────────────────────────────────
 # A failed forecheck in 5v5: we have lost the puck in their zone with our three
-# forwards caught around it and our D on their blue line, and their three
-# forwards break out with it at speed. The shape that has to form is the set
+# forwards caught around it and our D off their blue line and skating back
+# since it turned over, and their three forwards break out with it at speed. The shape that has to form is the set
 # 1-1-3 filled from the back (Scripts/domain/ai/CLAUDE.md → "Forecheck or set
 # up"): our line held before anything up the ice, the carrier stood up at it,
 # the middle and the weak lane held behind him, the forwards layering in ahead.
@@ -22,17 +22,14 @@ extends GutTest
 #
 # Team 0 (them) attacks -Z; team 1 (us) defends it.
 #
-# Reference readings over the 12 starts: the back line is never thinner than
-# two at entry outside KNOWN_THIN, and nobody of theirs stands behind it.
-#
-# Starts whose back line is beaten at entry today, each with its issue: they
-# count against neither the line nor the open share.
-#   v8.5/z24/c-6 — the carrier cuts across and stalls at our line with both
-#   wingers at speed; his D steps up alone and the winger on his outside takes
-#   the pass behind him: one man thin at entry. The ladder sizes the pair's
-#   depth from the carrier alone (#930).
-const KNOWN_THIN: Array[String] = ["v8.5/z24/c-6"]
-const MAX_OPEN_SHARE: float = 0.15
+# Reference readings: the back line is never thinner than two at entry, and
+# the open share over the 12 starts is 0.150 — four starts each with one
+# stretch of 48–121 ticks of the middle man driving the net off the puck once
+# it has gone wide. The share is lumpy: one such stretch moves it 2–5 points,
+# and nudging the starts (lane ±0.3 m, forwards ±0.5 m, speed ±0.2 m/s; 84
+# rushes) reads 0.050 while moving which starts carry one. The ceiling is the
+# reading plus one stretch.
+const MAX_OPEN_SHARE: float = 0.20
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
@@ -41,6 +38,7 @@ const SECS: float = 6.0
 const NET := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 const THEM: Array[int] = [1, 2, 3]
 const US: Array[int] = [11, 12, 13, 14, 15]
+const D: Array[int] = [14, 15]
 # The slot a defence must keep a rush out of: out to the hash marks, the posts'
 # width plus a stride (test_advantage_scenarios' home plate).
 const SLOT_DEPTH_M: float = 10.0
@@ -83,15 +81,24 @@ func _rush(cx: float, fwd_z: float, speed: float) -> Rush:
 			BotSkillProfile.hard())
 	duel.add_skater(13, 1, Vector3(_side(duel, 13) * 6.0, 0.0, fwd_z + 2.0),
 			BotSkillProfile.hard())
-	duel.add_skater(14, 1, Vector3(_side(duel, 14) * 6.0, 0.0, GameRules.BLUE_LINE_Z + 1.0),
-			BotSkillProfile.hard())
-	duel.add_skater(15, 1, Vector3(_side(duel, 15) * 6.0, 0.0, GameRules.BLUE_LINE_Z + 1.0),
-			BotSkillProfile.hard())
+	# The puck was lost where our forwards are caught, and their carrier has
+	# skated from there to here at no more than his speed. Our D saw it turn
+	# over and have been skating back that long, less their reaction to it.
+	var since_s: float = maxf((fwd_z - RUSH_Z) / speed
+			- BotSkillProfile.hard().carrier_reaction_delay_s, 0.0)
+	var back_m_s: float = AIStrideRamp.speed_at(0.0, since_s,
+			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2)
+	var back_m: float = AIStrideRamp.distance_in(0.0, since_s,
+			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2)
+	for d: int in D:
+		duel.add_skater(d, 1, Vector3(_side(duel, d) * 6.0, 0.0,
+				GameRules.BLUE_LINE_Z + 1.0 - back_m), BotSkillProfile.hard(),
+				Vector3(0.0, 0.0, -back_m_s))
 	duel.start(1)
 	for pid: int in THEM:
 		duel._skater(pid).facing = Vector2(0.0, -1.0)
 	for pid: int in US:
-		duel._skater(pid).facing = Vector2(0.0, 1.0)
+		duel._skater(pid).facing = Vector2(0.0, -1.0 if pid in D else 1.0)
 
 	var r := Rush.new()
 	for _t: int in int(SECS / DT):
@@ -154,14 +161,13 @@ func test_a_failed_forecheck_sets_the_1_1_3_and_it_holds() -> void:
 			for cx: float in [-6.0, 0.0, 6.0]:
 				var r: Rush = _rush(cx, fwd_z, speed)
 				var label := "v%.1f/z%.0f/c%.0f" % [speed, fwd_z, cx]
-				if not KNOWN_THIN.has(label):
-					open_sum += r.open_ticks
-					zone_sum += r.zone_ticks
+				open_sum += r.open_ticks
+				zone_sum += r.zone_ticks
 				row += "  c%+2.0f formed %d open %3d/%3d %4s%s" % [cx, r.formed,
 						r.open_ticks, r.zone_ticks, r.outcome,
 						"@%.1f" % r.shot_at.distance_to(NET) if r.shot_at.is_finite()
 						else ("@z%+.0f" % r.won_z if r.won_z < INF else "")]
-				if r.formed != -1 and r.formed < 2 and not KNOWN_THIN.has(label):
+				if r.formed != -1 and r.formed < 2:
 					thin.append(label)
 				if r.in_slot():
 					slot_shots.append(label)

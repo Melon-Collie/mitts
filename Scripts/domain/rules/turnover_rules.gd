@@ -10,15 +10,15 @@ class_name TurnoverRules
 ##     with no receiver) → nothing: conceding the puck to space is neither a
 ##     giveaway by the shooter/dumper nor a takeaway by whoever collects it.
 ##     Checked FIRST so a rebound or a retrieved dump is never scored as a
-##     turnover. Which of the three a release was is `release_kind` below — an
-##     intercepted PASS (a teammate was the target) still charges a giveaway.
+##     turnover. Which of the three a release was is `release_kind` below — a
+##     PASS (a teammate was the target) is no surrender.
 ##   - Opponent recovers a puck the previous owner was STRIPPED of (a recent
-##     poke / stick-lift / body-check) → takeaway. The credit goes to the
-##     STRIPPER — the defender who made the play — not whoever recovers the loose
-##     puck (TurnoverTracker carries the stripper's id alongside the strip). Being
-##     stripped is NOT a self-inflicted turnover, so no giveaway is charged.
-##   - Opponent recovers a puck otherwise cleanly lost (fumble / intercepted
-##     pass) → giveaway to the previous owner. The one further exclusion —
+##     poke / stick-lift / body-check, or a pass picked off) → takeaway. The
+##     credit goes to the STRIPPER — the defender who made the play — not whoever
+##     recovers the loose puck (TurnoverTracker carries the stripper's id
+##     alongside the strip). A turnover is one event, so no giveaway is charged.
+##   - Opponent recovers a puck otherwise cleanly lost (a fumble, or a pass gone
+##     astray that nobody picked off) → giveaway to the previous owner. The one further exclusion —
 ##     losing a CONTESTED loose puck (a board battle the losing team fought for
 ##     and lost) — is vetoed by TurnoverTracker at establishment, since it is
 ##     only fully known once the scramble resolves.
@@ -31,7 +31,7 @@ const GIVEAWAY := "giveaway"
 # in its flight corridor: within RECEIVER_CORRIDOR_M of the launch line and
 # ahead of the puck out to RECEIVER_MAX_DIST_M. A real pass is aimed AT a
 # teammate (one lands inside the corridor even when an opponent picks it off —
-# that stays a giveaway); a dump/clear/rim is fired to open ice.
+# that is a takeaway); a dump/clear/rim is fired to open ice.
 const RECEIVER_CORRIDOR_M: float = 3.5
 const RECEIVER_MAX_DIST_M: float = 30.0
 
@@ -84,7 +84,7 @@ static func is_dump_release(launch: Vector2, launch_dir: Vector2,
 # (ShotOnGoalTracker.pending_is_shot_attempt): directed at the opposing net and
 # not thrown with the pass button. A charged wrister is a shot or a pass by where
 # it goes, since a pass is a paced wrister; the pass button is a pass wherever it
-# goes, so a feed through the mouth that a defender picks off is an interception.
+# goes, so a feed through the mouth that a defender picks off is a takeaway.
 # The rest are is_dump_release's. NONE is a puck let go with no launch at all.
 static func release_kind(is_shot_attempt: bool, launch: Vector2, launch_dir: Vector2,
 		teammate_positions: Array[Vector2]) -> Release:

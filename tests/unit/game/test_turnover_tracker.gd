@@ -12,6 +12,8 @@ extends GutTest
 var tracker: TurnoverTracker
 var registry: PlayerRegistry
 var now_s: float = 0.0
+# Peers the faceoff placement put on the dot.
+var draw_takers: Dictionary[int, bool] = {}
 
 
 func before_each() -> void:
@@ -20,6 +22,9 @@ func before_each() -> void:
 	tracker.setup(registry)
 	now_s = 100.0
 	tracker.set_clock(func() -> float: return now_s)
+	draw_takers.clear()
+	tracker.set_draw_taker_check(func(r: PlayerRecord) -> bool:
+		return draw_takers.has(r.peer_id))
 
 
 func _add_player(peer_id: int, team_id: int, team_slot: int = 1) -> PlayerRecord:
@@ -29,6 +34,11 @@ func _add_player(peer_id: int, team_id: int, team_slot: int = 1) -> PlayerRecord
 	record.stats = PlayerStats.new()
 	registry._players[peer_id] = record
 	return record
+
+
+func _add_draw_taker(peer_id: int, team_id: int, team_slot: int = 0) -> PlayerRecord:
+	draw_takers[peer_id] = true
+	return _add_player(peer_id, team_id, team_slot)
 
 
 # Shorthand: `peer` gains the puck and establishes possession.
@@ -118,12 +128,12 @@ func test_same_team_recovery_after_strip_is_nothing() -> void:
 
 # ── Giveaways ────────────────────────────────────────────────────────────────
 
-func test_intercepted_pass_charges_giveaway_at_establishment() -> void:
+func test_lost_puck_charges_giveaway_at_establishment() -> void:
 	var passer := _add_player(10, 0)
 	_add_player(20, 1)
 	_gain_and_establish(10)
-	tracker.on_carrier_gained(20, false)  # no strip, no shot — a fumble/pick
-	assert_eq(passer.stats.giveaways, 0, "waits for the interceptor to establish")
+	tracker.on_carrier_gained(20, false)  # no strip, no shot, no pass — a fumble
+	assert_eq(passer.stats.giveaways, 0, "waits for the recoverer to establish")
 	assert_true(tracker.on_possession_established(20))
 	assert_eq(passer.stats.giveaways, 1)
 
@@ -179,7 +189,6 @@ func test_dump_recovery_is_neither_giveaway_nor_takeaway() -> void:
 	tracker.on_possession_established(20)
 	assert_eq(dumper.stats.giveaways, 0, "a dump is never a giveaway")
 	assert_eq(recoverer.stats.takeaways, 0, "retrieving a dump is not a takeaway")
-	assert_eq(recoverer.stats.interceptions, 0, "nor an interception")
 
 
 func test_decayed_strip_still_credits_a_takeaway_not_a_giveaway() -> void:
@@ -254,22 +263,23 @@ func test_clean_interception_after_an_own_retouch_is_still_a_giveaway() -> void:
 	assert_eq(owner_player.stats.giveaways, 1, "an own re-touch is not a contest")
 
 
-# ── Interceptions ────────────────────────────────────────────────────────────
+# ── Passes picked off ────────────────────────────────────────────────────────
 
-func test_picked_off_pass_credits_the_interceptor() -> void:
+func test_picked_off_pass_is_the_interceptors_takeaway_alone() -> void:
+	# One turnover, one event, as the NHL scores it: the defender's takeaway,
+	# and no giveaway for the passer.
 	var passer := _add_player(10, 0)
 	var picker := _add_player(20, 1)
 	_gain_and_establish(10)
 	tracker.note_pass(10)
 	tracker.on_carrier_gained(20, false)
-	assert_eq(picker.stats.interceptions, 0, "waits for the establishment")
+	assert_eq(picker.stats.takeaways, 0, "waits for the establishment")
 	assert_true(tracker.on_possession_established(20))
-	assert_eq(passer.stats.giveaways, 1)
-	assert_eq(picker.stats.interceptions, 1)
-	assert_eq(picker.stats.takeaways, 0, "a pick-off is not a strip")
+	assert_eq(picker.stats.takeaways, 1)
+	assert_eq(passer.stats.giveaways, 0)
 
 
-func test_interception_credits_the_first_opponent_touch() -> void:
+func test_pick_off_credits_the_first_opponent_touch() -> void:
 	# 20 gets a blade on the pass and it squirts to linemate 21, who establishes.
 	_add_player(10, 0)
 	var picker := _add_player(20, 1)
@@ -279,11 +289,11 @@ func test_interception_credits_the_first_opponent_touch() -> void:
 	tracker.on_carrier_gained(20, false)
 	tracker.on_carrier_gained(21, false)
 	assert_true(tracker.on_possession_established(21))
-	assert_eq(picker.stats.interceptions, 1)
-	assert_eq(linemate.stats.interceptions, 0)
+	assert_eq(picker.stats.takeaways, 1)
+	assert_eq(linemate.stats.takeaways, 0)
 
 
-func test_a_pass_that_reached_a_teammate_was_not_intercepted() -> void:
+func test_a_pass_that_reached_a_teammate_was_not_picked_off() -> void:
 	# The receiver touched it before the opponent got it: a completion and then
 	# a loss, so the giveaway stands but nobody picked a pass off.
 	var passer := _add_player(10, 0)
@@ -295,13 +305,13 @@ func test_a_pass_that_reached_a_teammate_was_not_intercepted() -> void:
 	tracker.on_carrier_gained(20, false)
 	assert_true(tracker.on_possession_established(20))
 	assert_eq(passer.stats.giveaways, 1)
-	assert_eq(opp.stats.interceptions, 0)
+	assert_eq(opp.stats.takeaways, 0)
 
 
-func test_a_contested_pick_credits_no_interception() -> void:
-	# The passing side fought the loose puck back before losing it: no giveaway,
-	# so no interception either.
-	_add_player(10, 0)
+func test_a_pick_off_fought_over_stays_the_pickers_takeaway() -> void:
+	# The passing side touches the loose puck back before the picker's side
+	# establishes: the pick-off is a strip, and a strip survives the scramble.
+	var passer := _add_player(10, 0)
 	_add_player(11, 0)
 	var picker := _add_player(20, 1)
 	_gain_and_establish(10)
@@ -309,11 +319,12 @@ func test_a_contested_pick_credits_no_interception() -> void:
 	tracker.on_carrier_gained(20, false)
 	tracker.on_carrier_gained(11, false)
 	tracker.on_carrier_gained(20, false)
-	assert_false(tracker.on_possession_established(20))
-	assert_eq(picker.stats.interceptions, 0)
+	assert_true(tracker.on_possession_established(20))
+	assert_eq(picker.stats.takeaways, 1)
+	assert_eq(passer.stats.giveaways, 0)
 
 
-func test_a_stray_pass_recovered_late_is_not_an_interception() -> void:
+func test_a_stray_pass_recovered_late_is_not_a_pick_off() -> void:
 	var passer := _add_player(10, 0)
 	var recoverer := _add_player(20, 1)
 	_gain_and_establish(10)
@@ -321,8 +332,8 @@ func test_a_stray_pass_recovered_late_is_not_an_interception() -> void:
 	now_s += TurnoverTracker.PASS_WINDOW_S + 0.1
 	tracker.on_carrier_gained(20, false)
 	assert_true(tracker.on_possession_established(20))
-	assert_eq(passer.stats.giveaways, 1, "still a giveaway")
-	assert_eq(recoverer.stats.interceptions, 0, "a loose-puck recovery, not a pick-off")
+	assert_eq(passer.stats.giveaways, 1, "a giveaway")
+	assert_eq(recoverer.stats.takeaways, 0, "a loose-puck recovery, not a pick-off")
 
 
 func test_a_pass_after_a_rebound_is_judged_as_a_pass() -> void:
@@ -337,8 +348,8 @@ func test_a_pass_after_a_rebound_is_judged_as_a_pass() -> void:
 	tracker.note_pass(11)
 	tracker.on_carrier_gained(20, false)
 	assert_true(tracker.on_possession_established(20))
-	assert_eq(passer.stats.giveaways, 1)
-	assert_eq(picker.stats.interceptions, 1)
+	assert_eq(passer.stats.giveaways, 0)
+	assert_eq(picker.stats.takeaways, 1)
 
 
 func test_no_stats_before_any_established_owner() -> void:
@@ -356,15 +367,15 @@ func test_draw_win_goes_to_first_team_to_establish() -> void:
 	# scramble with control — their centre gets the win (NHL: the draw is won
 	# by the team that first gains possession, credited to the centre). The
 	# beaten centre is charged a loss so faceoff % has a real denominator.
-	var centre0 := _add_player(10, 0, 0)
+	var centre0 := _add_draw_taker(10, 0)
 	_add_player(11, 0, 1)
-	var centre1 := _add_player(20, 1, 0)
+	var centre1 := _add_draw_taker(20, 1)
 	var winger1 := _add_player(21, 1, 1)
 	tracker.on_carrier_gained(11, true)   # first touch off the drop
 	assert_eq(centre0.stats.faceoff_wins, 0, "first touch is not the win")
 	tracker.on_carrier_gained(21, false)  # scramble continues...
 	assert_true(tracker.on_possession_established(21))
-	assert_eq(centre1.stats.faceoff_wins, 1, "centre credited, not the winner")
+	assert_eq(centre1.stats.faceoff_wins, 1, "draw-taker credited, not the winner")
 	assert_eq(winger1.stats.faceoff_wins, 0)
 	assert_eq(centre0.stats.faceoff_wins, 0)
 	assert_eq(centre0.stats.faceoff_losses, 1, "beaten centre charged a loss")
@@ -373,11 +384,38 @@ func test_draw_win_goes_to_first_team_to_establish() -> void:
 	assert_false(tracker.has_pending_faceoff())
 
 
+func test_a_boxed_centre_gets_no_part_of_the_draw() -> void:
+	# The centre sits a penalty, so a winger takes the draw in his place.
+	var boxed := _add_player(10, 0, 0)
+	var stand_in := _add_draw_taker(11, 0, 1)
+	var centre1 := _add_draw_taker(20, 1)
+	tracker.on_carrier_gained(11, true)
+	assert_true(tracker.on_possession_established(11))
+	assert_eq(stand_in.stats.faceoff_wins, 1)
+	assert_eq(boxed.stats.faceoff_wins, 0)
+	assert_eq(centre1.stats.faceoff_losses, 1)
+	tracker.on_carrier_gained(20, true)
+	tracker.on_possession_established(20)
+	assert_eq(stand_in.stats.faceoff_losses, 1)
+	assert_eq(boxed.stats.faceoff_losses, 0)
+
+
+func test_a_pickup_nobody_drew_for_credits_no_draw() -> void:
+	# A penalty shot is collected in the faceoff's phase, with nobody on the dot.
+	var shooter := _add_player(10, 0, 0)
+	var other := _add_player(20, 1, 0)
+	tracker.on_carrier_gained(10, true)
+	assert_false(tracker.on_possession_established(10))
+	assert_eq(shooter.stats.faceoff_wins, 0)
+	assert_eq(other.stats.faceoff_losses, 0)
+	assert_false(tracker.has_pending_faceoff())
+
+
 func test_no_turnover_charged_on_the_draw() -> void:
 	# The strip-and-recover inside the draw scramble is part of the faceoff —
 	# NHL never charges a takeaway/giveaway on it.
-	var centre0 := _add_player(10, 0, 0)
-	var centre1 := _add_player(20, 1, 0)
+	var centre0 := _add_draw_taker(10, 0)
+	var centre1 := _add_draw_taker(20, 1)
 	tracker.on_carrier_gained(10, true)
 	tracker.note_strip(10, 20)
 	tracker.on_carrier_gained(20, false)
@@ -389,8 +427,8 @@ func test_no_turnover_charged_on_the_draw() -> void:
 
 
 func test_turnovers_resume_after_the_draw_resolves() -> void:
-	var centre0 := _add_player(10, 0, 0)
-	var centre1 := _add_player(20, 1, 0)
+	var centre0 := _add_draw_taker(10, 0)
+	var centre1 := _add_draw_taker(20, 1)
 	tracker.on_carrier_gained(10, true)
 	tracker.on_possession_established(10)  # team 0 wins the draw
 	tracker.on_carrier_gained(20, false)   # then coughs it up
@@ -398,12 +436,12 @@ func test_turnovers_resume_after_the_draw_resolves() -> void:
 	assert_eq(centre0.stats.faceoff_wins, 1)
 	assert_eq(centre1.stats.faceoff_losses, 1)
 	assert_eq(centre0.stats.giveaways, 1, "post-draw play classifies normally")
-	assert_eq(centre1.stats.takeaways, 0, "interception without a strip")
+	assert_eq(centre1.stats.takeaways, 0, "a fumble, not a strip")
 
 
 func test_stoppage_fallback_resolves_pending_draw() -> void:
-	var centre1 := _add_player(20, 1, 0)
-	var centre0 := _add_player(10, 0, 0)
+	var centre1 := _add_draw_taker(20, 1)
+	var centre0 := _add_draw_taker(10, 0)
 	tracker.on_carrier_gained(10, true)
 	assert_true(tracker.has_pending_faceoff())
 	assert_true(tracker.resolve_pending_faceoff(1))  # last toucher was team 1
@@ -413,7 +451,7 @@ func test_stoppage_fallback_resolves_pending_draw() -> void:
 
 
 func test_fallback_with_unknown_team_clears_without_credit() -> void:
-	var centre0 := _add_player(10, 0, 0)
+	var centre0 := _add_draw_taker(10, 0)
 	tracker.on_carrier_gained(10, true)
 	assert_false(tracker.resolve_pending_faceoff(-1))
 	assert_false(tracker.has_pending_faceoff())
@@ -421,7 +459,7 @@ func test_fallback_with_unknown_team_clears_without_credit() -> void:
 
 
 func test_resolve_without_pending_is_noop() -> void:
-	var centre0 := _add_player(10, 0, 0)
+	var centre0 := _add_draw_taker(10, 0)
 	assert_false(tracker.resolve_pending_faceoff(0))
 	assert_eq(centre0.stats.faceoff_wins, 0)
 	assert_eq(centre0.stats.faceoff_losses, 0)
@@ -442,7 +480,7 @@ func test_reset_clears_owner_and_pending_draw() -> void:
 
 # ── Won possessions (the goal feats' memory) ─────────────────────────────────
 
-func test_a_landed_takeaway_or_interception_reports_who_won_the_puck() -> void:
+func test_a_landed_takeaway_reports_who_won_the_puck_and_how() -> void:
 	_add_player(10, 0)
 	_add_player(20, 1)
 	_add_player(21, 1)

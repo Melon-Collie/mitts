@@ -198,24 +198,10 @@ static func race_playable_time(puck_pos: Vector3, puck_vel: Vector3) -> float:
 	return AITrajectory.time_until_on_blade_plane(puck_pos, puck_vel)
 
 
-# ETA for the BLADE to touch `point`, rather than for the body to land on it.
-# The destination is the nearest spot on the reach circle around `point` — the
-# path point pulled `reach` back along the approach line — so the last stick-
-# length is never charged as travel. Already inside reach is 0: the stick is on
-# it now.
+# The blade's ETA to `point` (AIArrival.reach_eta).
 static func reach_eta(from_pos: Vector3, point: Vector3, vel: Vector3,
 		max_speed: float, accel: float, reach: float) -> float:
-	if reach <= 0.0:
-		return AIArrival.time_to_arrive(from_pos, point, vel, max_speed, accel)
-	var dx: float = point.x - from_pos.x
-	var dz: float = point.z - from_pos.z
-	var d: float = sqrt(dx * dx + dz * dz)
-	if d <= reach:
-		return 0.0
-	var f: float = (d - reach) / d
-	return AIArrival.time_to_arrive(from_pos,
-			Vector3(from_pos.x + dx * f, point.y, from_pos.z + dz * f),
-			vel, max_speed, accel)
+	return AIArrival.reach_eta(from_pos, point, vel, max_speed, accel, reach)
 
 
 # The path point a path_intercept_time result names — the spot on the walk the
@@ -318,6 +304,38 @@ static func reach_meet_time(traj: Array[Vector3], puck_pos: Vector3, puck_vel: V
 	return INF
 
 
+# Whether the puck on `traj` comes to a teammate's reach band sooner than it
+# comes to mine at `self_meet_s` (reach_meet_time, each man on his own caps).
+# The band belongs to the man the puck reaches first: a slow puck whose path
+# crosses four bands breaks one man off his job, not four. A meet is resolved
+# to a step of the walk, so men it reaches within one step tie, and the tie
+# goes to the man nearer the puck now, then to the lower peer id. A teammate
+# out of play is nobody it comes to.
+static func teammate_band_meets_first(traj: Array[Vector3], puck_pos: Vector3,
+		puck_vel: Vector3, skater_states: Dictionary, teammate_ids: Array,
+		self_pid: int, self_meet_s: float, caps_by_peer: Dictionary,
+		tag_up_peers: Dictionary = _NO_PEERS) -> bool:
+	var me: SkaterNetworkState = skater_states.get(self_pid)
+	var my_dist: float = _xz_dist(me.position, puck_pos) if me != null else INF
+	for pid: int in teammate_ids:
+		if pid == self_pid:
+			continue
+		var s: SkaterNetworkState = skater_states.get(pid)
+		if s == null or s.is_ghost or tag_up_peers.has(pid):
+			continue
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
+		var theirs: float = reach_meet_time(traj, puck_pos, puck_vel, s.position,
+				s.velocity, race_vmax(caps), race_reach(caps), false)
+		if theirs < self_meet_s:
+			return true
+		if theirs > self_meet_s:
+			continue
+		var their_dist: float = _xz_dist(s.position, puck_pos)
+		if their_dist < my_dist or (their_dist == my_dist and pid < self_pid):
+			return true
+	return false
+
+
 # ── Teammate yield (Scripts/domain/ai/CLAUDE.md → "Teammates don't stab") ───
 # Yielding requires the OTHER blade to be nearer the puck by more than this, a
 # relation that cannot hold in both directions, so two bots never both yield.
@@ -405,6 +423,9 @@ static func _segment_meet_fraction(a: Vector3, b: Vector3, pos: Vector3) -> floa
 #                    If the filters exclude EVERYONE the raw election runs
 #                    instead — someone must own the read, and the camper's
 #                    own veto still governs its behavior.
+#
+# `rebound_at` (rebound_point), when finite, is where a shot on net will be
+# played: the race is every body's arrival there, not the puck's path.
 static func elect(
 		skater_states: Dictionary,
 		teammate_ids: Array,
@@ -414,9 +435,13 @@ static func elect(
 		caps_by_peer: Dictionary = {},
 		puck_playable: bool = true,
 		human_ids: Array = [],
-		camped_ids: Array = []) -> int:
+		camped_ids: Array = [],
+		rebound_at: Vector3 = Vector3.INF) -> int:
 	if not puck_playable:
 		return -1
+	if rebound_at.is_finite():
+		return _elect_to(skater_states, teammate_ids, rebound_at, prev_elected, caps_by_peer,
+				human_ids, camped_ids)
 	var traj: Array[Vector3] = walk_race(puck_pos, puck_vel)
 	var step_dt: float = RACE_LOOKAHEAD_S / float(RACE_STEPS)
 	var margin: float = setup_margin(puck_vel)
@@ -455,6 +480,62 @@ static func elect(
 	return best_pid
 
 
+# elect's race to a fixed spot: each eligible body's arrival there, the same
+# hysteresis and tie-break. A human counts only once he skates at it.
+static func _elect_to(skater_states: Dictionary, teammate_ids: Array, at: Vector3,
+		prev_elected: int, caps_by_peer: Dictionary, human_ids: Array,
+		camped_ids: Array) -> int:
+	var best_pid: int = -1
+	var best_t: float = INF
+	for pid: int in teammate_ids:
+		var s: SkaterNetworkState = skater_states.get(pid)
+		if s == null or camped_ids.has(pid) \
+				or (human_ids.has(pid) and not committed_to_point(s, at)):
+			continue
+		var t: float = AIArrival.time_to_arrive(s.position, at, s.velocity,
+				race_vmax(caps_by_peer.get(pid)))
+		if pid != prev_elected:
+			t += HYSTERESIS_S
+		if t < best_t or (t == best_t and (best_pid == -1 or pid < best_pid)):
+			best_t = t
+			best_pid = pid
+	if best_pid == -1 and (not camped_ids.is_empty() or not human_ids.is_empty()):
+		return _elect_to(skater_states, teammate_ids, at, prev_elected, caps_by_peer, [], [])
+	return best_pid
+
+
+# Where a loose puck that is a shot on net will be played: released by a
+# skater now at `release` and untouched since (the caller's to know), at a
+# shot's pace and heading into a net's mouth, it is the save's rebound,
+# raced where the rebound field's rebounds of that release first sit playable
+# (AIReboundField.crash_point_into, through the caller's corners), not along a
+# path the walk runs through the cage. INF for any other puck.
+static func rebound_point(puck_pos: Vector3, puck_vel: Vector3, release: Vector3,
+		spots: PackedInt32Array, weights: PackedFloat32Array) -> Vector3:
+	var shot_pace: float = AIActionScoring.TIP_MIN_SPEED_M_S
+	if puck_vel.x * puck_vel.x + puck_vel.z * puck_vel.z < shot_pace * shot_pace \
+			or absf(puck_vel.z) < 0.001:
+		return Vector3.INF
+	var goal := Vector3(0.0, 0.0, signf(puck_vel.z) * GameRules.GOAL_LINE_Z)
+	var to_line: float = (goal.z - puck_pos.z) / puck_vel.z
+	if to_line <= 0.0 \
+			or absf(puck_pos.x + puck_vel.x * to_line) > GameRules.NET_ENTRY_HALF_WIDTH:
+		return Vector3.INF
+	return AIReboundField.crash_point_into(release, false, goal, spots, weights)
+
+
+# The team's chaser once a human's "Get the puck!" order is laid over the
+# election: the ordered bot, unless he is not among `teammate_ids` or may not
+# touch the puck, when the election stands. Sending only a man who cannot play
+# it sends nobody.
+static func with_order(elected: int, ordered: int, teammate_ids: Array,
+		snapshot: WorldSnapshot) -> int:
+	if ordered == -1 or not teammate_ids.has(ordered) \
+			or snapshot.is_out_of_play(ordered):
+		return elected
+	return ordered
+
+
 # Raw best intercept time (seconds) among `ids` to the loose puck — the
 # election's race read with no hysteresis and no winner identity, so a caller can
 # compare OUR best against THEIRS through the same model. INF when no eligible
@@ -484,11 +565,12 @@ static func best_intercept_time(
 
 
 # Should I decline a loose puck? True when a committed opponent reaches it a
-# clear contest band (CHASE_CONTEST_MARGIN_M) ahead of me AND nobody else contains
-# the counter. Inside the band it is a live 50/50 worth racing.
+# clear contest band (CHASE_CONTEST_MARGIN_M) ahead of me, declining makes ME
+# containment, and nobody else already is. Inside the band it is a live 50/50
+# worth racing.
 #
 # `own_goal_dir` (+1 = our net at +Z) enables the containment read; 0.0 (unit
-# tests only) claims no containment.
+# tests only) claims no containment, so a lost race is always declined.
 static func loose_puck_race_lost(
 		snapshot: WorldSnapshot, self_pos: Vector3, self_vel: Vector3,
 		self_max_speed: float, team_id: int, team_id_by_peer: Dictionary,
@@ -538,35 +620,43 @@ static func loose_puck_race_lost(
 			/ maxf(self_max_speed, 1.0)
 	if my_eta <= best_opp_eta + contest_window:
 		return false
-	# Declining buys a pre-contain body, worth it only when nobody else contains.
+	if own_goal_dir == 0.0:
+		return true
+	# Declining buys a pre-contain body: worth it only when I would be one and
+	# nobody else already is. Behind the pickup and out of reach of home (a puck
+	# rimmed up-ice past us deep in their zone) a decline covers nothing.
+	if not _contains(self_pos, self_vel, best_opp_meet, own_goal_dir):
+		return false
 	return not _has_containment_behind(snapshot, team_id, team_id_by_peer,
 			self_pid, best_opp_meet, own_goal_dir)
 
 
-# Is someone else covering the counter, so that leaving to chase is free? A live
-# teammate qualifies if he is GOAL-SIDE of the pickup, or can reach the HOUSE GATE
-# inside AIRushRead.LATE_MAN_WINDOW_S — the second because nothing can be
-# goal-side of a puck behind our own goal line.
-#
-# Never re-phrase this as a race to the pickup: behind our goal line the pickup
-# IS our net, so the collector is already home and nobody beats him there.
+# Is someone else covering the counter, so that leaving to chase is free?
 static func _has_containment_behind(snapshot: WorldSnapshot, team_id: int,
 		team_id_by_peer: Dictionary, self_pid: int, pickup: Vector3,
 		own_goal_dir: float) -> bool:
-	if own_goal_dir == 0.0:
-		return false
-	var gate := Vector3(0.0, 0.0, own_goal_dir
-			* (GameRules.GOAL_LINE_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M))
 	for pid: int in snapshot.skater_states:
 		if pid == self_pid or team_id_by_peer.get(pid, -1) != team_id:
 			continue
 		var mate: SkaterNetworkState = snapshot.skater_states[pid]
 		if mate.is_ghost:
 			continue
-		if own_goal_dir * (mate.position.z - pickup.z) \
-				> AIActionScoring.CHASE_CONTEST_MARGIN_M:
-			return true
-		if AIArrival.time_to_arrive(mate.position, gate, mate.velocity) \
-				<= AIRushRead.LATE_MAN_WINDOW_S:
+		if _contains(mate.position, mate.velocity, pickup, own_goal_dir):
 			return true
 	return false
+
+
+# Does a body at `pos` contain the counter from `pickup`? He does if he is
+# GOAL-SIDE of the pickup, or can reach the HOUSE GATE inside
+# AIRushRead.LATE_MAN_WINDOW_S — the second because nothing can be goal-side of
+# a puck behind our own goal line.
+#
+# Never re-phrase this as a race to the pickup: behind our goal line the pickup
+# IS our net, so the collector is already home and nobody beats him there.
+static func _contains(pos: Vector3, vel: Vector3, pickup: Vector3,
+		own_goal_dir: float) -> bool:
+	if own_goal_dir * (pos.z - pickup.z) > AIActionScoring.CHASE_CONTEST_MARGIN_M:
+		return true
+	var gate := Vector3(0.0, 0.0, own_goal_dir
+			* (GameRules.GOAL_LINE_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M))
+	return AIArrival.time_to_arrive(pos, gate, vel) <= AIRushRead.LATE_MAN_WINDOW_S

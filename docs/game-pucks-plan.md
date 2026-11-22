@@ -38,7 +38,7 @@ first goal, the hundredth point — taped and dated.
   chasing a puck spends their teammates' and opponents' game, not only their
   own (Darktide is co-op against AI, where it mostly costs the player's own
   run). So no puck pays for losing, for padding a stat in a blowout, or for
-  playing badly on purpose. Goals, assists, interceptions, blocks, wins and
+  playing badly on purpose. Goals, assists, takeaways, blocks, wins and
   hits are all safe to count.
 - **Games against bots count for everything**, every tier and every combo,
   exactly as Steam career stats and achievements already count them
@@ -160,8 +160,8 @@ The rows live in `GamePucks.ALL`. The title combos:
 | combo | needs | title |
 |---|---|---|
 | Power Forward | `goals@50` + `hits@50` | Power Forward |
-| Shutdown | `interceptions@50` + `takeaways@50` + `shots_blocked@50` | Shutdown |
-| Two-Way | `goals@50` + `assists@50` + `interceptions@50` + `takeaways@50` | Two-Way |
+| Shutdown | `takeaways@50` + `shots_blocked@50` | Shutdown |
+| Two-Way | `goals@50` + `assists@50` + `takeaways@50` | Two-Way |
 | Iron Man | `games_played@100` | Iron Man |
 
 | Playmaker | `assists@250` + `one_timer_feed` | Playmaker |
@@ -173,9 +173,9 @@ Playmaker and Sniper arrived with the feats in Phase 3, Enforcer with the
 fight pucks. Phase 5's cosmetic pricing is
 below, under *Phases*.
 
-Ladders: goals, assists, points, hits, interceptions, takeaways, blocks, faceoff
-wins, wins and games, four or five tiers each. Every counter is a `SteamStats`
-row (`STAT_INTERCEPTIONS` was added for this); points are goals + assists. A
+Ladders: goals, assists, points, hits, takeaways, blocks, faceoff wins, wins and
+games, four or five tiers each. Every counter is a `SteamStats` row; points are
+goals + assists, and takeaways also count the retired `STAT_INTERCEPTIONS`. A
 ladder has at most as many tiers as `TrophyCopy.TIER_KEYS` has numerals.
 
 Feats are where Mitts can stand out, since the mechanics are deep enough to
@@ -187,8 +187,8 @@ host's `GoalFeatContext`):
 | `snipe` | a HIGH-loft shot released beyond the end-zone faceoff dots (6.1 m off the goal line) | the scorer |
 | `backhand_shelf` | a backhand at MID or HIGH loft | the scorer |
 | `one_timer_feed` | the primary assist on a one-timer goal | the passer |
-| `pick_and_finish` | a goal on the possession your own interception started | the scorer |
-| `strip_and_finish` | the same, after your own takeaway (poke, lift, check or pin) | the scorer |
+| `pick_and_finish` | a goal on the possession your own takeaway off a picked-off pass started | the scorer |
+| `strip_and_finish` | the same, after your own strip (poke, lift, check or pin) | the scorer |
 | `one_timer_dot` (*The Office*) | a one-timer released inside either faceoff circle in the zone scored on (4.572 m round the dot) | the scorer |
 
 The shot's loft level and hand are recorded on the host at release

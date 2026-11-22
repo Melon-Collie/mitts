@@ -104,9 +104,26 @@ static func is_zone_slot(slot: int) -> bool:
 			or slot == AIRoleSlots.Slot.ZONE_W_WEAK
 
 
+# The other label of `slot`'s strong/weak zone pair (the D pair, the winger
+# pair), or NONE for any other slot.
+static func zone_pair_partner(slot: int) -> int:
+	match slot:
+		AIRoleSlots.Slot.ZONE_D_STRONG:
+			return AIRoleSlots.Slot.ZONE_D_WEAK
+		AIRoleSlots.Slot.ZONE_D_WEAK:
+			return AIRoleSlots.Slot.ZONE_D_STRONG
+		AIRoleSlots.Slot.ZONE_W_STRONG:
+			return AIRoleSlots.Slot.ZONE_W_WEAK
+		AIRoleSlots.Slot.ZONE_W_WEAK:
+			return AIRoleSlots.Slot.ZONE_W_STRONG
+		_:
+			return AIRoleSlots.Slot.NONE
+
+
 # Assigns each teammate to a 5v5 slot. Same contract as AIRoleSlots.assign
-# plus `position_by_peer` (peer_id → lobby team_slot). Returns
-# Dictionary[peer_id, AIRoleSlots.Slot].
+# plus `position_by_peer` (peer_id → lobby team_slot). `kept` (peer_id → slot)
+# names bodies that hold their slot without racing for it — the brain's call
+# (TeamBrain._keep_the_labels_men_need). Returns Dictionary[peer_id, AIRoleSlots.Slot].
 static func assign(
 		snapshot: WorldSnapshot,
 		team_id: int,
@@ -117,7 +134,8 @@ static func assign(
 		strong_x: float,
 		caps_by_peer: Dictionary,
 		position_by_peer: Dictionary,
-		carrier_lane: int = 0) -> Dictionary[int, int]:
+		carrier_lane: int = 0,
+		kept: Dictionary = {}) -> Dictionary[int, int]:
 	var result: Dictionary[int, int] = {}
 	if snapshot == null:
 		return result
@@ -143,6 +161,11 @@ static func assign(
 	var puck_pos: Vector3 = snapshot.puck_state.position if snapshot.puck_state else Vector3.ZERO
 	var specs: Array[SlotSpec] = _specs_for_state(
 			state, own_goal_z, strong_x, puck_pos, carrier_lane)
+	if state == AIPossessionState.State.OZONE and assigned.has(carrier_pid) \
+			and _group_of(carrier_pid, position_by_peer) == Group.D \
+			and snapshot.skater_states.has(carrier_pid):
+		_settle_the_carriers_point(specs, snapshot.skater_states[carrier_pid].position,
+				own_goal_z, _point_given_to_a_forward(prev_assignments, position_by_peer))
 
 	# TRANS_DEFENSE: our line's posts are held only by a body that can be SET on
 	# them before the carrier gets there (the brake margin: the seconds a skater
@@ -166,6 +189,7 @@ static func assign(
 	var short_handed: bool = teammates.size() < specs.size()
 	if short_handed and state == AIPossessionState.State.TRANS_DEFENSE:
 		_keep_the_high_man(specs)
+	_seat_the_kept(specs, kept, teammates, result, assigned)
 	var carrier_depth_z: float = NAN
 	if carrier_pid != -1 and snapshot.skater_states.has(carrier_pid):
 		carrier_depth_z = snapshot.skater_states[carrier_pid].position.z
@@ -207,8 +231,7 @@ static func assign(
 		result[pid] = spec.slot
 		assigned[pid] = true
 
-	# Pass 2 — cross-fill: deferred slots take whoever is left, any group (a D
-	# carrier's point falls to the leftover forward).
+	# Pass 2 — cross-fill: deferred slots take whoever is left, any group.
 	for spec: SlotSpec in deferred:
 		var pid: int = _pick_soonest(snapshot, teammates, assigned,
 				prev_assignments, spec, caps_by_peer, position_by_peer, false)
@@ -223,16 +246,20 @@ static func assign(
 	#
 	# The OUR-POSSESSION states spec only four, because CARRIER is assigned only
 	# while one of ours really holds the puck — so every pass in flight leaves a
-	# body over. That body gets SUPPORT, never MARK: the threat partition does
-	# not run outside DZONE / TRANS_DEFENSE, so MARK would fall to its recovery
-	# argmax, a defender's read pointed at our own end. SUPPORT orients off
-	# resolve_offensive_play_ref, which answers with the puck when nobody
-	# carries, so a pass in flight is a situation it already handles.
-	var attacking: bool = state == AIPossessionState.State.OZONE \
-			or state == AIPossessionState.State.TRANS_OFFENSE \
-			or state == AIPossessionState.State.BREAKOUT
-	var spare_slot: int = AIRoleSlots.Slot.SUPPORT if attacking \
-			else AIRoleSlots.Slot.MARK
+	# body over, and so does a D carrying on his point (_settle_the_carriers_point).
+	# Never MARK: the threat partition does not run outside DZONE /
+	# TRANS_DEFENSE, so MARK would fall to its recovery argmax, a defender's read
+	# pointed at our own end. In the O-zone he is the third low forward, a
+	# FINISHER (holding his station while a pass travels); in transition SUPPORT,
+	# which orients off resolve_offensive_play_ref and so answers a pass in
+	# flight with the puck. SUPPORT's O-zone post is at their line, and a low
+	# man sent there on every pass is how the attack ends up four high.
+	var spare_slot: int = AIRoleSlots.Slot.MARK
+	if state == AIPossessionState.State.OZONE:
+		spare_slot = AIRoleSlots.Slot.FINISHER
+	elif state == AIPossessionState.State.TRANS_OFFENSE \
+			or state == AIPossessionState.State.BREAKOUT:
+		spare_slot = AIRoleSlots.Slot.SUPPORT
 	for pid: int in teammates:
 		if not assigned.has(pid):
 			result[pid] = spare_slot
@@ -407,6 +434,21 @@ static func _keep_the_high_man(specs: Array[SlotSpec]) -> void:
 		specs[high] = middle
 
 
+# Seats each `kept` body on his slot ahead of every race, and takes the slot out
+# of the election.
+static func _seat_the_kept(specs: Array[SlotSpec], kept: Dictionary,
+		teammates: Array[int], result: Dictionary[int, int], assigned: Dictionary) -> void:
+	for pid: int in kept:
+		if assigned.has(pid) or not teammates.has(pid):
+			continue
+		for i: int in specs.size():
+			if specs[i].slot == kept[pid]:
+				result[pid] = specs[i].slot
+				assigned[pid] = true
+				specs.remove_at(i)
+				break
+
+
 # Sets each back-line post's deadline: the carrier's arrival there less the
 # brake margin.
 static func _apply_back_line_deadlines(specs: Array[SlotSpec],
@@ -564,6 +606,46 @@ static func _deadline_time(s: SkaterNetworkState, spec: SlotSpec, t: float) -> f
 static func _group_of(pid: int, position_by_peer: Dictionary) -> int:
 	var lobby_slot: int = position_by_peer.get(pid, 0)
 	return Group.D if PlayerRules.is_defense_slot(lobby_slot) else Group.F
+
+
+# A D carrying the puck on his point IS that point: the point slot nearer him
+# leaves the election, and the forward it would have pulled up to the line stays
+# low as the spare. Once he has left it (the pinch rotation's read,
+# AIRoleDefenseman.carrier_off_the_point) that point is the forwards', raced for
+# on the whole trip up to it, and his partner keeps the other. `covered` (a
+# forward held a point last tick) drops the read's slack, so a cover already
+# made holds until he is back on the stand.
+static func _settle_the_carriers_point(specs: Array[SlotSpec], carrier_pos: Vector3,
+		own_goal_z: float, covered: bool) -> void:
+	var nearest: int = -1
+	var nearest_dx: float = INF
+	for i: int in specs.size():
+		if specs[i].slot != AIRoleSlots.Slot.POINT_STRONG \
+				and specs[i].slot != AIRoleSlots.Slot.POINT_WEAK:
+			continue
+		var dx: float = absf(specs[i].target.x - carrier_pos.x)
+		if dx < nearest_dx:
+			nearest_dx = dx
+			nearest = i
+	if nearest == -1:
+		return
+	var depth_inside: float = -signf(own_goal_z) * carrier_pos.z - GameRules.BLUE_LINE_Z
+	if not AIRoleDefenseman.carrier_off_the_point(depth_inside, covered):
+		specs.remove_at(nearest)
+		return
+	specs[nearest].group = Group.F
+	specs[nearest].home_slot = -1
+	specs[nearest].lateral_race = false
+
+
+static func _point_given_to_a_forward(prev_assignments: Dictionary,
+		position_by_peer: Dictionary) -> bool:
+	for pid: int in prev_assignments:
+		var slot: int = prev_assignments[pid]
+		if (slot == AIRoleSlots.Slot.POINT_STRONG or slot == AIRoleSlots.Slot.POINT_WEAK) \
+				and _group_of(pid, position_by_peer) == Group.F:
+			return true
+	return false
 
 
 # Cross-state hysteresis continuity for the 5v5 slots (the 3v3 sibling is

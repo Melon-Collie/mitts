@@ -439,6 +439,78 @@ func test_reach_band_covers_a_settled_puck_at_your_feet() -> void:
 	assert_false(far, "a dead puck 8 m away is the election's business")
 
 
+# ── The band is the man's the puck reaches first ─────────────────────────────
+
+# A 4 m/s puck sliding along +X from x = -6, a metre off the skates of every
+# man in `xs` (peer id = 10 + index): whether the band of the man at `self_i`
+# is a teammate's first.
+func _slow_feed_is_a_teammates(xs: Array[float], self_i: int,
+		tag_up: Dictionary = {}) -> bool:
+	var from := Vector3(-6, 0, 0)
+	var vel := Vector3(4, 0, 0)
+	var states: Dictionary = {}
+	var ids: Array = []
+	for i: int in xs.size():
+		states[10 + i] = _skater(Vector3(xs[i], 0, 1.0))
+		ids.append(10 + i)
+	var traj: Array[Vector3] = AILoosePuckChase.walk_race(from, vel)
+	var mine: float = AILoosePuckChase.reach_meet_time(traj, from, vel,
+			states[10 + self_i].position, Vector3.ZERO, REF, 1.8, false)
+	assert_lt(mine, INF, "fixture: the puck comes to his own band")
+	return AILoosePuckChase.teammate_band_meets_first(traj, from, vel, states, ids,
+			10 + self_i, mine, {}, tag_up)
+
+
+func test_a_slow_puck_crossing_several_bands_is_one_mans() -> void:
+	var xs: Array[float] = [3.0, -3.0, 0.0]
+	assert_false(_slow_feed_is_a_teammates(xs, 1), "the man it reaches first takes it")
+	assert_true(_slow_feed_is_a_teammates(xs, 2), "the next man down its path keeps his job")
+	assert_true(_slow_feed_is_a_teammates(xs, 0), "and so does the last")
+
+
+func test_the_band_passes_down_the_path_when_the_first_man_is_out_of_play() -> void:
+	var xs: Array[float] = [3.0, -3.0, 0.0]
+	assert_false(_slow_feed_is_a_teammates(xs, 2, {11: true}),
+			"a man owing a tag-up is nobody the puck comes to")
+
+
+func test_men_the_puck_reaches_inside_one_walk_step_go_by_who_is_nearer_it() -> void:
+	# Half a metre apart down its path: one meet time, to the walk's step. The
+	# nearer man holds the higher peer id, so the id is not what decides it.
+	var xs: Array[float] = [0.5, 0.0]
+	assert_true(_slow_feed_is_a_teammates(xs, 0), "the man further down the path yields")
+	assert_false(_slow_feed_is_a_teammates(xs, 1), "the nearer man takes it")
+
+
+func test_two_men_the_puck_reaches_together_do_not_both_yield() -> void:
+	# Mirrored either side of its line: bit-identical meet times.
+	var from := Vector3(-6, 0, 0)
+	var vel := Vector3(4, 0, 0)
+	var states: Dictionary = {7: _skater(Vector3(0, 0, 1.0)), 3: _skater(Vector3(0, 0, -1.0))}
+	var traj: Array[Vector3] = AILoosePuckChase.walk_race(from, vel)
+	var meet: float = AILoosePuckChase.reach_meet_time(traj, from, vel,
+			states[7].position, Vector3.ZERO, REF, 1.8, false)
+	assert_false(AILoosePuckChase.teammate_band_meets_first(traj, from, vel, states,
+			[7, 3], 3, meet, {}), "the lower peer id takes the dead heat")
+	assert_true(AILoosePuckChase.teammate_band_meets_first(traj, from, vel, states,
+			[7, 3], 7, meet, {}), "and the other yields it")
+
+
+func test_a_teammate_who_cannot_make_his_crossing_does_not_take_the_band() -> void:
+	# The 30 m/s slapper of the timing test passes a standing teammate 3 m off
+	# its line before it reaches me: geometrically his first, but no stride gets
+	# him there, so it is still mine.
+	var from := Vector3(0, 0, -25)
+	var vel := Vector3(0, 0, 30)
+	var states: Dictionary = {1: _skater(Vector3(3.0, 0, -22)), 2: _skater(Vector3(0.5, 0, 20))}
+	var traj: Array[Vector3] = AILoosePuckChase.walk_race(from, vel)
+	var mine: float = AILoosePuckChase.reach_meet_time(traj, from, vel,
+			states[2].position, Vector3.ZERO, REF, 1.8, false)
+	assert_lt(mine, INF, "fixture: it comes to me")
+	assert_false(AILoosePuckChase.teammate_band_meets_first(traj, from, vel, states,
+			[1, 2], 2, mine, {}))
+
+
 # ── Containment gate (losing a race is only a reason to STOP if it buys something)
 
 func test_lost_race_is_still_run_when_a_teammate_is_home() -> void:
@@ -525,6 +597,44 @@ func test_a_puck_rimmed_into_our_own_corner_is_still_chased() -> void:
 			alone, Vector3(6, 0, 20), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_true(lost_alone,
 			"with nobody able to hold the house the last man covers the net front")
+
+
+func _rimmed_out_of_their_zone(chaser: Vector3) -> WorldSnapshot:
+	# Our net at +Z. The puck has come up their wall to their man at the point,
+	# past our two mates deep in their zone: neither is goal-side of it nor can
+	# get home in time, so nobody else contains.
+	var snap := WorldSnapshot.new()
+	snap.puck_state = PuckNetworkState.new()
+	snap.puck_state.position = Vector3(-11, 0, -12)
+	snap.puck_state.velocity = Vector3.ZERO
+	snap.skater_states[1] = _skater(chaser)
+	snap.skater_states[2] = _skater(Vector3(2, 0, -22))
+	snap.skater_states[3] = _skater(Vector3(5, 0, -19))
+	snap.skater_states[11] = _skater(Vector3(-11, 0, -9),
+			Vector3(0, 0, -3))                                      # opponent, winning
+	return snap
+
+
+func test_a_lost_race_behind_the_pickup_and_far_from_home_is_still_run() -> void:
+	# Declining buys a body between the collector and our net. A chaser behind
+	# the pickup, out of reach of the house, is not one: his decline covers
+	# nothing, so it is never the answer anywhere below the pickup.
+	var teams := {1: 0, 2: 0, 3: 0, 11: 1}
+	for x: float in [-8.0, -4.0, 0.0, 4.0, 8.0]:
+		for z: float in [-24.0, -20.0, -16.0]:
+			var chaser := Vector3(x, 0, z)
+			var lost: bool = AILoosePuckChase.loose_puck_race_lost(
+					_rimmed_out_of_their_zone(chaser), chaser, Vector3.ZERO, REF,
+					0, teams, {}, 1, 1.0)
+			assert_false(lost, "a chaser at %s behind the pickup runs the race" % chaser)
+
+	# The same lost race from goal-side of the pickup: there his decline IS the
+	# containment, so he still takes it.
+	var high := Vector3(6, 0, -6)
+	var lost_high: bool = AILoosePuckChase.loose_puck_race_lost(
+			_rimmed_out_of_their_zone(high), high, Vector3.ZERO, REF,
+			0, teams, {}, 1, 1.0)
+	assert_true(lost_high, "a chaser goal-side of the pickup declines to contain it")
 
 
 func test_a_ghosted_teammate_is_not_containment() -> void:
@@ -844,3 +954,83 @@ func test_the_passer_does_not_own_his_own_feed() -> void:
 	# The feed starts on his blade, leaving: that is not a puck coming to his stick.
 	assert_ne(AILoosePuckChase.elect(_feed_states(), [200, 300], FEED_FROM,
 			FEED_VEL, -1), 300)
+
+
+# ── A shot on net is raced to its rebound ───────────────────────────────────
+
+const _SHOT_NET := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+const _SHOT_FROM := Vector3(1.0, 0.0, -GameRules.GOAL_LINE_Z + 10.0)
+
+
+func _corners() -> Array:
+	return [PackedInt32Array([0, 0, 0, 0]), PackedFloat32Array([0.0, 0.0, 0.0, 0.0])]
+
+
+func _rebound(vel: Vector3) -> Vector3:
+	var c: Array = _corners()
+	return AILoosePuckChase.rebound_point(_SHOT_FROM, vel, _SHOT_FROM, c[0], c[1])
+
+
+func test_a_shot_on_net_is_played_where_its_rebound_sits() -> void:
+	var at: Vector3 = _rebound((_SHOT_NET - _SHOT_FROM).normalized() * 30.0)
+	assert_eq(at, AIReboundField.crash_point_at(_SHOT_FROM, false, _SHOT_NET),
+			"the rebound field's contest point for the release")
+
+
+func test_a_puck_that_is_not_a_shot_on_net_has_no_rebound() -> void:
+	var on: Vector3 = (_SHOT_NET - _SHOT_FROM).normalized()
+	assert_false(_rebound(on * 8.0).is_finite(), "too slow for a shot")
+	assert_false(_rebound(-on * 30.0).is_finite(), "heading away")
+	assert_false(_rebound((_SHOT_NET + Vector3(4.0, 0.0, 0.0) - _SHOT_FROM).normalized()
+			* 30.0).is_finite(), "wide of the mouth")
+
+
+func test_a_shot_on_net_elects_the_man_soonest_to_its_rebound() -> void:
+	# One man stands on the shot's line nearer the shooter, the other at the
+	# rebound: raced along the puck's path the first meets it; raced to the
+	# rebound, the second is there.
+	var vel: Vector3 = (_SHOT_NET - _SHOT_FROM).normalized() * 30.0
+	var at: Vector3 = _rebound(vel)
+	var in_lane: Vector3 = _SHOT_FROM + vel.normalized() * 2.0
+	var states := _states({100: _skater(in_lane), 101: _skater(at + Vector3(0.3, 0.0, 0.0))})
+	assert_eq(AILoosePuckChase.elect(states, [100, 101], _SHOT_FROM, vel, -1), 100,
+			"the path's own race")
+	assert_eq(AILoosePuckChase.elect(states, [100, 101], _SHOT_FROM, vel, -1, {}, true, [], [],
+			at), 101, "raced to the rebound")
+
+
+func test_the_rebound_read_off_the_worker_brings_its_own_corners() -> void:
+	# GameManager elects on the main thread while the AI worker reads the
+	# fields through AIFieldGrid's corners: its read must pass its own.
+	var src: String = FileAccess.get_file_as_string("res://Scripts/game/game_manager.gd")
+	assert_true(src.contains("AIReboundField.prepare()"),
+			"the field is built before either thread reads it")
+	assert_false(src.contains("AIFieldGrid.spot"),
+			"the main thread never fills the worker's corners")
+	assert_true(src.contains("_rebound_spots"), "it passes its own")
+
+
+# ── A human's "Get the puck!" laid over the election ─────────────────────────
+
+func _feed_snapshot() -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	var states: Dictionary = _feed_states()
+	for pid: int in states:
+		snap.skater_states[pid] = states[pid]
+	return snap
+
+
+func test_an_ordered_bot_takes_the_chase_from_the_elected_one() -> void:
+	var snap: WorldSnapshot = _feed_snapshot()
+	assert_eq(AILoosePuckChase.with_order(100, 200, [100, 200, 300], snap), 200)
+	assert_eq(AILoosePuckChase.with_order(100, -1, [100, 200, 300], snap), 100,
+			"no order")
+
+
+func test_an_order_to_a_man_who_cannot_play_the_puck_leaves_the_election() -> void:
+	var snap: WorldSnapshot = _feed_snapshot()
+	snap.tag_up_peers[200] = true
+	assert_eq(AILoosePuckChase.with_order(100, 200, [100, 200, 300], snap), 100,
+			"owing a tag-up")
+	assert_eq(AILoosePuckChase.with_order(100, 999, [100, 200, 300], snap), 100,
+			"not on this team's ice")

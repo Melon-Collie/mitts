@@ -152,7 +152,7 @@ func test_control_tick_costs() -> void:
 	# cannot reach their geometry.
 	_controller.has_puck = true
 	_bench("[E] collide pinned puck with net (carrying)", func() -> void:
-		_controller._collide_pinned_puck_with_net())
+		_controller._collide_pinned_puck_with_net(delta))
 	_controller.has_puck = false
 
 	_bench("[F] angular velocities", func() -> void:

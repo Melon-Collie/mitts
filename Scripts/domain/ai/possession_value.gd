@@ -12,7 +12,8 @@ extends RefCounted
 #
 # Every read is made from a puck he has to keep at the spot first, so each is
 # taken at the odds he does (base_at's keep): a shot off it, a drive, an entry.
-# A drive is then the odds of keeping the puck to where it ends × the shot there.
+# A drive is then the odds of keeping the puck on it × the best shot it passes on
+# the way in.
 # An entry is the better of its shot and the drive in from it, × the skate there —
 # the odds he keeps the puck on it (_skate_keep) — × the race to it: the side's
 # man from the spot against the defence's first arrival (AIActionScoring
@@ -27,16 +28,21 @@ extends RefCounted
 #
 # Every shot is against a keeper who tracked the play: set and square
 # (AIShotValue.set_keeper). Not modelled: passes — one man carries — and where
-# the defence will be by the time he gets anywhere, beyond dead reckoning.
+# the defence will be by the time he gets anywhere, beyond dead reckoning
+# (read_from_puck: for the side with the puck, a man backing off ahead of it stops).
 
 # Where a side enters: a stride past the line, in the middle and in each wall lane.
 const ENTRY_LEAD_M: float = 3.0
 const ENTRY_WALL_INSET_M: float = 2.0
-# A drive in: straight at the net, at most this far, stopping this far out. Also
-# how far a skate to an entry is priced as a carry: the read does not follow the
-# defence's pursuit further.
+# A drive in: straight at the net, stopping DRIVE_MIN_NET_DIST_M out, the odds
+# he keeps the puck priced over its first DRIVE_MAX_M. Also how far a skate to
+# an entry is priced as a carry: the read does not follow the defence's pursuit
+# further.
 const DRIVE_MAX_M: float = 12.0
 const DRIVE_MIN_NET_DIST_M: float = 3.0
+# How far out a drive's shots on the way in are read from: the range the carrier
+# plans his own release in.
+const DRIVE_SHOT_RANGE_M: float = 8.0
 # Goalie halves memoized per fill (_goalie_half): a defence read prices the same
 # few spots against every candidate body. Round-robin past this many.
 const GOALIE_MEMO_CAP: int = 32
@@ -90,6 +96,8 @@ var _opp_goal: Vector3 = Vector3.ZERO
 var _defenders: Array[Vector3] = []
 var _defender_vels: Array[Vector3] = []
 var _defender_caps: Array = []
+# The side's own puck, up the ice (read_from_puck); NAN: not this side's read.
+var _puck_z: float = NAN
 var _entry_spots: Array[Vector3] = []
 var _entry_worth: Array[float] = []   # < 0 until priced (_worth)
 # The most each entry's continuation can read (base_ceiling), its bound until
@@ -154,6 +162,7 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 	_defenders = defenders
 	_defender_vels = defender_vels
 	_defender_caps = defender_caps
+	_puck_z = NAN
 	_pushed = 0
 	_defence_gen += 1
 	_memo_from.clear()
@@ -180,6 +189,16 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 		_entry_opp_gen.append(-1)
 	if goal != _open_goal:
 		_price_open()
+
+
+# The read is the side's own, its puck at `puck_z` up the ice: a defender in
+# front of the puck backing off toward his net is carried on no further than
+# his stop takes (AICarrierField.project_opponents, the same man). Carried on at
+# his retreat, every later read shows ice he has left and waiting for it pays.
+# Until the next fill().
+func read_from_puck(puck_z: float) -> void:
+	_puck_z = puck_z
+	_defence_gen += 1
 
 
 # The puck at `pos` for the side fill() priced, its man there `start_s` from now
@@ -316,8 +335,14 @@ func _defence_at(t: float) -> Array[Vector3]:
 		_proj_next = (_proj_next + 1) % PROJECTION_MEMO
 	var out: Array[Vector3] = _proj[slot]
 	out.clear()
+	var toward_net: float = signf(_goal.z)
 	for k: int in _defenders.size():
-		out.append(AITrajectory.predict_at(_defenders[k], _defender_vels[k], t))
+		var at_k: Vector3 = _defenders[k]
+		var vel: Vector3 = _defender_vels[k]
+		if not is_nan(_puck_z) and vel.z * toward_net > 0.0 and (at_k.z - _puck_z) * toward_net > 0.0:
+			out.append(AITrajectory.predict_stopping(at_k, vel, t, AIArrival.REVERSAL_BRAKE_DECEL_M_S2))
+		else:
+			out.append(AITrajectory.predict_at(at_k, vel, t))
 	_proj_t[slot] = t
 	_proj_gen[slot] = _defence_gen
 	return out
@@ -445,27 +470,62 @@ func _drive(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO) -> float
 	var d: float = to_net.length()
 	if d <= DRIVE_MIN_NET_DIST_M + 0.1:
 		return 0.0
-	var target: Vector3 = from + to_net * (minf(DRIVE_MAX_M, d - DRIVE_MIN_NET_DIST_M) / d)
+	var reach: float = d - DRIVE_MIN_NET_DIST_M
+	var target: Vector3 = from + to_net * (reach / d)
 	if AINetObstacle.carry_path_blocked_by_net(from, target):
 		return 0.0
+	# The odds he keeps it are priced over the horizon; unstripped inside it, he
+	# goes on to the net.
+	var horizon: Vector3 = from + to_net * (minf(DRIVE_MAX_M, reach) / d)
 	var defence: Array[Vector3] = _defence_at(start_s)
-	var t: float = AIArrival.time_to_arrive(from, target, vel)
-	var keep: float = AICarrySpace.carry_safety(from, target, t, defence, _defender_vels,
+	var horizon_s: float = AIArrival.time_to_arrive(from, horizon, vel)
+	var keep: float = AICarrySpace.carry_safety(from, horizon, horizon_s, defence, _defender_vels,
 			_defender_caps, true)
 	if keep <= 0.0:
 		return 0.0
 	var reached: Vector3 = target
 	if keep < 1.0:
-		reached = AICarrySpace.carry_strip_point(from, target, t, defence,
+		var stripped: Vector3 = AICarrySpace.carry_strip_point(from, horizon, horizon_s, defence,
 				_defender_vels, _defender_caps, true, true)
-		if reached != target:
-			t = AIArrival.time_to_arrive(from, reached, vel)
+		if stripped != horizon:
+			reached = stripped
+	var t: float = AIArrival.time_to_arrive(from, reached, vel)
+	_drive_keep = keep
 	_drive_end = reached
 	_drive_end_s = start_s + t
-	_drive_end_vel = _arrive_vel(from, reached, t)
-	_drive_keep = keep
 	_drive_shot = _shot(reached)
-	return _drive_shot * keep * AIActionScoring.delay_discount(start_s + t)
+	var best: float = _drive_shot * AIActionScoring.delay_discount(_drive_end_s)
+	# He lets it go where the drive's shot is best, not where it stops: read
+	# where it crosses each row the shot field is measured at.
+	var from_out: float = (_goal.z - from.z) * signf(_goal.z)
+	var end_out: float = (_goal.z - reached.z) * signf(_goal.z)
+	for row_out: float in AIShotOdds.rows_out():
+		if row_out <= end_out:
+			continue
+		if row_out >= from_out or row_out > DRIVE_SHOT_RANGE_M:
+			break
+		var at_row: Vector3 = from.lerp(reached, (from_out - row_out) / (from_out - end_out))
+		# The keeper's half bounds the shot (the defence only lowers it, and the
+		# wait only decays it), so a row it cannot win on is read no further.
+		# Off the field, not through the memo: a drive's rows are its own.
+		var half: float = AIShotValue.set_keeper(at_row, _goal)
+		if half <= best:
+			continue
+		var row_s: float = start_s + AIArrival.time_to_arrive(from, at_row, vel)
+		var decay: float = AIActionScoring.delay_discount(row_s)
+		if half * decay <= best:
+			continue
+		var shot: float = AIActionScoring.score_shoot_value(at_row, _goal, Vector3.INF, _defenders,
+				0.0, AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
+				_defender_caps, half)
+		var now: float = shot * decay
+		if now > best:
+			best = now
+			_drive_end = at_row
+			_drive_end_s = row_s
+			_drive_shot = shot
+	_drive_end_vel = _arrive_vel(from, _drive_end, _drive_end_s - start_s)
+	return best * keep
 
 
 # ── The defence's read of a man ──────────────────────────────────────────────

@@ -24,6 +24,10 @@ const GOALIE_LATERAL_ACCEL_M_S2: float = GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_
 # because the model threads ~every scoring entry point; set at match config,
 # never per tick.
 static var goalie_leg_delay_s: float = GameRules.DEFAULT_GOALIE_REACTION_DELAY_S
+# His drop into the butterfly from the low ready, the stance a carrier in range
+# finds him in (KeeperLowReady.fall_share_at): how far ahead of a carrier
+# coming in tight he goes down (KeeperPositioning.down_range).
+static var goalie_drop_s: float = GoalieSkillProfile.hard().butterfly_drop_s * KeeperLowReady.fall_share_at(1.0)
 
 # His skating, which his depth answers the play from (KeeperPositioning.depth_for).
 static var _skates := KeeperFootwork.new()
@@ -45,6 +49,7 @@ static func _standing_pad_reach() -> float:
 # GoalieSkillProfile.hard() to restore the baseline (tests must restore).
 static func set_goalie_profile(profile: GoalieSkillProfile) -> void:
 	goalie_leg_delay_s = profile.reaction_delay_s
+	goalie_drop_s = profile.butterfly_drop_s * KeeperLowReady.fall_share_at(1.0)
 
 
 # The keeper's depth (metres out from his goal line) when the puck is at
@@ -137,6 +142,18 @@ static func goalie_reset_s() -> float:
 # rise; test_ai_goalie_model_mirrors.gd holds the two together): a shot sooner
 # than this from now still finds him in the stance he is in.
 const GOALIE_RECOVERY_S: float = 0.35
+
+# Whether he is down for a carrier of theirs with the puck at `puck`, in front
+# of the net at `attacking_goal`, coming at it at `closing_speed_m_s`: in tight
+# he plays it down (KeeperPositioning.TIGHT_M, kept_down and planted), and he
+# leaves his feet as far outside that as lands his drop by the time the
+# carrier is there (KeeperPositioning.down_range), his play read carrying the
+# puck on along its motion so his read costs no ground.
+static func down_in_tight(puck: Vector3, attacking_goal: Vector3, closing_speed_m_s: float = 0.0) -> bool:
+	if (puck.z - attacking_goal.z) * -signf(attacking_goal.z) <= 0.0:
+		return false
+	return Vector2(puck.x - attacking_goal.x, puck.z - attacking_goal.z).length() \
+			<= KeeperPositioning.down_range(closing_speed_m_s, goalie_drop_s)
 
 # The fastest a loose puck can be going for him to cover it (KeeperCover): one
 # slowing at his feet he covers, one going by he saves, and it stays live.

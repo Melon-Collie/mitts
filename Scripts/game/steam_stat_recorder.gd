@@ -41,8 +41,9 @@ func record_game(stats: PlayerStats, outcome: String) -> void:
 
 # Current career totals from Steam, keyed by career-totals column name (goals,
 # assists, hits, wins, games_played, …) — the shape GamePuckRules reads. `points`
-# is derived for parity with the Supabase view. Empty without Steam (every ladder
-# then reads zero).
+# is derived for parity with the Supabase view, and takeaways carry the retired
+# interceptions counter, as the view's do. Empty without Steam (every ladder then
+# reads zero).
 func totals() -> Dictionary:
 	var out: Dictionary = {}
 	if not SteamManager.is_available:
@@ -50,4 +51,6 @@ func totals() -> Dictionary:
 	for entry in SteamStats.ALL:
 		out[String(entry["key"])] = SteamManager.get_stat_int(String(entry["id"]))
 	out["points"] = int(out.get("goals", 0)) + int(out.get("assists", 0))
+	out["takeaways"] = int(out.get("takeaways", 0)) \
+			+ SteamManager.get_stat_int(SteamStats.LEGACY_INTERCEPTIONS)
 	return out

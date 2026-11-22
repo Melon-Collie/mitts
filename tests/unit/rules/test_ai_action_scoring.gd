@@ -931,7 +931,7 @@ func test_friction_traverse_time_exceeds_frictionless() -> void:
 	# frictionless baseline and the kinematic identity dist = v0·T − ½·a·T².
 	var dist: float = 18.0
 	var v0: float = 20.0
-	var t: float = AIPuckLane._friction_traverse_time(dist, v0)
+	var t: float = AIPuckLane.friction_traverse_time(dist, v0)
 	assert_gt(t, dist / v0, "friction makes the traversal take longer than dist/v0")
 	var a: float = GameRules.PUCK_ICE_DECEL_M_S2
 	assert_almost_eq(v0 * t - 0.5 * a * t * t, dist, 0.001,
@@ -1362,24 +1362,114 @@ func _tip_fixture(tip_man: Vector3, pace: float,
 
 
 func test_tip_needs_a_blade_the_shot_line_actually_crosses() -> void:
-	# A man 5 m off the line can't reach the flight in time (the same
-	# reach/reaction race a lane defender runs) — no tip outcome exists.
+	# A man 5 m off the line can't get his blade to it before the puck (his
+	# own arrival clock, AIArrival.reach_eta) — no tip outcome exists.
 	var none: Array[Vector3] = []
 	assert_eq(_tip_fixture(Vector3(5.0, 0.0, 24.0), 33.0, none), 0.0,
 			"an unreachable flight is not tippable")
 
 
+func test_the_tippers_own_momentum_decides_whether_his_blade_gets_there() -> void:
+	# 3.5 m off the line, past his blade's reach: standing he is not there
+	# before the rip; already skating onto the line, he is.
+	var none: Array[Vector3] = []
+	var tip_man := Vector3(3.5, 0.0, 24.0)
+	var standing: float = AIActionScoring.tip_ev(Vector3(0.0, 0.0, 10.0), tip_man, GOAL,
+			Vector3(0.0, 0.0, 25.5), none, 33.0)
+	var skating: float = AIActionScoring.tip_ev(Vector3(0.0, 0.0, 10.0), tip_man, GOAL,
+			Vector3(0.0, 0.0, 25.5), none, 33.0, [], null, Vector3(-6.0, 0.0, 0.0))
+	assert_eq(standing, 0.0, "standing, the rip is past before his blade")
+	assert_gt(skating, 0.0, "skating onto the line, his blade is on it")
+
+
+func test_a_man_on_the_shooter_contests_the_rip_as_he_does_the_shot() -> void:
+	# A defender on the shooter's hip, behind the release and out of the lane to
+	# the tipper, can still get a stick on the rip as it leaves.
+	var none: Array[Vector3] = []
+	var on_him: Array[Vector3] = [Vector3(0.6, 0.0, 9.4)]
+	var free: float = _tip_fixture(Vector3(0.0, 0.0, 24.0), 33.0, none)
+	var contested: float = _tip_fixture(Vector3(0.0, 0.0, 24.0), 33.0, on_him)
+	assert_gt(free, 0.0)
+	assert_lt(contested, free, "the release contest the direct shot pays")
+
+
+func _rip_past(defender: Vector3, vel: Vector3, blade: Vector3) -> float:
+	var d: Array[Vector3] = [defender]
+	var v: Array[Vector3] = [vel]
+	var b: Array[Vector3] = [blade]
+	return AIActionScoring.tip_ev(Vector3(0.0, 0.0, 10.0), Vector3(0.0, 0.0, 24.0), GOAL,
+			Vector3(0.0, 0.0, 25.5), d, 33.0, [], null, Vector3.ZERO, v, b)
+
+
+# The rip is a pass to the tipper's stick, and its lane is read as the carrier
+# reads a pass's: each defender from his momentum, his stick where he holds it.
+func test_a_defender_skating_into_the_rips_lane_takes_it() -> void:
+	var at := Vector3(2.5, 0.0, 16.0)
+	var standing: float = _rip_past(at, Vector3.ZERO, at)
+	var skating_in: float = _rip_past(at, Vector3(-6.0, 0.0, 0.0), at)
+	assert_gt(standing, 0.0)
+	assert_lt(skating_in, standing, "his skating carries him onto the line")
+
+
+func test_a_stick_held_in_the_rips_lane_takes_it() -> void:
+	var at := Vector3(2.5, 0.0, 16.0)
+	var stick_at_body: float = _rip_past(at, Vector3.ZERO, at)
+	var stick_out: float = _rip_past(at, Vector3.ZERO, Vector3(0.8, 0.0, 16.0))
+	assert_lt(stick_out, stick_at_body, "a blade reaching for the lane plays it")
+
+
+# A rip is tipped where his blade is, so its lane runs to his blade's catch
+# (AIPuckLane.LANE_BLADE_CATCH_M), not a receiver's reach short of it: a
+# defender beside the tip point with his stick held off the line gets it onto
+# the line before the tipper's blade, though not a receiver's reach upstream.
+func test_a_lane_read_to_the_blades_catch_counts_a_stick_beside_its_end() -> void:
+	var from := Vector3(0.0, 0.0, 10.0)
+	var to := Vector3(0.0, 0.0, 22.0)
+	var d: Array[Vector3] = [Vector3(4.0, 0.0, 22.5)]
+	var v: Array[Vector3] = [Vector3.ZERO]
+	var b: Array[Vector3] = [Vector3(1.4, 0.0, 22.0)]
+	var to_reach: float = AIPuckLane.lane_clear(from, to, d, 33.0, v, [], true, b)
+	var to_catch: float = AIPuckLane.lane_clear(from, to, d, 33.0, v, [], true, b,
+			AIPuckLane.LANE_BLADE_CATCH_M)
+	assert_lt(to_catch, to_reach, "the stretch short of the end is read")
+
+
+func test_a_stick_on_the_line_short_of_his_blade_takes_the_rip() -> void:
+	var tip_z: float = 24.0 - AITipPoint.BLADE_OUT_M
+	var body := Vector3(2.6, 0.0, tip_z - 1.0)
+	var on_the_line: float = _rip_past(body, Vector3.ZERO, Vector3(0.0, 0.0, tip_z - 1.0))
+	var held_off: float = _rip_past(body, Vector3.ZERO, Vector3(4.0, 0.0, tip_z - 1.0))
+	assert_gt(held_off, 0.0, "a stick held off the line cannot get to it in time")
+	assert_lt(on_the_line, held_off, "a stick on the line before his blade takes it")
+
+
+func test_a_short_rip_is_tipped_only_by_a_stick_that_can_swing_onto_it() -> void:
+	# From 6 m out the rip is at him in under 0.2 s: a stick already on its path
+	# tips it, one held out the far side of him cannot swing across in time.
+	var none: Array[Vector3] = []
+	var release := Vector3(0.0, 0.0, 18.0)
+	var tipper := Vector3(1.5, 0.0, 24.0)
+	var on_path: float = AIActionScoring.tip_ev(release, tipper, GOAL, Vector3(0.0, 0.0, 25.5),
+			none, 33.0, [], null, Vector3.ZERO, [], [], Vector3(0.3, 0.0, 23.5))
+	var far_side: float = AIActionScoring.tip_ev(release, tipper, GOAL, Vector3(0.0, 0.0, 25.5),
+			none, 33.0, [], null, Vector3.ZERO, [], [], Vector3(3.0, 0.0, 24.0))
+	assert_gt(on_path, 0.0, "his stick on its path")
+	assert_eq(far_side, 0.0, "his stick cannot get there in time")
+
+
 func test_tip_needs_shot_pace() -> void:
-	# The tipper holds the deflect, so any pace tips — but under the pace the
-	# finisher reads as a shot (AIRoleFinisher.INCOMING_SHOT_SPEED_M_S) he never
-	# goes to tip it.
+	# Under the pace the finisher reads as a shot (AIRoleFinisher
+	# .INCOMING_SHOT_SPEED_M_S) he never goes to tip it, and one he can hold
+	# (AIFeedReception.RECEIVE_HOLD_CEILING_M_S at the tip) he receives instead.
 	var none: Array[Vector3] = []
 	var gate: float = AIActionScoring.TIP_MIN_SPEED_M_S
 	assert_eq(AIRoleFinisher.INCOMING_SHOT_SPEED_M_S, gate, "the tip is priced where it is played")
 	assert_eq(_tip_fixture(Vector3(0.0, 0.0, 24.0), gate - 1.0, none), 0.0,
 			"a soft feed is a pass, not a tip")
-	assert_gt(_tip_fixture(Vector3(0.0, 0.0, 24.0), 18.0, none), 0.0,
-			"a wrister under the old catch ceiling is tipped all the same")
+	assert_eq(_tip_fixture(Vector3(0.0, 0.0, 24.0), 18.0, none), 0.0,
+			"a wrister he can hold is received, not tipped")
+	assert_gt(_tip_fixture(Vector3(0.0, 0.0, 24.0), 33.0, none), 0.0,
+			"a rip too fast to hold is tipped")
 
 
 func test_lane_clear_accurate_never_reads_a_crossing_defender_clearer() -> void:

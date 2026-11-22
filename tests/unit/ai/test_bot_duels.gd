@@ -69,6 +69,32 @@ func test_container_duel_resolves_with_possession() -> void:
 			"the puck got past the container's starting line in team-0 hands — the duel resolved")
 
 
+func test_no_bots_cursor_is_ever_left_at_the_origin() -> void:
+	# The input scratch is zeroed every tick, and a dispatch path that returns
+	# without stepping the cursor (a puck just lost, a press that bails or
+	# releases) left it there: the blade was sent reaching for centre ice for the
+	# tick. Three on two in one end, far from centre, through passes, shots and
+	# strips.
+	var duel: RefCounted = DuelHarness.new()
+	duel.add_skater(CARRIER, 0, Vector3(-6.0, 0, -14.0), null, Vector3(0, 0, -5.0))
+	duel.add_skater(102, 0, Vector3(6.0, 0, -15.0), null, Vector3(0, 0, -5.0))
+	duel.add_skater(103, 0, Vector3(0.0, 0, -11.0), null, Vector3(0, 0, -4.0))
+	duel.add_skater(DEFENDER, 1, Vector3(-3.0, 0, -20.0))
+	duel.add_skater(DEFENDER_2, 1, Vector3(3.0, 0, -21.0))
+	duel.start(CARRIER)
+	var at_origin: int = 0
+	var releases_seen: int = 0
+	for _i: int in int(6.0 / DuelHarness.DT):
+		duel.step()
+		for s: Object in duel.skaters:
+			if s.input.mouse_world_pos == Vector3.ZERO:
+				at_origin += 1
+		releases_seen = duel.releases.size()
+	assert_gt(releases_seen + duel.strips, 0,
+			"the fixture has the puck change hands, which is where a tick used to skip the cursor")
+	assert_eq(at_origin, 0, "bot-ticks with the cursor at the world origin")
+
+
 func test_cornered_carrier_escapes() -> void:
 	# A patient scripted container holds the line to the net while a real
 	# defender pressures from behind — retreat denied, forward contained. The
@@ -91,32 +117,28 @@ func test_cornered_carrier_escapes() -> void:
 			"puck carried past the container or released on net")
 
 
-func test_pincer_duel_carrier_keeps_the_puck() -> void:
-	# Two defenders converging from ahead on both sides — the corralling trap
-	# that used to strip the old passive evasion every time. The carrier doesn't
-	# have to score; it has to KEEP THE PUCK THROUGH THE TRAP: the pincer never
-	# gets a stick on the carried puck (no strip), and the puck ends the window on
-	# our stick or deliberately released. A defender recovering a puck the carrier
-	# itself RELEASED (a shot/dump out of the trap) is not the pincer stripping it —
-	# so the honest measure is `strips`, not raw defender carry-time (which counts
-	# post-release recovery; see the momentum-aware ETA — the carrier now splits the
-	# D and drives out rather than being corralled).
+func test_two_defenders_are_not_split_by_a_lone_carrier() -> void:
+	# A lone carrier three metres in front of two defenders, one either side of
+	# his lane. One plays him and the other is the layer behind (AIRoleMark), so
+	# whatever he does with the puck, he never carries it past both of them: a
+	# carrier who skates between two men and out the other side has found a
+	# defence with nobody behind the man on him.
 	var duel: RefCounted = DuelHarness.new()
 	duel.add_skater(CARRIER, 0, Vector3(0, 0, -10.0))
 	duel.add_skater(DEFENDER, 1, Vector3(1.8, 0, -13.0))
 	duel.add_skater(DEFENDER_2, 1, Vector3(-1.8, 0, -13.0))
 	duel.start(CARRIER)
-	duel.run(5.0)
-	# The pincer never SUSTAINS possession from a strip. Momentary pokes the carrier
-	# recovers from (duel.strips) are the carrier fighting through contact, not a
-	# takeover; and a defender recovering a puck the carrier itself RELEASED (a
-	# shot/dump out of the trap) is not the pincer stripping it. So the honest read
-	# is: the carrier either still has the puck at the buzzer, or the FIRST release
-	# was its OWN deliberate play out of the trap.
-	var carrier_made_first_play: bool = duel.releases.size() > 0 \
-			and int(duel.releases[0]["peer"]) == CARRIER
-	assert_true(duel.carrier() == CARRIER or carrier_made_first_play,
-			"the carrier keeps it through the trap and makes its OWN play — the pincer never strips and takes over")
+	var net := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+	var split_ticks: int = 0
+	for i: int in int(5.0 / DuelHarness.DT):
+		duel.step()
+		if duel.carrier() != CARRIER:
+			continue
+		var carrier_m: float = duel.skater_pos(CARRIER).distance_to(net)
+		if duel.skater_pos(DEFENDER).distance_to(net) > carrier_m \
+				and duel.skater_pos(DEFENDER_2).distance_to(net) > carrier_m:
+			split_ticks += 1
+	assert_eq(split_ticks, 0, "the carrier carried the puck goal-side of both defenders")
 
 
 func test_loose_puck_pickup_is_blade_first() -> void:

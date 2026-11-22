@@ -49,16 +49,10 @@ const _BEACON_PULSE_HZ: float        = 1.6
 const _BEACON_PULSE_MIN_SCALE: float = 0.92
 const _BEACON_PULSE_MAX_SCALE: float = 1.10
 
-# Smart-ping chat bubble. A billboarded Label3D that floats above the PINGER's
-# head for a beat, showing the resolved team message ("Pass to me!", "Cover
-# him!", ...). Built lazily on the first ping (most skaters never ping), holds
-# fully visible then fades out; position is rewritten each frame like the
-# beacon. Sits above the self-beacon apex so the two never overlap on the
-# local player's own skater.
-const _PING_BUBBLE_HOVER_OFFSET: float = 1.62
-const _PING_BUBBLE_HOLD_S: float = 2.4
-const _PING_BUBBLE_FADE_S: float = 0.5
-const _PING_BUBBLE_OUTLINE_A: float = 0.85
+# How far up the screen from the skater a call's bubble points its tail: clear
+# of the body and of the self-beacon over it.
+const _CALLOUT_RADIUS: float = 0.95
+const _CALLOUT_Y: float = 0.05
 
 # Crowd-gated visibility. The beacon is clutter on open ice and only earns its
 # place in a scrum, so it shows only when at least _BEACON_CROWD_COUNT other
@@ -117,10 +111,8 @@ var _beacon_crowded: bool = false
 var _beacon_crowd_accum: float = _BEACON_CROWD_CHECK_INTERVAL
 var _beacon_linger_timer: float = 0.0
 
-# Smart-ping chat bubble (lazy-built; null until this skater's first ping).
-# `_ping_bubble_time_left` counts down HOLD+FADE; the fade tail drives alpha.
-var _ping_label: Label3D = null
-var _ping_bubble_time_left: float = 0.0
+# Lazy: null until this skater's first call.
+var _callout: PingCallout = null
 
 # Slapper one-timer indicator, drawn by the ice shader (see IceRingField): just
 # the state the shader needs, no per-skater nodes. Placement, rotation and stroke
@@ -206,9 +198,8 @@ func update(delta: float) -> void:
 			_ring_visible = false
 			_name_label.visible = false
 			if _self_beacon != null: _self_beacon.visible = false
-			if _ping_label != null:
-				_ping_label.visible = false
-				_ping_bubble_time_left = 0.0
+			if _callout != null:
+				_callout.dismiss()
 		return
 	if _hidden_for_replay:
 		_hidden_for_replay = false
@@ -252,21 +243,8 @@ func update(delta: float) -> void:
 		var s: float = lerpf(_BEACON_PULSE_MIN_SCALE, _BEACON_PULSE_MAX_SCALE, pulse_t)
 		_self_beacon.scale = Vector3(s, s, s)
 
-	# Smart-ping chat bubble: hold above the head, then fade out. Only ticks
-	# while a bubble is live, so the idle cost is one branch.
-	if _ping_label != null and _ping_bubble_time_left > 0.0:
-		_ping_bubble_time_left -= delta
-		if _ping_bubble_time_left <= 0.0:
-			_ping_label.visible = false
-		else:
-			_ping_label.global_position = Vector3(
-					render_pos.x,
-					render_pos.y + _PING_BUBBLE_HOVER_OFFSET,
-					render_pos.z)
-			var bubble_a: float = clampf(
-					_ping_bubble_time_left / _PING_BUBBLE_FADE_S, 0.0, 1.0)
-			_ping_label.modulate.a = bubble_a
-			_ping_label.outline_modulate.a = _PING_BUBBLE_OUTLINE_A * bubble_a
+	if _callout != null and _callout.is_live():
+		_callout.global_position = _callout_anchor(render_pos)
 
 	# Elevation chevrons are drawn by the ice shader (IceRingField reads
 	# chevron_stack() / chevron_apex()), so nothing is placed here.
@@ -307,38 +285,24 @@ func _apply_name_plate() -> void:
 	_name_label.modulate = Color(col.r, col.g, col.b, MenuStyle.HUD_OPACITY)
 
 
-# Shows the smart-ping chat bubble above this skater's head. Called (via the
-# Skater delegate) from GameManager._on_smart_ping_received for teammates of
-# the pinger; a fresh ping restarts the hold/fade cycle. Lazy-built: most
-# skaters never ping, so the Label3D only exists once one does.
+# A call in a speech bubble pointing at this skater: a smart ping's words, the
+# fight challenge. A fresh call replaces the one showing.
 func show_ping_bubble(text: String) -> void:
-	if _skater == null:
+	if _skater == null or _force_world_hud_hidden or _hidden_for_replay:
 		return
-	if _ping_label == null:
-		_ping_label = Label3D.new()
-		_ping_label.name = "PingBubble"
-		_ping_label.top_level = true
-		_ping_label.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-		_ping_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		# Reads through a scrum — a team call-out must never hide behind bodies.
-		_ping_label.no_depth_test = true
-		_ping_label.render_priority = 2
-		_ping_label.font_size = 48
-		_ping_label.outline_size = 10
-		_ping_label.pixel_size = 0.005
-		_ping_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_ping_label.visible = false
-		_skater.add_child(_ping_label)
-	_ping_label.text = text
-	_ping_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
-	_ping_label.outline_modulate = Color(0.0, 0.0, 0.0, _PING_BUBBLE_OUTLINE_A)
-	var render_pos: Vector3 = _skater.render_transform().origin
-	_ping_label.global_position = Vector3(
-			render_pos.x,
-			render_pos.y + _PING_BUBBLE_HOVER_OFFSET,
-			render_pos.z)
-	_ping_label.visible = true
-	_ping_bubble_time_left = _PING_BUBBLE_HOLD_S + _PING_BUBBLE_FADE_S
+	if _callout == null:
+		_callout = PingCallout.new()
+		_skater.add_child(_callout)
+	_refresh_screen_down_cache_if_camera_changed()
+	_callout.global_position = _callout_anchor(_skater.render_transform().origin)
+	_callout.say(text)
+
+
+func _callout_anchor(render_pos: Vector3) -> Vector3:
+	return Vector3(
+			render_pos.x - _cached_screen_down.x * _CALLOUT_RADIUS,
+			_CALLOUT_Y,
+			render_pos.z - _cached_screen_down.y * _CALLOUT_RADIUS)
 
 
 # Installs the resolver that maps this skater to a RingRelation (self/teammate/

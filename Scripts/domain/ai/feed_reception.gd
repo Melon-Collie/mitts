@@ -13,8 +13,9 @@ const SETTLE_CLEAN_LOAD: float = 0.30
 const SETTLE_MAX_S: float = 0.40
 const BOBBLE_LOAD: float = 0.67
 const BOBBLE_EDGE_SHARE: float = 0.4
-# The catch ceiling of a blade on the feed's line, where a receiver parks it,
-# and the pace under which it holds the catch there rather than bobbling it.
+# The catch ceiling of a neutral blade on the feed's line, where a receiver
+# parks it, and the pace under which it holds the catch there rather than
+# bobbling it. A leaned blade's are these × receiver_ceiling_mult.
 const RECEIVE_ON_LINE_CEILING_M_S: float = RECEIVE_DEFLECT_MIN_M_S + RECEIVE_ALIGNMENT_BONUS_M_S
 const RECEIVE_HOLD_CEILING_M_S: float = RECEIVE_ON_LINE_CEILING_M_S * sqrt(BOBBLE_LOAD)
 
@@ -37,32 +38,43 @@ const BOBBLE_TANGENTIAL_RETAIN: float = 0.35
 const BOBBLE_PACE_RETAIN: float = 0.45
 
 
+# The receiver's lean on both catch-ceiling terms (Skater.reception_ceiling_mult,
+# from his blade curve), as the reception decision sites apply it; the league's
+# for a receiver whose caps are unknown.
+static func receiver_ceiling_mult(caps: AISkaterCaps) -> float:
+	return caps.reception_ceiling_mult if caps != null else 1.0
+
+
 # The reception load of a catch closing at `closing` m/s with the blade at
-# `offset` off the feed's path.
-static func _catch_load(closing: float, offset: float) -> float:
+# `offset` off the feed's path, by a blade whose ceiling terms are leaned by
+# `ceiling_mult` (receiver_ceiling_mult).
+static func _catch_load(closing: float, offset: float, ceiling_mult: float) -> float:
 	return PuckReceptionRules.reception_load(Vector3(closing, 0.0, 0.0), Vector3.ZERO,
-			offset, RECEIVE_DEFLECT_MIN_M_S, RECEIVE_ALIGNMENT_BONUS_M_S)
+			offset, RECEIVE_DEFLECT_MIN_M_S * ceiling_mult,
+			RECEIVE_ALIGNMENT_BONUS_M_S * ceiling_mult)
 
 
 # Seconds a receiver settles a catch closing at `closing` m/s in his frame: the
 # settle of each contact by its share.
-static func receiver_settle_s(closing: float) -> float:
-	var on_line: float = PuckReceptionRules.settle_time(_catch_load(closing, 0.0),
+static func receiver_settle_s(closing: float, ceiling_mult: float = 1.0) -> float:
+	var on_line: float = PuckReceptionRules.settle_time(_catch_load(closing, 0.0, ceiling_mult),
 			SETTLE_CLEAN_LOAD, SETTLE_MAX_S)
 	var off_line: float = PuckReceptionRules.settle_time(
-			_catch_load(closing, RECEIVE_OFF_LINE_OFFSET), SETTLE_CLEAN_LOAD, SETTLE_MAX_S)
+			_catch_load(closing, RECEIVE_OFF_LINE_OFFSET, ceiling_mult),
+			SETTLE_CLEAN_LOAD, SETTLE_MAX_S)
 	return (1.0 - RECEIVE_OFF_LINE_SHARE) * on_line + RECEIVE_OFF_LINE_SHARE * off_line
 
 
 # Odds a catch closing at `closing` m/s bobbles: the share of contacts whose load
 # is past their own bobble line.
-static func receiver_bobble_prob(closing: float) -> float:
+static func receiver_bobble_prob(closing: float, ceiling_mult: float = 1.0) -> float:
 	var p: float = 0.0
-	if _catch_load(closing, 0.0) >= PuckReceptionRules.bobble_load_at(
+	if _catch_load(closing, 0.0, ceiling_mult) >= PuckReceptionRules.bobble_load_at(
 			0.0, BOBBLE_LOAD, BOBBLE_EDGE_SHARE):
 		p += 1.0 - RECEIVE_OFF_LINE_SHARE
-	if _catch_load(closing, RECEIVE_OFF_LINE_OFFSET) >= PuckReceptionRules.bobble_load_at(
-			RECEIVE_OFF_LINE_OFFSET, BOBBLE_LOAD, BOBBLE_EDGE_SHARE):
+	if _catch_load(closing, RECEIVE_OFF_LINE_OFFSET, ceiling_mult) \
+			>= PuckReceptionRules.bobble_load_at(
+					RECEIVE_OFF_LINE_OFFSET, BOBBLE_LOAD, BOBBLE_EDGE_SHARE):
 		p += RECEIVE_OFF_LINE_SHARE
 	return p
 
@@ -88,10 +100,11 @@ static func bobble_regather_s(closing: float) -> float:
 
 # Seconds a receiver is tied up taking a feed closing at `closing` m/s, before he
 # can act or protect it: the settle of a catch, or the regather of a bobble, by
-# the odds of each.
-static func reception_hold_s(closing: float) -> float:
-	var p_bobble: float = receiver_bobble_prob(closing)
-	var settle_s: float = receiver_settle_s(closing)
+# the odds of each. The lean moves the odds and the settle; the regather is the
+# bounce off the face, which his ceiling does not change.
+static func reception_hold_s(closing: float, ceiling_mult: float = 1.0) -> float:
+	var p_bobble: float = receiver_bobble_prob(closing, ceiling_mult)
+	var settle_s: float = receiver_settle_s(closing, ceiling_mult)
 	if p_bobble <= 0.0:
 		return settle_s
 	return (1.0 - p_bobble) * settle_s + p_bobble * bobble_regather_s(closing)

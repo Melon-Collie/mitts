@@ -1,6 +1,9 @@
 # Phase 2 spec: goalie collision prototype (the real determinism risk)
 
-Status: **spec, ready to build.** Phase 2 of the deterministic-puck migration
+Status: **COMPLETE — built, shipped, and its shadow harness since retired** (the
+analytic goalie contact is `GoalieContactDetector` + `GoalieSaveRules.resolve_contact`;
+see Phases 1–4 in `netcode-determinism-migration.md`). The rest of this doc is the
+spec that produced it. Phase 2 of the deterministic-puck migration
 (`netcode-determinism-migration.md`). Phase 0 proved the analytic puck matches Jolt on
 boards + rim-arounds (GO — see `netcode-phase0-shadow-puck-spec.md`). This addresses
 the one piece with **no existing analytic model and the only genuine unknown**: the

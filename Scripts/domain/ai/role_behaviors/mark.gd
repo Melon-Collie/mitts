@@ -5,8 +5,11 @@ class_name AIRoleMark
 # patch of ice; which man (and so net-front vs. weak side) is the threat
 # partition's call (AIThreatAssignment), one marker per man.
 #
-# Fallback (no man assigned — more markers than receivers, a loose puck, no
-# brain): recover to the most dangerous ice, argmaxing
+# No man assigned and their carrier on our coverage ice (more markers than
+# receivers): the carrier's next layer, behind the man on him (_layer_carrier).
+#
+# Fallback (a loose puck, a carrier still up the ice, no brain): recover to the
+# most dangerous ice, argmaxing
 #
 #     -max over opps of AIPossessionValue.threat_of_carrier(opp)
 #
@@ -21,6 +24,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	if AIDefensiveVerbs.cover_threat(ctx, d, ctx.assigned_threat_peer,
 			AIRoleReads.resolve_defensive_play_ref(ctx)):
 		d.locked_man_pid = ctx.assigned_threat_peer
+		return d
+	if _layer_carrier(ctx, d):
 		return d
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
@@ -126,3 +131,59 @@ static func _max_threat(poss: AIPossessionValue, candidate: Vector3,
 				opp_states[bi].velocity, our_goalie_pos))
 	poss.pop_defender()
 	return max_threat
+
+
+# The spare marker is the carrier's next layer: the closing verb's stand
+# (AIDefensiveVerbs.carrier_stand: on his line to our net, shaded inside) one
+# ladder rung deeper than the man on him holds, riding him, so a carrier who
+# beats the first man meets the second. Each further spare marker stacks a rung
+# deeper, by who is nearer the second layer's stand, and the stack ends at the
+# net front (AIRoleRushD.RETREAT_FINISH_M). False when the brain named nobody
+# because there is no brain, or the carrier is not on our coverage ice: the
+# caller's recovery fallback.
+static func _layer_carrier(ctx: RoleContext, d: RoleDecision) -> bool:
+	if ctx.team_brain == null or ctx.snapshot == null or ctx.snapshot.puck_state == null:
+		return false
+	var carrier: int = ctx.snapshot.puck_state.carrier_peer_id
+	if carrier == -1 or ctx.team_id_by_peer.get(carrier, -1) == ctx.team_id \
+			or not ctx.snapshot.skater_states.has(carrier):
+		return false
+	var ap: AICarrierApproach = ctx.scratch_carrier_approach
+	AIDefensiveVerbs.fill_approach(ctx, ctx.snapshot.skater_states[carrier].position,
+			ctx.snapshot.skater_states[carrier].velocity, ap)
+	if ap.dir_net == Vector3.ZERO \
+			or not AIZoneCoverage.in_coverage_ice(ctx.defending_goal_pos.z, ap.carrier_pos):
+		return false
+	var first: float = AIRoleRushD.ladder_gap_m(ap.carrier_pos, ctx.own_goal_dir,
+			ctx.self_blade_reach, AIRoleRushD.ramp_cushion_m(ctx, ap, carrier))
+	var rung: float = AIRoleRushD.GAP_RUNG_STICKS * AIRoleRushD.stick_m(ctx)
+	var finish: float = maxf(ap.net_dist - AIRoleRushD.RETREAT_FINISH_M, 0.0)
+	var second: Vector3 = AIDefensiveVerbs.carrier_stand(ap, minf(first + rung, finish))
+	var gap: float = minf(first + rung * (1 + _spare_markers_nearer(ctx, second)), finish)
+	d.target_position = AIDefensiveVerbs.carrier_stand(ap, gap)
+	# A stand a fixed gap down his line rides him; one held at the net front is a
+	# share of the way to a fixed net, and moves at the rest of his velocity.
+	d.target_velocity = ap.carrier_vel if gap < finish \
+			else ap.carrier_vel * (1.0 - gap / ap.net_dist)
+	AIRoleRushD.set_retreat_floor(ctx, ap, d)
+	return true
+
+
+# How many other markers with no man stand nearer `stand` than this bot does (a
+# dead heat to the lower peer id): the layers ahead of his.
+static func _spare_markers_nearer(ctx: RoleContext, stand: Vector3) -> int:
+	var mine: float = AIRoleReads.xz_distance(ctx.self_pos, stand)
+	var n: int = 0
+	for pid: int in ctx.snapshot.skater_states:
+		if pid == ctx.peer_id or ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
+			continue
+		if ctx.team_brain.get_slot(pid) != AIRoleSlots.Slot.MARK \
+				or ctx.team_brain.assigned_threat(pid) != -1:
+			continue
+		var s: SkaterNetworkState = ctx.snapshot.skater_states[pid]
+		if s.is_ghost:
+			continue
+		var theirs: float = AIRoleReads.xz_distance(s.position, stand)
+		if theirs < mine or (theirs == mine and pid < ctx.peer_id):
+			n += 1
+	return n

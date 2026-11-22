@@ -144,9 +144,9 @@ base(spot) = keep · C(spot) − (1 − keep) · C_opp(strip)
 ```
 
 - `keep`: the carrier's **evadability**, the odds he can keep the puck at all,
-  in whatever direction: `reach_clearance` at the max-clearance seam
-  (`AICarrySpace.best_evade_point`) over `EVADE_HORIZON_S`, through
-  `clearance_to_safety`. It is the read `AIRoleCarrier._pick_fire_phase`
+  in whatever direction: the best cut of his handling envelope over
+  `EVADE_HORIZON_S`, each priced along its route (`AIEvadeRead.evade_safety`).
+  It is the read `AIRoleCarrier._pick_fire_phase`
   already makes as `_phase_current_safety` for the hold's keep odds. **Not** the
   drive's keep (`carry_safety` / `_skate_keep`): that prices one play, skating
   at the net through whoever is in the slot, and reads ~0 at the point whenever
@@ -370,7 +370,10 @@ never park at the blue line waiting.
 
 ## 5. Open questions
 
-- **Measuring the rebound share.** `REBOUND_RECOVER_SHARE` is a property of the
+- **Measuring the rebound share.** Measured since: the rebound field and
+  `AIReboundValue` (`docs/bot-net-front-offense-plan.md` steps 2a and 3a);
+  the tunable is now `AIActionScoring.FLAT_REBOUND_CREDIT` until the measured
+  credit is switched on. As first written: `REBOUND_RECOVER_SHARE` is a property of the
   goalie and the puck, not of play, so it can be measured: the shot field's
   stager already fires shots at the live keeper; recording where saves and
   misses leave the puck, and which side's nearest body is first to it on the
@@ -400,8 +403,8 @@ never park at the blue line waiting.
   and the release contest (`score_shoot_value`'s `rebound`), so a blocked shot
   earns none.
 - **The keep odds are the seam's own safety**, read by `AIEvadeRead.evade_safety`
-  under exact bounds (~45 µs a read in traffic against ~190 µs for the full
-  sweep), and held to `best_evade_point` by `test_evade_safety.gd`.
+  under exact bounds, and held to the whole sweep (`AIEvadeRead.best_evade_point`)
+  by `test_evade_safety.gd`.
 - **Host AI cost is up.** Every read adds a keep read, an entry a defender
   stands on is no longer pruned on its dead live worth (it still carries the
   zone's floor), and bots that hold the puck in the zone keep the defence in

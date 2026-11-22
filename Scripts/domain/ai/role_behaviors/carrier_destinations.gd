@@ -92,8 +92,13 @@ func fill(ctx: RoleContext) -> void:
 				own * (GameRules.BLUE_LINE_Z - EXIT_NZ_LEAD_M))
 	if absf(self_pos.z) <= GameRules.GOAL_LINE_Z:
 		return
-	_add_pair(ctx, Kind.WALKOUT_LEFT, Kind.WALKOUT_RIGHT,
-			left * (GameRules.NET_HALF_WIDTH + WALKOUT_POST_CLEARANCE_M),
+	# Out from behind our own net, wide of our posts by the keep-out of our mouth
+	# (AINetObstacle.own_mouth_keep_out_depth): the puck on his stick cannot reach it.
+	var walkout_x: float = GameRules.NET_HALF_WIDTH + WALKOUT_POST_CLEARANCE_M
+	if own * self_pos.z > 0.0:
+		walkout_x = maxf(walkout_x,
+				AINetObstacle.OWN_MOUTH_HALF_WIDTH_M + AINetObstacle.OWN_MOUTH_KEEP_OUT_M)
+	_add_pair(ctx, Kind.WALKOUT_LEFT, Kind.WALKOUT_RIGHT, left * walkout_x,
 			signf(self_pos.z) * (GameRules.GOAL_LINE_Z - WALKOUT_FRONT_M))
 	if ctx.team_size < 5 or own * self_pos.z <= 0.0:
 		return

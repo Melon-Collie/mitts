@@ -417,6 +417,84 @@ const _FEED_PASSER := Vector3(-4, 0, 6)
 const _FEED_RECEIVER := Vector3(-4, 0, -6)     # 12 m up-ice
 
 
+# A receiver curling back at the passer is fed up to the crisp ceiling, and that
+# ceiling is his own blade's (AISkaterCaps.reception_ceiling_mult): the toe hook
+# is never fed past what it soaks. What is fired is the solve for his blade at
+# the pace the search priced.
+func test_a_feed_to_a_curling_receiver_is_solved_for_his_blade() -> void:
+	var hook: float = PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_OPEN, 1, 1) \
+			.reception_ceiling_mult()
+	var passer: Vector3 = _FEED_PASSER
+	var receiver: Vector3 = _FEED_RECEIVER
+	var curl_back := Vector3(0, 0, 9)
+	var ctx: RoleContext = _make_ctx(passer, [
+			[1, TEAM_ID, passer],
+			[2, TEAM_ID, receiver, false, curl_back]])
+	var caps := AISkaterCaps.new()
+	caps.reception_ceiling_mult = hook
+	ctx.caps_by_peer = {2: caps}
+	ctx.ping_pass_target_peer = 2
+	var c: AIRoleCarrier = _decided(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS, "the pinged feed is committed")
+	assert_almost_eq(c.pass_target_speed, AIPuckLane.pass_launch_speed(
+			passer.distance_to(receiver), ctx.self_wrister_shot_speed * c._pass.best_hold_cap,
+			ctx.pass_speed_scale * c._pass.best_pace_frac, curl_back,
+			(receiver - passer).normalized(), hook), 0.001)
+	assert_lt(AIFeedReception.arrival_closing_speed(passer, receiver, c.pass_target_speed,
+			curl_back), AIPuckLane.PASS_RECEIVE_CEILING_M_S * hook + 0.01,
+			"the hook's feed lands under his leaned ceiling")
+
+
+# Every feed the search commits to a P28 receiver (CURVE_OPEN, the lowest
+# reception ceiling) who plays it as a catch reaches him, in his frame, under
+# his own blade's catch ceiling at every contact a bot receiver's blade makes
+# (on the line, or at the measured off-line offset, AIFeedReception): caught,
+# never deflected. Read where the fired aim meets him
+# (AIPassLead.lead from the puck, as the press aims it, his skating through the
+# windup), across lengths, bearings and his skating: still, streaking away,
+# curling back at the passer, crossing.
+func test_every_committed_feed_to_a_p28_receiver_is_under_his_catch_ceiling() -> void:
+	var hook: float = PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_OPEN, 1, 1) \
+			.reception_ceiling_mult()
+	var catch_ceiling: float = hook * (AIFeedReception.RECEIVE_DEFLECT_MIN_M_S
+			+ AIFeedReception.RECEIVE_ALIGNMENT_BONUS_M_S
+			* (1.0 - AIFeedReception.RECEIVE_OFF_LINE_OFFSET))
+	var passer := Vector3(0, 0, 14)
+	var fired: int = 0
+	var over_hold: int = 0
+	for dist: float in [6.0, 12.0, 20.0]:
+		for bearing_deg: float in [0.0, 35.0, -70.0]:
+			var dir := Vector3(sin(deg_to_rad(bearing_deg)), 0, -cos(deg_to_rad(bearing_deg)))
+			var side := Vector3(-dir.z, 0, dir.x)
+			for vel: Vector3 in [Vector3.ZERO, dir * 7.0, -dir * 6.0, -dir * 9.0,
+					side * 6.0, (side - dir).normalized() * 8.0]:
+				var receiver: Vector3 = passer + dir * dist
+				var ctx: RoleContext = _make_ctx(passer, [
+						[1, TEAM_ID, passer],
+						[2, TEAM_ID, receiver, false, vel]])
+				var caps := AISkaterCaps.new()
+				caps.reception_ceiling_mult = hook
+				ctx.caps_by_peer = {2: caps}
+				ctx.ping_pass_target_peer = 2
+				var c: AIRoleCarrier = _decided(ctx)
+				if c.intended_action != AIRoleCarrier.INTENT_PASS:
+					continue
+				fired += 1
+				var state: SkaterNetworkState = ctx.snapshot.skater_states[2]
+				var meet: Vector3 = AIPassLead.lead(passer, state, c.pass_target_speed,
+						AICarrierPassSearch.PASS_LEAD_MAX_S,
+						AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)[0]
+				var closing: float = AIFeedReception.arrival_closing_speed(passer, meet,
+						c.pass_target_speed, vel)
+				if closing > AIFeedReception.RECEIVE_HOLD_CEILING_M_S * hook:
+					over_hold += 1
+				assert_lt(closing, catch_ceiling,
+						"%.0f m at %.0f deg, receiver skating %s: caught" % [dist, bearing_deg, vel])
+	assert_gt(fired, 0, "the sweep commits feeds to read")
+	gut.p("%d feeds committed, %d past his bobble line on the line (priced as bobbles)"
+			% [fired, over_hold])
+
+
 # The bobble odds of the feed the search picked, at the pace it fires.
 func _picked_feed_bobble_prob(defender: Vector3) -> float:
 	var ctx: RoleContext = _make_ctx(_FEED_PASSER, [
@@ -652,6 +730,25 @@ func _decided_twice(ctx: RoleContext) -> AIRoleCarrier:
 	var c: AIRoleCarrier = _decided(ctx)
 	c.decide(ctx)
 	return c
+
+
+# ─── alone outside the zone he carries it in ────────────────────────────────
+
+func test_alone_in_the_neutral_zone_at_pace_he_carries_on_over_the_line() -> void:
+	# Nobody near him and a set keeper: the only play is in. From every start a
+	# move's end, or the spot his hands' hold would let a shot go from at that
+	# end, falls on one side of the blue line or the other, and neither may read
+	# as worth less than standing where he is.
+	for speed: float in [3.0, 5.0, 7.0, 8.5]:
+		for z: float in [4.0, 1.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0]:
+			var self_pos := Vector3(0.0, 0.0, z)
+			var ctx: RoleContext = _set_keeper(_make_ctx(self_pos))
+			ctx.self_velocity = Vector3(0.0, 0.0, -speed)
+			ctx.snapshot.skater_states[1].velocity = ctx.self_velocity
+			var c: AIRoleCarrier = _decided(ctx)
+			var what: String = "z %.0f at %.1f m/s" % [z, speed]
+			assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY, "%s: carrying" % what)
+			assert_lt(c.last_carry_anchor.z, z - 0.5 * speed, "%s: on toward the line, not braked" % what)
 
 
 # ─── turnover costs are priced in the unit of the gains ─────────────────────
@@ -1006,7 +1103,7 @@ func test_settling_carrier_holds_instead_of_firing() -> void:
 
 # The same pressured breakout, with the outlet in two different situations. Both
 # are legal passes that fire on tick one with no doubt; the strong one is worth
-# ~10x PASS_MIN_VALUE, the weak one ~0.9x. Boxed in, the carrier would lose the
+# ~10x PASS_MIN_VALUE, the weak one ~1.4x. Boxed in, the carrier would lose the
 # puck where he stands, so the bar's own PASS_MIN_VALUE is off it and what Normal
 # holds is under its doubt's raise (1.5x). The weak outlet is still sliding into
 # the far corner, so his drive up the wall has to brake that out first. Both
@@ -1028,7 +1125,7 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 # inside the slot is never priced (AINetObstacle.pass_crosses_own_slot).
 const _SETTLE_CARRIER := Vector3(4, 0, 20)
 const _STRONG_OUTLET := Vector3(12, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(10.0, 0, 22.5)  # deep below the dot
+const _MARGINAL_OUTLET := Vector3(10.0, 0, 26.5)  # in the corner, a stride off the goal line
 const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 0.5)   # …and still drifting into the corner
 
 
@@ -1801,9 +1898,9 @@ func test_sharp_angle_shot_along_the_ice_into_an_rvh_seal_is_never_worth_firing(
 # ─── attacking blue-line keep-out bands ──────────────────────────────────────
 # The offside puck-line is the TRUE blue line while the carrier reasons in
 # body positions: the pass windup swings the carried puck a stick's reach
-# behind the body, and reception plays the puck a reach around the receiver.
-# Both bands (OZ_RETREAT_LINE_BUFFER_M / OZ_RECEIVE_LINE_BUFFER_M) exist so
-# blue-line slop can't turn a completed play into a zone exit / offside.
+# behind the body (OZ_RETREAT_LINE_BUFFER_M), and a feed is caught where the
+# blade meets it (OZ_RECEIVE_LINE_BUFFER_M), so neither turns a completed play
+# into a zone exit / offside.
 
 func test_oz_valve_prunes_carry_candidates_in_the_blue_line_band() -> void:
 	# Carrier established in the OZ (team 0 attacks -Z; OZ is z < -BLUE_LINE_Z).
@@ -1845,17 +1942,18 @@ func _best_pass_to_mate(ctx: RoleContext) -> AICarrierPassSearch:
 	return c._pass
 
 
-func test_oz_pass_skips_receiver_hugging_the_blue_line() -> void:
-	# Carrier in the OZ; the only teammate is wide open but his tape sits
-	# just inside the blue line — reception slop there takes the puck out
-	# of the zone, so he is excluded as a target entirely. The same open
-	# man past the keep-out band (the far-post backdoor the squared goalie
-	# can't re-square onto) is a legal (positive) feed.
+func test_oz_pass_feeds_a_man_at_the_line_but_not_on_it() -> void:
+	# Carrier in the OZ; the only teammate is wide open. Half a metre inside
+	# the blue line, his catch keeps the puck in the zone (a clean catch holds
+	# it where the blade meets it, a bobble comes back off the face:
+	# tests/instruments/ai/test_line_reception.gd), so he is a legal feed. On
+	# the line itself the puck he catches is outside it, and he is no target.
 	var at_line := Vector3(-2.5, 0.0, -(GameRules.BLUE_LINE_Z + 0.5))
-	assert_eq(_best_pass_to_mate(_backdoor_ctx(at_line)).best_score, 0.0,
-			"a receiver hugging the blue line is not a pass target from inside the zone")
-	assert_gt(_best_pass_to_mate(_backdoor_ctx(_BACKDOOR_MATE)).best_score, 0.0,
-			"the same open man past the keep-out band is a legal feed")
+	assert_gt(_best_pass_to_mate(_backdoor_ctx(at_line)).best_score, 0.0,
+			"a man half a metre inside the line is a pass target")
+	var on_line := Vector3(-2.5, 0.0, -(GameRules.BLUE_LINE_Z + 0.1))
+	assert_eq(_best_pass_to_mate(_backdoor_ctx(on_line)).best_score, 0.0,
+			"a man on the line is not a pass target from inside the zone")
 
 
 # ─── close-quarters saucer variant ───────────────────────────────────────────
@@ -2000,6 +2098,47 @@ func test_a_frontal_stick_threat_earns_the_shield() -> void:
 			"a stick on the presented spot, with a safe hip to hide it, earns the shield")
 
 
+func test_keeping_the_puck_reads_the_evadability() -> void:
+	# The carrier's keep odds are his evadability (AIEvadeRead) at the puck: the
+	# best of his cuts, the stop among them.
+	var self_pos := Vector3(0, 0, 5)
+	var vel := Vector3(0, 0, -6)
+	for opp: Vector3 in [Vector3(-2, 0, 2), Vector3(0, 0, 2), Vector3(1.5, 0, 4)]:
+		var ctx: RoleContext = _make_ctx(self_pos, [
+				[1, TEAM_ID, self_pos, false, vel], [3, 1, opp]])
+		ctx.self_velocity = vel
+		var c: AIRoleCarrier = _decided(ctx)
+		var opps: Array[Vector3] = [opp]
+		var still: Array[Vector3] = [Vector3.ZERO]
+		var cut: float = AIEvadeRead.evade_safety(
+				AICarrierField.puck_pos_at(self_pos, ctx.attacking_goal_pos), vel, opps, still,
+				ctx.self_handle_reach)
+		assert_almost_eq(c.carry_keep, cut, 1e-6, "a man at %s" % opp)
+
+
+func test_a_stick_that_reaches_the_back_hip_leaves_no_shield() -> void:
+	# The poke reads no body (PuckInteractionRules.check_poke): a blade reaches
+	# through the carrier to a puck on his far hip as readily as round him. So
+	# wherever a checker on the play line still reaches the spot furthest from
+	# him the blade can hold the puck — straight behind the body — the shield
+	# buys nothing, however close he stands: the gain is zero there, and every
+	# stand inside contact range is such a stand.
+	var handle: float = _make_ctx(_PROTECT_SPOT).self_handle_reach
+	var back_hip: Vector3 = _PROTECT_SPOT + Vector3(0, 0, handle)
+	var still: Array[Vector3] = [Vector3.ZERO]
+	for ahead_m: float in [0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 2.0, 2.5]:
+		var checker: Array[Vector3] = [_PROTECT_SPOT + Vector3(0, 0, -ahead_m)]
+		var hip_safety: float = AICarrySpace.clearance_to_safety(AICarrySpace.reach_clearance(
+				back_hip, AICarrySpace.EVADE_HORIZON_S, checker, still))
+		if ahead_m <= 1.2:
+			assert_eq(hip_safety, 0.0,
+					"a checker %.1f m ahead reaches the back hip through the body" % ahead_m)
+		if hip_safety <= 0.0:
+			assert_eq(_frontal_threat(ahead_m).protect_gain, 0.0,
+					"checker %.1f m ahead reaches the back hip: the shield buys nothing"
+					% ahead_m)
+
+
 func test_the_shield_never_moves_the_puck_toward_the_checker() -> void:
 	# Wherever a checker stands on the play line, the protected spot is no nearer
 	# him than the presented one (the offset with nobody there): the shield moves
@@ -2118,6 +2257,21 @@ func _sealed_corner_ctx() -> RoleContext:
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = _squared_goalie(
 			self_pos, Vector3(0.0, 0.0, OPP_NET_Z), 1.3)
 	return ctx
+
+
+func test_receivers_are_read_in_peer_id_order_whatever_the_snapshots() -> void:
+	# The pass search keeps the first of equal reads, so the order it reads its
+	# receivers in is the tie-break.
+	var self_pos := Vector3(0.0, 0.0, -8.0)
+	for order: Array in [[2, 3, 4], [4, 3, 2], [3, 4, 2]]:
+		var skaters: Array = [[1, TEAM_ID, self_pos]]
+		for pid: int in order:
+			skaters.append([pid, TEAM_ID, Vector3(-9.0 + 3.0 * pid, 0.0, -14.0)])
+		var ctx := _make_ctx(self_pos, skaters)
+		var c := AIRoleCarrier.new()
+		c._field.fill_receivers(ctx, self_pos)
+		assert_eq(c._field.teammate_ids, [2, 3, 4] as Array[int],
+				"filled %s" % [order])
 
 
 # ─── behind the net ─────────────────────────────────────────────────────────
@@ -2427,6 +2581,20 @@ func test_behind_net_candidates_stay_on_the_playing_surface() -> void:
 			"and the rounded corner is honoured, not a bounding box")
 
 
+func test_the_rounded_corner_is_honoured_in_front_of_the_goal_line_too() -> void:
+	# A body's width inside the side boards and a stride short of the goal line
+	# is off the surface: the corner's arc starts well up the ice from there.
+	var c := AIRoleCarrier.new()
+	var in_the_arc := Vector3(GameRules.INNER_HALF_WIDTH - 2.0 * AIStationSearch.RINK_INSET_M,
+			0.0, OPP_NET_Z + 2.0 * AIStationSearch.GOAL_LINE_BUFFER_M)
+	assert_gt(absf(in_the_arc.z), GameRules.CORNER_CENTER_Z, "the point is in the corner")
+	for allow_behind: bool in [false, true]:
+		assert_false(c._carry._candidate_ice_legal(in_the_arc, allow_behind),
+				"outside the corner's arc is not ice")
+	assert_true(c._carry._candidate_ice_legal(Vector3(in_the_arc.x, 0.0, -18.0), false),
+			"the same distance off the straight boards is")
+
+
 func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 	# Scoped change: nothing about front-of-net carrying moves.
 	var c := AIRoleCarrier.new()
@@ -2441,7 +2609,9 @@ func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 # straight lane to the strong half-wall winger. The boards are the open lane:
 # rimmed round the corner, the puck reaches the winger before anybody of theirs.
 
-func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
+# `wall_sealed`: a second forechecker up the near wall, so the wide carry up the
+# boards away from the man on his hip is shut as well as the lane.
+func _rim_breakout_ctx(lane_blocked: bool, wall_sealed: bool = false) -> RoleContext:
 	var self_pos := Vector3(3.0, 0, GameRules.GOAL_LINE_Z + 1.35)
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos],
@@ -2451,6 +2621,8 @@ func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
 	]
 	if lane_blocked:
 		skaters.append([4, 1, Vector3(7.0, 0, GameRules.GOAL_LINE_Z - 5.65)])   # in the straight lane
+	if wall_sealed:
+		skaters.append([6, 1, Vector3(6.5, 0, GameRules.GOAL_LINE_Z - 1.5)])    # up the near wall
 	return _make_ctx(self_pos, skaters)
 
 
@@ -2488,11 +2660,11 @@ func test_a_rim_is_fired_as_soft_as_the_race_allows() -> void:
 
 
 func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:
-	var ctx := _rim_breakout_ctx(true)
+	var ctx := _rim_breakout_ctx(true, true)
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP,
-			"pinned on his own goal line with the lane cut, he rims it")
+			"pinned on his own goal line with the lane and the wall cut, he rims it")
 	assert_eq(c.pass_target_peer_id, c._phase_best_pass_peer, "…to the receiver it was priced to")
 	assert_eq(c.dump_launch_speed, c._phase_best_pass_rim_pace, "…at its searched pace")
 	var puck: Vector3 = ctx.snapshot.puck_state.position
@@ -2786,7 +2958,8 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 	# shoot-now read after a carry (History.CARRIED) sees him there. Read with
 	# his facing unknown, the field blends in keepers turned to a decoy or a feed,
 	# and in tight a carry to the crease promised odds the shot on arrival never
-	# had. The arrival is the better of that shot and keeping the puck there.
+	# had. The arrival is the better of that shot, from the hold the carrier would
+	# shoot it from, and keeping the puck there.
 	for spot: Vector3 in [Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 2.5),
 			Vector3(-1.2, 0.0, -GameRules.GOAL_LINE_Z + 2.2)]:
 		var ctx := _standstill_ctx(2.5)
@@ -2800,10 +2973,20 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 		c._field.holds.configure_from(ctx)
 		var arrival: float = c._carry._arrival_value(ctx, spot, Vector3.ZERO, 0.0)
 		var keeper := Vector3(g.position_x, 0.0, g.position_z)
-		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(spot,
-				ctx.attacking_goal_pos, keeper, 0.0, AIShotOdds.Stance.UPRIGHT, g.rotation_y,
-				AIShotOdds.History.CARRIED))
-		var kept: float = c._field.continuation_at(spot)
+		var hold: Vector2 = c._field.holds.arrival_offset
+		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
+				spot + Vector3(hold.x, 0.0, hold.y), ctx.attacking_goal_pos, keeper)
+		# In tight he is down for it, as he plays a carrier there (AIGoalieModel
+		# .down_in_tight, held to his brain in test_ai_goalie_model_mirrors.gd).
+		var stance: int = AIShotOdds.Stance.DOWN \
+				if AIGoalieModel.down_in_tight(spot + Vector3(hold.x, 0.0, hold.y),
+						ctx.attacking_goal_pos) else AIShotOdds.Stance.UPRIGHT
+		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(release,
+				ctx.attacking_goal_pos, keeper, 0.0, stance,
+				atan2(keeper.x - release.x, keeper.z - release.z),
+				AIShotOdds.History.CARRIED), AIActionScoring.FLAT_REBOUND_CREDIT) \
+				* c._field.holds.arrival_keep
+		var kept: float = c._field.continuation_at(release)
 		assert_almost_eq(arrival, maxf(shot_there, kept), 1e-4,
 				"arriving at rest at %s prices the shot the keeper facing it gives" % spot)
 
@@ -2910,3 +3093,46 @@ func test_a_pass_leaves_from_the_ice_not_through_the_boards() -> void:
 	assert_gt(origin.z, at.z, "carried on toward the boards up to them")
 	ctx.self_velocity = Vector3(0.0, 0.0, -4.0)
 	assert_lt(AICarrierField.pass_origin(ctx).z, at.z, "skating away, carried on as before")
+
+
+# ─── shooting for a tip ─────────────────────────────────────────────────────
+
+# A carrier 8 m wide at the top of the circle, a teammate in `slot` on his line
+# to the net with his blade at the crease top (AITipPoint: his body a blade back
+# of where he tips it), the keeper square on the carrier, `team_size` a side.
+func _point_with_tipper(slot: int, team_size: int = 5) -> AIRoleCarrier:
+	var self_pos := Vector3(8.0, 0.0, OPP_NET_Z + 16.0)
+	var net := Vector3(0.0, 0.0, OPP_NET_Z)
+	var tipper: Vector3 = net + (self_pos - net).normalized() \
+			* (AIRoleFinisher.TIP_STATION_DIST_M - AITipPoint.BLADE_OUT_M)
+	var ctx := _make_ctx(self_pos, [[1, TEAM_ID, self_pos], [2, TEAM_ID, tipper]])
+	ctx.team_size = team_size
+	var brain := TeamBrain.new(TEAM_ID, ctx.team_id_by_peer)
+	brain.slot_assignments[2] = slot
+	ctx.team_brain = brain
+	var g := GoalieNetworkState.new()
+	var dir: Vector3 = (self_pos - net).normalized()
+	g.position_x = net.x + dir.x * 1.3
+	g.position_z = net.z + dir.z * 1.3
+	_place_keeper(ctx, g)
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	return c
+
+
+func test_a_net_front_man_on_his_line_makes_the_wide_rip_a_tip() -> void:
+	# From out wide the tip field measures a tip at the crease top scoring where
+	# the shot alone does not: the rip for him to tip is the shot read.
+	var tip := _point_with_tipper(AIRoleSlots.Slot.NET_FRONT)
+	var plain := _point_with_tipper(AIRoleSlots.Slot.HIGH_SLOT)
+	assert_true(tip._shot_sample_is_tip, "the rip is for his tip")
+	assert_gt(tip.debug_shoot_score, plain.debug_shoot_score,
+			"his tip is worth more than the shot alone")
+	assert_false(plain._shot_sample_is_tip, "a man who does not tip is not shot at")
+
+
+func test_a_3v3_carrier_never_rips_for_the_finishers_tip() -> void:
+	var tip := _point_with_tipper(AIRoleSlots.Slot.FINISHER, 3)
+	assert_false(tip._shot_sample_is_tip, "3v3 shoots the direct shot")
+	assert_true(_point_with_tipper(AIRoleSlots.Slot.FINISHER)._shot_sample_is_tip,
+			"the same finisher in 5v5 is ripped for")

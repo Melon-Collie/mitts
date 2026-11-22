@@ -6,41 +6,12 @@ extends RefCounted
 # each move to the next so his place, turn and pose run on unbroken. Pure,
 # stepped at the tick.
 #
-# Moves are asked for in order and each starts when the one before it has come
-# to rest, settled out of him. One asked for from the wrong rest (a slide on
-# his feet, a T-push down) is refused and counted. On his feet he turns by a
-# pivot (`face`), his skates turning under him on their edges, and footwork
-# goes in his turned frame: a T-push straight to the spot (KeeperFootwork's
-# diagonal), a shuffle to where it falls on his line, a C-cut to where it falls
-# in depth. Turning first is the brain's, as the coaching orders it: eyes,
-# rotation, then the feet.
-#
-# Or he is given where to be (`go_to`, `seal`), and makes the first move of the
-# fastest way there (KeeperRoute) each time he comes to rest, until he is
-# there. A new spot or facing under a pivot or footwork under way is taken on
-# by it; any other change waits for him to come to rest. Footwork toward a goal
-# turns his trunk toward its facing as he goes (`lead`, up to LEAD_MAX_RAD
-# ahead of his skates), his skates on their line, and the skates turn under
-# him to catch up once he is set on the spot, as the stop
-# settles. More footwork, or a pivot, starts as soon as his push leg is back
-# under him; a drop, slide or the RVH waits for the stop to settle. The last order
-# wins: a goal clears the moves asked for, and a move asked for clears the
-# goal.
-#
-# A low save (`save`, KeeperSaveMove) is the one move that does not wait: it
-# cuts whatever is under way where it is, the speed it had carried into the
-# save, and holds until `end_save`; then he rests where it leaves him.
-#
-# Set on his feet he sinks into the low ready when asked (`low_ready`), and
-# rises out of it as any move starts; a drop or a low save from it is the
-# shorter fall.
-#
 # Places are in the stances' frame, as the movers': x across, z depth (+ back
 # toward his net), `yaw` his turn about the vertical, as a Node3D's rotation.y.
 
 const Rest := KeeperRoute.Rest
 const Do := KeeperRoute.Do
-enum Mover { NONE, PIVOT, FOOTWORK, DROP, SLIDE, POST, SAVE, GLIDE }
+enum Mover { NONE, PIVOT, FOOTWORK, DROP, SLIDE, POST, SAVE, GLIDE, KNEES }
 
 # The pivot: its top turn rate, near the old goalie's (whose 5/s lerp turns him
 # through 45° at up to 3.9 rad/s), and how hard his edges start and stop it.
@@ -73,6 +44,9 @@ var route := KeeperRoute.new(footwork, drop, slide, post, PIVOT_RATE_RAD_S, PIVO
 var save_move := KeeperSaveMove.new()
 var glide := KeeperGlide.new()
 var low_ready := KeeperLowReady.new()
+var pad_out := KeeperPadOut.new()
+var hands_low := KeeperHandsLow.new()
+var knee_shuffle := KeeperKneeShuffle.new()
 # The share of a drop's time a low save cut in now takes to fall: from his feet
 # as far as he has sunk into the low ready; between his feet and the ice, a fall
 # from rest over the height he has left (its root), no shorter than the low
@@ -243,7 +217,8 @@ func rvh_fold_out() -> void:
 func can_save(down: bool) -> bool:
 	var gathering: bool = _mover == Mover.SAVE and save_move.state == KeeperSaveMove.State.GATHERING
 	if down:
-		return rest == Rest.DOWN and _mover == Mover.NONE or gathering and save_move.rests_down()
+		return rest == Rest.DOWN and (_mover == Mover.NONE or _mover == Mover.KNEES) \
+				or gathering and save_move.rests_down()
 	return rest == Rest.FEET and (_mover == Mover.NONE or _mover == Mover.PIVOT or _mover == Mover.FOOTWORK
 			or _mover == Mover.GLIDE) or _mover == Mover.DROP or gathering and not save_move.rests_down()
 
@@ -254,6 +229,9 @@ func save(low: int, side: float) -> void:
 	pose(_cut)
 	save_move.fall = fall
 	low_ready.cut()
+	pad_out.cut()
+	knee_shuffle.cut()
+	hands_low.cut()
 	save_move.start(_cut, low, side, Vector2(x, z), _velocity)
 	footwork.set_still()
 	lead = 0.0
@@ -334,6 +312,8 @@ func step(dt: float) -> void:
 			or _mover == Mover.FOOTWORK and footwork.move == KeeperFootwork.Move.SHUFFLE
 	low_ready.step(dt, rest == Rest.FEET and (_mover == Mover.NONE or with_play))
 	_velocity = (Vector2(x, z) - was) / maxf(dt, 1e-6)
+	var steps: bool = _mover == Mover.KNEES and pad_out.share <= 0.0
+	knee_shuffle.step(dt, _turned(Vector2(x, z) - was, -yaw).x if steps else 0.0)
 	fall = maxf(sqrt(1.0 - drop.down), KeeperLowReady.fall_share_at(1.0)) if _mover == Mover.DROP else low_ready.fall_share()
 	# What a slide from his feet would fall from, for the route to price it.
 	if _mover != Mover.SLIDE:
@@ -341,6 +321,16 @@ func step(dt: float) -> void:
 
 
 func _step_mover(dt: float) -> void:
+	# A move that needs the leg he has out waits for it to come back under him,
+	# and one about to start on the leg asked for keeps it in.
+	var gathers: bool = _mover == Mover.NONE and pad_out.share > 0.0 and _next_takes_the_leg(pad_out.side)
+	pad_out.step(dt, _pad_free() and not gathers
+			and not (_mover == Mover.NONE and pad_out.asked != 0.0 and _next_takes_the_leg(pad_out.asked)))
+	hands_low.step(dt, drops() or (rest == Rest.DOWN and not _frozen and pad_out.share <= 0.0
+			and (_mover == Mover.NONE or _mover == Mover.KNEES)))
+	if gathers:
+		slide.step(dt)
+		return
 	if _mover == Mover.NONE:
 		_start_next()
 		if _mover == Mover.NONE and _goal and _plan() != Do.NONE:
@@ -368,6 +358,14 @@ func _step_mover(dt: float) -> void:
 			elif drop.state == KeeperDrop.State.DOWN:
 				_rest_on(Rest.DOWN)
 		Mover.SLIDE:
+			# A turn on his knees gives way to a goal he has to push for, and a
+			# push not yet made to a goal back within his knees' reach.
+			if _goal and route.rest == Rest.DOWN:
+				var near: bool = Vector2(x, z).distance_to(route.spot) <= KeeperRoute.KNEE_REACH_M
+				if slide.turns() and not near:
+					slide.stop_turning()
+				elif slide.loads() and near and slide.bound_for().distance_to(route.spot) > KeeperRoute.KNEE_REACH_M:
+					slide.turn_instead(route.facing)
 			slide.step(dt)
 			x = slide.x
 			z = slide.z
@@ -387,10 +385,12 @@ func _step_mover(dt: float) -> void:
 				KeeperPost.State.BUTTERFLY:
 					_rest_on(Rest.DOWN)
 		Mover.SAVE:
+			if _landing and _goal:
+				save_move.hold_to(route.spot - Vector2(x, z), dt)
 			save_move.step(dt)
 			x = save_move.x
 			z = save_move.z
-			if _landing and save_move.is_set():
+			if _landing and save_move.is_set() and not _rides_on():
 				_landing = false
 				save_move.state = KeeperSaveMove.State.NONE
 				_rest_on(Rest.DOWN)
@@ -398,6 +398,16 @@ func _step_mover(dt: float) -> void:
 				_rest_on(Rest.DOWN if save_move.rests_down() else Rest.FEET)
 		Mover.GLIDE:
 			_step_glide(dt)
+		Mover.KNEES:
+			# Toward his goal as it is now, nothing committed: he stops the tick
+			# the way there is no longer a scoot.
+			slide.step(dt)
+			if not _goal or _plan() != Do.KNEE_SHUFFLE:
+				_mover = Mover.NONE
+			else:
+				var scoot: Vector2 = (route.spot - Vector2(x, z)).limit_length(KeeperSlide.KNEE_SHUFFLE_M_S * dt)
+				x += scoot.x
+				z += scoot.y
 		Mover.NONE:
 			# Down at rest, the last slide's stop still easing out of him.
 			if rest == Rest.DOWN:
@@ -452,11 +462,84 @@ func _step_glide(dt: float) -> void:
 
 
 # Down from a glide, its speed carried: into the butterfly as a low save drops
-# him, held only until he lands in it.
+# him, held until he lands in it and for as long after as the slide still
+# takes him toward his goal down (`_rides_on`).
 func _drop_carrying() -> void:
 	save(KeeperSaveMove.Low.BUTTERFLY, 1.0)
 	save_move.edges = false
 	_landing = true
+
+
+# Whether the leg his pad is asked out on kneels with nothing else to do: at
+# rest on his knees, scooting, or the lead leg of a slide or a rotation from
+# the butterfly.
+func _pad_free() -> bool:
+	if rest != Rest.DOWN or _frozen:
+		return false
+	return _mover == Mover.NONE or _mover == Mover.KNEES \
+			or (_mover == Mover.SLIDE and slide.leads_from_his_knees(pad_out.asked))
+
+
+# Whether the move he would start next from his knees needs the leg on `side`
+# (his own): anything but a scoot, or a slide or a rotation that leg leads.
+func _next_takes_the_leg(side: float) -> bool:
+	if rest != Rest.DOWN:
+		return false
+	var what: int = Do.NONE
+	var to := Vector2.ZERO
+	var turn: float = 0.0
+	if not _queue.is_empty():
+		what = _queue[0].what
+		to = _queue[0].spot
+		turn = _queue[0].side
+	elif _goal:
+		what = _plan()
+		to = route.first_spot
+		turn = route.first_side
+	match what:
+		Do.NONE, Do.KNEE_SHUFFLE:
+			return false
+		Do.SLIDE:
+			return _turned(to - Vector2(x, z), -yaw).x * side <= 0.0
+		Do.ROTATE:
+			return -signf(wrapf(turn - yaw, -PI, PI)) != side
+	return true
+
+
+# Whether a push across on his knees is under way: a slide, which cannot be
+# cut short, not a scoot.
+func slides() -> bool:
+	return _mover == Mover.SLIDE
+
+
+# His speed over the ice, the stances' frame.
+func moving() -> Vector2:
+	return _velocity
+
+
+# Whether he is on his way down: dropped as he skated (`_drop_carrying`), or
+# from standing.
+func drops() -> bool:
+	return (_mover == Mover.SAVE and _landing) or (_mover == Mover.DROP and drop.state == KeeperDrop.State.DROPPING)
+
+
+# Whether the speed he dropped with as he skated is still sliding him.
+func carries() -> bool:
+	return _mover == Mover.SAVE and _landing and save_move.velocity != Vector2.ZERO
+
+
+# Landed from a glide and still sliding on his pads: whether the slide is
+# still his way to his goal down, which lies more along it than across it,
+# still carries him faster than his knees would, and will bring him within
+# their reach of it. One that dies short of that he lets go to push.
+func _rides_on() -> bool:
+	var speed: float = save_move.velocity.length()
+	if speed <= KeeperSlide.KNEE_SHUFFLE_M_S or not _goal or route.rest != Rest.DOWN:
+		return false
+	var to: Vector2 = route.spot - Vector2(x, z)
+	var way: Vector2 = save_move.velocity / speed
+	return to.dot(way) > absf(to.cross(way)) \
+			and speed * speed / (2.0 * save_move.pad_friction) >= to.length() - KeeperRoute.KNEE_REACH_M
 
 
 func _rest_on(r: int) -> void:
@@ -537,6 +620,10 @@ func _start(what: int, spot: Vector2, side: float, top: float) -> bool:
 				else:
 					slide.slide_from_feet(spot, top)
 			_mover = Mover.SLIDE
+		Do.KNEE_SHUFFLE:
+			if rest != Rest.DOWN:
+				return false
+			_mover = Mover.KNEES
 		Do.ROTATE:
 			if rest != Rest.DOWN:
 				return false
@@ -631,6 +718,9 @@ func _pivot(dt: float) -> void:
 func pose(p: KeeperPose) -> void:
 	_pose_mover(p)
 	low_ready.lay_over(p, _mover == Mover.NONE and rest == Rest.FEET and footwork.is_settled())
+	pad_out.lay_over(p)
+	knee_shuffle.lay_over(p)
+	hands_low.lay_over(p)
 	if lead != 0.0:
 		KeeperPoses.turn_trunk(p, lead)
 
@@ -681,6 +771,9 @@ func wire(w: KeeperWire) -> void:
 	save_move.wire(w)
 	glide.wire(w)
 	low_ready.wire(w)
+	pad_out.wire(w)
+	knee_shuffle.wire(w)
+	hands_low.wire(w)
 	fall = w.s16(fall, KeeperWire.FRACTION)
 	_wire_queue(w)
 	_goal = w.bit(_goal)

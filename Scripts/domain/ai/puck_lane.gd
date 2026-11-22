@@ -82,7 +82,9 @@ const PASS_SPEED_M_S: float = GameRules.DEFAULT_QUICK_PASS_POWER_M_S
 # (blade at the rim of its reach ≤ deflect_min 22, on the puck's line ≤ 30), 20
 # catches wherever the blade meets it with margin, though it settles (AIFeedReception.receiver_settle_s); the carrier prices
 # softer steps of it (PASS_PACE_FRACS). pass_launch_speed holds it across
-# distance and receiver motion.
+# distance and receiver motion. A pace, not a ceiling, so a receiver's curve
+# does not lean it: what his blade makes of it is priced in the reception
+# (AIFeedReception's ceiling_mult), and it holds on the line on every curve.
 const PASS_TARGET_CLOSING_M_S: float = 20.0
 
 # The softest feed a bot fires: a pass's world arrival and its launch never go
@@ -104,7 +106,9 @@ const PASS_PACE_FRACS: Array[float] = [0.6, 0.8, 1.0]
 # curling back, which would otherwise floor at a min-wrister floater. A bot
 # receiver parks its blade on the puck's line (SkaterAgentReception), so its
 # ceiling sits above the rim's bar (22); 26 credits that with margin below the
-# on-the-line ceiling (30) for an imperfect setup.
+# on-the-line ceiling (30) for an imperfect setup. Both bars are a neutral
+# blade's: a receiver's curve leans them, and this with them (pass_launch_speed's
+# receive_ceiling_mult).
 const PASS_RECEIVE_CEILING_M_S: float = 26.0
 
 # Reference charged-pass speed (~mid-ramp) for callers that want one typical
@@ -124,7 +128,8 @@ const PASS_CHARGE_SPEED_M_S: float = (
 #   2. Receiver motion (when receiver_vel/pass_dir supplied): the WORLD arrival
 #      is the stationary-receiver target clamped between the two arrivals that
 #      close in the receiver's frame at the target (soft) and at
-#      PASS_RECEIVE_CEILING_M_S (crisp), each
+#      PASS_RECEIVE_CEILING_M_S × receive_ceiling_mult (crisp: his blade's,
+#      AIFeedReception.receiver_ceiling_mult), each
 #        w = (pass_dir·receiver_vel) + sqrt(max(0, closing² − |receiver_vel_⊥|²)).
 #      Streaking onto a lead feed fires harder; curling back softens only to
 #      what he can still catch. With no receiver_vel, w = the target.
@@ -141,7 +146,8 @@ const PASS_CHARGE_SPEED_M_S: float = (
 static func pass_launch_speed(distance: float, max_launch: float,
 		speed_scale: float = 1.0,
 		receiver_vel: Vector3 = Vector3.ZERO,
-		pass_dir: Vector3 = Vector3.ZERO) -> float:
+		pass_dir: Vector3 = Vector3.ZERO,
+		receive_ceiling_mult: float = 1.0) -> float:
 	var target_closing: float = PASS_TARGET_CLOSING_M_S * maxf(speed_scale, 0.01)
 	var world_arrival: float = target_closing
 	if pass_dir.length_squared() > 0.0001:
@@ -151,8 +157,8 @@ static func pass_launch_speed(distance: float, max_launch: float,
 		# can handle, not a choice about how hard to pass.
 		var soft_arrival: float = along + sqrt(maxf(0.0,
 				target_closing * target_closing - perp_sq))
-		var crisp_arrival: float = along + sqrt(maxf(0.0,
-				PASS_RECEIVE_CEILING_M_S * PASS_RECEIVE_CEILING_M_S - perp_sq))
+		var ceiling: float = PASS_RECEIVE_CEILING_M_S * receive_ceiling_mult
+		var crisp_arrival: float = along + sqrt(maxf(0.0, ceiling * ceiling - perp_sq))
 		world_arrival = clampf(target_closing, soft_arrival, crisp_arrival)
 		# A receiver charging the passer harder than the target could drive this
 		# negative/tiny; floor at the softest feed so we still fire a real pass.
@@ -242,25 +248,15 @@ static func expected_pass_speed(shooter: Vector3, receiver: Vector3) -> float:
 
 # ── Release contest: the pressure read, as a physical race ────────────────────
 # P(the release completes clean) in [0, 1] against every nearby opponent — the
-# factor the shot scorers multiply by. A physical
-# contest, never a density curve: an opponent's BLADE must reach the RELEASE
-# POINT (release_point_toward) while the puck is still on the blade.
-#
-# Per opponent, in lane_block_at's vocabulary (same reach convention, read
-# delay and lateral close pace):
+# factor the shot scorers multiply by: an opponent's BLADE must reach the
+# RELEASE POINT (release_point_toward) while the puck is still on the blade.
+# Per opponent, in lane_block_at's vocabulary:
 #
 #   reach_i  = stick_i + close_speed_i × max(0, T_window − read delay)
-#              — his stick, plus what he closes after a competitive read,
-#              over the real windup window
 #   block_i  = clamp((reach_i − d_i) / stick_i, 0, 1)
-#              — one full stick inside reach ⇒ certain blade-on-puck
 #   p_i      = block_i × (T_window − read delay)⁺ / T_window
-#              — a blade can only disrupt the fraction of the release
-#              that remains after its read: arriving as the puck leaves
-#              does nothing, arriving at the start of the windup kills it
-#
-#   clean    = Π (1 − p_i)      — independent contests compose as a
-#              product; no count normalizer, no saturation constant
+#              — only the share of the release left after his read
+#   clean    = Π (1 − p_i)      — independent contests
 #
 # T_window is the bot's real decision→puck-away time
 # (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S). Directionality is
@@ -422,7 +418,7 @@ static func _brake_block_at(u: float, a: float, b: float, speed: float,
 # Time for a puck launched at `v0` to slide `dist` against ice friction (Coulomb
 # decel PUCK_ICE_DECEL_M_S2): the first root of dist = v0·T − ½·a·T². Falls
 # back to frictionless if the puck would stop before arriving.
-static func _friction_traverse_time(dist: float, v0: float) -> float:
+static func friction_traverse_time(dist: float, v0: float) -> float:
 	var a: float = GameRules.PUCK_ICE_DECEL_M_S2
 	if a <= 0.0:
 		return dist / v0
@@ -480,9 +476,7 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 # closest-approach reachability model (see the doc-block above the lane
 # constants), not the carry-path AICarrySpace.carry_lane_clearance.
 # `puck_speed_m_s` is the speed the puck travels the segment. `opponent_vels`
-# is an OPTIONAL array index-matched to `opponents`; missing entries read as
-# stationary.
-#
+# is index-matched to `opponents`; missing entries read as stationary.
 # `accurate` (the carrier's own pass EV opts in) composes these refinements
 # over the default `1 − max(block)` constant-speed ballistic model:
 #   1. Each defender's BODY read on the momentum-honest arrival clock: the best
@@ -494,10 +488,13 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 #      time they really get.
 #   4. With `opponent_blades` (index-matched), each defender's stick where he
 #      holds it (_blade_block, max'd per defender).
+# The accurate read ends `end_reach` short of `to`: a receiver's reach for a
+# pass, his own stick playing it there; a blade's catch for a tip (tip_ev).
 static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		puck_speed_m_s: float, opponent_vels: Array[Vector3] = [],
 		opponent_caps: Array = [], accurate: bool = false,
-		opponent_blades: Array[Vector3] = []) -> float:
+		opponent_blades: Array[Vector3] = [],
+		end_reach: float = LANE_RECEIVER_REACH_M) -> float:
 	var dx: float = to.x - from.x
 	var dz: float = to.z - from.z
 	var line_len_sq: float = dx * dx + dz * dz
@@ -508,8 +505,8 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 	# Friction-aware average speed over the real traversal (accurate only).
 	var eff_speed: float = speed
 	if accurate:
-		eff_speed = line_len / _friction_traverse_time(line_len, speed)
-	var read_len: float = maxf(line_len - LANE_RECEIVER_REACH_M, 0.0)
+		eff_speed = line_len / friction_traverse_time(line_len, speed)
+	var read_len: float = maxf(line_len - end_reach, 0.0)
 	var seg_time: float = line_len / eff_speed
 	var inv_len: float = 1.0 / line_len
 	var pvx: float = dx * inv_len * eff_speed
@@ -606,7 +603,7 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 	# From the touch-down on it is a flat pass on the ice for the rest of the lane.
 	var flown: float = speed * t_down
 	var landed_len: float = line_len - flown
-	var landed_speed: float = landed_len / _friction_traverse_time(landed_len, speed) \
+	var landed_speed: float = landed_len / friction_traverse_time(landed_len, speed) \
 			if landed_len > 0.01 else speed
 	var landed_read: float = line_len - LANE_RECEIVER_REACH_M - flown
 	var has_blades: bool = opponent_blades.size() == opponents.size()
@@ -683,7 +680,7 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 		return Vector3.INF
 	var line_len: float = sqrt(line_len_sq)
 	var speed: float = maxf(puck_speed_m_s, 1.0)
-	var eff_speed: float = line_len / _friction_traverse_time(line_len, speed)
+	var eff_speed: float = line_len / friction_traverse_time(line_len, speed)
 	var dirx: float = dx / line_len
 	var dirz: float = dz / line_len
 	var read_len: float = maxf(line_len - LANE_RECEIVER_REACH_M, 0.0)

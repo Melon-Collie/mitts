@@ -18,8 +18,8 @@ var shot_state: int
 # True when this entry was RE-RECORDED by a reconcile replay (its values come
 # from the replay's manual integration) rather than the live post-move capture.
 # Attribution flag for reconcile telemetry: a reconcile whose matched
-# prediction was re-recorded fires against the replay's approximations (no
-# goalie-body sliding, snapshot-approximated body checks), so a high
+# prediction was re-recorded fires against the replay's approximations
+# (snapshot-approximated body checks), so a high
 # replayed-entry share of reconciles points at replay fidelity, while a high
 # live-entry share points at genuine live prediction divergence.
 var was_replay_rerecorded: bool = false
@@ -51,6 +51,16 @@ var hold_ease: Vector2
 # smoother from the host's blade at the ack moving at this, since the wire
 # carries the blade's place but not its motion.
 var blade_dangle_vel: Vector3
+# What this live tick read of the world it does not simulate, recorded live only
+# and played back at this input by the replay (LocalController._replay_view),
+# which otherwise reads the puck and goalie an unacked window later: the puck as
+# this client drew it at the tick's start, and the goalie's save boxes (the
+# blade's wall, as the tick read them) and body boxes (the body's, as its clamp
+# read them). Empty boxes mean no box was in reach.
+var puck_position: Vector3
+var puck_velocity: Vector3
+var goalie_boxes: PackedFloat32Array
+var goalie_body_boxes: PackedFloat32Array
 
 
 func record_tick_state(skater: Skater) -> void:

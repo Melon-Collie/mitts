@@ -56,17 +56,17 @@ void NativeCarrySpace::set_rink(double p_inner_half_width, double p_inner_half_l
 }
 
 void NativeCarrySpace::set_sweep(double p_horizon_s, int64_t p_angles,
-		const PackedFloat64Array &p_rings, double p_saturated_m, double p_poke_contact,
-		double p_dwell_half_band) {
+		const PackedFloat64Array &p_rings, double p_poke_contact, double p_dwell_half_band,
+		double p_body_contact) {
 	horizon_s = p_horizon_s;
 	angles = (int)p_angles;
 	rings.resize(p_rings.size());
 	for (int64_t i = 0; i < p_rings.size(); i++) {
 		rings[i] = p_rings[i];
 	}
-	saturated_m = p_saturated_m;
 	poke_contact = p_poke_contact;
 	dwell_half_band = p_dwell_half_band;
+	body_contact = p_body_contact;
 }
 
 void NativeCarrySpace::set_carry(double p_transit_strip, double p_transit_safe,
@@ -339,25 +339,94 @@ double NativeCarrySpace::crossing_keep(double fx, double fz, double tx, double t
 	return clamp01((eff + poke_contact) / poke_contact);
 }
 
+// AIArrival.body_contact_time.
+double NativeCarrySpace::momentum_horizon(double cx, double cz, double cvx, double cvz,
+		const std::vector<Defender> &defs) const {
+	double t_c = horizon_s;
+	const double contact_sq = body_contact * body_contact;
+	for (const Defender &o : defs) {
+		const double rx = cx - o.x;
+		const double rz = cz - o.z;
+		const double wx = cvx - o.vx;
+		const double wz = cvz - o.vz;
+		const double b = rx * wx + rz * wz;
+		if (b >= 0.0) {
+			continue;
+		}
+		const double c = rx * rx + rz * rz - contact_sq;
+		if (c <= 0.0) {
+			return 0.0;
+		}
+		const double a = wx * wx + wz * wz;
+		const double disc = b * b - a * c;
+		if (disc < 0.0) {
+			continue;
+		}
+		t_c = std::fmin(t_c, (-b - std::sqrt(disc)) / a);
+	}
+	return t_c;
+}
+
+// AIEvadeRead._cut_at: the puck `frac` of the way through a cut, rounded to
+// float as the GDScript's Vector3 holds it.
+void NativeCarrySpace::cut_at(double cx, double cz, double cvx, double cvz, double t_c,
+		double dir_x, double dir_z, double body, double hands, double frac, double &out_x,
+		double &out_z) const {
+	const double coast = std::fmin(horizon_s * frac, t_c);
+	const double off = body * frac * frac + hands * frac;
+	out_x = f32(cx + cvx * coast + dir_x * off);
+	out_z = f32(cz + cvz * coast + dir_z * off);
+}
+
+// AIEvadeRead._cut_safety.
+double NativeCarrySpace::cut_safety(double cx, double cz, double cvx, double cvz, double t_c,
+		double dir_x, double dir_z, double body, double hands,
+		const std::vector<Defender> &defs, bool valid, double beat) const {
+	double px = 0.0;
+	double pz = 0.0;
+	cut_at(cx, cz, cvx, cvz, t_c, dir_x, dir_z, body, hands, 1.0, px, pz);
+	const double dwell_abort = beat == -INF_D ? -INF_D
+			: beat * 2.0 * dwell_half_band + poke_contact - dwell_half_band;
+	double s = clearance_to_safety(reach_clearance(px, pz, horizon_s, defs, valid, -1.0,
+			0.0, 0.0, 0.0, dwell_abort));
+	if (s <= beat) {
+		return s;
+	}
+	const double transit_abort = beat == -INF_D ? -INF_D
+			: transit_strip + beat * (transit_safe - transit_strip);
+	const double fracs[2] = { 0.5, 0.25 };
+	for (int i = 0; i < 2; i++) {
+		cut_at(cx, cz, cvx, cvz, t_c, dir_x, dir_z, body, hands, fracs[i], px, pz);
+		s = std::fmin(s, transit_clearance_to_safety(reach_clearance(px, pz,
+				horizon_s * fracs[i], defs, valid, -1.0, 0.0, 0.0, 0.0, transit_abort)));
+		if (s <= beat) {
+			return s;
+		}
+	}
+	return s;
+}
+
 double NativeCarrySpace::evade_safety(const Vector3 &carrier_pos, const Vector3 &carrier_vel,
 		const Array &opponents, const Array &opponent_vels, double handle_reach,
 		const PackedFloat64Array &caps) const {
 	std::vector<Defender> defs;
 	const bool valid = load(opponents, opponent_vels, caps, defs);
-	const double proj_x = (double)carrier_pos.x + (double)carrier_vel.x * horizon_s;
-	const double proj_z = (double)carrier_pos.z + (double)carrier_vel.z * horizon_s;
-	const double cx = f32(proj_x);
-	const double cz = f32(proj_z);
-	double best_clear = reach_clearance(cx, cz, horizon_s, defs, valid, -1.0, 0.0, 0.0, 0.0,
-			-INF_D);
-	if (best_clear >= saturated_m) {
+	const double cx = carrier_pos.x;
+	const double cz = carrier_pos.z;
+	const double cvx = carrier_vel.x;
+	const double cvz = carrier_vel.z;
+	const double t_c = valid ? momentum_horizon(cx, cz, cvx, cvz, defs) : horizon_s;
+	double best = cut_safety(cx, cz, cvx, cvz, t_c, 0.0, 0.0, 0.0, 0.0, defs, valid, -INF_D);
+	if (best >= 1.0) {
 		return 1.0;
 	}
 	if (!valid) {
-		// Nothing any sample reads can beat the empty defence's clearance.
-		return clearance_to_safety(best_clear);
+		return best;
 	}
-	const double env = 0.5 * maneuver_accel * horizon_s * horizon_s + handle_reach;
+	const double body_m = 0.5 * maneuver_accel * horizon_s * horizon_s;
+	const double env = body_m + handle_reach;
+	const double proj_x = f32(cx + cvx * t_c);
+	const double proj_z = f32(cz + cvz * t_c);
 	// _fill_clearance_bounds.
 	const double tau = std::fmax(0.0, horizon_s - reaction_s);
 	const double coast = horizon_s - tau;
@@ -374,22 +443,23 @@ double NativeCarrySpace::evade_safety(const Vector3 &carrier_pos, const Vector3 
 		o.bound_slack = -least - o.stick;
 	}
 	std::vector<double> bound((size_t)angles);
-	std::vector<double> sx((size_t)angles);
-	std::vector<double> sz((size_t)angles);
 	for (int ring = (int)rings.size() - 1; ring >= 0; ring--) {
 		const double radius = env * rings[(size_t)ring];
-		if (clearance_bound(cx, cz, defs) + radius <= best_clear) {
+		if (clearance_to_safety(clearance_bound(proj_x, proj_z, defs) + radius) <= best) {
 			continue;
 		}
+		const double body = std::fmin(radius, body_m);
+		const double hands = radius - body;
 		int top = -1;
 		for (int k = 0; k < angles; k++) {
 			const double ang = TAU_D * (double)k / (double)angles;
-			sx[k] = f32(proj_x + std::cos(ang) * radius);
-			sz[k] = f32(proj_z + std::sin(ang) * radius);
-			const double ub = board_gap(sx[k], sz[k]) < 0.0 ? -INF_D
-					: clearance_bound(sx[k], sz[k], defs);
+			double px = 0.0;
+			double pz = 0.0;
+			cut_at(cx, cz, cvx, cvz, t_c, std::cos(ang), std::sin(ang), body, hands, 1.0, px, pz);
+			const double ub = board_gap(px, pz) < 0.0 ? -INF_D
+					: clearance_to_safety(clearance_bound(px, pz, defs));
 			bound[k] = ub;
-			if (ub > best_clear && (top < 0 || ub > bound[top])) {
+			if (ub > best && (top < 0 || ub > bound[top])) {
 				top = k;
 			}
 		}
@@ -398,21 +468,22 @@ double NativeCarrySpace::evade_safety(const Vector3 &carrier_pos, const Vector3 
 		}
 		for (int read_top = 0; read_top < 2; read_top++) {
 			for (int k = 0; k < angles; k++) {
-				if ((read_top == 0) != (k == top) || bound[k] <= best_clear) {
+				if ((read_top == 0) != (k == top) || bound[k] <= best) {
 					continue;
 				}
-				const double c = reach_clearance(sx[k], sz[k], horizon_s, defs, valid, -1.0,
-						0.0, 0.0, 0.0, best_clear);
-				if (c > best_clear) {
-					best_clear = c;
-					if (best_clear >= saturated_m) {
+				const double ang = TAU_D * (double)k / (double)angles;
+				const double cs = cut_safety(cx, cz, cvx, cvz, t_c, std::cos(ang), std::sin(ang),
+						body, hands, defs, valid, best);
+				if (cs > best) {
+					best = cs;
+					if (best >= 1.0) {
 						return 1.0;
 					}
 				}
 			}
 		}
 	}
-	return clearance_to_safety(best_clear);
+	return best;
 }
 
 double NativeCarrySpace::carry_safety(const Vector3 &from, const Vector3 &to,
@@ -574,8 +645,8 @@ void NativeCarrySpace::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_rink", "inner_half_width", "inner_half_length",
 								 "corner_radius", "corner_center_x", "corner_center_z"),
 			&NativeCarrySpace::set_rink);
-	ClassDB::bind_method(D_METHOD("set_sweep", "horizon_s", "angles", "rings", "saturated_m",
-								 "poke_contact", "dwell_half_band"),
+	ClassDB::bind_method(D_METHOD("set_sweep", "horizon_s", "angles", "rings", "poke_contact",
+								 "dwell_half_band", "body_contact"),
 			&NativeCarrySpace::set_sweep);
 	ClassDB::bind_method(D_METHOD("set_carry", "transit_strip", "transit_safe",
 								 "lunge_window_s", "protect_shift", "league_blade_reach"),

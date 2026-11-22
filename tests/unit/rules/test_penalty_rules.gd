@@ -71,6 +71,29 @@ func test_nothing_under_a_full_check_is_a_foul() -> void:
 			"a bump, a lean and the press never reach a full check")
 
 
+func test_a_man_skated_into_where_he_stands_threw_nothing() -> void:
+	assert_eq(PenaltyRules.thrown_strength(FULL * 2.0, 1.0, 0.0), 0.0,
+			"leaning on Ctrl in front of the net, the other man brought the speed")
+	assert_eq(PenaltyRules.thrown_strength(FULL * 2.0, 1.0, -3.0), 0.0,
+			"nor does a man backing away from him")
+
+
+func test_a_check_thrown_is_his_run_up_at_his_weight() -> void:
+	assert_almost_eq(PenaltyRules.thrown_strength(FULL * 3.0, 1.2, 5.0), 6.0, 1e-5)
+
+
+func test_catching_a_man_skating_away_lands_only_their_closing() -> void:
+	assert_almost_eq(PenaltyRules.thrown_strength(1.5, 1.0, 8.0), 1.5, 1e-5,
+			"a fast run-up into a man skating the same way is a bump")
+
+
+func test_banging_around_the_net_is_not_a_foul() -> void:
+	var slow_run_up: float = FULL - 0.5   # m/s, at weight 1
+	var thrown: float = PenaltyRules.thrown_strength(FULL * 2.0, 1.0, slow_run_up)
+	assert_eq(_judge(thrown, false, false, false), PenaltyRules.Foul.NONE,
+			"two men closing hard, each from a shuffle, is a net-front battle")
+
+
 func test_an_uncommitted_body_and_a_carrier_foul_nobody() -> void:
 	assert_eq(_judge(FULL * 2.0, false, true, true, false), PenaltyRules.Foul.NONE)
 	assert_eq(_judge(FULL * 2.0, false, true, true, true, true), PenaltyRules.Foul.NONE)
@@ -98,9 +121,13 @@ func test_the_carrier_may_be_hit() -> void:
 
 
 func test_a_man_who_just_released_the_puck_may_be_hit() -> void:
-	var grace: float = HitRules.JUST_RELEASED_GRACE_S
+	var grace: float = PenaltyRules.FINISH_CHECK_GRACE_S
 	assert_true(PenaltyRules.is_eligible_to_be_hit(false, grace, false, 30.0))
 	assert_false(PenaltyRules.is_eligible_to_be_hit(false, grace + 0.01, false, 30.0))
+
+
+func test_the_referee_lets_a_check_finish_longer_than_the_hit_stat_credits_one() -> void:
+	assert_gt(PenaltyRules.FINISH_CHECK_GRACE_S, HitRules.JUST_RELEASED_GRACE_S)
 
 
 func test_a_man_playing_a_loose_puck_may_be_hit() -> void:

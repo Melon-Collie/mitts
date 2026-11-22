@@ -52,9 +52,14 @@ var best_hold_offset: Vector3 = Vector3.ZERO
 var best_hold_cap: float = 1.0
 var best_hold_keep: float = 1.0
 # The completion read of the search's highest-EV pass, for instruments (nothing
-# decides on it): not poked at the release, the lane, the execution miss, kept on
-# reception (kept = x · y · (1 − z) · w; x < 0: none priced), its origin, spot and pace.
+# decides on it): not poked at the release, past every stick on the lane (theirs
+# and ours), the execution miss, kept on reception (the receiver's kept = x · y ·
+# (1 − z) · w; x < 0: none priced), its origin, spot and pace.
 var debug_completion := Vector4(-1.0, 0.0, 0.0, 0.0)
+# The instrument's per-receiver record of each search (null: none kept).
+var trace: AICarrierPassTrace = null
+# The gate the last _pass_variant_ev stopped at (AICarrierPassTrace.Gate).
+var _gate: int = 0
 var debug_spot: Vector3 = Vector3.INF
 var debug_origin_pace := Vector4.ZERO
 var _debug_best_ev: float = -INF
@@ -73,6 +78,8 @@ var _hold_speed: float = 0.0
 var _hold_saucer_speed: float = 0.0
 var _hold_puck_off: Vector2 = Vector2.ZERO
 var _release_lane_fn: Callable = Callable()
+# The field index of the mate the last _mate_take found taking the most of it.
+var _mate_idx: int = -1
 
 
 func _init(field: AICarrierField) -> void:
@@ -140,12 +147,15 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 	var rim_t: float = 0.0
 	var rim_lane: float = 0.0
 	var rim_miss: float = 0.0
+	if trace != null:
+		trace.clear()
 	for peer_id: int in teammate_ids:
 		var receiver_state: SkaterNetworkState = snapshot.skater_states[peer_id]
-		if snapshot.is_out_of_play(peer_id):
-			continue
-		if carrier_in_oz and not AIActionScoring.in_offensive_zone(
-				receiver_state.position, attacking_goal):
+		if snapshot.is_out_of_play(peer_id) or (carrier_in_oz
+				and not AIActionScoring.in_offensive_zone(receiver_state.position,
+						attacking_goal)):
+			if trace != null:
+				trace.record(peer_id, -1.0, 0.0, 0.0, AICarrierPassTrace.Gate.LEAD_OUT_OF_ZONE)
 			continue
 		var receiver_is_one_timer: bool = (ctx.team_brain != null
 				and ctx.team_brain.is_one_timer_ready(peer_id))
@@ -159,12 +169,13 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var scored_pass_dir: Vector3 = to_recv.normalized() \
 				if to_recv.length_squared() > 0.0001 else Vector3.ZERO
 		var receiver_caps: AISkaterCaps = ctx.caps_by_peer.get(peer_id)
+		var receiver_ceiling: float = AIFeedReception.receiver_ceiling_mult(receiver_caps)
 		# Released from the candidate pocket that carries the feed's hardest pace
 		# kept best (AIShotHolds.solve_pass_kept).
 		var full_need: float = AIPuckLane.pass_launch_speed(
 				pass_origin.distance_to(receiver_state.position), ctx.self_wrister_shot_speed,
-				ctx.pass_speed_scale, receiver_state.velocity, scored_pass_dir) \
-				/ maxf(ctx.self_wrister_shot_speed, 0.001)
+				ctx.pass_speed_scale, receiver_state.velocity, scored_pass_dir,
+				receiver_ceiling) / maxf(ctx.self_wrister_shot_speed, 0.001)
 		_hold_ctx = ctx
 		_hold_receiver = receiver_state.position
 		_hold_speed = full_need * ctx.self_wrister_shot_speed
@@ -193,7 +204,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		# Exact prune floor for this receiver: the running best, divided by any
 		# bonus applied to him AFTER scoring (the ping multiplier below), so the
 		# bound stays sound.
-		var prune_floor: float = best_pass_score
+		var prune_floor: float = 0.0 if trace != null else best_pass_score
 		if peer_id == ctx.ping_pass_target_peer:
 			prune_floor /= PING_PASS_EV_MULT
 		# Flat feed, at each pace from full down; the saucer gate reads the winning
@@ -208,13 +219,16 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var win_pull: float = full_pull
 		var win_keep: float = 1.0
 		var win_hold := Vector3(holds.pass_from.x, 0.0, holds.pass_from.y)
+		var raw_best: float = -INF
+		var full_gate: int = 0
 		var prev_speed: float = -1.0
 		var prev_hold: float = INF
 		var fracs: Array[float] = AIPuckLane.PASS_PACE_FRACS
 		for i: int in range(fracs.size() - 1, -1, -1):
 			var frac: float = fracs[i]
 			var speed: float = AIPuckLane.pass_launch_speed(dist, launch_cap,
-					ctx.pass_speed_scale * frac, receiver_state.velocity, scored_pass_dir)
+					ctx.pass_speed_scale * frac, receiver_state.velocity, scored_pass_dir,
+					receiver_ceiling)
 			if speed == prev_speed:
 				continue   # clamped onto the last pace's launch: the same pass
 			# A softer pace only flies longer, so it can win only by tying the
@@ -223,7 +237,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			# horizon even with him skating flat out at the passer.
 			var hold: float = 0.0 if receiver_is_one_timer else AIFeedReception.reception_hold_s(
 					AIFeedReception.arrival_closing_speed(hold_origin, receiver_state.position,
-							speed, receiver_state.velocity))
+							speed, receiver_state.velocity), receiver_ceiling)
 			if frac < 1.0 and (hold >= prev_hold
 					or dist > (speed + receiver_top_speed) * PASS_LEAD_MAX_S):
 				continue
@@ -244,9 +258,11 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 					origin, speed, false, receiver_is_one_timer,
 					self_facing_xz, our_goalie, carrier_in_oz, maxf(prune_floor, s),
 					frac < 1.0, pull, keep)
+			raw_best = maxf(raw_best, s_pace)
 			if frac == 1.0:
 				full_speed = speed
 				full_lane = _last_flat_variant_lane
+				full_gate = _gate
 			if s_pace > s:
 				s = s_pace
 				pass_speed = speed
@@ -303,6 +319,9 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		# Smart-ping PASS_TO_ME / IM_OPEN (see PING_PASS_EV_MULT).
 		if peer_id == ctx.ping_pass_target_peer and s > 0.0:
 			s *= PING_PASS_EV_MULT
+		if trace != null:
+			trace.record(peer_id, maxf(raw_best, s), full_lane,
+					_field.receiver_value_at(receiver_state.position), full_gate)
 		if s > best_pass_score:
 			best_pass_score = s
 			best_pass_peer = peer_id
@@ -341,7 +360,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 				rim_state.velocity, floor_ev,
 				rim_dir, AIRimPass.opp_meet[rim_k], 0.0,
 				ctx.icing_enforced and _rim.ices(ctx, pass_origin, rim_k),
-				pass_origin, rim_keep)
+				pass_origin, rim_keep, rim_state.position)
 		if rim_peer == ctx.ping_pass_target_peer and s_rim > 0.0:
 			s_rim *= PING_PASS_EV_MULT
 		if s_rim > best_pass_score:
@@ -427,6 +446,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	# is the SOLVED time. He skates on through the pull and the windup, so the
 	# lead is solved from the release, where the state machine aims it and
 	# pass_origin throws it.
+	_gate = AICarrierPassTrace.Gate.PRICED
 	var lead: Array = AIPassLead.lead(pass_origin, receiver_state, pass_speed, PASS_LEAD_MAX_S,
 			AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s)
 	var receiver: Vector3 = lead[0]
@@ -437,17 +457,18 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	if one_timed:
 		receiver = AIPassLead.one_timer_tape(receiver, receiver_caps, ctx.attacking_goal_pos)
 	if soft and flight_t >= PASS_LEAD_MAX_S - 0.0001:
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.SOFT_TOO_LONG)
 	if ctx.own_goal_dir * receiver.z > GameRules.GOAL_LINE_Z:
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.LEAD_PAST_GOAL_LINE)
 	if carrier_in_oz and not AIActionScoring.in_offensive_zone(
 			receiver, ctx.attacking_goal_pos, AICarrierField.OZ_RECEIVE_LINE_BUFFER_M):
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.LEAD_OUT_OF_ZONE)
 	# A delayed offside is up: a feed caught in the zone is a touch that whistles.
 	if ctx.zone_entry_blocked and not carrier_in_oz \
 			and AIActionScoring.in_offensive_zone(receiver, ctx.attacking_goal_pos):
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.ENTRY_BLOCKED)
 	var lane: float
+	var mates := Vector3(-1.0, 0.0, 0.0)
 	# Execution miss (AIPuckLane.pass_miss_prob): this bot's release error
 	# projected over the pass distance vs the receiver's catch envelope.
 	var catch_radius: float = receiver_caps.handle_reach if receiver_caps != null \
@@ -482,6 +503,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		if lane <= lane_flat:
 			return 0.0
 		miss_prob += AIPuckLane.SAUCER_EXTRA_MISS_PROB
+		mates = _mate_take(pass_origin, receiver, pass_speed, receiver_state.position, true)
 	else:
 		lane = AIPuckLane.lane_clear(
 				pass_origin, receiver, _field.opponents_release, pass_speed,
@@ -500,7 +522,14 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	return _pass_ev(ctx, receiver, pass_speed, flight_t,
 			receiver_release_t, flight_t + maxf(rotation_time, pull_s), our_goalie,
 			receiver_caps, lane, miss_prob, receiver_state.velocity, useless_below,
-			Vector3.ZERO, Vector3.INF, closing, false, pass_origin, keep)
+			Vector3.ZERO, Vector3.INF, closing, false, pass_origin, keep,
+			receiver_state.position, mates)
+
+
+# A gate that zeroes a feed, noted for the trace.
+func _stop(gate: int) -> float:
+	_gate = gate
+	return 0.0
 
 
 # Expected value of firing a pass from our current position to
@@ -521,7 +550,8 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 # or a rim: no reception to price). `origin` is where it leaves the blade (INF:
 # AICarrierField.pass_origin, the puck where it is) and `keep` the odds it is
 # still on the blade when it goes (AIShotHolds.keep_for), a loss there priced
-# as a poke at the release.
+# as a poke at the release. `receiver_now` is where the receiver stands.
+# `mates` is _mate_take's read of the feed (x < 0: the flat feed's, read here).
 func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		flight_t: float, receiver_release_t: float, delay_s: float,
 		our_goalie: Vector3, receiver_caps: AISkaterCaps = null,
@@ -534,7 +564,9 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		closing: float = 0.0,
 		rim_iced: bool = false,
 		origin: Vector3 = Vector3.INF,
-		keep: float = 1.0) -> float:
+		keep: float = 1.0,
+		receiver_now: Vector3 = Vector3.INF,
+		mates: Vector3 = Vector3(-1.0, 0.0, 0.0)) -> float:
 	var self_pos: Vector3 = ctx.self_pos
 	# The pass flies from the PUCK, not the body: behind the net the two differ
 	# by up to a stick's reach. The lane and its loss points are the puck's;
@@ -546,17 +578,17 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# segment — AIRimPass checked each of its legs instead.
 	var is_rim: bool = rim_dir != Vector3.ZERO
 	if not is_rim and AINetObstacle.pass_lane_blocked_by_net(origin, receiver_spot):
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.THROUGH_NET)
 	if not is_rim and AINetObstacle.pass_crosses_own_slot(
 			origin, receiver_spot, ctx.own_goal_dir * GameRules.GOAL_LINE_Z):
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.ACROSS_OWN_SLOT)
 	if lane < 0.0:
 		lane = AIPuckLane.lane_clear(
 				origin, receiver_spot, _field.opponents_release, pass_speed,
 				_field.opponent_vels, _field.opponent_caps, true,
 				_field.opponent_blades_release)
 	if lane <= 0.0:
-		return 0.0
+		return _stop(AICarrierPassTrace.Gate.LANE_CLOSED)
 	# RELEASE CONTEST — the cough-up loss mode: a forechecker whose stick reaches
 	# the release point inside the ~135 ms windup pokes the puck off the blade
 	# before it flies (the same race as the shot's release_contest_clean). It is
@@ -566,60 +598,47 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 			AIPuckLane.release_point_toward(self_pos,
 					self_pos + rim_dir if is_rim else receiver_spot),
 			_field.opponents, _field.opponent_caps) * keep
-	_field.project_opponents(flight_t, _proj_buf)
 	# The receiver's shot off this feed, the keeper square on the passer as it
 	# leaves (the goalie's own answer to the flight, AIShotValue.feed). A
 	# one-timer-ready receiver's release is the flight alone (_pass_variant_ev).
-	var receiver_value: float = _field.feed_value_at(ctx, origin, receiver_spot,
-			pass_speed, receiver_release_t <= flight_t, self_pos, _proj_buf)
-	# An OPEN receiver can carry into a better look, so he is credited the best
-	# value he can REACH with a short drive toward the net. It bites in the OZ,
-	# where value_at is shot-only. (Re-projects _proj_buf, which
-	# the instant value above has already consumed.)
-	receiver_value = maxf(receiver_value, _field.receiver_drive_in_value(
-			ctx, receiver_spot, receiver_caps, receiver_vel, Vector3.INF, flight_t))
-	# He does not search, so in the zone the lanes his one straight drive misses
-	# are priced as our possession of his spot prices them, by its zone entries:
-	# the read the defence prices a feed to him by. Outside it the feed's value
-	# already is that possession.
-	if AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
-		receiver_value = _field.entry_value(receiver_spot, flight_t, receiver_vel,
-				receiver_value)
-	var settle_s: float = AIFeedReception.receiver_settle_s(closing)
-	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing)
-	# Reception pressure on a catch: the reachable-set clearance at the reception
-	# spot when the puck arrives — defenders momentum-projected from their
-	# RELEASE-TIME spots over the flight, sticks maneuvering over the short
-	# reception window and his settle. It prices a defender draped on the
-	# receiver's back, who is off both the lane and the receiver's forward shot cone.
-	var catch_safety: float = AICarrySpace.clearance_to_safety(
-			AICarrySpace.reach_clearance(receiver_spot, flight_t + settle_s,
-					_field.opponents_release, _field.opponent_vels,
-					_field.opponent_caps, AICarrySpace.EVADE_HORIZON_S + settle_s))
-	# A bobble is a loose puck he must win back: the race to the spot, him at his
-	# regather against their first body there from the release.
-	var bobble_won: float = 0.0
-	var bobble_decay: float = 0.0
-	if p_bobble > 0.0:
-		var regather_s: float = AIFeedReception.bobble_regather_s(closing)
-		bobble_won = AIActionScoring.arrival_race(receiver_spot, flight_t + regather_s,
-				_field.opponents_release, _field.opponent_vels)
-		bobble_decay = AIActionScoring.delay_discount(delay_s + regather_s)
-	var reception_kept: float = (1.0 - p_bobble) * catch_safety + p_bobble * bobble_won
-	# Four completion loss modes, mutually exclusive and summing to 1 with the
-	# retained case: poked at the release (1 − release_clean), lane interception
-	# (release_clean × (1 − lane)), execution miss (release_clean × lane × miss),
-	# and lost on reception (clean lane, no miss, but a stick on the catch or a
-	# lost race to the bobble).
-	var clean_lane: float = lane * (1.0 - miss_prob)   # reaches the tape, in flight
-	var benefit: float = receiver_value * release_clean * clean_lane * (
-			(1.0 - p_bobble) * catch_safety * AIActionScoring.delay_discount(delay_s + settle_s)
-			+ p_bobble * bobble_won * bobble_decay)
+	var receiver_value: float = _taker_value(ctx, origin, receiver_spot, pass_speed,
+			receiver_release_t <= flight_t, flight_t, receiver_caps, receiver_vel, receiver_now)
+	var reception: Vector2 = _reception(receiver_spot, flight_t, delay_s, closing,
+			AIFeedReception.receiver_ceiling_mult(receiver_caps))
+	var reception_kept: float = reception.y
+	# A mate the feed meets on its way takes it: it is his feed, at his own
+	# reception and his value, not a turnover and not the receiver's.
+	if mates.x < 0.0:
+		mates = Vector3.ZERO if is_rim \
+				else _mate_take(origin, receiver_spot, pass_speed, receiver_now)
+	var mate_spot := Vector3.INF
+	var mate_value: float = 0.0
+	var mate_reception := Vector2.ZERO
+	if mates.x > 0.0:
+		var along: Vector3 = Vector3(receiver_spot.x - origin.x, 0.0,
+				receiver_spot.z - origin.z).normalized()
+		mate_spot = Vector3(origin.x + along.x * mates.y, 0.0, origin.z + along.z * mates.y)
+		var mate_vel: Vector3 = _field.mate_vels[_mate_idx]
+		mate_value = _taker_value(ctx, origin, mate_spot, pass_speed, false, mates.z,
+				_field.mate_caps[_mate_idx], mate_vel, _field.mates_now[_mate_idx])
+		mate_reception = _reception(mate_spot, mates.z, delay_s - flight_t + mates.z,
+				AIFeedReception.arrival_closing_speed(origin, mate_spot, pass_speed, mate_vel),
+				AIFeedReception.receiver_ceiling_mult(_field.mate_caps[_mate_idx]))
+	# Five ways the feed ends, mutually exclusive and summing to 1: poked at the
+	# release (1 − release_clean), intercepted (release_clean × (1 − lane)), taken
+	# by a mate on the way (release_clean × met), and of what passes every stick,
+	# missed (× miss) or on the receiver's tape. Either taker may lose it on
+	# reception (a stick on the catch or a lost race to the bobble).
+	var reached: float = lane * (1.0 - mates.x)
+	var met: float = lane * mates.x
+	var clean_lane: float = reached * (1.0 - miss_prob)   # reaches the tape, in flight
+	var benefit: float = release_clean * (receiver_value * clean_lane * reception.x
+			+ mate_value * met * mate_reception.x)
 	# CEILING PRUNE (exact): the turnovers below pay the passer at most the
 	# opponent's least possession (AIPossessionValue.LEAST_VALUE) over the loss
 	# modes' share, so that on top of the benefit bounds the EV.
-	if benefit - AIPossessionValue.LEAST_VALUE \
-			* (1.0 - release_clean * clean_lane * reception_kept) <= useless_below:
+	if benefit - AIPossessionValue.LEAST_VALUE * (1.0 - release_clean
+			* (clean_lane * reception_kept + met * mate_reception.y)) <= useless_below:
 		return 0.0
 	# No separate "escape" bonus for a pressured carrier: the pressure is
 	# already priced by the carry/hold alternatives' own strip cost.
@@ -640,11 +659,12 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		cost += _field.turnover_cost(loss_point,
 				release_clean * (1.0 - lane))
 		cost += _field.turnover_cost(AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
-				release_clean * lane * miss_prob)
-	# Lost on reception: the puck dies AT the receiver, in whatever traffic he was
+				release_clean * reached * miss_prob)
+	# Lost on reception: the puck dies AT its taker, in whatever traffic he was
 	# about to catch it in.
 	cost += _field.turnover_cost(receiver_spot,
 			release_clean * clean_lane * (1.0 - reception_kept))
+	cost += _field.turnover_cost(mate_spot, release_clean * met * (1.0 - mate_reception.y))
 	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
 	# it hands over — the carrier stays at self_pos through a pass, so his
 	# own recovery race starts from here (plan §6).
@@ -653,12 +673,107 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 				self_pos, our_goalie)
 	cost += _field.counter_exposure_cost(ctx, receiver_spot,
 			clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
+	if met > 0.0:
+		cost += _field.counter_exposure_cost(ctx, mate_spot,
+				met * (1.0 - mate_reception.y), self_pos, our_goalie)
 	if benefit - cost > _debug_best_ev:
 		_debug_best_ev = benefit - cost
-		debug_completion = Vector4(release_clean, lane, miss_prob, reception_kept)
+		debug_completion = Vector4(release_clean, reached, miss_prob, reception_kept)
 		debug_spot = receiver_spot
 		debug_origin_pace = Vector4(origin.x, origin.y, origin.z, pass_speed)
 	return benefit - cost
+
+
+# What our man taking a feed from `origin` at `pass_speed` at `spot`, `arrive_t`
+# from now, makes of it: his shot off it (`one_timer`: on contact), or, open, the
+# better look a short drive toward the net reaches; in the zone, where his one
+# drive misses lanes, our possession of the spot by its entries (the read the
+# defence prices a feed to him by). `now` is where he stands, `vel` his skating
+# and `caps` his build.
+func _taker_value(ctx: RoleContext, origin: Vector3, spot: Vector3, pass_speed: float,
+		one_timer: bool, arrive_t: float, caps: AISkaterCaps, vel: Vector3,
+		now: Vector3) -> float:
+	_field.project_opponents(arrive_t, _proj_buf)
+	var value: float = maxf(_field.feed_value_at(ctx, origin, spot, pass_speed, one_timer,
+			ctx.self_pos, _proj_buf, 0.0, Vector3.ZERO, now),
+			_field.receiver_drive_in_value(ctx, spot, caps, vel, Vector3.INF, arrive_t))
+	if AIActionScoring.in_offensive_zone(spot, ctx.attacking_goal_pos):
+		value = _field.entry_value(spot, arrive_t, vel, value)
+	return value
+
+
+# A feed taken at `spot` `arrive_t` from now, closing at `closing` m/s in its
+# taker's frame, at his blade's catch ceiling (`ceiling_mult`), his play off it
+# waiting `delay_s`: (the share of his value it keeps, discounted for his settle
+# or his regather; the odds he keeps it). A
+# catch is kept against the sticks that reach him from their release-time spots
+# over the flight and his settle — a man draped on his back, off the lane and off
+# his shot cone; a bobble is a loose puck he must win back, him at his regather
+# against their first body there (AIFeedReception).
+func _reception(spot: Vector3, arrive_t: float, delay_s: float, closing: float,
+		ceiling_mult: float) -> Vector2:
+	var settle_s: float = AIFeedReception.receiver_settle_s(closing, ceiling_mult)
+	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing, ceiling_mult)
+	var catch_safety: float = AICarrySpace.clearance_to_safety(
+			AICarrySpace.reach_clearance(spot, arrive_t + settle_s,
+					_field.opponents_release, _field.opponent_vels,
+					_field.opponent_caps, AICarrySpace.EVADE_HORIZON_S + settle_s))
+	var bobble_won: float = 0.0
+	var bobble_decay: float = 0.0
+	if p_bobble > 0.0:
+		var regather_s: float = AIFeedReception.bobble_regather_s(closing)
+		bobble_won = AIActionScoring.arrival_race(spot, arrive_t + regather_s,
+				_field.opponents_release, _field.opponent_vels)
+		bobble_decay = AIActionScoring.delay_discount(delay_s + regather_s)
+	return Vector2((1.0 - p_bobble) * catch_safety
+			* AIActionScoring.delay_discount(delay_s + settle_s) + p_bobble * bobble_won * bobble_decay,
+			(1.0 - p_bobble) * catch_safety + p_bobble * bobble_won)
+
+
+# How much of a feed from `from` to `to` at `pass_speed` our own men take on its
+# way: (the share, the lane arc-coord and the time the one taking most meets it),
+# his field index left in _mate_idx. The pickup takes whoever's blade the path
+# crosses, meant for him or not, and a mate whose stick can get to a feed first
+# goes to play it (AILoosePuckChase.reach_meet_time, stick out), so each is read
+# as a defender is, on the arrival clock from his read of the release
+# (AILaneReach.block). The puck must pass every one of them (lane_clear's survival
+# product); the receiver standing at `receiver_now` is not one, and the read ends
+# where his own stick plays it. A `saucer` is over their sticks until it lands.
+func _mate_take(from: Vector3, to: Vector3, pass_speed: float, receiver_now: Vector3,
+		saucer: bool = false) -> Vector3:
+	_mate_idx = -1
+	var dx: float = to.x - from.x
+	var dz: float = to.z - from.z
+	var line_len: float = sqrt(dx * dx + dz * dz)
+	var read_len: float = line_len - AIPuckLane.LANE_RECEIVER_REACH_M
+	var speed: float = maxf(pass_speed, 1.0)
+	var u0: float = AIPuckLane.saucer_airborne_distance_m(speed) if saucer else 0.0
+	var t0: float = AIPuckLane.saucer_hang_time_s(speed) if saucer else 0.0
+	if read_len <= u0:
+		return Vector3.ZERO
+	var eff_speed: float = (line_len - u0) / AIPuckLane.friction_traverse_time(line_len - u0, speed)
+	var dirx: float = dx / line_len
+	var dirz: float = dz / line_len
+	var survival: float = 1.0
+	var best := Vector2.ZERO
+	for i: int in _field.mates_release.size():
+		if _field.mates_now[i] == receiver_now:
+			continue
+		var caps: AISkaterCaps = _field.mate_caps[i]
+		var p: Vector3 = _field.mates_release[i]
+		var v: Vector3 = _field.mate_vels[i]
+		var read: Vector2 = AILaneReach.block(from.x, from.z, dirx, dirz, read_len, eff_speed,
+				p.x, p.z, v.x, v.z, AILaneReach.defender_reach(caps),
+				caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
+				caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2,
+				AIPuckLane.LANE_REACTION_DELAY_S, u0, t0)
+		survival *= 1.0 - read.x
+		if read.x > best.x:
+			best = read
+			_mate_idx = i
+	if _mate_idx < 0:
+		return Vector3.ZERO
+	return Vector3(1.0 - survival, best.y, t0 + (best.y - u0) / eff_speed)
 
 
 # Seconds the bot needs to rotate its facing before the blade can fire at
@@ -796,5 +911,6 @@ func _developing_outlet_feed(ctx: RoleContext, tm: SkaterNetworkState,
 				flight_t + rotation_time, our_goalie, receiver_caps, -1.0,
 				AIPuckLane.PASS_MISS_BASE_PROB, Vector3.ZERO, best,
 				Vector3.ZERO, Vector3.INF,
-				AIFeedReception.arrival_closing_speed(ctx.self_pos, spot, pass_speed, vel)))
+				AIFeedReception.arrival_closing_speed(ctx.self_pos, spot, pass_speed, vel),
+				false, Vector3.INF, 1.0, tm.position))
 	return best

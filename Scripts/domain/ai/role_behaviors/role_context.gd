@@ -65,6 +65,12 @@ var self_lateral_grip: float = 1.0
 # Pass release-direction error, radians (BotSkillProfile.pass_aim_error_rad);
 # drives AIPuckLane.pass_miss_prob. 0 = error-free agent (miss = base floor).
 var self_pass_aim_error_rad: float = 0.0
+# A shot's commit→release lookahead, seconds: AIBotMechanics.shot_lookahead_s at
+# this tier's shot_timing_error_s.
+var self_shot_lookahead_s: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+# The tier's shot_timing_error_s: the spread of that hold
+# (AIBotMechanics.shot_hold_sample_s).
+var self_shot_timing_error_s: float = 0.0
 # Charged wrister release speed, m/s — also the cap on its pass launch speed.
 var self_wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 # Body-check delivery and current stagger, for AIDefensiveVerbs.evaluate_body_check.
@@ -76,7 +82,7 @@ var self_settle_s: float = 0.0
 # Where the teammate whose release the puck reached this bot on stood when it
 # was seen loose off him: the pass it was fed. INF: it did not come by a pass.
 var fed_from: Vector3 = Vector3.INF
-# Lever-scaled carry-handle reach, m — how tight a seam best_evade_point threads.
+# Lever-scaled carry-handle reach, m — how tight a seam AIEvadeRead threads.
 var self_handle_reach: float = 0.9
 # Stick + blade reach, m — the "one stick length" unit of the gap ladder.
 var self_blade_reach: float = AIBotMechanics.BLADE_REACH_M
@@ -150,6 +156,8 @@ var dispatch_period_ticks: int = 1
 # another's target). The incumbent for argmax switch-hysteresis
 # (AIStationSearch.append_incumbent / incumbent_bonus).
 var prev_role_target: Vector3 = Vector3.INF
+# Last dispatch's RoleDecision.station_key, -1 across a slot change.
+var prev_station_key: int = -1
 
 # NHL delayed offside: a teammate owes a tag-up, so the carrier keeps its
 # carries, feeds and rims out of the attacking zone.
@@ -196,6 +204,8 @@ var scratch_teammates: Array[Vector3] = []
 var scratch_teammate_caps: Array[AISkaterCaps] = []
 # Index-matched to scratch_teammates.
 var scratch_teammate_vels: Array[Vector3] = []
+# Index-matched to scratch_teammates: each one's peer id.
+var scratch_teammate_ids: Array[int] = []
 # The opposing attack's possession read against our skaters
 # (AIRoleReads.defence_possession), over the three teammate buffers above.
 var scratch_defence_possession := AIPossessionValue.new()
@@ -204,3 +214,6 @@ var scratch_opp_receivers: Array[Vector3] = []
 var scratch_option_bases: Array[float] = []
 # AIDefensiveVerbs.read_carrier_approach's output.
 var scratch_carrier_approach := AICarrierApproach.new()
+# AIBackLineRunners: the attackers coming at pace, and those a teammate holds.
+var scratch_runners: Array[int] = []
+var scratch_held_runners: Array[int] = []

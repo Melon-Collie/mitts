@@ -88,6 +88,23 @@ func test_chase_waits_out_the_reaction_delay() -> void:
 			"chase once the reaction delay has elapsed")
 
 
+func test_an_ordered_bot_chases_a_puck_the_election_gave_a_teammate() -> void:
+	var brain := TeamBrain.new(0, _team_map)
+	sm.setup(SELF_ID, 0, brain, _team_map, false)
+	var s := _loose_puck_snap(Vector3(5, 0, 0))
+	s.real_puck_carrier_peer_id = -1
+	_add_skater(s, SELF_ID, Vector3(-12, 0, 0))
+	_add_skater(s, TEAMMATE_ID, Vector3(4, 0, 0))
+	s.closest_to_puck_by_team[0] = TEAMMATE_ID
+	sm._current_strategy = brain
+	assert_false(sm._should_chase_loose_puck(s, Vector3(-12, 0, 0)), "not his puck")
+	brain.apply_ping(PingRules.Type.GET_PUCK, TEAMMATE_ID, SELF_ID, SELF_ID, Vector3.ZERO)
+	assert_true(sm._should_chase_loose_puck(s, Vector3(-12, 0, 0)), "ordered onto it")
+	s.tag_up_peers[SELF_ID] = true
+	assert_false(sm._should_chase_loose_puck(s, Vector3(-12, 0, 0)),
+			"an order cannot send a man who would whistle the play by touching it")
+
+
 func test_loose_clock_survives_a_scramble_graze() -> void:
 	# The failure the old global debounce had: a puck grazing sticks restarted the
 	# reaction clock every time, so a scramble could defer the chase indefinitely.
@@ -134,6 +151,24 @@ func test_should_chase_a_puck_inside_our_reach_even_when_teammate_is_nearer() ->
 	_add_skater(s, SELF_ID, Vector3(4, 0, 0))         # 1.0 m away
 	_add_skater(s, TEAMMATE_ID, Vector3(4.5, 0, 0))   # 0.5 m away — elected
 	assert_true(sm._should_chase_loose_puck(s, Vector3(4, 0, 0)))
+
+
+# A 4 m/s puck sliding along +X a metre off both teammates' skates, the
+# election naming the teammate: is it this bot's to chase from `self_x`?
+func _chases_a_slow_feed_from(self_x: float, teammate_x: float) -> bool:
+	var s := _loose_puck_snap(Vector3(-6, 0, 0))
+	s.puck_state.velocity = Vector3(4, 0, 0)
+	_add_skater(s, SELF_ID, Vector3(self_x, 0, 1))
+	_add_skater(s, TEAMMATE_ID, Vector3(teammate_x, 0, 1))
+	s.teammate_ids_by_team = {0: [SELF_ID, TEAMMATE_ID]}
+	s.closest_to_puck_by_team = {0: TEAMMATE_ID}
+	return sm._should_chase_loose_puck(s, Vector3(self_x, 0, 1))
+
+
+func test_a_puck_crossing_two_reach_bands_is_chased_by_the_man_it_reaches_first() -> void:
+	assert_true(_chases_a_slow_feed_from(-3.0, 0.0), "it comes to this bot first")
+	assert_false(_chases_a_slow_feed_from(0.0, -3.0),
+			"it reaches the teammate first: this bot keeps his job")
 
 
 # ── _is_closest_teammate_to_puck_at: cache vs. live scan ─────────────────────
@@ -1525,6 +1560,32 @@ func test_carry_holds_intent_against_carrier_flip() -> void:
 	assert_gt(sm._intent_wait_ticks, 0, "the pre-aim wait counter advances")
 
 
+func test_a_shot_puck_already_loaded_waits_where_it_sits() -> void:
+	# While the press waits for its planned point, a puck already carrying the
+	# pace the shot was priced at stays there; pulled on to the hold, its sweep
+	# across the body unloads it and the press waits on the load instead.
+	_stub_carry(AIRoleCarrier.INTENT_CARRY)
+	sm._intended_action = Agent.State.SHOOT_PRESSED
+	sm._locked_pre_aim_point = Vector3(0, 0, -20)
+	var hold := Vector3(-0.6, 0, -1.0)
+	sm._shot_hold_offset_locked = hold
+	var s := _self_snap(Vector3.ZERO, true)
+	var st: SkaterNetworkState = s.skater_states[SELF_ID]
+	var forehand := Vector3(0.6, 0, -0.9)
+	s.puck_state.position = forehand
+	var loaded_share: float = sm._share_as_is(s, Vector3.ZERO, st, sm._locked_pre_aim_point)
+	sm._shot_hold_share_locked = loaded_share
+	assert_eq(sm._pre_aim_target(s, Vector3.ZERO, st), forehand,
+			"loaded as it sits: the pre-aim leaves the puck there")
+	var behind := Vector3(0, 0, 0.6)
+	s.puck_state.position = behind
+	assert_lt(sm._share_as_is(s, Vector3.ZERO, st, sm._locked_pre_aim_point),
+			loaded_share - AIShotHolds.LOAD_READY_SHARE_SLACK,
+			"precondition: a puck behind the body is short of the load")
+	assert_eq(sm._pre_aim_target(s, Vector3.ZERO, st), hold,
+			"short of its load, the pre-aim takes it to the hold")
+
+
 func test_carry_pre_aim_times_out_and_fires() -> void:
 	# Even with the cursor never converging, the pre-aim commits once the wait
 	# counter reaches the timeout — the safety hatch against a never-arriving aim.
@@ -1552,8 +1613,7 @@ func _windup_midpoint(agent: SkaterAgentStateMachine, aim_dir: Vector3, side_sig
 	return (e.start as Vector3 + e.target as Vector3) * 0.5
 
 func _forehand_dir(aim_dir: Vector3, is_left_handed: bool) -> Vector3:
-	var left_dir := Vector3(aim_dir.z, 0.0, -aim_dir.x)
-	return left_dir if is_left_handed else -left_dir
+	return SkaterAgentReception.forehand_dir(aim_dir, is_left_handed)
 
 func test_windup_forehand_side_right_handed() -> void:
 	# sm from before_each is right-handed. For several aim directions the wind-up
@@ -1807,6 +1867,66 @@ func test_shot_entry_samples_release_hold_inside_timing_budget() -> void:
 	sm._set_state(Agent.State.OFF_PUCK)
 
 
+func test_a_shot_is_priced_where_it_leaves_on_average() -> void:
+	# The carrier prices a shot AIBotMechanics.shot_lookahead_s ahead: the
+	# wrister's lookahead plus the mean hold the hands add. Held against the
+	# holds the press really samples, on every tier (#943).
+	for profile: BotSkillProfile in [BotSkillProfile.hard(), BotSkillProfile.normal(),
+			BotSkillProfile.easy()]:
+		sm.apply_profile(profile)
+		var sum: int = 0
+		var n: int = 4000
+		for i: int in n:
+			sum += sm._sample_release_hold_ticks()
+		var sampled_s: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S \
+				+ float(sum) / n * Agent.MOUSE_TICK_DELTA
+		assert_almost_eq(AIBotMechanics.shot_lookahead_s(profile.shot_timing_error_s),
+				sampled_s, 0.004,
+				"the priced lookahead is the sampled hold's mean (error %.2f s)"
+				% profile.shot_timing_error_s)
+
+
+func test_a_shot_is_priced_over_the_hold_it_can_be_let_go_in() -> void:
+	# The samples a shot is priced at span the hold the press draws from and
+	# average to the priced lookahead; hands with no hold price one.
+	assert_eq(AIBotMechanics.shot_hold_samples(0.0), 1, "no hold, one sample")
+	assert_almost_eq(AIBotMechanics.shot_hold_sample_s(0.0, 0, 1),
+			AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, 1e-9, "at the wrister's lookahead")
+	for profile: BotSkillProfile in [BotSkillProfile.hard(), BotSkillProfile.normal(),
+			BotSkillProfile.easy()]:
+		var err: float = profile.shot_timing_error_s
+		var n: int = AIBotMechanics.shot_hold_samples(err)
+		var sum: float = 0.0
+		var max_ticks: int = int(round(err / Agent.MOUSE_TICK_DELTA))
+		for j: int in n:
+			var s: float = AIBotMechanics.shot_hold_sample_s(err, j, n)
+			assert_between(s, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
+					AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + max_ticks * Agent.MOUSE_TICK_DELTA,
+					"a sample lies inside the hold (error %.2f s)" % err)
+			sum += s
+		assert_almost_eq(sum / n, AIBotMechanics.shot_lookahead_s(err), 1e-6,
+				"the samples average to the priced lookahead (error %.2f s)" % err)
+
+
+func test_a_planned_shot_presses_at_its_point() -> void:
+	# A shot committed ahead of its planned release waits for the body to reach
+	# it: within half a dispatch's skate, so the press lands nearest the point.
+	var st := SkaterNetworkState.new()
+	st.velocity = Vector3(0.0, 0.0, -9.0)
+	sm._dispatch_period_ticks = 6
+	sm._intended_action = SkaterAgentStateMachine.State.SHOOT_PRESSED
+	var half_dispatch_m: float = 0.5 * 9.0 * 6.0 / float(Agent._PhysicsConstants.PHYSICS_TICK)
+	sm._shot_press_point = Vector3(0.0, 0.0, -20.0)
+	assert_false(sm._press_point_reached(Vector3(0.0, 0.0, -20.0 + 2.0 * half_dispatch_m), st),
+			"two half-dispatches short: the next dispatch lands nearer it")
+	assert_true(sm._press_point_reached(Vector3(0.0, 0.0, -20.0 + 0.9 * half_dispatch_m), st),
+			"inside half a dispatch: press now")
+	assert_true(sm._press_point_reached(Vector3(0.0, 0.0, -21.0), st), "past it: press now")
+	sm._shot_press_point = Vector3.INF
+	assert_true(sm._press_point_reached(Vector3(0.0, 0.0, -10.0), st),
+			"no planned point: the press waits for nothing")
+
+
 # ── Cognition gates (difficulty-tiered hockey IQ) ────────────────────────────
 
 func test_apply_profile_sets_cognition_gates() -> void:
@@ -1857,8 +1977,11 @@ func test_motion_blind_aim_ignores_the_goalie_slide() -> void:
 
 # ── Protect-side turn (carry arc direction) ──────────────────────────────────
 # A carrier's turn-around picks which way the puck sweeps: shortest by default,
-# the long way when the short sweep drags the puck through a defender's poke
-# reach and the far side is clear. See PROTECT_TURN_* on the state machine.
+# the long way when a defender's stick gets onto the short sweep and the far
+# side is clear. See _opponent_poke_clearance on the state machine.
+
+const ARC_RATE: float = Agent.MOUSE_ARC_RATE_RAD_S
+
 
 func _protect_snap(self_pos: Vector3, opp_pos: Vector3) -> WorldSnapshot:
 	var s := _loose_puck_snap(self_pos)
@@ -1878,7 +2001,7 @@ func test_a_left_hander_s_holds_read_left_handed_from_the_first_build() -> void:
 func test_protect_turn_shortest_in_open_ice() -> void:
 	var s := _protect_snap(Vector3.ZERO, Vector3(0, 0, -30))   # opponent far away
 	# Facing +z (angle 0), target ~172° around via the +x side.
-	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s), 1.0,
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), 1.0,
 			"open ice → the shortest way around")
 
 
@@ -1886,15 +2009,60 @@ func test_protect_turn_flips_away_from_short_side_defender() -> void:
 	# Defender's blade sits right where the short (+x) sweep would carry the
 	# puck; the long (−x) side is empty → sweep the long way.
 	var s := _protect_snap(Vector3.ZERO, Vector3(2.0, 0, 0.2))
-	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s), -1.0,
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), -1.0,
 			"short sweep through a poke threat → turn the long way, puck shielded")
 
 
 func test_protect_turn_stays_short_when_both_sides_threatened() -> void:
 	var s := _protect_snap(Vector3.ZERO, Vector3(2.0, 0, 0.2))
 	_add_skater(s, 12, Vector3(-2.0, 0, 0.2))   # second defender mirrors the first
-	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s), 1.0,
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), 1.0,
 			"nowhere safer to sweep → don't pay the long rotation for nothing")
+
+
+# A defender set off the short sweep's midpoint (angle 1.5 of a 3.0 swing)
+# along the carrier's outward line, his blade `blade_gap` from it and his body
+# `body_gap`; the long side's midpoint is across the carrier, clear of him.
+func _defender_off_short_mid(blade_gap: float, body_gap: float) -> WorldSnapshot:
+	var mid := Vector3(sin(1.5), 0, cos(1.5)) * sm._blade_reach
+	var out: Vector3 = mid.normalized()
+	var s := _protect_snap(Vector3.ZERO, mid + out * body_gap)
+	s.skater_states[OPP_ID].blade_contact_world = mid + out * blade_gap
+	return s
+
+
+func test_protect_turn_reads_the_stick_the_sweep_has_to_beat() -> void:
+	# His blade gets to the midpoint at his blade speed over the sweep's time
+	# there, to within a poke's contact; his body's reach bounds where it can.
+	var sweep_s: float = 1.5 / ARC_RATE
+	var traverse: float = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S * sweep_s + GameRules.POKE_RADIUS_M
+	var reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + GameRules.POKE_RADIUS_M
+	var s := _defender_off_short_mid(traverse - 0.05, reach - 0.05)
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), -1.0,
+			"his blade gets onto the sweep in time → the long way")
+	s = _defender_off_short_mid(traverse + 0.05, reach - 0.05)
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), 1.0,
+			"his blade arrives after the puck has gone by → the short way")
+	s = _defender_off_short_mid(traverse - 0.05, reach + 0.05)
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), 1.0,
+			"the point is outside his reach of his body → the short way")
+
+
+func test_protect_turn_reads_each_defender_by_his_own_build() -> void:
+	var sweep_s: float = 1.5 / ARC_RATE
+	var league: float = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S * sweep_s + GameRules.POKE_RADIUS_M
+	var slow := AISkaterCaps.new()
+	slow.blade_speed = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S * 0.5
+	sm._caps_by_peer = {OPP_ID: slow}
+	var s := _defender_off_short_mid(league - 0.05, 1.0)
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), 1.0,
+			"a league blade gets there; his slower hands do not")
+	var long_reach := AISkaterCaps.new()
+	long_reach.max_blade_reach = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + 0.3
+	sm._caps_by_peer = {OPP_ID: long_reach}
+	s = _defender_off_short_mid(0.5, AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + GameRules.POKE_RADIUS_M + 0.1)
+	assert_eq(sm._protect_turn_direction(Vector3.ZERO, 0.0, 3.0, s, ARC_RATE), -1.0,
+			"past a league reach of his body, inside his longer one")
 
 
 func test_arc_step_commits_to_the_protected_direction() -> void:

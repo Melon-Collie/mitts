@@ -31,8 +31,10 @@ const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
 const WARMUP_S: float = 1.0
 const WINDOW_S: float = 10.0
-# Catastrophic-regression ceiling: 5v5 AI over half the host's whole budget.
-const SANITY_CEILING_US_PER_S: float = 500_000.0
+# Catastrophic-regression ceiling: 5v5 AI over three-quarters of the host's whole
+# budget. Without the native extension built the GDScript references run, and
+# their 5v5 rows read 530–630k on a shared machine.
+const SANITY_CEILING_US_PER_S: float = 750_000.0
 
 # Collected rows for the final report: scenario -> size -> Dictionary.
 var _rows: Array[Dictionary] = []

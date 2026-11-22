@@ -43,9 +43,11 @@ const RECEIVE_PATH_STEPS: int = 20
 # the glass, body rink-side); outside it the ordinary side-stand runs.
 const WALL_KILL_BAND_M: float = 1.0
 # "Give with the puck" ceiling on an incoming feed's RECEIVER-FRAME speed
-# (gives_with): the bobble line with the blade on the feed's line, where the
-# passer prices the catch, so a receiver never skates a feed the passer priced
-# as a catch into one that bobbles.
+# (gives_with), for a neutral blade: the bobble line with the blade on the
+# feed's line, where the passer prices the catch, so a receiver never skates a
+# feed the passer priced as a catch into one that bobbles. His own blade's is
+# this × his reception lean, as the passer prices it
+# (AIFeedReception.receiver_ceiling_mult).
 const RECEIVE_GIVE_CEILING_M_S: float = AIFeedReception.RECEIVE_HOLD_CEILING_M_S
 
 # ── Shot-aware reception (read_shot) ─────────────────────────────────────────
@@ -233,17 +235,21 @@ func read_pass(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
 	pass_overruns = Vector2(drift.x - perp_foot.x, drift.z - perp_foot.z) \
 			.length() > gate_reach(blade_reach) + GameRules.DEFAULT_BLADE_LENGTH_M * 0.5
 	pass_body_anchor = body_anchor
-	pass_give = gives_with(puck_vel, self_vel)
+	pass_give = gives_with(puck_vel, self_vel,
+			AIFeedReception.receiver_ceiling_mult(_caps_by_peer.get(_peer_id)))
 	# PARK the blade at the gate, held in the body's frame (see blade_gate).
 	pass_blade_aim = self_pos + blade_offset
 	return true
 
 
 # GIVE WITH THE PUCK: brake when our own skating is what carries the feed past
-# RECEIVE_GIVE_CEILING_M_S — stopping would bring it back under. A feed already
-# past it on its own bobbles however we skate, so it is taken in stride.
-static func gives_with(puck_vel: Vector3, self_vel: Vector3) -> bool:
-	var ceiling_sq: float = RECEIVE_GIVE_CEILING_M_S * RECEIVE_GIVE_CEILING_M_S
+# our blade's give ceiling (RECEIVE_GIVE_CEILING_M_S × `ceiling_mult`, our
+# reception lean) — stopping would bring it back under. A feed already past it
+# on its own bobbles however we skate, so it is taken in stride.
+static func gives_with(puck_vel: Vector3, self_vel: Vector3,
+		ceiling_mult: float = 1.0) -> bool:
+	var ceiling: float = RECEIVE_GIVE_CEILING_M_S * ceiling_mult
+	var ceiling_sq: float = ceiling * ceiling
 	var rel_x: float = puck_vel.x - self_vel.x
 	var rel_z: float = puck_vel.z - self_vel.z
 	return rel_x * rel_x + rel_z * rel_z > ceiling_sq \
@@ -366,6 +372,13 @@ static func skating_point(pos: Vector3, vel: Vector3, puck_pos: Vector3,
 	return Vector3(pos.x + vel.x * drift_s, 0.0, pos.z + vel.z * drift_s)
 
 
+# The side of a body squared to `aim_dir` its forehand is on: left of the aim
+# (up × aim_dir) for a left-hander, right of it for a right-hander.
+static func forehand_dir(aim_dir: Vector3, is_left_handed: bool) -> Vector3:
+	var left_dir := Vector3(aim_dir.z, 0.0, -aim_dir.x)
+	return left_dir if is_left_handed else -left_dir
+
+
 # Shot-aware reception read (the shot-aware block above) into the shot_*
 # results. False when this feed is not a shot reception (the caller runs the
 # normal catch); true with the net-forward stand and whether its geometry allows
@@ -421,11 +434,8 @@ func read_shot(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
 	# Mode A (one-time) eligibility: lateral redirect (in the band), forehand
 	# side, far enough out, and not already driving hard at the net.
 	var redirect_angle: float = acos(clampf(puck_dir.dot(net_dir), -1.0, 1.0))
-	# Left of the net direction (up × net_dir); RH forehand = -left_dir, LH =
-	# +left_dir (the convention the state machine's handedness also follows).
-	var left_dir: Vector3 = Vector3(net_dir.z, 0.0, -net_dir.x)
-	var forehand_dir: Vector3 = left_dir if _is_left_handed else -left_dir
-	var from_forehand: bool = (puck_pos - self_pos).dot(forehand_dir) > 0.0
+	var from_forehand: bool = (puck_pos - self_pos).dot(
+			forehand_dir(net_dir, _is_left_handed)) > 0.0
 	shot_self_vel = Vector3.ZERO
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state != null:

@@ -180,3 +180,37 @@ func test_type_validation_bounds() -> void:
 	assert_true(PingRules.is_valid_type(PingRules.Type.GO_THERE))
 	assert_false(PingRules.is_valid_type(-1))
 	assert_false(PingRules.is_valid_type(PingRules.Type.size()))
+
+
+func test_a_ping_off_the_wire_must_name_a_real_spot_and_a_real_skater() -> void:
+	var here := Vector3(1.0, 0.0, 2.0)
+	assert_true(PingRules.is_well_formed(PingRules.Type.GO_THERE, -1, here, _positions))
+	assert_true(PingRules.is_well_formed(PingRules.Type.COVER_HIM, OPP_A, here, _positions))
+	assert_false(PingRules.is_well_formed(PingRules.Type.size(), -1, here, _positions))
+	assert_false(PingRules.is_well_formed(PingRules.Type.COVER_HIM, 99, here, _positions),
+			"a target nobody holds")
+	assert_false(PingRules.is_well_formed(PingRules.Type.GO_THERE, -1,
+			Vector3(NAN, 0.0, 0.0), _positions))
+	assert_false(PingRules.is_well_formed(PingRules.Type.GO_THERE, -1,
+			Vector3(INF, 0.0, 0.0), _positions))
+
+
+func test_a_bot_answers_only_an_order_it_will_carry_out() -> void:
+	assert_true(PingRules.acknowledges(PingRules.Type.GO_THERE, MATE))
+	assert_true(PingRules.acknowledges(PingRules.Type.COVER_HIM, MATE))
+	assert_false(PingRules.acknowledges(PingRules.Type.GO_THERE, -1), "nobody took it")
+	assert_false(PingRules.acknowledges(PingRules.Type.SHOOT, MATE),
+			"a shot call is a bias his own read can refuse")
+
+
+# The display seam tr()s these keys off the domain, where the locale ratchet's
+# scan for literal tr("KEY") calls cannot see them.
+func test_every_call_has_a_catalogue_row() -> void:
+	var rows: PackedStringArray = FileAccess.get_file_as_string(
+			"res://locale/translations.csv").split("\n")
+	var known: Dictionary[String, bool] = {}
+	for row: String in rows:
+		known[row.get_slice(",", 0)] = true
+	for t: int in PingRules.Type.values():
+		assert_true(known.has(PingRules.message_key_for(t)), PingRules.message_key_for(t))
+	assert_true(known.has(PingRules.ACK_MESSAGE_KEY), PingRules.ACK_MESSAGE_KEY)

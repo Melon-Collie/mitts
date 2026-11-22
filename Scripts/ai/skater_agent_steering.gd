@@ -190,6 +190,7 @@ func steer(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		input.brake = (_pivot_braking and not pivot_cut) or _arrival_braking
 		_stance_turning = not input.brake and AISteering.stance_carves_to(
 				self_pos, anchor, desired, Vector2(v.x, v.z), upright_lateral_accel,
-				blade_reach, _stance_turning)
+				blade_reach, _stance_turning,
+				Vector2(anchor_velocity.x, anchor_velocity.z) if moving_anchor else Vector2.ZERO)
 		input.stance_held = pivot_cut or _stance_turning
 	input.move_vector = desired

@@ -1,11 +1,12 @@
 extends RefCounted
 
-# A KeeperController's sim state copied onto another, by reflection: every
+# A KeeperController's sim state copied onto another, or held and put back on
+# him (capture / restore, the shot stager's), by reflection: every
 # script variable of the controller, its collaborators and the Keeper node's
 # skeleton, RefCounted objects deep-copied (into the destination's own objects
 # where it has one of the same script, so its aliases survive: brain.play is
 # the controller's play, the route's footwork is the motor's), arrays and
-# dictionaries copied, value types and packed arrays assigned (copy on write).
+# dictionaries and packed arrays copied, value types assigned.
 #
 # Shared, never copied: nodes (his goalie, the puck, the skaters), the tier's
 # profile, and the controller's world and wire plumbing (`WORLD`). Anything
@@ -21,7 +22,8 @@ const WORLD: Array[String] = ["goalie", "puck", "is_server", "team_id", "_keeper
 		"_state_buffer", "_scratch_bracket", "_scratch_state", "is_extrapolating", "_rejoin_blend_elapsed",
 		"_rejoin_blend_from_x", "_rejoin_blend_from_z", "extrapolation_max_ms", "rejoin_blend_duration",
 		"_goal_line_z", "_goal_center_x", "_profile", "_wire", "wire_state", "wire_state_time",
-		"seat_places_only", "_predictor", "_world_source"]
+		"seat_places_only", "_predictor", "_world_source", "_restep_ease", "_drew_predicted",
+		"_seat_boxes"]
 # The Keeper node's own state: the skeleton solved from his pose, the last one
 # it drew (whether the next pose moved him), and the acceleration his tail
 # swings to.
@@ -55,6 +57,40 @@ func copy(src: KeeperController, dst: KeeperController, skip: Dictionary = {}) -
 		for f: String in KEEPER_NODE:
 			dst._keeper.set(f, _value(src._keeper.get(f), dst._keeper.get(f), "Keeper." + f))
 	dst.goalie.global_transform = src.goalie.global_transform
+	for part: int in KeeperGear.PART_COUNT:
+		dst.goalie.seat_save_box(part, KeeperGear.box(dst._keeper.skeleton, part))
+
+
+# `src`'s state held apart from him, for restore() to put back: what copy()
+# carries, deep-copied into objects of its own, so stepping him on leaves it as
+# it was.
+func capture(src: KeeperController) -> Dictionary:
+	_memo.clear()
+	_claimed.clear()
+	_skip = {}
+	var fields: Dictionary = {}
+	for f: String in names_of(src):
+		if not _world.has(f):
+			fields[f] = _value(src.get(f), null, "KeeperController." + f)
+	var node: Dictionary = {}
+	for f: String in KEEPER_NODE:
+		node[f] = _value(src._keeper.get(f), null, "Keeper." + f)
+	return {"ctrl": fields, "keeper": node, "at": src.goalie.global_transform}
+
+
+# A captured state onto `dst` as copy() would put it there from the keeper it
+# was captured from, into `dst`'s own objects; the capture is left as it was.
+func restore(state: Dictionary, dst: KeeperController) -> void:
+	_memo.clear()
+	_claimed.clear()
+	_skip = {}
+	var fields: Dictionary = state["ctrl"]
+	for f: String in fields:
+		dst.set(f, _value(fields[f], dst.get(f), "KeeperController." + f))
+	var node: Dictionary = state["keeper"]
+	for f: String in node:
+		dst._keeper.set(f, _value(node[f], dst._keeper.get(f), "Keeper." + f))
+	dst.goalie.global_transform = state["at"]
 	for part: int in KeeperGear.PART_COUNT:
 		dst.goalie.seat_save_box(part, KeeperGear.box(dst._keeper.skeleton, part))
 
@@ -106,7 +142,14 @@ func _value(v: Variant, into: Variant, path: String) -> Variant:
 		TYPE_CALLABLE, TYPE_SIGNAL, TYPE_RID:
 			uncopyable[path] = type_string(typeof(v))
 			return into
+	if is_packed(v):
+		return v.duplicate()
 	return v
+
+
+# A packed array: shared by every variable it is assigned to, so it is copied.
+static func is_packed(v: Variant) -> bool:
+	return typeof(v) >= TYPE_PACKED_BYTE_ARRAY and typeof(v) <= TYPE_PACKED_VECTOR4_ARRAY
 
 
 func _object(o: Object, into: Variant, path: String) -> Variant:

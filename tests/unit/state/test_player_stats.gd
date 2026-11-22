@@ -24,10 +24,9 @@ func _full() -> PlayerStats:
 	s.shot_attempts_blocked = 15
 	s.xg_for = 2.5
 	s.icings = 3
-	s.interceptions = 16
 	s.fights = 2
 	s.fight_wins = 1
-	s.pim = 4
+	s.pim_seconds = 48
 	s.pp_goals = 3
 	s.sh_goals = 2
 	s.penalty_shot_goals = 1
@@ -40,10 +39,10 @@ func _full() -> PlayerStats:
 	return s
 
 
-func test_to_array_has_thirty_fields_in_order() -> void:
+func test_to_array_has_twenty_nine_fields_in_order() -> void:
 	var a := _full().to_array()
-	assert_eq(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 11, 12, 13, 14, 15, 2.5, 3, 16, 2, 1,
-			4, 3, 2, 1, 5, 6, 2, 4, 1])
+	assert_eq(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 11, 12, 13, 14, 15, 2.5, 3, 2, 1,
+			48, 3, 2, 1, 5, 6, 2, 4, 1])
 	assert_eq(a.size() + 1, WorldStateCodec.STATS_PLAYER_RECORD_SIZE,
 			"the codec's record is peer_id + this array")
 
@@ -65,7 +64,6 @@ func test_round_trip_preserves_broadcast_counters() -> void:
 	assert_eq(restored.shot_attempts_blocked, 15)
 	assert_almost_eq(restored.xg_for, 2.5, 0.0001)
 	assert_eq(restored.icings, 3)
-	assert_eq(restored.interceptions, 16)
 	assert_eq(restored.fights, 2)
 	assert_eq(restored.fight_wins, 1)
 
@@ -74,7 +72,7 @@ func test_update_from_array_preserves_local_toi() -> void:
 	# toi_seconds never crosses the wire; a decode must not zero a client's count.
 	var s := PlayerStats.new()
 	s.toi_seconds = 42.0
-	s.update_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 2, 3, 4, 16, 5, 1.75, 0, 0, 0, 0,
+	s.update_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 2, 3, 4, 16, 5, 1.75, 0, 0, 0,
 			0, 0, 0, 0, 0, 0, 0, 0, 0])
 	assert_eq(s.faceoff_wins, 9)
 	assert_eq(s.faceoff_losses, 10)
@@ -91,7 +89,7 @@ func test_to_dict_includes_new_stats() -> void:
 	var d := _full().to_dict()
 	assert_eq(d["hits_taken"], 6)
 	assert_eq(d["takeaways"], 7)
-	assert_eq(d["interceptions"], 16)
+	assert_false(d.has("interceptions"), "pick-offs are takeaways")
 	assert_eq(d["giveaways"], 8)
 	assert_eq(d["faceoff_wins"], 9)
 	assert_eq(d["faceoff_losses"], 10)
@@ -105,7 +103,7 @@ func test_to_dict_includes_new_stats() -> void:
 
 func test_the_penalty_counters_cross_the_wire() -> void:
 	var restored := PlayerStats.from_array(_full().to_array())
-	assert_eq(restored.pim, 4)
+	assert_eq(restored.pim_seconds, 48)
 	assert_eq(restored.pp_goals, 3)
 	assert_eq(restored.sh_goals, 2)
 	assert_eq(restored.penalty_shot_goals, 1)
@@ -127,7 +125,7 @@ func test_a_goal_is_credited_to_the_situation_it_came_in() -> void:
 
 func test_the_career_row_carries_the_penalty_columns() -> void:
 	var row: Dictionary = _full().to_dict()
-	assert_eq(row["pim"], 4)
+	assert_eq(row["pim_seconds"], 48)
 	assert_eq(row["pp_goals"], 3)
 	assert_eq(row["pp_assists"], 5)
 	assert_eq(row["sh_goals"], 2)

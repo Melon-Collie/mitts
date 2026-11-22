@@ -39,11 +39,14 @@ var aim_world_pos: Vector3 = Vector3.ZERO
 var has_aim_override: bool = false
 
 # Hold the deliberate deflect (stick_lift_held) this tick, so the blade redirects
-# the puck it meets instead of catching it, tipped up or down (`deflect_up`).
-# Off-puck only — carrying, the button is the nudge — and consumed by the state
-# machine's OFF_PUCK handler.
+# the puck it meets instead of catching it, at the tip height `deflect_level`
+# (a ShotMechanics elevation). Off-puck only — carrying, the button is the
+# nudge — and consumed by the state machine's OFF_PUCK handler.
 var deflect: bool = false
-var deflect_up: bool = false
+var deflect_level: int = ShotMechanics.ELEVATION_FLAT
+# Set up to tip a teammate's shot too fast to hold: the agent leaves it to the
+# tip rather than going to receive it.
+var tips_shot: bool = false
 
 # Off-puck one-timer readiness — camped at the staging spot, pre-aimed at the
 # open net. The state machine forwards it to TeamBrain so the carrier can reward
@@ -77,3 +80,13 @@ var arrive_at_speed: bool = false
 # An offensive station kept its forward stand this dispatch. Round-tripped into
 # RoleContext.prev_held_forward_stand as the pinch read's hysteresis incumbent.
 var held_forward_stand: bool = false
+
+# The ice this decision holds in front of their net (INF: none): a station
+# that screens one of our shots or wins a share of its rebound. The press fights
+# a man off it while we carry the puck (SkaterAgentPress).
+var battle_spot: Vector3 = Vector3.INF
+# Which station target_position is, by what it is rather than where
+# (AIStationSearch.station_keys: the shot it is in front of, and how), so the
+# next read holds the same station where the play has taken it; -1 for a
+# place.
+var station_key: int = -1

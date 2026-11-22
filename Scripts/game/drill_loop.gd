@@ -114,12 +114,13 @@ func _advance() -> void:
 # faces -Z, so ahead is -Z), lifting the pickup lock left from the previous
 # attempt. Skating onto it runs the NORMAL proximity-pickup path — never hand a
 # puck to a stick from here, since a bare set_carrier bypasses PuckController's
-# bookkeeping. stage_at fully parks it (position, linear AND angular velocity,
+# bookkeeping. The puck is fully parked (position, linear AND angular velocity,
 # any queued elevation), so a puck left spinning by the last attempt can't carry
-# its momentum into this one.
+# its momentum into this one, and parked through the puck's controller, so the
+# jump from where the last attempt left it is not swept as travel.
 func stage_puck_for_player() -> void:
 	_puck.remove_skater_cooldown(_skater)
-	_puck.stage_at(Vector3(_skater.global_position.x, ICE_Y,
+	GameManager.tutorial_place_puck(Vector3(_skater.global_position.x, ICE_Y,
 			_skater.global_position.z - STAGE_PUCK_AHEAD))
 
 

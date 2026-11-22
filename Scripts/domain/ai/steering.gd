@@ -85,7 +85,11 @@ const STANCE_RELEASE_FRACTION: float = 0.8
 const ARRIVAL_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 const ARRIVAL_BRAKE_ENGAGE_MARGIN_M: float = 0.5
 const ARRIVAL_BRAKE_RELEASE_MARGIN_M: float = 1.5
-const ARRIVAL_BRAKE_MIN_SPEED_M_S: float = 3.0
+# Below this a body closing on our own crease is settled by the crease repel, not
+# braked (stops_in_own_crease).
+const OWN_CREASE_BRAKE_MIN_SPEED_M_S: float = 3.0
+# The league body's glide, which settles an arrival that needs no brake.
+static var _glide: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_config()
 
 # Offside brake (offside_brake). In ARCADE an attacking non-carrier whose body
 # is wholly past the attacking blue line before the puck is ghosted on that
@@ -515,6 +519,32 @@ static func _crease_repel(self_pos: Vector3) -> Vector2:
 	return dir * (CREASE_REPEL_WEIGHT * falloff)
 
 
+# Whether a body travelling at `velocity_xz` would stop inside our own crease
+# (the repel's extended one) if it braked now — its straight-line stop
+# (ARRIVAL_BRAKE_DECEL_M_S2, plus the engage margin) reaches the paint from the
+# rink side while closing on the goal centre. The crease repel only steers: it
+# sheds no momentum, so a carrier driving at our net reaches the paint at speed
+# with the puck, and the line is a stride behind it.
+# Below OWN_CREASE_BRAKE_MIN_SPEED_M_S the repel settles it.
+static func stops_in_own_crease(self_pos: Vector3, velocity_xz: Vector2,
+		own_goal_dir: float) -> bool:
+	var speed: float = velocity_xz.length()
+	if speed < OWN_CREASE_BRAKE_MIN_SPEED_M_S:
+		return false
+	var centre := Vector2(0.0, own_goal_dir * GameRules.GOAL_LINE_Z)
+	var p := Vector2(self_pos.x, self_pos.z)
+	if velocity_xz.dot(centre - p) <= 0.0:
+		return false
+	var stop_dist: float = (speed * speed) / (2.0 * ARRIVAL_BRAKE_DECEL_M_S2) \
+			+ ARRIVAL_BRAKE_ENGAGE_MARGIN_M
+	var dir: Vector2 = velocity_xz / speed
+	var q: Vector2 = p + dir * clampf(dir.dot(centre - p), 0.0, stop_dist)
+	var radius: float = CreaseRules.ARC_RADIUS + CREASE_REPEL_EXTENSION
+	# The rink side of the goal line only: a stop behind the net is the detour's.
+	var in_front: bool = (q.y - centre.y) * -own_goal_dir >= 0.0
+	return in_front and q.distance_squared_to(centre) <= radius * radius
+
+
 # Lateral "round the post" force for a bot pinned behind a goal line.
 # Returns ZERO unless the bot is at/behind a goal line AND laterally
 # within the net's post span AND its anchor is on the rink side of that
@@ -607,19 +637,28 @@ static func pivot_cuts_in_stance(desired: Vector2, velocity_xz: Vector2) -> bool
 # one the body is already on, not one it must turn to reach. `was_holding` is the
 # previous tick's answer, so the stance releases at STANCE_RELEASE_FRACTION of
 # the upright rate rather than strobing the replicated stance bit.
+#
+# A stand that rides a man (`anchor_velocity_xz`) is reached at the speed the
+# body closes on it, not the speed it skates at, so the turn has d / closing to
+# be made in: 2 · closing · sin θ / d. Read at his ice speed, a stand ridden a
+# metre off at 7 m/s is a turn no edge makes on every tick, and the stance's
+# stride and top-speed cost is paid for the whole retreat.
 static func stance_carves_to(self_pos: Vector3, anchor: Vector3, desired: Vector2,
 		velocity_xz: Vector2, upright_lateral_accel: float, arrival_floor: float,
-		was_holding: bool) -> bool:
+		was_holding: bool, anchor_velocity_xz: Vector2 = Vector2.ZERO) -> bool:
 	var speed: float = velocity_xz.length()
 	var desired_len: float = desired.length()
 	if speed < 0.01 or desired_len < 0.01:
 		return false
+	var to_anchor := Vector2(anchor.x - self_pos.x, anchor.z - self_pos.z)
 	var cos_off: float = velocity_xz.dot(desired) / (speed * desired_len)
 	var sin_off: float = 1.0 if cos_off <= 0.0 else sqrt(maxf(1.0 - cos_off * cos_off, 0.0))
-	var dist: float = maxf(Vector2(anchor.x - self_pos.x, anchor.z - self_pos.z).length(),
-			arrival_floor)
-	return _stance_out_turns(2.0 * speed * sin_off / dist, speed, upright_lateral_accel,
-			was_holding)
+	var closing: float = speed
+	if anchor_velocity_xz != Vector2.ZERO:
+		closing = maxf((velocity_xz - anchor_velocity_xz).dot(to_anchor)
+				/ maxf(to_anchor.length(), 0.01), 0.0)
+	return _stance_out_turns(2.0 * closing * sin_off / maxf(to_anchor.length(), arrival_floor),
+			speed, upright_lateral_accel, was_holding)
 
 
 # The same read for a held stick with no anchor (a rolled carry move's): the turn
@@ -657,23 +696,34 @@ static func _stance_out_turns(required_rate: float, speed: float,
 # body's momentum.
 static func should_arrival_brake(self_pos: Vector3, anchor: Vector3,
 		velocity_xz: Vector2, was_braking: bool) -> bool:
-	var speed: float = velocity_xz.length()
-	if speed < ARRIVAL_BRAKE_MIN_SPEED_M_S:
-		return false  # slow enough that friction + the deadband settle it
 	var to_anchor := Vector2(anchor.x - self_pos.x, anchor.z - self_pos.z)
 	var dist: float = to_anchor.length()
-	if dist < 0.001:
-		return true  # on top of the target at speed — stop
 	# Closing speed: the velocity component toward the anchor. Moving away
 	# or tangential → nothing to overshoot (reversals are the pivot
-	# brake's job).
-	var closing: float = velocity_xz.dot(to_anchor) / dist
+	# brake's job). On top of it, all of the speed is overshoot.
+	var closing: float = velocity_xz.length() if dist < 0.001 \
+			else velocity_xz.dot(to_anchor) / dist
 	if closing <= 0.0:
+		return false
+	# Gliding there stops inside the engage margin past it: friction settles
+	# it, no brake key. Never a speed floor: at 3 m/s the glide carries a body
+	# metres on, and a side-step into a reception stance blew through it.
+	if glide_distance(closing) <= dist + ARRIVAL_BRAKE_ENGAGE_MARGIN_M:
 		return false
 	var stop_dist: float = (closing * closing) / (2.0 * ARRIVAL_BRAKE_DECEL_M_S2)
 	var margin: float = ARRIVAL_BRAKE_RELEASE_MARGIN_M if was_braking \
 			else ARRIVAL_BRAKE_ENGAGE_MARGIN_M
 	return stop_dist + margin >= dist
+
+
+# How far (m) the league body glides from `speed` (m/s) to a stop: its glide
+# friction plus the drag on its speed (SkaterMovementRules.apply_movement).
+static func glide_distance(speed: float) -> float:
+	var f: float = _glide.friction
+	var k: float = _glide.friction_drag
+	if k < 0.0001:
+		return speed * speed / (2.0 * maxf(f, 0.0001))
+	return (speed - f / k * log(1.0 + k * speed / f)) / k
 
 
 # Hard body-level guard against skating offside. Returns `desired`

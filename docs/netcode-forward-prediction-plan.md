@@ -1,6 +1,8 @@
 # Netcode: forward-prediction target architecture & plan
 
-Status: **design agreed, staged implementation in progress.** This doc is the
+Status: **stages 1, 3, 4 and 5 landed** (stage 4's goalie half by a different
+route, the predicted keeper of #903); stage 2 not built (body checks are still
+client-predicted); stage 6 open. This doc is the
 agreed design (per CLAUDE.md workflow — treat it as the plan; ask before
 deviating). It captures the target the netcode is moving toward and the order
 we get there. Deep invariants for the *current* system live in
@@ -254,7 +256,10 @@ can't run headless, so networking feel is verified on the developer's machine.
      present via the shared analytic sim, with claims validated at the stamp,
      which is strictly better than any eased lead. The machinery was removed
      rather than left dormant.
-   - *Goalie pose-lead — DEFERRED.* Lower value (spectator-only cosmetic) and a
+   - *Goalie pose-lead — SUPERSEDED* by the predicted keeper (#903,
+     `KeeperPredictor`): a client replays the host's keeper to the render
+     instant, which the shooter's release is stamped at, so the footgun below no
+     longer applies. The deferral's reasoning, kept for the record: Lower value (spectator-only cosmetic) and a
      real footgun: the shooter's shot is already lag-comp'd against the goalie
      they saw, so leading the goalie for the shooter would make them aim at a
      goalie the host won't judge against — worse, not better. A safe version has
@@ -262,6 +267,8 @@ can't run headless, so networking feel is verified on the developer's machine.
      fiddly state logic for a cosmetic gain. Revisit only if the skater+puck lead
      feels good and the goalie's past-ness still reads badly.
 5. **Rate drop** (now free on feel) **+ delta-encode** (when egress-metered).
+   *Landed:* 45 Hz broadcast, XOR deltas against each client's ack, zstd-packed
+   (`SnapshotDelta`, `WirePacking`, #912).
 6. **Pure-server-mode + Steam auth ticket + hybrid dedicated for ranked.**
 
 ## What this does not fix (honest residuals)

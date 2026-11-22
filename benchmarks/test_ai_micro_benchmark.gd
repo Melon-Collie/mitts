@@ -418,7 +418,7 @@ func test_evaluator_costs() -> void:
 		AICarrySpace.carry_safety(from, from + Vector3(-3, 0, -3), 0.8,
 				opps, opp_vels, opp_caps, true))
 	_bench("best_evade_point (5 def)", func() -> void:
-		AICarrySpace.best_evade_point(from, Vector3(2, 0, -4), opps, opp_vels, 0.9))
+		AIEvadeRead.best_evade_point(from, Vector3(2, 0, -4), opps, opp_vels, 0.9))
 	_bench("release_contest_clean (5 def)", func() -> void:
 		AIPuckLane.release_contest_clean(from, opps, opp_caps))
 	_bench("time_to_arrive", func() -> void:

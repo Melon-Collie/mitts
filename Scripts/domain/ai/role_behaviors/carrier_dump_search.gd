@@ -317,7 +317,8 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float, lead_s:
 		var next: Vector3 = AILoosePuckChase.path_intercept_point(_path, STEP_DT, origin,
 				t_theirs + STEP_DT)
 		_away[k] = t_theirs + AIFeedReception.receiver_settle_s(
-				meet_theirs.distance_to(next) / STEP_DT) \
+				meet_theirs.distance_to(next) / STEP_DT,
+				AIFeedReception.receiver_ceiling_mult(_rival_caps[k])) \
 				+ AIForecheckRead.CARRIER_READ_S + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 		_regain[k] = _regain_odds(meet_theirs, _away[k], lead_s)
 	_dumper_then[k] = Vector3.INF
@@ -506,7 +507,7 @@ func _fill_support(ctx: RoleContext) -> void:
 		_our_then.append(p)
 		_our_then_val.append(AIActionScoring.score_shoot_value(p, ctx.attacking_goal_pos,
 				keeper, _opp_then, 0.0, AIShotOdds.Stance.UPRIGHT,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, _field.opponent_caps, -1.0, NAN, false,
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, _field.opponent_caps, -1.0, NAN, -1.0,
 				AIShotOdds.History.FED)
 				if AIActionScoring.in_offensive_zone(p, ctx.attacking_goal_pos) else 0.0)
 

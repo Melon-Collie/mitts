@@ -118,6 +118,7 @@ static func read_loose(snapshot: WorldSnapshot, team_id: int,
 			path, puck, setup_s, playable_s, team_id, false)
 	if out.theirs_s == INF:
 		return false
+	var collector: AISkaterCaps = caps_by_peer.get(_first_pid)
 	out.ours_s = _first_on_path(snapshot, team_id_by_peer, caps_by_peer,
 			path, puck, setup_s, playable_s, team_id, true)
 	out.first_at = AILoosePuckChase.path_intercept_point(path, _PATH_STEP_S, puck,
@@ -125,7 +126,8 @@ static func read_loose(snapshot: WorldSnapshot, team_id: int,
 	out.meet = AILoosePuckChase.path_intercept_point(path, _PATH_STEP_S, puck, out.theirs_s)
 	var meet_speed: float = out.meet.distance_to(AILoosePuckChase.path_intercept_point(
 			path, _PATH_STEP_S, puck, out.theirs_s + _PATH_STEP_S)) / _PATH_STEP_S
-	out.away_s = out.theirs_s + AIFeedReception.receiver_settle_s(meet_speed) \
+	out.away_s = out.theirs_s + AIFeedReception.receiver_settle_s(meet_speed,
+			AIFeedReception.receiver_ceiling_mult(collector)) \
 			+ CARRIER_READ_S + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 	return true
 
@@ -267,21 +269,30 @@ static func _our_first_to(snapshot: WorldSnapshot, team_id: int,
 	return best
 
 
+# Who _first_on_path last found soonest (-1: nobody): the worker's scratch, read
+# before the next call.
+static var _first_pid: int = -1
+
+
 # One side's soonest body to a loose puck on `path` (walked from `puck`), at the
 # election's resolution: ours when `ours`, else theirs.
 static func _first_on_path(snapshot: WorldSnapshot, team_id_by_peer: Dictionary,
 		caps_by_peer: Dictionary, path: Array[Vector3], puck: Vector3, setup_s: float,
 		playable_s: float, team_id: int, ours: bool) -> float:
 	var best: float = INF
+	_first_pid = -1
 	for pid: int in snapshot.skater_states:
 		var t: int = team_id_by_peer.get(pid, -1)
 		if t == -1 or (t == team_id) != ours or snapshot.is_out_of_play(pid):
 			continue
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
-		best = minf(best, AILoosePuckChase.path_intercept_time(path, _PATH_STEP_S, puck,
+		var meets: float = AILoosePuckChase.path_intercept_time(path, _PATH_STEP_S, puck,
 				s.position, s.velocity, AILoosePuckChase.race_vmax(caps), setup_s,
-				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, playable_s))
+				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, playable_s)
+		if meets < best:
+			best = meets
+			_first_pid = pid
 	return best
 
 

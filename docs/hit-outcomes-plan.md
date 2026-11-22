@@ -270,9 +270,11 @@ off his feet at modest pace, below the rocked line when hit from the side.
 
 ### Bots
 
-- **Built:** `skater_agent_board_play.gd`'s pin reach asks the host's own
-  question, `BodyBalanceRules.overshoot` on the man's replicated facing,
-  stance and shot state and his build's height, instead of the knockdown line.
+- **Not built:** nothing in the bots asks the host's own question
+  (`BodyBalanceRules.overshoot` on the man's replicated facing, stance and
+  shot state). `skater_agent_board_play.gd` holds a man on the wall where
+  holding him is worth it (`_worth_holding`: our support first to the puck, or
+  our own end), not by what the hit would do to him.
 - **Built:** the commit bar already prices a rocked hit; `test_body_check.gd`
   holds it under what floors a square, upright man.
 - **Not built** (a new decision each, #842): the checker

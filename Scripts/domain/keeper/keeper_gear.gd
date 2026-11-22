@@ -184,6 +184,20 @@ static func box(skel: KeeperSkeleton, part: int) -> Transform3D:
 	return _stick_box(skel, part)
 
 
+# Every part's box into `out` (PART_COUNT long), each as box() gives it, with
+# each leg's settle solved once for its pad, rise and boot rather than once each.
+static func boxes(skel: KeeperSkeleton, out: Array[Transform3D]) -> void:
+	for side: int in 2:
+		var pad: Transform3D = _pad_box(skel, side)
+		var boot: Transform3D = _boot_box(skel, side)
+		var settle: Vector3 = _settle_of(skel, side, pad, boot)
+		out[Part.PAD_G + side] = pad.translated(settle)
+		out[Part.RISE_G + side] = _rise_box(skel, side).translated(settle)
+		out[Part.BOOT_G + side] = boot.translated(settle)
+	for part: int in range(Part.SKATE_G, PART_COUNT):
+		out[part] = box(skel, part)
+
+
 # The pad strapped on its shin, where the leg holds it.
 static func _pad_box(skel: KeeperSkeleton, side: int) -> Transform3D:
 	var shin: Transform3D = skel.xf[KeeperSkeleton.SHIN[side]]
@@ -196,7 +210,12 @@ static func _pad_box(skel: KeeperSkeleton, side: int) -> Transform3D:
 # strapped loose round the leg, settles onto it instead. Past its foam's give,
 # and no further than its straps let it. Keeper space.
 static func _pad_settle(skel: KeeperSkeleton, side: int) -> Vector3:
-	var low: float = minf(lowest(_pad_box(skel, side), _PAD_HALF), lowest(_boot_box(skel, side), _BOOT_HALF))
+	return _settle_of(skel, side, _pad_box(skel, side), _boot_box(skel, side))
+
+
+# _pad_settle from that side's pad and boot boxes, unsettled.
+static func _settle_of(skel: KeeperSkeleton, side: int, pad: Transform3D, boot: Transform3D) -> Vector3:
+	var low: float = minf(lowest(pad, _PAD_HALF), lowest(boot, _BOOT_HALF))
 	var sink: float = -low - PAD_SETTLE_GIVE_M
 	if sink <= 0.0:
 		return Vector3.ZERO

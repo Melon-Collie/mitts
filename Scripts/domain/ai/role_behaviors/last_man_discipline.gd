@@ -132,9 +132,9 @@ static func neutral_station_target(ctx: RoleContext, stand: Vector3,
 
 # ── "If I go, is anybody home?" ──────────────────────────────────────────────
 #
-# has_support_behind's depth read, minus the elected chaser (committed to the
-# puck, he holds nothing) and with a cover-envelope margin, so two bodies level
-# with each other cover nothing for one another. Antisymmetric: exactly one body
+# A depth read: a teammate deeper than me by a cover envelope, so two bodies
+# level with each other cover nothing for one another, the elected chaser aside
+# (committed to the puck, he holds nothing). Antisymmetric: exactly one body
 # draws the layer, and no two can each appoint the other.
 static func home_layer_behind_me(ctx: RoleContext) -> bool:
 	if ctx.snapshot == null:
@@ -171,21 +171,54 @@ static func _attacker_behind(ctx: RoleContext, stand: Vector3,
 	return false
 
 
-# True when a teammate is deeper toward our net than we are — a layer that picks
-# the carrier up if our challenge is beaten. False: we are the last man back.
-# A depth read, not a race: "beaten wide, nobody home" is a positional question.
+# True when a teammate is home before the play: his trip to our net is shorter
+# than mine and than the puck's, each on the arrival clock from where he is and
+# how he is moving (AIArrival.time_to_arrive). He picks the carrier up if our
+# challenge is beaten; with nobody, we are the last man back. A race, so a man
+# nearer our net who is skating away up the ice is not behind me, and one a
+# stride further out skating home is; and to our net, not down the ice, so the
+# man in the slot is behind a challenge low in the corner. A teammate the puck
+# beats home is beaten with us: counted, a defender behind the play threw the
+# check his beaten partner was supposed to cover.
 static func has_support_behind(ctx: RoleContext) -> bool:
 	if ctx.snapshot == null:
 		return false
-	var my_depth: float = ctx.own_goal_dir * ctx.self_pos.z
+	var beaten_by: float = minf(_puck_home_s(ctx), AIArrival.time_to_arrive(ctx.self_pos,
+			ctx.defending_goal_pos, ctx.self_velocity, ctx.self_max_speed, ctx.self_max_accel,
+			ctx.self_lateral_grip))
 	for pid: int in ctx.snapshot.skater_states:
 		if pid == ctx.peer_id:
 			continue
 		if ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
 			continue
-		if ctx.own_goal_dir * ctx.snapshot.skater_states[pid].position.z > my_depth:
+		if _home_s(ctx, pid) < beaten_by:
 			return true
 	return false
+
+
+# A skater's trip to our net from where he is and how he is moving, on his own
+# build where it is known.
+static func _home_s(ctx: RoleContext, pid: int) -> float:
+	var s: SkaterNetworkState = ctx.snapshot.skater_states[pid]
+	var caps: AISkaterCaps = ctx.caps_by_peer.get(pid)
+	if caps == null:
+		return AIArrival.time_to_arrive(s.position, ctx.defending_goal_pos, s.velocity,
+				GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2)
+	return AIArrival.time_to_arrive(s.position, ctx.defending_goal_pos, s.velocity,
+			caps.max_speed, caps.max_accel, caps.lateral_grip)
+
+
+# The puck's trip to our net: its carrier's, or with it loose a league skater's
+# setting off from where it lies, the soonest anyone could bring it. INF with no
+# puck.
+static func _puck_home_s(ctx: RoleContext) -> float:
+	var puck: PuckNetworkState = ctx.snapshot.puck_state
+	if puck == null:
+		return INF
+	if ctx.snapshot.skater_states.has(puck.carrier_peer_id):
+		return _home_s(ctx, puck.carrier_peer_id)
+	return AIArrival.time_to_arrive(puck.position, ctx.defending_goal_pos, Vector3.ZERO,
+			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2)
 
 
 # The shallowest stand depth — metres goal-side of `threat_pos` along `dir_net`

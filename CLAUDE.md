@@ -118,7 +118,7 @@ a baseline recorded with `--baseline`. No taught stance raises an arm, so
 `KEEPER_CAPTURE_STANCES` also takes its reaches (`reach_glove_high`,
 `reach_glove_out`, `reach_both_high`: a hand put where a save takes it), which
 is where his sleeves' hang shows. `.claude/hooks/render-keeper-strip.sh`
-draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recovery, the sink into the low ready and the drop from it, the butterfly slide and the rotation on his knees, the RVH's ways in and out and the push off the post, a whole sequence of them through `KeeperMotor`, goals given to it with the moves `KeeperRoute` picks, the first brain tracking a puck round the zone, his saves against a shot read as in a match, and a puck dribbling in to his feet covered) frame by frame (`tools/keeper_strip.gd`).
+draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recovery, the sink into the low ready and the drop from it, the butterfly slide and the rotation on his knees, the RVH's ways in and out and the push off the post, a whole sequence of them through `KeeperMotor`, goals given to it with the moves `KeeperRoute` picks, the first brain tracking a puck round the zone, his saves against a shot read as in a match, a puck dribbling in to his feet covered, a pad out through a slide it leads, and his knee shuffle's steps) frame by frame (`tools/keeper_strip.gd`).
 
 **To see the BODY's skin, render it.** `.claude/hooks/render-body.sh
 [--only=a,b]` runs pose_capture's poses on the skater's skin
@@ -174,7 +174,7 @@ camera following it, printing `PuckSpinRig`'s spin, tilt and tumble per frame
 **To see a SCREEN, render it.** `.claude/hooks/render-ui.sh [shots]` drives the
 real menus and HUD (title card, each Options tab, the free-play HUD and every
 side-menu overlay, the tutorial HUD, the lobby, a tournament's lobby and bracket,
-a 3v3 against bots a few seconds in, the view from each penalty box) and writes PNGs to `.preview/ui/`. Shot list in `tools/ui_preview_runner.gd`;
+a 3v3 against bots a few seconds in, the view from each penalty box, a smart ping's bubble and markers) and writes PNGs to `.preview/ui/`. Shot list in `tools/ui_preview_runner.gd`;
 `--list` prints it. Each run gets a throwaway user data directory, so it shows
 first-run defaults and never touches your prefs. The UI comes out faithful but the 3D behind it does not (software
 Compatibility renderer), and a match runs at about a frame a second, so the full
@@ -218,6 +218,15 @@ process used and every engine error it logged
 takes as long as the match. It is the check for dedicated-server work
 (`docs/dedicated-server-plan.md`): a host-side change that quietly needs a local
 player shows up here as a phase that never ends.
+
+**To check the bots for own goals, stage them.** `.claude/hooks/stage-own-goals.sh
+[sizes]` plays an all-bot match headless and stages a loose puck behind and
+beside a net again and again (every puck spot, the defenseman's approach and
+pace, with and without a forechecker, both nets), printing each trial's outcome,
+who played the puck, a summary, and the per-tick trace of any own goal
+(`tools/own_goal_stage_runner.gd`; logs to `.preview/own_goal_stage/`).
+`tools/own_goal_hunt.gd` is its free-play sibling: a match left to run, every
+own goal traced.
 
 A render answers *how it reads*; it does not answer *whether two placements
 agree*. When the question is the second one — does the sleeve stay inside the

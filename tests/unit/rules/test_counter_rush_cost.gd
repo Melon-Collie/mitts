@@ -134,6 +134,20 @@ func test_sooner_counter_costs_more() -> void:
 	assert_gt(soon_cost, late_cost)
 
 
+func test_a_lone_collector_is_no_outlet_for_himself() -> void:
+	# One opponent, set between the loss and our net: he skates back for it and
+	# lugs it the whole way. Fed "forward" to himself he collected it at the loss
+	# and carried it from where he had set out, a dozen metres up the ice.
+	var ahead: Array[Vector3] = [Vector3(6.0, 0.0, -8.0)]
+	var at_rest: Array[Vector3] = [Vector3.ZERO]
+	var league: Array = [null]
+	var lug: float = AIArrival.time_to_arrive(ahead[0], LOSS_POINT, Vector3.ZERO) \
+			+ LOSS_POINT.distance_to(AIActionScoring.counter_point_for(OUR_NET)) \
+					/ AIArrival.SKATER_REF_SPEED_M_S
+	assert_almost_eq(AIActionScoring.counter_time(LOSS_POINT, OUR_NET, ahead, at_rest, league),
+			lug, 0.001, "nobody is ahead of him to feed")
+
+
 func test_stretch_outlet_makes_the_deep_loss_dearer() -> void:
 	# The PASS-FORWARD leg: the checker collecting in the corner doesn't lug
 	# it 50 m himself — he hits the stretch man already at center, who

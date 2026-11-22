@@ -29,22 +29,21 @@ func test_increments_map_extended_stat_fields() -> void:
 	s.takeaways = 6
 	s.giveaways = 7
 	s.faceoff_wins = 8
-	s.interceptions = 9
 	var d := SteamStatRecorder.increments(s, "loss")
 	assert_eq(d[SteamStats.HITS_TAKEN], 5)
 	assert_eq(d[SteamStats.TAKEAWAYS], 6)
 	assert_eq(d[SteamStats.GIVEAWAYS], 7)
 	assert_eq(d[SteamStats.FACEOFF_WINS], 8)
-	assert_eq(d[SteamStats.INTERCEPTIONS], 9)
+	assert_false(d.has(SteamStats.LEGACY_INTERCEPTIONS), "retired, never written")
 
 
 func test_increments_map_the_penalty_stats() -> void:
 	var s := _stats(0, 0, 0, 0, 0)
-	s.pim = 4
+	s.pim_seconds = 48
 	s.pp_goals = 2
 	s.pp_assists = 3
 	var d := SteamStatRecorder.increments(s, "win")
-	assert_eq(d[SteamStats.PIM], 4)
+	assert_eq(d[SteamStats.PIM], 48)
 	assert_eq(d[SteamStats.PP_GOALS], 2)
 	assert_eq(d[SteamStats.PP_POINTS], 5, "his goals and his assists a man up")
 

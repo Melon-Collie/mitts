@@ -30,6 +30,7 @@ extends GutTest
 #   hips on the skating line            16              3 / 9
 #   the carrier's entry read on arrival 13              3 / 9
 #   the stick at its real length        13              5 / 9
+#   a ridden stand is not carved onto   20              1 / 9
 #
 # The last two rows are the attack getting better, not the defence worse: a
 # carrier who reads the entries from where his move ends
@@ -43,10 +44,14 @@ extends GutTest
 # and with it the share of the backward top-speed penalty an angled body skips
 # (SkaterMovementRules): he skates at the flat 80% his retreat is priced at.
 #
+# The last row is the stance carve timed by the speed the body closes on a
+# stand that rides the carrier (AISteering.stance_carves_to). Timed by his ice
+# speed he held the stance on 37-45% of these retreats' ticks and never built
+# the pace the bound is priced at.
+#
 # What is still lost sits off the carrier's lane, where the straight-line bound
-# ignores the lateral ice the defender must also cover. Of the five winnable
-# races lost, two are 5 m starts 2-4 m off a 3 m/s carrier's lane and three are
-# 8 m starts 2-4 m off it, on a 3 m/s and a 6 m/s carrier's.
+# ignores the lateral ice the defender must also cover: the 8 m start 4 m off a
+# 6 m/s carrier's.
 #
 # WHAT THE HARNESS DOES NOT MODEL: body collisions. The carrier skates through
 # the defender, so a body in his lane only stops him by stripping the puck.
@@ -63,8 +68,11 @@ const BOUND_REACTION_S: float = 0.05 + TeamBrain.TICK_PERIOD
 # as winnable — a body's width, so a coin-flip finish is not held against the bot.
 const WINNABLE_MARGIN_M: float = 0.5
 
-const MIN_CONTAINED: int = 13
-const MAX_WINNABLE_LOST: int = 5
+# Between the last reading and the one before it, which was the degenerate
+# retreat (17 contained, 4 lost): a different rollout on another machine passes,
+# a defender skating his retreat in the stance does not.
+const MIN_CONTAINED: int = 18
+const MAX_WINNABLE_LOST: int = 3
 
 
 func _gate_z() -> float:

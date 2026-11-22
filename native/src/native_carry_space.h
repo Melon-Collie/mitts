@@ -10,8 +10,8 @@
 namespace mitts {
 
 // C++ port of the carry-space reads the bots make most: AIEvadeRead.evade_safety
-// (Scripts/domain/ai/evade_read.gd: the carrier's keep odds, the seam sweep under
-// its exact bounds) and AICarrySpace.carry_safety / carry_strip_point
+// (Scripts/domain/ai/evade_read.gd: the carrier's keep odds, each cut priced along
+// its route, swept under exact bounds) and AICarrySpace.carry_safety / carry_strip_point
 // (Scripts/domain/ai/carry_space.gd: a carry's keep odds and where it is
 // stripped), with what they read: reach_clearance (its escape gate and the
 // defender who stops), the crossing band, the two safety maps, board_gap_m and
@@ -48,7 +48,6 @@ class NativeCarrySpace : public godot::RefCounted {
 	double horizon_s = 0.4;
 	int angles = 12;
 	std::vector<double> rings;
-	double saturated_m = 1.0;
 	double poke_contact = 0.5;
 	double dwell_half_band = 0.3;
 
@@ -57,6 +56,7 @@ class NativeCarrySpace : public godot::RefCounted {
 	double lunge_window_s = 0.4;
 	double protect_shift = 0.1;
 	double league_blade_reach = 2.4;
+	double body_contact = 0.7;
 
 	struct Defender {
 		double x, z, vx, vz;
@@ -80,6 +80,14 @@ class NativeCarrySpace : public godot::RefCounted {
 			const std::vector<Defender> &defs, bool valid, double maneuver_time,
 			double carry_dx, double carry_dz, double carry_speed, double abort_below) const;
 	double clearance_bound(double px, double pz, const std::vector<Defender> &defs) const;
+	double momentum_horizon(double cx, double cz, double cvx, double cvz,
+			const std::vector<Defender> &defs) const;
+	void cut_at(double cx, double cz, double cvx, double cvz, double t_c, double dir_x,
+			double dir_z, double body, double hands, double frac, double &out_x,
+			double &out_z) const;
+	double cut_safety(double cx, double cz, double cvx, double cvz, double t_c, double dir_x,
+			double dir_z, double body, double hands, const std::vector<Defender> &defs,
+			bool valid, double beat) const;
 	double clearance_to_safety(double clearance) const;
 	double transit_clearance_to_safety(double clearance) const;
 	double crossing_keep(double fx, double fz, double tx, double tz, double arrival_time,
@@ -100,8 +108,8 @@ public:
 	void set_rink(double p_inner_half_width, double p_inner_half_length,
 			double p_corner_radius, double p_corner_center_x, double p_corner_center_z);
 	void set_sweep(double p_horizon_s, int64_t p_angles,
-			const godot::PackedFloat64Array &p_rings, double p_saturated_m,
-			double p_poke_contact, double p_dwell_half_band);
+			const godot::PackedFloat64Array &p_rings, double p_poke_contact,
+			double p_dwell_half_band, double p_body_contact);
 	void set_carry(double p_transit_strip, double p_transit_safe, double p_lunge_window_s,
 			double p_protect_shift, double p_league_blade_reach);
 

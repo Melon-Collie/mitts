@@ -21,7 +21,8 @@ extends GutTest
 # their edges bisected). Reads are stored raw; AIShotOdds
 # derives its features from them, so a feature change needs no re-measurement.
 #
-#   MITTS_FIELD_SHARD=i MITTS_FIELD_SHARDS=n   measure every n-th cell from i
+#   MITTS_FIELD_SHARD=i MITTS_FIELD_SHARDS=n   measure every n-th cell from i,
+#                                              after those a stopped run kept
 #   MITTS_FIELD_MERGE=1                        merge the shards into the data file
 
 const Stager := preload("res://tests/unit/ai/shot_odds_stager.gd")
@@ -29,6 +30,7 @@ const Fingerprint := preload("res://tests/unit/ai/shot_field_fingerprint.gd")
 
 const OUT_PATH: String = "res://Scripts/domain/ai/generated/shot_field_data.gd"
 const SHARD_PATH: String = "user://shot_field_shard_%d.txt"
+const PROGRESS_EVERY: int = 25
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 # Lateral and metres-out release grid, in the frame of the net at GOAL_Z, out
 # to the boards and the blue line's far edge (19.51 m), so a release on the ice
@@ -67,6 +69,12 @@ const WRAP_BEHIND_M: float = 1.6
 # feeds' paces; a lane through the cage is no pass.
 const PASS_OUT_MAX_FWD_M: float = 6.0
 const PASS_OUT_X_M: float = 2.5
+# Drives: spots this close in, a carrier skating straight in at a breakaway's
+# pace (Stager.stage_drive). Further out the keeper he meets is the SET's.
+const DRIVE_MAX_FWD_M: float = 9.5
+# A drive's deke onto the spot from a lane this far to either side
+# (Stager.stage_drive_deke).
+const DRIVE_DEKE_ACROSS_M: Array[float] = [-2.0, -1.0, 1.0, 2.0]
 
 var _s: RefCounted = null
 var _body_radius: float = 0.0
@@ -86,10 +94,13 @@ func before_each() -> void:
 
 
 # Every cell, in a fixed order: [spot_x, spot_fwd, kind, mode, passer_x,
-# feed_speed]. kind is SET / DEKE / FEED / DECOY / WRAP / PASSOUT; mode C (charged), O
-# (one-timer) or K (caught, then charged); passer_x is the deke's start for a
-# deke and the decoy's or the wrap carrier's x for those, whose metres out ride
-# in feed_speed's column (a wrap's negative: behind the goal line).
+# feed_speed]. kind is SET / DEKE / FEED / DECOY / WRAP / PASSOUT / DRIVE /
+# DRIVE_DEKE; mode C
+# (charged), O (one-timer), K (caught, then charged) or D (charged in stride);
+# passer_x is the deke's start for a deke, the decoy's or the wrap carrier's x
+# for those, whose metres out ride in feed_speed's column (a wrap's negative:
+# behind the goal line), and a drive's lane, whose pace rides there. A spot's
+# cells are consecutive: AIShotOdds reads each spot as one run of rows.
 func _cells() -> Array:
 	var out: Array = []
 	for fwd: float in SPOT_FWD:
@@ -128,6 +139,12 @@ func _cells() -> Array:
 					for speed: float in FEED_SPEEDS_M_S:
 						for mode: String in ["O", "K"]:
 							out.append([x, fwd, "PASSOUT", mode, passer.x, speed])
+			if fwd <= DRIVE_MAX_FWD_M:
+				out.append([x, fwd, "DRIVE", "D", x, Stager.DRIVE_M_S])
+				for across: float in DRIVE_DEKE_ACROSS_M:
+					var from: float = x - across
+					if _on_ice(from, fwd + Stager.DEKE_FORWARD_M_S * Stager.DEKE_S):
+						out.append([x, fwd, "DRIVE_DEKE", "C", from, Stager.DRIVE_M_S])
 	return out
 
 
@@ -158,6 +175,11 @@ func _stage_for(cell: Array) -> Callable:
 			var from := Vector3(cell[4], 0.0, GOAL_Z + AIShotOdds.PASS_OUT_PASSER_FWD_M)
 			var pace: float = cell[5]
 			return func() -> Vector3: return _s.stage_pass_out(spot, from, pace)
+		"DRIVE":
+			return func() -> Vector3: return _s.stage_drive(spot)
+		"DRIVE_DEKE":
+			var across: float = spot.x - float(cell[4])
+			return func() -> Vector3: return _s.stage_drive_deke(spot, across)
 	return func() -> Vector3: return _s.stage_set(spot)
 
 
@@ -169,29 +191,75 @@ func _row(index: int, cell: Array) -> String:
 			else decision
 	var pre_fields: String = Stager.read_fields(pre)
 	var decision_fields: String = Stager.read_fields(decision)
-	var patterns: PackedStringArray = _s.open_set(stage, cell[3] == "O", cell[3] == "K")
+	var patterns: PackedStringArray = _s.open_set(stage, cell[3] == "O", cell[3] == "K",
+			cell[3] == "D")
 	return "%d\t%.2f\t%.2f\t%s\t%s\t%.2f\t%.2f\t%.3f\t%.3f\t%s\t%s\t%s" % [
 			index, cell[0], cell[1], cell[2], cell[3], cell[4], cell[5],
 			release.x, release.z - GOAL_Z, pre_fields, decision_fields, "\t".join(patterns)]
 
 
+# The first line of a shard file: what it was measured against and which shard
+# it is, so a run resumes only its own cells of the same goalie.
+static func _shard_header(shard: int, shards: int) -> String:
+	return "# %s %d/%d" % [Fingerprint.compute(), shard, shards]
+
+
+# The rows an earlier run of this shard measured before it was stopped, if its
+# file carries `header`: whole lines only, since a kill can land mid-write.
+static func _resumable_rows(path: String, header: String) -> PackedStringArray:
+	var kept := PackedStringArray()
+	if not FileAccess.file_exists(path):
+		return kept
+	var lines: PackedStringArray = FileAccess.get_file_as_string(path).split("\n")
+	if lines[0] != header:
+		return kept
+	# The last element follows the final newline: empty, or a torn row.
+	for i: int in range(1, lines.size() - 1):
+		if not lines[i].is_empty():
+			kept.append(lines[i])
+	return kept
+
+
+# Each row is written and flushed as it is measured, so a run that is stopped
+# loses one cell, and the next run of the same shard picks up after the rows
+# already there.
 func test_measure_a_shard() -> void:
 	var shards: int = int(OS.get_environment("MITTS_FIELD_SHARDS"))
 	if shards <= 0:
 		pending("set MITTS_FIELD_SHARD / MITTS_FIELD_SHARDS (generate-shot-field.sh)")
 		return
 	var shard: int = int(OS.get_environment("MITTS_FIELD_SHARD"))
+	var path: String = SHARD_PATH % shard
+	var header: String = _shard_header(shard, shards)
+	var kept: PackedStringArray = _resumable_rows(path, header)
+	var done: Dictionary = {}
+	for line: String in kept:
+		done[int(line.get_slice("\t", 0))] = true
 	var cells: Array = _cells()
-	var lines: PackedStringArray = []
+	var mine: int = 0
 	for i: int in cells.size():
 		if i % shards == shard:
-			lines.append(_row(i, cells[i]))
-	var f := FileAccess.open(SHARD_PATH % shard, FileAccess.WRITE)
+			mine += 1
+	var f := FileAccess.open(path, FileAccess.WRITE)
 	assert_not_null(f, "can write shard %d" % shard)
-	if f != null:
-		f.store_string("\n".join(lines) + "\n")
-		f.close()
-	gut.p("shard %d/%d: %d cells" % [shard, shards, lines.size()])
+	if f == null:
+		return
+	f.store_line(header)
+	for line: String in kept:
+		f.store_line(line)
+	f.flush()
+	gut.p("shard %d/%d: %d cells, %d already measured" % [shard, shards, mine, kept.size()])
+	var measured: int = kept.size()
+	for i: int in cells.size():
+		if i % shards != shard or done.has(i):
+			continue
+		f.store_line(_row(i, cells[i]))
+		f.flush()
+		measured += 1
+		if measured % PROGRESS_EVERY == 0:
+			gut.p("shard %d/%d: %d of %d" % [shard, shards, measured, mine])
+	f.close()
+	gut.p("shard %d/%d: %d cells" % [shard, shards, measured])
 
 
 func test_merge_the_shards() -> void:
@@ -202,7 +270,9 @@ func test_merge_the_shards() -> void:
 	var rows: Array[String] = []
 	rows.resize(_cells().size())
 	for shard: int in shards:
-		for line: String in FileAccess.get_file_as_string(SHARD_PATH % shard).split("\n"):
+		var lines: PackedStringArray = FileAccess.get_file_as_string(SHARD_PATH % shard).split("\n")
+		assert_eq(lines[0], _shard_header(shard, shards), "shard %d measured this goalie" % shard)
+		for line: String in lines.slice(1):
 			if not line.is_empty():
 				rows[int(line.get_slice("\t", 0))] = line
 	for i: int in rows.size():

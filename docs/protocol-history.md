@@ -570,3 +570,35 @@ here whenever you bump, in the same format.
 #      stats payload as malformed, so mixed builds must be refused.
 #      Replay FORMAT_VERSION unchanged: the bit was zero in every v22 frame,
 #      so an older file plays as it did.
+# v107: interceptions fold into takeaways, NHL-style (a turnover is one event:
+#      a pass picked off is the defender's takeaway and charges the passer
+#      nothing). PlayerStats.to_array drops `interceptions` (index 18), so it
+#      goes from 30 fields to 29 and every later field shifts down one. A v106
+#      peer would refuse every stats payload as malformed, so mixed builds
+#      must be refused. Replay FORMAT_VERSION unchanged: a replay's box score
+#      is a dictionary in its footer, and an older file's `interceptions`
+#      reads as takeaways.
+# v108: penalty time is seconds. PlayerStats.to_array's index 20 (`pim`,
+#      two a minor) becomes `pim_seconds`, a minor's length on the match's
+#      clock for each penalty assessed. Same size, new unit: a client uploads
+#      its career row from the stats the host sends, so a v107 host would put
+#      two a minor into a v108 client's seconds, and mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged: no replay reader reads it.
+# v109: the keeper's wire set (KeeperWireTail) grows by the pad he has out
+#      (KeeperPadOut: the side asked, the side out and how far, three s16)
+#      and his hands set low (KeeperHandsLow: the height asked and the one
+#      they are set for, two s16) and his knee shuffle's steps
+#      (KeeperKneeShuffle: the side he goes, how far through a pair of steps
+#      and how far in, three s16), and two of its fields gain a value: his mover a scoot on his knees
+#      (KeeperMotor.Mover.KNEES) and his route's first move the same
+#      (KeeperRoute.Do.KNEE_SHUFFLE). A v108 client would read a blob of the
+#      wrong length and fall back to drawing him interpolated, and a v108
+#      host's blob would re-seed a v109 client's keeper from misaligned
+#      fields, so mixed builds must be refused. Replay FORMAT_VERSION
+#      unchanged: a replay poses him from the goalie block, which no field of
+#      this changes.
+# v110: added notify_smart_ping_ack (reliable, host to all): the bot that took
+#      a smart ping as its order and the pinger, so every teammate's screen
+#      can show the bot answering. A new @rpc method shifts the rpc-config
+#      ordering, so mixed builds must be refused. Replay FORMAT_VERSION
+#      unchanged: pings are not recorded.
