@@ -219,6 +219,70 @@ func test_man_coverage_rides_a_moving_man_instead_of_leading_him() -> void:
 			"a cutting man's stand rides him at his own pace")
 
 
+# ── Depth before width ───────────────────────────────────────────────────────
+# Their carrier on the strong wall, a man driving the middle at our net at
+# `man_vel`, and this coverer `depth_m` in front of him, a stride to his weak
+# side and backing up at 3 m/s. The cover stand is on the man's other side,
+# toward the feed.
+const DRIVER := Vector3(0.0, 0.0, 12.0)
+
+
+func _driver_ctx(depth_m: float, man_vel: Vector3) -> RoleContext:
+	var self_pos := Vector3(-1.5, 0.0, DRIVER.z + depth_m)
+	var ctx: RoleContext = _make_ctx(self_pos, [
+		[1, TEAM_ID, self_pos],
+		[200, 1 - TEAM_ID, Vector3(9.0, 0.0, 14.0)],
+		[210, 1 - TEAM_ID, DRIVER],
+	], 200)
+	ctx.snapshot.skater_states[210].velocity = man_vel
+	ctx.self_velocity = Vector3(0.0, 0.0, 3.0)
+	return ctx
+
+
+# How far across the driver's line to our net (the x axis: he is in the middle)
+# the cover sends this body, and the stand it would be sent to unbounded.
+func _sent_across(ctx: RoleContext) -> Vector2:
+	var man: SkaterNetworkState = ctx.snapshot.skater_states[210]
+	var stand: Vector3 = AIDefensiveVerbs.cover_man_target(ctx, man.position, man.velocity,
+			ctx.snapshot.skater_states[200].position)
+	var d := RoleDecision.new()
+	AIDefensiveVerbs.cover_threat(ctx, d, 210, ctx.snapshot.skater_states[200].position)
+	assert_gt(stand.x, 1.0, "fixture sanity: the stand is across his line from me")
+	return Vector2(absf(d.target_position.x - ctx.self_pos.x), absf(stand.x - ctx.self_pos.x))
+
+
+func test_a_coverer_the_man_is_gaining_on_backs_up_before_he_crosses() -> void:
+	var ctx: RoleContext = _driver_ctx(3.0, Vector3(0.0, 0.0, 8.0))
+	var cushion: float = AIRoleRushD.head_start_on_me(ctx, Vector3(0.0, 0.0, 1.0),
+			Vector3(0.0, 0.0, 8.0), OUR_NET_Z - DRIVER.z, 210, AIRoleRushD.RETREAT_FINISH_M)
+	assert_gt(cushion, 3.0, "fixture sanity: the driver gains more than the depth held")
+	assert_almost_eq(_sent_across(ctx).x, 0.0, 0.001, "every stride goes down the line")
+
+
+func test_depth_he_holds_past_the_ramp_is_his_to_cross_with() -> void:
+	var ctx: RoleContext = _driver_ctx(9.0, Vector3(0.0, 0.0, 8.0))
+	var spare: float = 9.0 - AIRoleRushD.head_start_on_me(ctx, Vector3(0.0, 0.0, 1.0),
+			Vector3(0.0, 0.0, 8.0), OUR_NET_Z - DRIVER.z, 210, AIRoleRushD.RETREAT_FINISH_M)
+	assert_gt(spare, 0.0, "fixture sanity: depth to spare")
+	var across: Vector2 = _sent_across(ctx)
+	assert_almost_eq(across.x, minf(across.y, spare), 0.001)
+
+
+func test_a_man_who_is_not_gaining_is_covered_from_the_stand() -> void:
+	var across: Vector2 = _sent_across(_driver_ctx(3.0, Vector3.ZERO))
+	assert_almost_eq(across.x, across.y, 0.001)
+
+
+func test_a_stand_on_his_own_side_of_the_man_is_skated_to() -> void:
+	# No crossing in front of the man: closing on his line costs him no depth.
+	var ctx: RoleContext = _driver_ctx(3.0, Vector3(0.0, 0.0, 8.0))
+	ctx.self_pos.x = 4.0
+	ctx.snapshot.skater_states[1].position.x = 4.0
+	var across: Vector2 = _sent_across(ctx)
+	assert_gt(across.y, 1.0, "fixture sanity: the stand is off his own lane")
+	assert_almost_eq(across.x, across.y, 0.001)
+
+
 func test_wide_man_coverage_stays_in_the_sealing_lane() -> void:
 	# Man wide near the goal-line-extended: "behind him in Z" and "between
 	# him and the net" point different ways. The old Z-axis goal-side test

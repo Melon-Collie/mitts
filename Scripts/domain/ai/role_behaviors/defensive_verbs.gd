@@ -97,9 +97,38 @@ static func cover_threat(ctx: RoleContext, d: RoleDecision, man_pid: int,
 	if not play_ref.is_finite():
 		return false
 	var man: SkaterNetworkState = ctx.snapshot.skater_states[man_pid]
-	d.target_position = cover_man_target(ctx, man.position, man.velocity, play_ref)
+	d.target_position = _depth_before_width(ctx, man, man_pid,
+			cover_man_target(ctx, man.position, man.velocity, play_ref))
 	d.target_velocity = man.velocity
 	return true
+
+
+# `stand`, when it is across the man's line to our net from this body, brought
+# no further across than the depth he holds on the man past what building to
+# his pace gives up (AIRoleRushD.head_start_on_me). The stride a coverer spends
+# crossing in front of a man who gains on him is the stride his retreat needs,
+# and the man is past him as he gets there.
+static func _depth_before_width(ctx: RoleContext, man: SkaterNetworkState, man_pid: int,
+		stand: Vector3) -> Vector3:
+	var to_net := Vector3(ctx.defending_goal_pos.x - man.position.x, 0.0,
+			ctx.defending_goal_pos.z - man.position.z)
+	var net_dist: float = to_net.length()
+	if net_dist < 0.001:
+		return stand
+	var dir_net: Vector3 = to_net / net_dist
+	var side := Vector3(-dir_net.z, 0.0, dir_net.x)
+	var from_man: Vector3 = ctx.self_pos - man.position
+	if from_man.dot(side) * (stand - man.position).dot(side) >= 0.0:
+		return stand
+	var depth: float = from_man.dot(dir_net)
+	var cushion: float = AIRoleRushD.head_start_on_me(ctx, dir_net, man.velocity, net_dist,
+			man_pid, AIRoleRushD.RETREAT_FINISH_M)
+	if depth <= 0.0 or cushion <= 0.0:
+		return stand
+	var to_stand := Vector3(stand.x - ctx.self_pos.x, 0.0, stand.z - ctx.self_pos.z)
+	var along: float = to_stand.dot(dir_net)
+	return ctx.self_pos + dir_net * along \
+			+ (to_stand - dir_net * along).limit_length(maxf(depth - cushion, 0.0))
 
 
 # How far to the INSIDE of the carrier→our-net line a defender who owns the

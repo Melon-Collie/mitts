@@ -46,24 +46,28 @@ func _stage(team_size: int, driver_speed: float) -> Object:
 	return duel
 
 
-# The farthest the driver's nearest defender is from him between the house gate
-# and the net front, or INF when he never gets there.
-func _farthest_off_the_driver(duel: Object) -> float:
-	var farthest: float = 0.0
+# Between the house gate and the net front, of the driver's nearest defender:
+# x the farthest he is from him, y the furthest up the driver's line to our net
+# he falls behind him. INF when the driver never gets there.
+func _worst_on_the_driver(duel: Object) -> Vector2:
+	var our_net := Vector3(0.0, 0.0, -GL)
+	var worst := Vector2(0.0, -INF)
 	for _t: int in int(SECS / DT):
 		duel.step()
 		var man: Vector3 = duel._skater(DRIVER).pos
 		var depth: float = man.z + GL
 		if depth > AIZoneCoverage.HOUSE_TOP_DEPTH_M:
 			continue
-		var nearest: float = INF
+		var nearest: Vector3 = Vector3.INF
 		for s: Object in duel.skaters:
-			if s.team_id == 1:
-				nearest = minf(nearest, s.pos.distance_to(man))
-		farthest = maxf(farthest, nearest)
+			if s.team_id == 1 and (not nearest.is_finite()
+					or s.pos.distance_to(man) < nearest.distance_to(man)):
+				nearest = s.pos
+		worst.x = maxf(worst.x, nearest.distance_to(man))
+		worst.y = maxf(worst.y, (man - nearest).dot((our_net - man).normalized()))
 		if depth <= NET_FRONT_DEPTH_M:
-			return farthest
-	return INF
+			return worst
+	return Vector2.INF
 
 
 func test_the_man_driving_the_net_is_ridden_in() -> void:
@@ -72,7 +76,7 @@ func test_the_man_driving_the_net_is_ridden_in() -> void:
 	# metres alone.
 	var duel: Object = _stage(3, 8.0)
 	var reach_in: float = duel.match_caps().max_blade_reach + GameRules.POKE_RADIUS_M
-	var farthest: float = _farthest_off_the_driver(duel)
+	var farthest: float = _worst_on_the_driver(duel).x
 	assert_lt(farthest, reach_in,
 			"inside the house gate his nearest defender was %.2f m off him" % farthest)
 
@@ -83,6 +87,15 @@ func test_the_d_on_him_keeps_him_when_the_rush_becomes_zone_coverage() -> void:
 	# a man by his own area alone, he leaves him for the wide one.
 	var duel: Object = _stage(5, 6.5)
 	var reach_in: float = duel.match_caps().max_blade_reach + GameRules.POKE_RADIUS_M
-	var farthest: float = _farthest_off_the_driver(duel)
+	var farthest: float = _worst_on_the_driver(duel).x
 	assert_lt(farthest, reach_in,
 			"inside the house gate his nearest defender was %.2f m off him" % farthest)
+
+
+func test_the_d_on_a_fast_driver_does_not_cross_in_front_of_him() -> void:
+	# 5v5, the D a stride to the driver's weak side and the cover stand on his
+	# strong side, toward the feed. Crossing to it while he builds his retreat,
+	# he is behind the driver from the hash marks in.
+	var behind: float = _worst_on_the_driver(_stage(5, 8.0)).y
+	assert_lt(behind, AIDefensiveVerbs.COVER_GOAL_SIDE_TOLERANCE_M,
+			"inside the house gate his nearest defender fell %.2f m behind him" % behind)

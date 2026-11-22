@@ -686,6 +686,17 @@ new coverage scheme is a new answer to "who is mine", never new positioning code
 Position and velocity come from one snapshot entry, so a stand cannot ride a body
 its geometry isn't built on.
 
+**A coverer does not cross in front of a man who gains on him.** The stand is in
+the feed lane, which can be the far side of the man's line to our net from
+where the coverer stands. In front of a man who would gain on him while he
+builds to his pace (the ramp cushion, `AIRoleRushD.head_start_on_me`), he goes
+across no further than the depth he holds past that cushion
+(`AIDefensiveVerbs._depth_before_width`): every stride he spends crossing is
+one his retreat needed. Sent to the stand, the weak D on a man driving the
+middle at 8 m/s crossed 3.6 m to the strong side of him and was a stride behind
+from the hash marks in (`test_odd_man_net_drive.gd`). A stand on his own side of
+the man is skated to as it is: closing on the line costs him no depth.
+
 Zone coverage picks a man up on its own ice (`AIZoneCoverage.in_coverage_ice`:
 our zone, out to a cover envelope past the line), in the partition and in
 MARK's no-man fallback alike. A man still up the ice is the rush's trailer, and
