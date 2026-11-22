@@ -1459,6 +1459,32 @@ func test_the_net_front_man_is_waited_for_like_the_finisher() -> void:
 			fin._pass.developing_feed_value(_ctx_with_finisher(spot, false)), 1e-6)
 
 
+func test_a_finishers_developing_feed_is_priced_as_the_live_pass_to_his_spot() -> void:
+	# A defender leaning on the lane: the live pass pays for the turnover he
+	# threatens, and so must the hold that waits on it, or the hold out-prices
+	# the play it turns into.
+	var fin := Vector3(-2.5, 0, -21.5)
+	var ctx := _ctx_with_finisher(fin, false)
+	var leaner := SkaterNetworkState.new()
+	leaner.position = Vector3(1.5, 0, -15.6)
+	ctx.snapshot.skater_states[9] = leaner
+	ctx.team_id_by_peer[9] = 1 - TEAM_ID
+	var c := AIRoleCarrier.new()
+	c._field.fill(ctx)
+	c._field.teammate_ids = [2]
+	var pass_speed: float = AIPuckLane.pass_launch_speed(ctx.self_pos.distance_to(fin),
+			ctx.self_wrister_shot_speed, ctx.pass_speed_scale)
+	var flight_t: float = ctx.self_pos.distance_to(fin) / pass_speed
+	var live: float = c._pass._pass_ev(ctx, fin, pass_speed, flight_t,
+			flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, flight_t,
+			AIRoleReads.resolve_our_goalie_pos(ctx), null, -1.0,
+			AIPuckLane.PASS_MISS_BASE_PROB, Vector3.ZERO, -INF, Vector3.ZERO, Vector3.INF,
+			AIFeedReception.arrival_closing_speed(ctx.self_pos, fin, pass_speed, Vector3.ZERO),
+			false, Vector3.INF, 1.0, fin)
+	assert_gt(live, 0.0, "fixture sanity: the feed is worth making")
+	assert_almost_eq(c._pass.developing_feed_value(ctx), live, 1e-6)
+
+
 func test_developing_feed_invisible_without_the_cognition_gate() -> void:
 	# Same staging finisher the test above values positively — but a tier that
 	# doesn't hold for developing plays (Easy) sees nothing: it plays only what

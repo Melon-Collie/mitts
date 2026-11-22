@@ -808,10 +808,10 @@ func _facing_rotation_time(self_facing_xz: Vector2, self_pos: Vector3,
 #   - FINISHER (or the 5v5 NET_FRONT, who runs the finisher's role), not yet
 #     one-timer-ready: the feed to the spot he is DRIVING TO
 #     (projected OUTLET_DEVELOP_WINDOW_S along his velocity, inside the zone by
-#     the reception band), priced on the seam (score_pass_value) with the keeper
-#     given the flight plus the finisher's wrister charge to re-square. So a
-#     fresh zone entry holds for the mates still arriving instead of settling
-#     for the weak from-the-top shot.
+#     the reception band), priced as the live pass to it (_pass_ev) with the
+#     keeper given the flight plus the finisher's wrister charge to re-square.
+#     So a fresh zone entry holds for the mates still arriving instead of
+#     settling for the weak from-the-top shot.
 #
 #   - Breakout OUTLET (BREAKOUT_STRONG / OUTLET / BREAKOUT_D2): an outlet
 #     skating its route toward open ice — see _developing_outlet_feed.
@@ -852,12 +852,14 @@ func developing_feed_value(ctx: RoleContext) -> float:
 			var pass_speed: float = AIPuckLane.pass_launch_speed(
 					dist, ctx.self_wrister_shot_speed, ctx.pass_speed_scale)
 			var flight_t: float = clampf(dist / pass_speed, 0.0, PASS_LEAD_MAX_S)
-			_field.project_opponents(flight_t, _proj_buf)
-			# On the seam, because this value is compared directly against
-			# fire_score (see score_pass_value).
-			feed = AIActionScoring.score_pass_value(
-					self_pos, spot, ctx.attacking_goal_pos, AICarrierField.goalie_now(ctx),
-					_proj_buf, pass_speed, _field.opponent_caps)
+			# As the live pass to that spot is priced, turnovers and all: the hold
+			# competes with it, and it is what the hold becomes when he arrives.
+			feed = _pass_ev(ctx, spot, pass_speed, flight_t,
+					flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, flight_t, our_goalie,
+					ctx.caps_by_peer.get(pid), -1.0, AIPuckLane.PASS_MISS_BASE_PROB,
+					Vector3.ZERO, best, Vector3.ZERO, Vector3.INF,
+					AIFeedReception.arrival_closing_speed(self_pos, spot, pass_speed, fin_vel),
+					false, Vector3.INF, 1.0, tm.position)
 		elif slot == AIRoleSlots.Slot.BREAKOUT_STRONG \
 				or slot == AIRoleSlots.Slot.OUTLET \
 				or slot == AIRoleSlots.Slot.BREAKOUT_D2:
