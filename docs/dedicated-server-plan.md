@@ -172,12 +172,13 @@ that is full or gone degrades a match to player-hosted and never to nothing.
 **The matchmaker is on Supabase** when the vs-humans queue is built: a queue
 table and a function that pairs parties and asks for a server.
 
-**What one match needs**: under half a core of main thread with the native
-kernels built (§7) plus the bots' worker thread; about 600 MB of memory (the §7
-probe's peak, on the editor binary with the HUD and the arena built); and
-16 KB/s of upload a human client (`docs/performance-findings.md`), so 1.3 Mbps
-for ten humans. The tick is one thread, so a core taken by a neighbour is
-dilated physics for every client in the match.
+**What one match needs** (a 5v5 of ten bots, the worst case, measured in §8):
+about 0.9 of a core for the main thread at a tick a frame, 0.65 once a server
+skips the mesh nobody sees, plus about 0.2 for the bots' worker thread; about
+600 MB of memory; and 16 KB/s of upload a human client
+(`docs/performance-findings.md`), so 1.3 Mbps for ten humans. The tick is one
+thread, so a core taken by a neighbour is dilated physics for every client in
+the match.
 
 ## 6. Phases
 
@@ -302,10 +303,7 @@ the cosmetic rig (gait, IK, skin) of bodies nobody is looking at.
 a frame owes back to back and sends at the frame's end, so at 30 fps three ticks
 and their snapshots leave in one clump, which a client's interpolation delay
 then has to cover. A server runs about a tick a frame (a cap at the tick rate),
-where the process step is paid 90 times a second: about a third of a core with
-the native kernels, on top of the tick's 0.44. Skipping the cosmetic step on a
-server is the saving worth measuring, once Phase 1c has a client to show what
-it does to the stream, and on a build with the native kernels.
+where the process step is paid 90 times a second.
 
 ### How much of that step is separable
 
@@ -328,9 +326,26 @@ as the table above, two runs: the process step fell from 18.0 to 12.5 ms a
 frame, the tick did not move, and the match played out. Freezing the chrome and
 the effects on top of that moved nothing.
 
-So a server counting as nobody watching is a few lines over a path that is
-already tested, and worth doing. What is left is the gait, and skipping that
-means first moving the held pose's crouch onto the tick, which is reconcile
-code. Whether it is worth it depends on what the gait costs with the native
-kernels, which this machine cannot say.
+### On the native kernels
 
+Built in the same container (12 of 12 kernels active) and rerun, 2026-11-22: the
+5v5 server match capped at 90 fps, two runs each. Editor (debug) binary still.
+
+| | process step, ms a frame | tick, ms | main thread busy | frame rate held |
+|---|---|---|---|---|
+| as a server is today | 5.7 | 4.6 | 89% | 85 of 90 |
+| every skater off camera | 2.2 | 4.9 | 64% | 89.5 of 90 |
+
+The tick held 90 Hz in all four. The native kernels are the process step's, not
+the tick's: the tick costs what it did on GDScript.
+
+The mesh pass is 3.5 ms a frame, a third of a core at a tick a frame, and a
+server as it stands cannot hold that frame rate on this machine. Counting as
+nobody watching is a few lines over a path that is already tested, and it is
+the larger half of the saving.
+
+Of the 2.2 ms left, a 3v3 run the same way (1.5 ms for six skaters) puts about
+0.16 ms on each skater and 0.6 ms on the frame. So the gait is at most 1.6 ms a
+frame for ten, 0.14 of a core, and that is a ceiling: it is everything a skater
+still does each frame, not the gait alone. Skipping it means first moving the
+held pose's crouch onto the tick, which is reconcile code.
