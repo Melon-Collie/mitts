@@ -137,6 +137,44 @@ func test_back_weak_holds_the_weak_lane_on_our_line() -> void:
 	assert_lt(d.target_position.x, 0.0, "on the weak side; got %s" % d.target_position)
 
 
+# A rush with a man driving the middle (11) ahead of a winger wide on the weak
+# side (12), our weak back man in his lane and our middle D (3) home on his.
+class MiddleHeldView extends TeamStrategyView:
+	func get_slot(peer_id: int) -> int:
+		return AIRoleSlots.Slot.BACK_MID if peer_id == 3 else AIRoleSlots.Slot.NONE
+
+
+const DRIVER_VEL := Vector3(0.0, 0.0, 7.0)
+const WINGER_VEL := Vector3(0.0, 0.0, 6.0)
+
+
+func _driver_and_winger_ctx(middle_d: Vector3) -> RoleContext:
+	var ctx: RoleContext = _ctx(Vector3(-6.7, 0.0, 18.0), [
+		[10, 1, Vector3(9.0, 0.0, 9.0), Vector3(0.0, 0.0, 6.5)],
+		[11, 1, Vector3(-1.5, 0.0, 14.5), DRIVER_VEL],
+		[12, 1, Vector3(-9.0, 0.0, 15.0), WINGER_VEL],
+		[3, TEAM_ID, middle_d],
+	], 10)
+	ctx.team_brain = MiddleHeldView.new()
+	return ctx
+
+
+func test_back_weak_leaves_the_man_driving_the_middle_to_the_middle() -> void:
+	# The driver is on the weak half and nearer our net than the winger: taken
+	# by the nearest in his half, both back men cover him and the winger is
+	# nobody's.
+	var d: RoleDecision = AIRoleNeutralZone.decide(
+			_driver_and_winger_ctx(Vector3(-1.5, 0.0, 18.5)), AIRoleSlots.Slot.BACK_WEAK)
+	assert_eq(d.target_velocity, WINGER_VEL, "he rides the wide man")
+
+
+func test_back_weak_takes_the_middle_man_while_nobody_home_holds_the_middle() -> void:
+	# Our middle D is still up the ice, behind the rush.
+	var d: RoleDecision = AIRoleNeutralZone.decide(
+			_driver_and_winger_ctx(Vector3(-1.5, 0.0, 2.0)), AIRoleSlots.Slot.BACK_WEAK)
+	assert_eq(d.target_velocity, DRIVER_VEL, "he rides the nearest man in his half")
+
+
 func test_the_back_line_sags_only_as_far_as_the_house_gate() -> void:
 	var ctx: RoleContext = _ctx(Vector3(-5.0, 0.0, 14.0),
 			[[10, 1, Vector3(6.0, 0.0, 20.0), Vector3(0.0, 0.0, 3.0)]], 10)

@@ -142,7 +142,7 @@ static func _decide_d1(ctx: RoleContext, bracket: float = 0.0,
 	# pass it is. The numbers read decides WHEN; the fan finds where.
 	elif bracket == 0.0 and read.numbers != AIRushRead.Numbers.EVEN_OR_UP \
 			and ctx.plays_rush_pass_lanes \
-			and not _middle_held(ctx):
+			and not middle_held(ctx):
 		var fan: Vector3 = _lane_fan_target(ctx, read, ap, our_net,
 				carrier_pos.distance_to(stand))
 		if fan.is_finite():
@@ -170,7 +170,7 @@ static func _decide_d1(ctx: RoleContext, bracket: float = 0.0,
 
 # True when a teammate holds the middle of our line behind me (BACK_MID, back
 # in the shape): the feed across belongs to him.
-static func _middle_held(ctx: RoleContext) -> bool:
+static func middle_held(ctx: RoleContext) -> bool:
 	if ctx.team_brain == null or ctx.snapshot == null:
 		return false
 	for pid: int in ctx.snapshot.skater_states:

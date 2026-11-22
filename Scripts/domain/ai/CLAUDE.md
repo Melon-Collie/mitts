@@ -349,7 +349,12 @@ drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
   own lane: picked up only on arrival, a driver at pace is past a D still
   skating his post's, and crossing to him up the ice draws the pair into
   trading men.
-- `BACK_WEAK` (5v5) the weak lane.
+- `BACK_WEAK` (5v5) the weak lane: the man nearest our net in his half, bar the
+  one driving the middle while a body home holds the middle
+  (`AIRoleTrack._middle_lane_index`). Taken by the nearest in each half alone, a
+  driver a stride to the weak side of centre was covered by both back men and
+  the winger outside him by nobody. BACK_STRONG holding the strong lane reads
+  it the same way.
 - The back line moves with the carrier only as far as the gap and the ramp
   require (`AIRoleNeutralZone.back_line_depth_m`), never past the house gate, and
   each back man picks up a man only once he is in his ice (his post plus a cover
