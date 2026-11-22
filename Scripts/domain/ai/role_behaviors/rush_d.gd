@@ -294,7 +294,8 @@ static func standing_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 					retreat_max_accel(ctx, true), _turn_s(ctx, facing, ap.dir_net), 0.0))
 
 
-# Ends a ridden retreat for a defender still in front of the carrier he owns.
+# Ends a ridden retreat for a defender still in front of the carrier he owns,
+# or of the man he covers (`threat_peer`, with `ap` filled on that man).
 # With a gap he may back off as far as the house gate and no further — inside it,
 # backing off only walks him into his own net. Draped on the carrier — within a
 # stick, or close enough that building to the carrier's pace from here
@@ -308,14 +309,16 @@ static func standing_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 # the gate braked a defender with a gap to a stop, the stop draped him, and he
 # rebuilt his retreat from rest while a carrier at pace came level.
 static func set_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
-		d: RoleDecision) -> void:
+		d: RoleDecision, threat_peer: int = -1) -> void:
 	if d.target_velocity == Vector3.ZERO or ap.dir_net == Vector3.ZERO:
 		return
 	var depth: float = (ctx.self_pos.x - ap.carrier_pos.x) * ap.dir_net.x \
 			+ (ctx.self_pos.z - ap.carrier_pos.z) * ap.dir_net.z
 	if depth <= 0.0:
 		return
-	var threat: int = ctx.rush_read.carrier_peer if ctx.rush_read != null else -1
+	var threat: int = threat_peer
+	if threat == -1 and ctx.rush_read != null:
+		threat = ctx.rush_read.carrier_peer
 	var from_net: float = AIRoleReads.xz_distance(ctx.self_pos, ctx.defending_goal_pos)
 	var cushion: float = ramp_cushion_m(ctx, ap, threat)
 	if from_net - AIZoneCoverage.HOUSE_TOP_DEPTH_M <= _gate_brake_m(ctx, from_net):
@@ -674,9 +677,13 @@ static func _decide_d2(ctx: RoleContext) -> RoleDecision:
 	# yet, or I leave the line to escort him.
 	var pickup: float = AIRoleReads.xz_distance(post, ctx.defending_goal_pos) \
 			+ AIRushRead.cover_envelope_m()
-	if AIDefensiveVerbs.cover_threat(ctx, d, _mid_lane_man_peer(ctx, ctx.rush_read, pickup),
+	var man_pid: int = _mid_lane_man_peer(ctx, ctx.rush_read, pickup)
+	if AIDefensiveVerbs.cover_threat(ctx, d, man_pid,
 			AIRoleReads.resolve_defensive_play_ref(ctx)):
-		d.target_position = _clamp_to_house(ctx, d.target_position)
+		# The stand stays on him; the floor on the ride is read against him.
+		var man: SkaterNetworkState = ctx.snapshot.skater_states[man_pid]
+		AIDefensiveVerbs.fill_approach(ctx, man.position, man.velocity, ap)
+		set_retreat_floor(ctx, ap, d, man_pid)
 		d.arrive_at_speed = true
 		return d
 	d.target_position = post
@@ -717,8 +724,7 @@ static func stick_m(ctx: RoleContext) -> float:
 	return maxf(ctx.self_blade_reach, 0.5)
 
 
-# No rush role ever stands deeper than the house gate (top of the circles) — the
-# doorstep belongs to in-zone coverage, which is a different state.
+# The carrier's D never stands deeper than the house gate (top of the circles).
 static func _clamp_to_house(ctx: RoleContext, pos: Vector3) -> Vector3:
 	return AILastManDiscipline.hold_out_to_house_gate(ctx.defending_goal_pos, pos)
 

@@ -336,7 +336,14 @@ drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
   stepped up on.
 - `BACK_MID` holds the middle of our line behind him and the feed across is HIS:
   `BACK_STRONG` plays the pass (the odd-man lane fan) only while nobody holds the
-  middle. Two bodies reading one pass leaves the carrier walking in.
+  middle. Two bodies reading one pass leaves the carrier walking in. The man he
+  picks up driving the middle he rides with the carrier's own retreat floor,
+  read against that man (`AIRoleRushD.set_retreat_floor`'s `threat_peer`): with a
+  gap, held at the house gate; on him, in to the net front. Never hold his STAND
+  out at the gate instead: on an odd-man rush the zone coverage is not home to
+  take the man there, the ride pulls him in while the stand pulls him back, and
+  the driver reaches the crease a stride goal-side of him
+  (`test_odd_man_net_drive.gd`).
 - `BACK_WEAK` (5v5) the weak lane.
 - The back line moves with the carrier only as far as the gap and the ramp
   require (`AIRoleNeutralZone.back_line_depth_m`), never past the house gate, and

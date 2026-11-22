@@ -1,0 +1,63 @@
+extends GutTest
+
+# A 3-on-2 against the back pair in 3v3, the third defender caught up the ice so
+# the zone coverage is not home to take anybody: the carrier down the wall, a
+# man driving the middle to the net front, a third wide on the far side. The
+# back line's man on the driver goes in with him.
+#
+# Team 1 defends -Z.
+
+const Duel := preload("res://tests/unit/ai/duel_harness.gd")
+
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
+const GL: float = GameRules.GOAL_LINE_Z
+const CARRIER := 1
+const DRIVER := 2
+const SECS: float = 5.0
+# The driver is at the net front once he is this far off our goal line.
+const NET_FRONT_DEPTH_M: float = 2.0
+
+
+func _stage() -> Object:
+	var duel: Object = Duel.new()
+	duel.team_size = 3
+	duel.add_scripted_attacker(CARRIER, 0,
+			[Vector3(9.0, 0, 4.0), Vector3(10.0, 0, -21.0)] as Array[Vector3], 6.5)
+	duel.add_scripted_attacker(DRIVER, 0,
+			[Vector3(0.0, 0, 6.0), Vector3(0.0, 0, -GL + 1.6)] as Array[Vector3], 8.0)
+	duel.add_scripted_attacker(3, 0,
+			[Vector3(-7.0, 0, 6.0), Vector3(-6.0, 0, -20.0)] as Array[Vector3], 7.5)
+	var defenders: Array[Vector3] = [Vector3(4.0, 0, -9.5), Vector3(-2.0, 0, -9.5),
+			Vector3(1.0, 0, 22.0)]
+	for i: int in defenders.size():
+		duel.add_skater(50 + i, 1, defenders[i], BotSkillProfile.hard())
+		duel._skater(50 + i).facing = Vector2(0.0, 1.0)
+	duel.start(CARRIER)
+	return duel
+
+
+func test_the_man_driving_the_net_is_ridden_in() -> void:
+	# From the house gate to the net front, some defender's stick can reach him
+	# on every tick. A cover held out at the gate lets him go the last ten
+	# metres alone.
+	var duel: Object = _stage()
+	var reach_in: float = duel.match_caps().max_blade_reach + GameRules.POKE_RADIUS_M
+	var farthest: float = 0.0
+	var arrived: bool = false
+	for _t: int in int(SECS / DT):
+		duel.step()
+		var man: Vector3 = duel._skater(DRIVER).pos
+		var depth: float = man.z + GL
+		if depth > AIZoneCoverage.HOUSE_TOP_DEPTH_M:
+			continue
+		var nearest: float = INF
+		for s: Object in duel.skaters:
+			if s.team_id == 1:
+				nearest = minf(nearest, s.pos.distance_to(man))
+		farthest = maxf(farthest, nearest)
+		if depth <= NET_FRONT_DEPTH_M:
+			arrived = true
+			break
+	assert_true(arrived, "the driver never reached the net front")
+	assert_lt(farthest, reach_in,
+			"inside the house gate his nearest defender was %.2f m off him" % farthest)
