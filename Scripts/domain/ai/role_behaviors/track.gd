@@ -135,7 +135,8 @@ static func _post_depth() -> float:
 
 # Lane ownership, not man-marking: the attacker (not the carrier) nearest our
 # net on my side of centre (`side` ±1; 0 is the whole ice) and within
-# `pickup_m` of our net. -1 when nobody is.
+# `pickup_m` of our net. -1 when nobody is. A side lane leaves the middle's man
+# (_middle_lane_index) to the body holding the middle of our line.
 static func man_in_lane_peer(ctx: RoleContext, read: AIRushRead,
 		side: float, pickup_m: float) -> int:
 	var i: int = _man_in_lane_index(ctx, read, side, pickup_m)
@@ -147,8 +148,10 @@ static func _man_in_lane_index(ctx: RoleContext, read: AIRushRead,
 	var best: int = -1
 	var best_depth: float = pickup_m
 	var our_net: Vector3 = ctx.defending_goal_pos
+	var the_middles: int = _middle_lane_index(read) \
+			if side != 0.0 and AIRoleRushD.middle_held(ctx) else -1
 	for i: int in read.attackers.size():
-		if read.attackers[i] == read.carrier_peer:
+		if read.attackers[i] == read.carrier_peer or i == the_middles:
 			continue
 		var lead: Vector3 = read.attacker_leads[i]
 		# Half-ice filter only when there IS a neighbour (side != 0).
@@ -158,6 +161,19 @@ static func _man_in_lane_index(ctx: RoleContext, read: AIRushRead,
 		var depth: float = lead.distance_to(our_net)
 		if depth < best_depth:
 			best_depth = depth
+			best = i
+	return best
+
+
+# The attacker (not the carrier) driving the middle: the most central one
+# inside AIRoleRushD's mid-lane band, the man BACK_MID picks up. -1 with none.
+static func _middle_lane_index(read: AIRushRead) -> int:
+	var best: int = -1
+	var best_x: float = AIRoleRushD.D2_MID_LANE_HALF_WIDTH_M
+	for i: int in read.attackers.size():
+		if read.attackers[i] != read.carrier_peer \
+				and absf(read.attacker_leads[i].x) < best_x:
+			best_x = absf(read.attacker_leads[i].x)
 			best = i
 	return best
 

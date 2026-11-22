@@ -147,6 +147,38 @@ static func chased_by_another(snapshot: WorldSnapshot, team_id: int, peer_id: in
 	return chaser != -1 and chaser != peer_id
 
 
+# Whether no holder of a zone area the man stands in (`slots`: peer → slot) has
+# him: none is nearer our net than he is, to take the ice between, nor within a
+# cover envelope of him. `incumbent`: for the defender on him already, who keeps
+# him until a holder is goal-side of him by the release margin, however near
+# one comes from behind. A man down the one's area is left out: it is the
+# perimeter the wedge has given up.
+static func behind_every_holder(snapshot: WorldSnapshot, slots: Dictionary,
+		strong_x: float, own_goal_z: float, man_pos: Vector3, incumbent: bool,
+		man_down: bool) -> bool:
+	var goal_side_m: float = _net_distance(own_goal_z, man_pos) \
+			- (AREA_RELEASE_MARGIN_M if incumbent else 0.0)
+	var owned_within_m: float = 0.0 if incumbent else AIRushRead.cover_envelope_m()
+	var in_an_area: bool = false
+	for pid: int in slots:
+		var slot: int = slots[pid]
+		if man_down and slot == AIRoleSlots.Slot.ZONE_W_STRONG:
+			continue
+		if not snapshot.skater_states.has(pid) \
+				or not in_area(slot, strong_x, own_goal_z, man_pos, 0.0, man_down):
+			continue
+		var holder: Vector3 = snapshot.skater_states[pid].position
+		if _net_distance(own_goal_z, holder) < goal_side_m \
+				or Vector2(holder.x - man_pos.x, holder.z - man_pos.z).length() < owned_within_m:
+			return false
+		in_an_area = true
+	return in_an_area
+
+
+static func _net_distance(own_goal_z: float, pos: Vector3) -> float:
+	return Vector2(pos.x, pos.z - own_goal_z).length()
+
+
 # Whether `pos` is inside `slot`'s responsibility area, expanded by `margin`
 # metres (pass AREA_RELEASE_MARGIN_M for the incumbent-man hysteresis).
 # Areas deliberately overlap a little at the seams — a man on a boundary is

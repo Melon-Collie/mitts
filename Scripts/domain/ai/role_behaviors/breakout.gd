@@ -71,7 +71,7 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 	if is_strong:
 		candidates = _strong_wall_candidates(ctx, carrier_pos, side_x)
 	else:
-		var search_center: Vector3 = _weak_search_center(carrier_pos, side_x)
+		var search_center: Vector3 = weak_search_center(carrier_pos, side_x)
 		candidates = AIStationSearch.generate_candidates_around(ctx.self_pos, search_center)
 	AIStationSearch.append_incumbent(ctx, candidates)
 
@@ -136,7 +136,8 @@ static func _strong_wall_candidates(ctx: RoleContext, carrier_pos: Vector3,
 	return result
 
 
-# WEAK search center: the weak-side wall, level with the carrier.
-static func _weak_search_center(carrier_pos: Vector3, side_x: float) -> Vector3:
+# WEAK search center: the weak-side wall, level with the carrier. Also the
+# point 5v5's BREAKOUT_D2 is elected by, so the D sent there is the D nearest it.
+static func weak_search_center(carrier_pos: Vector3, side_x: float) -> Vector3:
 	var wall_x: float = side_x * (GameRules.RINK_HALF_WIDTH - WALL_INSET_M)
 	return Vector3(wall_x, 0.0, carrier_pos.z)

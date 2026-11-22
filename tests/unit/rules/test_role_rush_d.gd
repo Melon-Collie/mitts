@@ -602,9 +602,9 @@ func test_the_pass_across_is_the_middles_while_he_holds_it() -> void:
 	assert_lt(stand_held.distance_to(stand_no_fan), 0.01,
 			"with the middle held he plays the carrier, not the lane; got %s vs %s"
 			% [stand_held, stand_no_fan])
-	assert_false(AIRoleRushD._middle_held(_fan_ctx(false)),
+	assert_false(AIRoleRushD.middle_held(_fan_ctx(false)),
 			"a middle man who is not back holds nothing")
-	assert_true(AIRoleRushD._middle_held(held), "a middle man back holds it")
+	assert_true(AIRoleRushD.middle_held(held), "a middle man back holds it")
 
 
 func test_back_mid_does_not_leave_the_line_for_a_man_up_the_ice() -> void:

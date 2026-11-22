@@ -228,14 +228,18 @@ static func _likely_shooter(ctx: RoleContext) -> SkaterNetworkState:
 # ── Positioning (no incoming shot) ──────────────────────────────────────────
 
 # Argmax over the named staging stations, each scored as the better of its two
-# payoffs — the one-timer feed or the tip of the carrier's direct rip. Holds
-# when no teammate carries.
+# payoffs — the one-timer feed or the tip of the carrier's direct rip. With no
+# teammate carrying (our pass in flight, a loose puck) every payoff's shooter is
+# unknown, so the station last read stands and is still skated to: held on his
+# own body instead, a man on his way to one stopped short of it for every pass.
 static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 
 	var carrier_pos: Vector3 = AIRoleReads.resolve_teammate_carrier_pos(ctx)
 	if not carrier_pos.is_finite():
-		d.target_position = ctx.self_pos
+		d.target_position = ctx.prev_role_target if ctx.prev_role_target.is_finite() \
+				else ctx.self_pos
+		d.station_key = ctx.prev_station_key
 		return d
 
 	var goalie_pos: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)

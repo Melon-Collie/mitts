@@ -336,8 +336,25 @@ drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
   stepped up on.
 - `BACK_MID` holds the middle of our line behind him and the feed across is HIS:
   `BACK_STRONG` plays the pass (the odd-man lane fan) only while nobody holds the
-  middle. Two bodies reading one pass leaves the carrier walking in.
-- `BACK_WEAK` (5v5) the weak lane.
+  middle. Two bodies reading one pass leaves the carrier walking in. The man he
+  picks up driving the middle he rides with the carrier's own retreat floor,
+  read against that man (`AIRoleRushD.set_retreat_floor`'s `threat_peer`): with a
+  gap, held at the house gate; on him, in to the net front. Never hold his STAND
+  out at the gate instead: on an odd-man rush the zone coverage is not home to
+  take the man there, the ride pulls him in while the stand pulls him back, and
+  the driver reaches the crease a stride goal-side of him
+  (`test_odd_man_net_drive.gd`). He picks that man up as far outside his ice as
+  the man would gain on him while he builds to his pace (the ramp cushion,
+  `_mid_lane_man_peer`), and until the man is in his ice he matches him from his
+  own lane: picked up only on arrival, a driver at pace is past a D still
+  skating his post's, and crossing to him up the ice draws the pair into
+  trading men.
+- `BACK_WEAK` (5v5) the weak lane: the man nearest our net in his half, bar the
+  one driving the middle while a body home holds the middle
+  (`AIRoleTrack._middle_lane_index`). Taken by the nearest in each half alone, a
+  driver a stride to the weak side of centre was covered by both back men and
+  the winger outside him by nobody. BACK_STRONG holding the strong lane reads
+  it the same way.
 - The back line moves with the carrier only as far as the gap and the ramp
   require (`AIRoleNeutralZone.back_line_depth_m`), never past the house gate, and
   each back man picks up a man only once he is in his ice (his post plus a cover
@@ -533,6 +550,10 @@ between the crease and the screen's depth, so neither held him.
 Never hold one by its place: the ice worth holding moves with the play, and
 held where it stood it went stale, half as valuable, and he re-picked 2.3 m a
 time almost once a second.
+With no teammate carrying (our pass in flight, a loose puck) every station's
+shooter is unknown, so the station last read stands and is still skated to
+(`RoleContext.prev_role_target`). Never hold him on his own body instead: a man
+on his way to a station then stops short of it for as long as each pass flies.
 The press pass then wins it while one of ours carries the puck (skating into a man who
 stands on it short of contact, `CLOSE_IN_M`, rather than stopping at the spot
 his body holds), never with it loose: the press takes the stick off the ice, and the rebound it was won for
@@ -670,6 +691,17 @@ new coverage scheme is a new answer to "who is mine", never new positioning code
 Position and velocity come from one snapshot entry, so a stand cannot ride a body
 its geometry isn't built on.
 
+**A coverer does not cross in front of a man who gains on him.** The stand is in
+the feed lane, which can be the far side of the man's line to our net from
+where the coverer stands. In front of a man who would gain on him while he
+builds to his pace (the ramp cushion, `AIRoleRushD.head_start_on_me`), he goes
+across no further than the depth he holds past that cushion
+(`AIDefensiveVerbs._depth_before_width`): every stride he spends crossing is
+one his retreat needed. Sent to the stand, the weak D on a man driving the
+middle at 8 m/s crossed 3.6 m to the strong side of him and was a stride behind
+from the hash marks in (`test_odd_man_net_drive.gd`). A stand on his own side of
+the man is skated to as it is: closing on the line costs him no depth.
+
 Zone coverage picks a man up on its own ice (`AIZoneCoverage.in_coverage_ice`:
 our zone, out to a cover envelope past the line), in the partition and in
 MARK's no-man fallback alike. A man still up the ice is the rush's trailer, and
@@ -682,7 +714,18 @@ overlap on purpose, and independent argmaxes double-cover (most D-zone ticks)
 while leaving the best man open. The areas tile the zone, so a man can stand in
 nobody's coverable area only when his area's owner is on the puck: the pressure
 owner's area is therefore every zone defender's while he is (a strong D in the
-corner leaves his net-front man to whoever the matching sends). A loose puck
+corner leaves his net-front man to whoever the matching sends). An area's
+holder who is not back is the same case: a man nearer our net than the holder
+of every area he stands in, with none of them inside a cover envelope of him,
+is every zone defender's (`AIZoneCoverage.behind_every_holder`). The defender
+handed him keeps him until a holder is goal-side of him, however near one comes
+from behind: a backchecker on his hip does not have him. Held to the areas
+alone, an odd-man rush turning into coverage found the man driving the high
+slot in the ice of forwards still outside our line, and the D riding him in was
+handed the wide man in his place (`test_odd_man_net_drive.gd`). It is settled
+coverage's rule too: with the wingers out on the points, a man in the high slot
+above the centre's corridor is the centre's. A man down the one's area is left
+out, as it is when the one is on the puck. A loose puck
 with a teammate elected to race it (`closest_to_puck_by_team`) is HIS, not the
 area's: the chaser leaves the matching and the area's owner covers a man
 (`AIZoneCoverage.chased_by_another`), or one body stands off both the puck and

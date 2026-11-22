@@ -352,7 +352,7 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 
 		AIPossessionState.State.BREAKOUT:
 			return _breakout_post_specs(own_goal_z, own_dir, strong_x,
-					half_w, our_blue_z)
+					half_w, our_blue_z, puck_pos)
 
 		AIPossessionState.State.TRANS_DEFENSE:
 			# The 1-1-3, filled from the back: our line's three posts elect first,
@@ -468,10 +468,11 @@ static func _apply_back_line_deadlines(specs: Array[SlotSpec],
 
 # The four breakout post specs: the outlets a carrier breaking out reads for.
 static func _breakout_post_specs(own_goal_z: float, own_dir: float,
-		strong_x: float, half_w: float, our_blue_z: float) -> Array[SlotSpec]:
+		strong_x: float, half_w: float, our_blue_z: float,
+		puck_pos: Vector3) -> Array[SlotSpec]:
 	return [
 		SlotSpec.make(AIRoleSlots.Slot.BREAKOUT_D2, Group.D,
-				Vector3(0.0, 0.0, own_goal_z - own_dir * 1.0)),
+				AIRoleBreakout.weak_search_center(puck_pos, -strong_x)),
 		SlotSpec.make(AIRoleSlots.Slot.BREAKOUT_STRONG, Group.F,
 				Vector3(strong_x * (half_w - 2.0), 0.0, our_blue_z),
 				_side_home_f(strong_x, own_goal_z)),

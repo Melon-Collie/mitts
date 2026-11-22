@@ -666,16 +666,18 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 			release_clean * clean_lane * (1.0 - reception_kept))
 	cost += _field.turnover_cost(mate_spot, release_clean * met * (1.0 - mate_reception.y))
 	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
-	# it hands over — the carrier stays at self_pos through a pass, so his
-	# own recovery race starts from here (plan §6).
+	# it hands over, at that mode's own share — the carrier stays at self_pos
+	# through a pass, so his own recovery race starts from here (plan §6).
+	cost += _field.counter_exposure_cost(ctx, origin, 1.0 - release_clean,
+			self_pos, our_goalie)
 	if not rim_iced:
-		cost += _field.counter_exposure_cost(ctx, loss_point, 1.0 - lane,
-				self_pos, our_goalie)
+		cost += _field.counter_exposure_cost(ctx, loss_point,
+				release_clean * (1.0 - lane), self_pos, our_goalie)
 	cost += _field.counter_exposure_cost(ctx, receiver_spot,
-			clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
+			release_clean * clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
 	if met > 0.0:
 		cost += _field.counter_exposure_cost(ctx, mate_spot,
-				met * (1.0 - mate_reception.y), self_pos, our_goalie)
+				release_clean * met * (1.0 - mate_reception.y), self_pos, our_goalie)
 	if benefit - cost > _debug_best_ev:
 		_debug_best_ev = benefit - cost
 		debug_completion = Vector4(release_clean, reached, miss_prob, reception_kept)
@@ -806,10 +808,10 @@ func _facing_rotation_time(self_facing_xz: Vector2, self_pos: Vector3,
 #   - FINISHER (or the 5v5 NET_FRONT, who runs the finisher's role), not yet
 #     one-timer-ready: the feed to the spot he is DRIVING TO
 #     (projected OUTLET_DEVELOP_WINDOW_S along his velocity, inside the zone by
-#     the reception band), priced on the seam (score_pass_value) with the keeper
-#     given the flight plus the finisher's wrister charge to re-square. So a
-#     fresh zone entry holds for the mates still arriving instead of settling
-#     for the weak from-the-top shot.
+#     the reception band), priced as the live pass to it (_pass_ev) with the
+#     keeper given the flight plus the finisher's wrister charge to re-square.
+#     So a fresh zone entry holds for the mates still arriving instead of
+#     settling for the weak from-the-top shot.
 #
 #   - Breakout OUTLET (BREAKOUT_STRONG / OUTLET / BREAKOUT_D2): an outlet
 #     skating its route toward open ice — see _developing_outlet_feed.
@@ -850,12 +852,14 @@ func developing_feed_value(ctx: RoleContext) -> float:
 			var pass_speed: float = AIPuckLane.pass_launch_speed(
 					dist, ctx.self_wrister_shot_speed, ctx.pass_speed_scale)
 			var flight_t: float = clampf(dist / pass_speed, 0.0, PASS_LEAD_MAX_S)
-			_field.project_opponents(flight_t, _proj_buf)
-			# On the seam, because this value is compared directly against
-			# fire_score (see score_pass_value).
-			feed = AIActionScoring.score_pass_value(
-					self_pos, spot, ctx.attacking_goal_pos, AICarrierField.goalie_now(ctx),
-					_proj_buf, pass_speed, _field.opponent_caps)
+			# As the live pass to that spot is priced, turnovers and all: the hold
+			# competes with it, and it is what the hold becomes when he arrives.
+			feed = _pass_ev(ctx, spot, pass_speed, flight_t,
+					flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, flight_t, our_goalie,
+					ctx.caps_by_peer.get(pid), -1.0, AIPuckLane.PASS_MISS_BASE_PROB,
+					Vector3.ZERO, best, Vector3.ZERO, Vector3.INF,
+					AIFeedReception.arrival_closing_speed(self_pos, spot, pass_speed, fin_vel),
+					false, Vector3.INF, 1.0, tm.position)
 		elif slot == AIRoleSlots.Slot.BREAKOUT_STRONG \
 				or slot == AIRoleSlots.Slot.OUTLET \
 				or slot == AIRoleSlots.Slot.BREAKOUT_D2:

@@ -284,17 +284,32 @@ func test_hold_when_puck_path_crossing_is_in_past() -> void:
 
 # ─── POSITIONING (no incoming shot) ───────────────────────────────────────
 
+func test_with_no_carrier_he_goes_on_to_the_station_he_was_sent_to() -> void:
+	# Our pass is in flight: nobody carries, so there is no shooter to stage off,
+	# and the station he was on his way to still stands. Held on his own body, he
+	# stopped 5 m short of it for as long as the pass flew, and for every pass.
+	var self_pos := Vector3(4.0, 0.0, -18.0)
+	var station := Vector3(1.5, 0.0, -22.5)
+	var ctx: RoleContext = _make_ctx(
+			self_pos, Vector3(-6.0, 0.0, -10.0), Vector3(3.0, 0.0, 0.0))  # a slow feed across
+	ctx.prev_role_target = station
+	ctx.prev_station_key = 77
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_eq(d.target_position, station, "the station last read stands")
+	assert_eq(d.station_key, 77, "and is still the station he holds when the puck lands")
+	assert_false(d.has_aim_override)
+
+
 func test_positioning_falls_back_to_self_pos_when_no_carrier() -> void:
-	# No teammate carrier means no offensive context — positioning
-	# falls back to self_pos (hold position; brain re-tick will
-	# reassign within a frame).
+	# No teammate carrier and no station read yet in this slot: he holds where
+	# he is until there is a carrier to stage off.
 	var self_pos := Vector3(-2.0, 0.0, -22.0)
 	var ctx: RoleContext = _make_ctx(
 			self_pos,
 			Vector3(0.0, 0.0, -10.0), Vector3.ZERO)  # slow puck → reactive returns null
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
 	assert_eq(d.target_position, self_pos,
-			"slow puck + no carrier → positioning falls back to self_pos")
+			"slow puck, no carrier, no station yet: he holds where he is")
 	assert_false(d.has_aim_override)
 
 

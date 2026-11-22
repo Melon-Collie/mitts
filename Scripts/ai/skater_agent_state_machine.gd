@@ -1437,7 +1437,7 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 		AIRoleSlots.Slot.F3_WALL:
 			decision = AIRoleForecheck.decide_wall(ctx)
 		AIRoleSlots.Slot.BREAKOUT_D2:
-			# Net-front reverse valve — the weak-side breakout outlet's job.
+			# The reverse valve: the weak-side breakout outlet's job.
 			decision = AIRoleBreakout.decide(ctx, false)
 		AIRoleSlots.Slot.BREAKOUT_STRETCH:
 			# Weak winger's stretch: OUTLET paces the far blue line legally.
@@ -1726,22 +1726,22 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 	var ctx: RoleContext = _build_role_context(snapshot, self_pos, self_state)
 	_carrier.decide(ctx)
 
-	# Mirrored every tick: press states and pre-aim read these fresh.
 	_last_carry_anchor = _carrier.last_carry_anchor
-	_pass_target_peer_id = _carrier.pass_target_peer_id
-	_pass_target_speed = _carrier.pass_target_speed
-	_pass_should_saucer = _carrier.pass_should_saucer
-	# Shot params must NOT keep tracking the carrier once a fire intent is latched,
-	# so the bot performs the exact shot that won the compete; they refresh only
-	# while still deliberating.
+	# A release's params must NOT keep tracking the carrier once a fire intent is
+	# latched, so the bot performs the exact shot or pass that won the compete;
+	# they refresh only while still deliberating. A pass to a receiver picked
+	# after the latch would be fired from the hold, and off the pre-aim, locked
+	# for the first.
 	if _intended_action == State.CARRY:
+		_pass_target_peer_id = _carrier.pass_target_peer_id
+		_pass_target_speed = _carrier.pass_target_speed
+		_pass_should_saucer = _carrier.pass_should_saucer
 		_shot_loft_level = _carrier.shot_loft_level
 		_shot_aim_locked = _carrier.shot_aim_point
 		_shot_power_committed = _carrier.shot_power_t
 		_shot_hold_offset_locked = _carrier.shot_hold_offset
 		_shot_hold_share_locked = _carrier.shot_hold_share
-		# The dump target freezes the same way. (_pass_aim_point reads
-		# _dump_target first, so the always-fresh pass mirror can't hijack a dump.)
+		# The dump target freezes the same way.
 		if _carrier.intended_action == AIRoleCarrier.INTENT_DUMP:
 			_dump_target = _carrier.dump_target
 			_dump_launch_speed = _carrier.dump_launch_speed
@@ -3767,9 +3767,11 @@ func _opponent_within_of(snapshot: WorldSnapshot, point: Vector3, r: float) -> b
 # The carrier-just-changed-to-someone-else case (a teammate or opp picked up
 # cleanly without us being close) doesn't fire — prev was set, now is the new
 # carrier, not -1. Duration scales with our speed at engagement: see
-# ENGAGEMENT_COOLDOWN_MIN_TICKS.
+# ENGAGEMENT_COOLDOWN_MIN_TICKS. It reads the REAL carrier: the contact is on
+# his own stick, and the delayed belief reads loose a reaction late, or never
+# when the puck is collected inside it.
 func _update_engagement_cooldown(snapshot: WorldSnapshot, self_state: SkaterNetworkState) -> void:
-	var carrier: int = snapshot.puck_state.carrier_peer_id
+	var carrier: int = snapshot.real_puck_carrier_peer_id
 	if _prev_carrier_peer_id != -1 and carrier == -1:
 		var self_pos: Vector3 = self_state.position
 		var puck_pos: Vector3 = snapshot.puck_state.position

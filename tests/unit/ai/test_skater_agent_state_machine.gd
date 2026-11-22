@@ -105,6 +105,37 @@ func test_an_ordered_bot_chases_a_puck_the_election_gave_a_teammate() -> void:
 			"an order cannot send a man who would whistle the play by touching it")
 
 
+# ── The strip cooldown arms on the strip ─────────────────────────────────────
+
+func _carried_then_loose(belief_after: int) -> void:
+	var held := _loose_puck_snap(Vector3(0.5, 0, 0))
+	held.puck_state.carrier_peer_id = SELF_ID
+	held.real_puck_carrier_peer_id = SELF_ID
+	_add_skater(held, SELF_ID, Vector3.ZERO)
+	sm._update_engagement_cooldown(held, held.skater_states[SELF_ID])
+	var stripped := _loose_puck_snap(Vector3(0.8, 0, 0))
+	stripped.puck_state.carrier_peer_id = belief_after
+	stripped.real_puck_carrier_peer_id = -1
+	_add_skater(stripped, SELF_ID, Vector3.ZERO)
+	sm._update_engagement_cooldown(stripped, stripped.skater_states[SELF_ID])
+
+
+func test_a_strip_arms_the_cooldown_while_the_belief_still_has_him_carrying() -> void:
+	_carried_then_loose(SELF_ID)
+	assert_gt(sm._engagement_cooldown, 0)
+
+
+func test_a_strip_arms_the_cooldown_when_the_belief_never_reads_it_loose() -> void:
+	# Collected inside the reaction window, the belief goes from him to them.
+	_carried_then_loose(SELF_ID)
+	var taken := _loose_puck_snap(Vector3(1.2, 0, 0))
+	taken.puck_state.carrier_peer_id = OPP_ID
+	taken.real_puck_carrier_peer_id = OPP_ID
+	_add_skater(taken, SELF_ID, Vector3.ZERO)
+	sm._update_engagement_cooldown(taken, taken.skater_states[SELF_ID])
+	assert_gt(sm._engagement_cooldown, 0)
+
+
 func test_loose_clock_survives_a_scramble_graze() -> void:
 	# The failure the old global debounce had: a puck grazing sticks restarted the
 	# reaction clock every time, so a scramble could defer the chase indefinitely.
@@ -1489,6 +1520,25 @@ func test_committing_the_loaded_pass_does_not_move_the_cursor() -> void:
 	assert_eq(sm._intended_action, Agent.State.PASS_PRESSED, "pre-aiming the pass")
 	assert_almost_eq(sm._aim_target_for_intent(s, Vector3.ZERO), carried,
 			Vector3.ONE * 0.0001, "commit aims where the carry rested the puck")
+
+
+func test_a_latched_pass_keeps_the_receiver_it_was_latched_for() -> void:
+	# The carrier's next re-eval, mid pre-aim, likes another receiver. The
+	# pre-aim point and the hold are locked for the first, so the pass is his.
+	var carrier := _stub_loading_pass()
+	var s := _self_snap(Vector3.ZERO, true)
+	sm.dispatch(InputState.new(), s)
+	carrier.next_intent = AIRoleCarrier.INTENT_PASS
+	carrier.pass_hold_offset = carrier.pass_now_hold
+	carrier.pass_hold_share = 1.0
+	sm._dispatch_skip_counter = 0
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._intended_action, Agent.State.PASS_PRESSED, "fixture sanity: pre-aiming")
+	carrier.next_pass_target = TEAMMATE_ID + 1
+	sm._dispatch_skip_counter = 0
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._intended_action, Agent.State.PASS_PRESSED, "fixture sanity: still pre-aiming")
+	assert_eq(sm._pass_target_peer_id, TEAMMATE_ID)
 
 
 func test_a_man_to_beat_keeps_the_carry_presented() -> void:
