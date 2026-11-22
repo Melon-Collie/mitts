@@ -15,6 +15,8 @@ extends SceneTree
 #                       its host in a spectator seat)
 #   --no-ot             a tie ends the match (default: overtime, which runs
 #                       until a goal and so has no fixed length)
+#   --free=<a,b>        node paths under the match scene to free before the
+#                       match plays (Hud, RinkArena/ArenaStands): what each costs
 #
 # A bootstrap only, for the reason pose_capture.gd gives: a `-s` script compiles
 # before the autoloads register, so the typed runner is loaded once the tree is up.
@@ -31,28 +33,27 @@ func _on_frame() -> void:
 	if _started:
 		return
 	_started = true
-	var team_size: int = 5
-	var period_s: float = 40.0
-	var periods: int = 3
-	var timeout_s: float = 600.0
-	var max_fps: int = 0
-	var as_server: bool = false
-	var overtime: bool = true
+	var opts: Dictionary = {
+		"team_size": 5, "period_s": 40.0, "periods": 3, "timeout_s": 600.0, "max_fps": 0,
+		"as_server": false, "overtime": true, "free": PackedStringArray(),
+	}
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--team-size="):
-			team_size = int(a.trim_prefix("--team-size="))
+			opts.team_size = int(a.trim_prefix("--team-size="))
 		elif a.begins_with("--period="):
-			period_s = float(a.trim_prefix("--period="))
+			opts.period_s = float(a.trim_prefix("--period="))
 		elif a.begins_with("--periods="):
-			periods = int(a.trim_prefix("--periods="))
+			opts.periods = int(a.trim_prefix("--periods="))
 		elif a.begins_with("--timeout="):
-			timeout_s = float(a.trim_prefix("--timeout="))
+			opts.timeout_s = float(a.trim_prefix("--timeout="))
 		elif a.begins_with("--max-fps="):
-			max_fps = int(a.trim_prefix("--max-fps="))
+			opts.max_fps = int(a.trim_prefix("--max-fps="))
 		elif a == "--server":
-			as_server = true
+			opts.as_server = true
 		elif a == "--no-ot":
-			overtime = false
+			opts.overtime = false
+		elif a.begins_with("--free="):
+			opts.free = a.trim_prefix("--free=").split(",", false)
 	var runner: Node = (load(RUNNER) as GDScript).new() as Node
 	root.add_child(runner)
-	runner.call("begin", team_size, period_s, periods, timeout_s, max_fps, as_server, overtime)
+	runner.call("begin", opts)

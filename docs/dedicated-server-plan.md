@@ -266,8 +266,8 @@ Of §7's five, what it took:
    the puck through a field `stop()` had just cleared). Fixed there.
 2. **A server casts no skip vote.**
 3. **A server holds no seat**, player or spectator.
-4. **Not done.** The scene still builds its HUD and the arena. Measure before
-   stripping either.
+4. **Measured, and left alone.** The scene still builds its HUD and the arena.
+   Freeing them before the match plays (`--free=`) moved nothing: see below.
 5. **Not done.** Bot and goalie difficulty still come from the machine's
    preferences; Phase 1b's config carries them.
 
@@ -275,3 +275,34 @@ Probed 2026-11-22 as a server, same machine and caveats as §7: a 5v5 of three
 30 s periods and a 3v3 that went to overtime and scored both reached
 `GAME_OVER` with no script error, no camera at the opening faceoff and no
 local skater. The 5v5 held 88.7 to 90.0 Hz in live play.
+
+### What the HUD and the arena cost a server
+
+The same 5v5 server match (one 40 s period, capped at 30 fps), with nodes freed
+before it played, two runs each, 2026-11-22, same machine and caveats as §7:
+
+| freed | process step, ms a frame | tick, ms | peak memory |
+|---|---|---|---|
+| nothing | 18.00 | 4.98 | 595 MB |
+| `Hud` | 17.51 | 4.87 | 590 MB |
+| `RinkArena/ArenaStands`, `Jumbotron` | 18.26 | 4.88 | 597 MB |
+| all three and `CrowdAudio` | 17.43 | 4.89 | 591 MB |
+
+Runs of one configuration differ by up to 0.4 ms, so the arena costs nothing
+that shows and the HUD at most half a millisecond a frame. Memory does not move,
+though freeing a node after the scene has loaded cannot show what never loading
+it would save. Neither is worth a server-only scene.
+
+**What the table does show is where a server's frame goes: the skaters' own
+per-frame step.** 18 ms a frame for ten bots on the GDScript kernels;
+`docs/performance-findings.md` has it at 3.6 ms with the native ones. That is
+the cosmetic rig (gait, IK, skin) of bodies nobody is looking at.
+
+**And a server cannot buy it back with a low frame rate.** Godot runs every tick
+a frame owes back to back and sends at the frame's end, so at 30 fps three ticks
+and their snapshots leave in one clump, which a client's interpolation delay
+then has to cover. A server runs about a tick a frame (a cap at the tick rate),
+where the process step is paid 90 times a second: about a third of a core with
+the native kernels, on top of the tick's 0.44. Skipping the cosmetic step on a
+server is the saving worth measuring, once Phase 1c has a client to show what
+it does to the stream, and on a build with the native kernels.

@@ -1,13 +1,15 @@
 #!/bin/bash
 # Plays a whole bot match on a host with no skater of its own, headless, and
 # prints whether it reached GAME_OVER, each phase with the tick rate held in it,
-# the CPU the process used, and every engine error it logged. Wraps
+# what the main thread spent in live play (the process step a frame, the tick),
+# the CPU and peak memory of the process, and every engine error it logged. Wraps
 # tools/headless_host_probe.gd (docs/dedicated-server-plan.md).
 #
 #   .claude/hooks/probe-headless-host.sh                          # 5v5, 3 x 40 s
 #   .claude/hooks/probe-headless-host.sh --server                 # as a dedicated server
 #   .claude/hooks/probe-headless-host.sh --team-size=3 --period=20
-#   .claude/hooks/probe-headless-host.sh --max-fps=30             # a server's frame rate
+#   .claude/hooks/probe-headless-host.sh --max-fps=90             # about a tick a frame
+#   .claude/hooks/probe-headless-host.sh --free=Hud               # without that node
 #
 # The match runs in real time, so a run takes about as long as the match does.
 # Each run gets a throwaway user data directory.
@@ -39,9 +41,11 @@ START="$(date +%s.%N)"
   -s res://tools/headless_host_probe.gd -- "$@" > "$LOG" 2>&1 &
 PID=$!
 CPU_TICKS=0
+PEAK_KB=0
 while kill -0 "$PID" 2>/dev/null; do
   if [ -r "/proc/$PID/stat" ]; then
     CPU_TICKS="$(awk '{print $14 + $15}' "/proc/$PID/stat" 2>/dev/null || echo "$CPU_TICKS")"
+    PEAK_KB="$(awk '/VmHWM/ {print $2}' "/proc/$PID/status" 2>/dev/null || echo "$PEAK_KB")"
   fi
   sleep 1
 done
@@ -52,6 +56,9 @@ grep '^\[headless-host\] {' "$LOG" || echo "[probe-headless-host] no result line
 if [ "$CPU_TICKS" != "0" ]; then
   awk -v t="$CPU_TICKS" -v hz="$(getconf CLK_TCK)" -v s="$START" -v e="$END" \
     'BEGIN { printf "[probe-headless-host] cpu %.1f s over %.1f s wall = %.2f cores\n", t / hz, e - s, (t / hz) / (e - s) }'
+fi
+if [ -n "$PEAK_KB" ] && [ "$PEAK_KB" != "0" ]; then
+  echo "[probe-headless-host] peak memory $((PEAK_KB / 1024)) MB"
 fi
 echo "[probe-headless-host] engine errors and warnings (count, message):"
 grep -E '^(SCRIPT )?ERROR|^WARNING' "$LOG" | sort | uniq -c | sort -rn || true

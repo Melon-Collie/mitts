@@ -61,6 +61,12 @@ func begin(skaters: int, frames: int) -> void:
 
 
 func _install_brackets() -> void:
+	_head = install_brackets(get_tree().root)
+
+
+# Adds the pair to `root` and returns the opening one, whose `proc_us` and
+# `phys_us` accumulate until the caller zeroes them.
+static func install_brackets(root: Node) -> Bracket:
 	var head := Bracket.new()
 	var tail := Bracket.new()
 	tail.opens = false
@@ -72,8 +78,8 @@ func _install_brackets() -> void:
 		n.process_thread_group_order = side * _FAR_ORDER
 		n.process_priority = side * _FAR_PRIORITY
 		n.process_physics_priority = side * _FAR_PRIORITY
-		get_tree().root.add_child(n)
-	_head = head
+		root.add_child(n)
+	return head
 
 
 func _start_match(skaters: int) -> void:

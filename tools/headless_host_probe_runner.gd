@@ -9,6 +9,8 @@ extends Node
 # lobby, no seat, no camera. Otherwise it is a player's machine: an offline
 # lobby with the host moved to a spectator seat, its camera and HUD mounted.
 
+const FrameCost: GDScript = preload("res://tools/frame_cost_runner.gd")
+
 const _START_TIMEOUT_FRAMES: int = 6000
 # How long the run watches the host after GAME_OVER, to see what it does next
 # with nobody to press a button.
@@ -26,30 +28,59 @@ var _match_frame0: int = 0
 var _camera_at_start: bool = false
 
 
-# `max_fps` caps the process step once the match is up; 0 leaves the prefs' cap.
-func begin(team_size: int, period_s: float, periods: int, timeout_s: float, max_fps: int,
-		as_server: bool, overtime: bool) -> void:
+# What the main thread spent in live play: the process step a frame and the
+# tick, timed apart as tools/frame_cost_runner.gd times them.
+var _bracket: FrameCost.Bracket = null
+var _live_frames: int = 0
+var _live_ticks: int = 0
+var _live_proc_us: int = 0
+var _live_phys_us: int = 0
+var _live_wall_us: int = 0
+var _freed: PackedStringArray = PackedStringArray()
+
+
+# `opts`: team_size, period_s, periods, timeout_s, max_fps (0 leaves the prefs'
+# cap), as_server, overtime, and free (node paths under the match scene to free
+# before the match plays, to see what each costs).
+func begin(opts: Dictionary) -> void:
 	_t0_ms = Time.get_ticks_msec()
-	team_size = clampi(team_size, 3, 5)
-	if as_server:
-		_open_as_server(team_size, period_s, periods, overtime)
+	var team_size: int = clampi(int(opts.team_size), 3, 5)
+	if opts.as_server:
+		_open_as_server(team_size, float(opts.period_s), int(opts.periods), bool(opts.overtime))
 	else:
-		await _open_through_lobby(team_size, period_s, periods, overtime)
+		await _open_through_lobby(team_size, float(opts.period_s), int(opts.periods),
+				bool(opts.overtime))
 	var started: bool = await _match_scene_up()
 	if not started:
 		_finish("never_started", team_size)
 		return
-	if max_fps > 0:
-		Engine.max_fps = max_fps
+	if int(opts.max_fps) > 0:
+		Engine.max_fps = int(opts.max_fps)
+	_free_nodes(opts.free as PackedStringArray)
 	_match_t0_ms = Time.get_ticks_msec()
 	_match_frame0 = Engine.get_process_frames()
 	_camera_at_start = get_viewport().get_camera_3d() != null
 	GameManager.goal_scored.connect(func(_t: Team, _s: String, _a: String, _b: String) -> void:
 		_goals += 1)
-	var deadline_ms: int = _t0_ms + int(timeout_s * 1000.0)
+	_bracket = FrameCost.install_brackets(get_tree().root)
+	var deadline_ms: int = _t0_ms + int(float(opts.timeout_s) * 1000.0)
 	var reached: bool = false
+	var t_prev: int = Time.get_ticks_usec()
+	var tick_prev: int = Engine.get_physics_frames()
 	while Time.get_ticks_msec() < deadline_ms:
 		await get_tree().process_frame
+		var t: int = Time.get_ticks_usec()
+		var tick: int = Engine.get_physics_frames()
+		if _phase() == GamePhase.Phase.PLAYING:
+			_live_frames += 1
+			_live_ticks += tick - tick_prev
+			_live_proc_us += _bracket.proc_us
+			_live_phys_us += _bracket.phys_us
+			_live_wall_us += t - t_prev
+		_bracket.proc_us = 0
+		_bracket.phys_us = 0
+		t_prev = t
+		tick_prev = tick
 		_note_phase()
 		if _phase() == GamePhase.Phase.GAME_OVER:
 			reached = true
@@ -60,6 +91,16 @@ func begin(team_size: int, period_s: float, periods: int, timeout_s: float, max_
 			await get_tree().process_frame
 			_note_phase()
 	_finish("game_over" if reached else "timed_out", team_size)
+
+
+func _free_nodes(paths: PackedStringArray) -> void:
+	for path: String in paths:
+		var node: Node = get_tree().current_scene.get_node_or_null(path)
+		if node == null:
+			push_error("[headless-host] --free: no node at '%s'" % path)
+			continue
+		node.queue_free()
+		_freed.append(path)
 
 
 func _finish(outcome: String, team_size: int) -> void:
@@ -75,6 +116,11 @@ func _finish(outcome: String, team_size: int) -> void:
 		"host_is_spectator": GameManager.is_local_spectator(),
 		"host_has_skater": GameManager.get_local_player() != null,
 		"host_has_camera": _camera_at_start,
+		"freed": _freed,
+		"live_process_ms": snappedf(float(_live_proc_us) / 1000.0 / maxf(float(_live_frames), 1.0), 0.01),
+		"live_tick_ms": snappedf(float(_live_phys_us) / 1000.0 / maxf(float(_live_ticks), 1.0), 0.01),
+		"live_main_thread_share": snappedf(
+				float(_live_proc_us + _live_phys_us) / maxf(float(_live_wall_us), 1.0), 0.001),
 		"score": scores,
 		"goals_seen": _goals,
 		"period": sm.current_period if sm != null else 0,

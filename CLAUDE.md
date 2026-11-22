@@ -212,9 +212,11 @@ against a number from someone else's machine.
 **To see whether the HOST runs with nobody on it, probe it.**
 `.claude/hooks/probe-headless-host.sh [--server] [--team-size=3] [--max-fps=30]`
 plays a whole bot match headless and prints whether it reached `GAME_OVER`, each
-phase with the tick rate held in it, the cores the process used and every engine
-error it logged, with where each script error was raised
-(`tools/headless_host_probe_runner.gd`). `--server` hosts it as a dedicated
+phase with the tick rate held in it, what the main thread spent in live play
+(the process step a frame and the tick, apart), the cores and peak memory of the
+process and every engine error it logged, with where each script error was
+raised (`tools/headless_host_probe_runner.gd`). `--free=Hud,RinkArena/ArenaStands`
+frees those nodes before the match plays, which is how to see what one costs. `--server` hosts it as a dedicated
 server (`NetworkManager.start_server()`: no seat, no camera, no lobby); without
 it the host is a player's machine seated as a spectator. The match runs in real
 time, so a run takes as long as the match. It is the check for a change to the
