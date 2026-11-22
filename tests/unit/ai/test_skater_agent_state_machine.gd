@@ -105,6 +105,37 @@ func test_an_ordered_bot_chases_a_puck_the_election_gave_a_teammate() -> void:
 			"an order cannot send a man who would whistle the play by touching it")
 
 
+# ── The strip cooldown arms on the strip ─────────────────────────────────────
+
+func _carried_then_loose(belief_after: int) -> void:
+	var held := _loose_puck_snap(Vector3(0.5, 0, 0))
+	held.puck_state.carrier_peer_id = SELF_ID
+	held.real_puck_carrier_peer_id = SELF_ID
+	_add_skater(held, SELF_ID, Vector3.ZERO)
+	sm._update_engagement_cooldown(held, held.skater_states[SELF_ID])
+	var stripped := _loose_puck_snap(Vector3(0.8, 0, 0))
+	stripped.puck_state.carrier_peer_id = belief_after
+	stripped.real_puck_carrier_peer_id = -1
+	_add_skater(stripped, SELF_ID, Vector3.ZERO)
+	sm._update_engagement_cooldown(stripped, stripped.skater_states[SELF_ID])
+
+
+func test_a_strip_arms_the_cooldown_while_the_belief_still_has_him_carrying() -> void:
+	_carried_then_loose(SELF_ID)
+	assert_gt(sm._engagement_cooldown, 0)
+
+
+func test_a_strip_arms_the_cooldown_when_the_belief_never_reads_it_loose() -> void:
+	# Collected inside the reaction window, the belief goes from him to them.
+	_carried_then_loose(SELF_ID)
+	var taken := _loose_puck_snap(Vector3(1.2, 0, 0))
+	taken.puck_state.carrier_peer_id = OPP_ID
+	taken.real_puck_carrier_peer_id = OPP_ID
+	_add_skater(taken, SELF_ID, Vector3.ZERO)
+	sm._update_engagement_cooldown(taken, taken.skater_states[SELF_ID])
+	assert_gt(sm._engagement_cooldown, 0)
+
+
 func test_loose_clock_survives_a_scramble_graze() -> void:
 	# The failure the old global debounce had: a puck grazing sticks restarted the
 	# reaction clock every time, so a scramble could defer the chase indefinitely.

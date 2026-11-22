@@ -3767,9 +3767,11 @@ func _opponent_within_of(snapshot: WorldSnapshot, point: Vector3, r: float) -> b
 # The carrier-just-changed-to-someone-else case (a teammate or opp picked up
 # cleanly without us being close) doesn't fire — prev was set, now is the new
 # carrier, not -1. Duration scales with our speed at engagement: see
-# ENGAGEMENT_COOLDOWN_MIN_TICKS.
+# ENGAGEMENT_COOLDOWN_MIN_TICKS. It reads the REAL carrier: the contact is on
+# his own stick, and the delayed belief reads loose a reaction late, or never
+# when the puck is collected inside it.
 func _update_engagement_cooldown(snapshot: WorldSnapshot, self_state: SkaterNetworkState) -> void:
-	var carrier: int = snapshot.puck_state.carrier_peer_id
+	var carrier: int = snapshot.real_puck_carrier_peer_id
 	if _prev_carrier_peer_id != -1 and carrier == -1:
 		var self_pos: Vector3 = self_state.position
 		var puck_pos: Vector3 = snapshot.puck_state.position
