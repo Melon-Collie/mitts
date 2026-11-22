@@ -1726,22 +1726,22 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 	var ctx: RoleContext = _build_role_context(snapshot, self_pos, self_state)
 	_carrier.decide(ctx)
 
-	# Mirrored every tick: press states and pre-aim read these fresh.
 	_last_carry_anchor = _carrier.last_carry_anchor
-	_pass_target_peer_id = _carrier.pass_target_peer_id
-	_pass_target_speed = _carrier.pass_target_speed
-	_pass_should_saucer = _carrier.pass_should_saucer
-	# Shot params must NOT keep tracking the carrier once a fire intent is latched,
-	# so the bot performs the exact shot that won the compete; they refresh only
-	# while still deliberating.
+	# A release's params must NOT keep tracking the carrier once a fire intent is
+	# latched, so the bot performs the exact shot or pass that won the compete;
+	# they refresh only while still deliberating. A pass to a receiver picked
+	# after the latch would be fired from the hold, and off the pre-aim, locked
+	# for the first.
 	if _intended_action == State.CARRY:
+		_pass_target_peer_id = _carrier.pass_target_peer_id
+		_pass_target_speed = _carrier.pass_target_speed
+		_pass_should_saucer = _carrier.pass_should_saucer
 		_shot_loft_level = _carrier.shot_loft_level
 		_shot_aim_locked = _carrier.shot_aim_point
 		_shot_power_committed = _carrier.shot_power_t
 		_shot_hold_offset_locked = _carrier.shot_hold_offset
 		_shot_hold_share_locked = _carrier.shot_hold_share
-		# The dump target freezes the same way. (_pass_aim_point reads
-		# _dump_target first, so the always-fresh pass mirror can't hijack a dump.)
+		# The dump target freezes the same way.
 		if _carrier.intended_action == AIRoleCarrier.INTENT_DUMP:
 			_dump_target = _carrier.dump_target
 			_dump_launch_speed = _carrier.dump_launch_speed

@@ -1522,6 +1522,25 @@ func test_committing_the_loaded_pass_does_not_move_the_cursor() -> void:
 			Vector3.ONE * 0.0001, "commit aims where the carry rested the puck")
 
 
+func test_a_latched_pass_keeps_the_receiver_it_was_latched_for() -> void:
+	# The carrier's next re-eval, mid pre-aim, likes another receiver. The
+	# pre-aim point and the hold are locked for the first, so the pass is his.
+	var carrier := _stub_loading_pass()
+	var s := _self_snap(Vector3.ZERO, true)
+	sm.dispatch(InputState.new(), s)
+	carrier.next_intent = AIRoleCarrier.INTENT_PASS
+	carrier.pass_hold_offset = carrier.pass_now_hold
+	carrier.pass_hold_share = 1.0
+	sm._dispatch_skip_counter = 0
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._intended_action, Agent.State.PASS_PRESSED, "fixture sanity: pre-aiming")
+	carrier.next_pass_target = TEAMMATE_ID + 1
+	sm._dispatch_skip_counter = 0
+	sm.dispatch(InputState.new(), s)
+	assert_eq(sm._intended_action, Agent.State.PASS_PRESSED, "fixture sanity: still pre-aiming")
+	assert_eq(sm._pass_target_peer_id, TEAMMATE_ID)
+
+
 func test_a_man_to_beat_keeps_the_carry_presented() -> void:
 	var carrier := _stub_loading_pass()
 	carrier.forward_puck_clearance = -0.5
