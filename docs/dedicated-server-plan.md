@@ -1,8 +1,8 @@
 # Dedicated servers — design plan
 
-Status: **design agreed in chat, 2026-11-13. Nothing is built but the probe in
-§7.** The rows under *Proposed, not confirmed* were put forward in that chat and
-not answered; settle them before the phase that needs them.
+Status: **design agreed in chat, 2026-11-13. Phase 1a is built (§8); the rest
+is not.** The rows under *Proposed, not confirmed* were put forward in that chat
+and not answered; settle them before the phase that needs them.
 
 Mitts is server-authoritative already: one machine simulates, every other
 machine predicts, reconciles and sends lag-compensated claims. Today that
@@ -186,7 +186,7 @@ Each phase is playable on its own and the next is built on it.
 1. **Hosted vs AI for one tester.** Each step is one pull request, and the game
    plays as it does today after every one of them.
    a. A server launch mode: the host path with no local player, no seat and no
-      camera (§7 is the list). Held by the probe.
+      camera (§7 is the list). Held by the probe. **Built, §8.**
    b. Boot from a match config, seat joiners by SteamID, post the results and
       exit; exit early when the last human has left.
    c. ENet: the server listens on a UDP port and a client connects to an
@@ -249,3 +249,29 @@ probe passes over all of them, because its host keeps a viewport and a seat:
 4. **The host builds its camera, its HUD and the arena.** A server needs none
    of it. What it costs was not measured.
 5. **The host's own preferences set the bots** (§2).
+
+## 8. Phase 1a as built
+
+`NetworkManager.start_server()` is a host that seats nobody
+(`is_dedicated_server`). It opens no lobby: the caller fills
+`pending_game_config` and the bot slots and loads `Hockey.tscn`, which is what
+the probe's `--server` does and what Phase 1b's boot will do from a config.
+
+Of §7's five, what it took:
+
+1. **The cinematics stay.** The goal replay and the intermission reel run on a
+   server as they do on a host, so those phases end on the same clock a
+   client's own cinematic runs on. They mount their cameras with none to hand
+   back to, which found a stale read in `GoalReplayDriver` (its cameras followed
+   the puck through a field `stop()` had just cleared). Fixed there.
+2. **A server casts no skip vote.**
+3. **A server holds no seat**, player or spectator.
+4. **Not done.** The scene still builds its HUD and the arena. Measure before
+   stripping either.
+5. **Not done.** Bot and goalie difficulty still come from the machine's
+   preferences; Phase 1b's config carries them.
+
+Probed 2026-11-22 as a server, same machine and caveats as §7: a 5v5 of three
+30 s periods and a 3v3 that went to overtime and scored both reached
+`GAME_OVER` with no script error, no camera at the opening faceoff and no
+local skater. The 5v5 held 88.7 to 90.0 Hz in live play.

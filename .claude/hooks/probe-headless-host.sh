@@ -5,6 +5,7 @@
 # tools/headless_host_probe.gd (docs/dedicated-server-plan.md).
 #
 #   .claude/hooks/probe-headless-host.sh                          # 5v5, 3 x 40 s
+#   .claude/hooks/probe-headless-host.sh --server                 # as a dedicated server
 #   .claude/hooks/probe-headless-host.sh --team-size=3 --period=20
 #   .claude/hooks/probe-headless-host.sh --max-fps=30             # a server's frame rate
 #
@@ -54,3 +55,7 @@ if [ "$CPU_TICKS" != "0" ]; then
 fi
 echo "[probe-headless-host] engine errors and warnings (count, message):"
 grep -E '^(SCRIPT )?ERROR|^WARNING' "$LOG" | sort | uniq -c | sort -rn || true
+if grep -q '^SCRIPT ERROR' "$LOG"; then
+  echo "[probe-headless-host] where each script error was raised (first of each):"
+  grep -A3 '^SCRIPT ERROR' "$LOG" | awk '!seen[$0]++' | head -40
+fi

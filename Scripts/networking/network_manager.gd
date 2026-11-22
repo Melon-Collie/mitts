@@ -239,6 +239,9 @@ var tutorial_id: String = ""
 # Boot and by return-to-free-play; cleared by reset() and whenever any other
 # activity (host, client, lobby-with-bots, tutorial) is started.
 var is_free_play_mode: bool = false
+# The simulating machine seats nobody: no skater, no spectator seat, no vote.
+# Peer 1 is then the server and never a player (docs/dedicated-server-plan.md).
+var is_dedicated_server: bool = false
 var pending_home_color_slot: int = TeamColorRegistry.DEFAULT_HOME_SLOT
 var pending_away_color_slot: int = TeamColorRegistry.DEFAULT_AWAY_SLOT
 var pending_color_votes: Dictionary = {}  # peer_id → color_slot (int; host authoritative; all peers mirror)
@@ -530,6 +533,15 @@ func start_offline() -> void:
 	pending_game_config = {"num_periods": 1, "period_duration": 0.0, "ot_enabled": false, "ot_duration": 0.0,
 			"rule_set": GameRules.DEFAULT_RULE_SET,
 			"team_size": GameRules.DEFAULT_TEAM_SIZE}
+
+
+# A host that plays nobody. It carries no transport of its own: the session is
+# offline until one is attached.
+func start_server() -> void:
+	is_host = true
+	game_initiated = true
+	is_offline_mode = true
+	is_dedicated_server = true
 
 
 # Entry point that wraps start_offline with the free-play-specific seeding:
@@ -938,6 +950,7 @@ func reset() -> void:
 	pending_session_end_reason = ""
 	is_offline_mode = false
 	is_free_play_mode = false
+	is_dedicated_server = false
 	is_tutorial_mode = false
 	drill_id = ""
 	tutorial_id = ""

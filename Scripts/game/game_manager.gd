@@ -1590,7 +1590,9 @@ func on_host_started() -> void:
 	HostCostProbe.reset()
 	_carrier_belief.reset()
 	_spawn_world()
-	if not NetworkManager.pending_lobby_slots.is_empty():
+	if NetworkManager.is_dedicated_server:
+		_push_lobby_assignments_to_clients()
+	elif not NetworkManager.pending_lobby_slots.is_empty():
 		var my_slot: Dictionary = NetworkManager.pending_lobby_slots.get(1, {})
 		var team_id: int = my_slot.get("team_id", 0)
 		var team_slot: int = my_slot.get("team_slot", 0)
@@ -3236,7 +3238,8 @@ func _on_remote_skip_replay_vote(current: int, total: int) -> void:
 
 
 func _total_skip_voters() -> int:
-	return 1 + NetworkManager.connected_peer_ids().size()
+	var local_voters: int = 0 if NetworkManager.is_dedicated_server else 1
+	return local_voters + NetworkManager.connected_peer_ids().size()
 
 
 # ── Replay file recording ────────────────────────────────────────────────────

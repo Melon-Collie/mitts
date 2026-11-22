@@ -1,13 +1,13 @@
 extends Node
 
-# The work behind tools/headless_host_probe.gd. Opens an offline lobby, moves
-# the host to a spectator seat, fills every skater seat with a bot, starts the
-# match and watches it to GAME_OVER, logging each phase change with the wall
-# time and the tick rate the host held since the last one.
+# The work behind tools/headless_host_probe.gd. Starts a match whose every
+# skater is a bot on a host with no skater of its own, and watches it to
+# GAME_OVER, logging each phase change with the wall time and the tick rate the
+# host held since the last one.
 #
-# The host still mounts its spectator camera and HUD here. What this measures is
-# the simulation and the match flow with no skater on the simulating machine;
-# a server with no camera at all is a step further than this goes.
+# Two hosts. As a server (`as_server`) it is NetworkManager.start_server(): no
+# lobby, no seat, no camera. Otherwise it is a player's machine: an offline
+# lobby with the host moved to a spectator seat, its camera and HUD mounted.
 
 const _START_TIMEOUT_FRAMES: int = 6000
 # How long the run watches the host after GAME_OVER, to see what it does next
@@ -22,12 +22,20 @@ var _phases: Array[Dictionary] = []
 var _goals: int = 0
 var _match_t0_ms: int = 0
 var _match_frame0: int = 0
+# Read as the match opens: a replay mounts cameras of its own later on.
+var _camera_at_start: bool = false
 
 
 # `max_fps` caps the process step once the match is up; 0 leaves the prefs' cap.
-func begin(team_size: int, period_s: float, periods: int, timeout_s: float, max_fps: int) -> void:
+func begin(team_size: int, period_s: float, periods: int, timeout_s: float, max_fps: int,
+		as_server: bool, overtime: bool) -> void:
 	_t0_ms = Time.get_ticks_msec()
-	var started: bool = await _start_match(clampi(team_size, 3, 5), period_s, periods)
+	team_size = clampi(team_size, 3, 5)
+	if as_server:
+		_open_as_server(team_size, period_s, periods, overtime)
+	else:
+		await _open_through_lobby(team_size, period_s, periods, overtime)
+	var started: bool = await _match_scene_up()
 	if not started:
 		_finish("never_started", team_size)
 		return
@@ -35,6 +43,7 @@ func begin(team_size: int, period_s: float, periods: int, timeout_s: float, max_
 		Engine.max_fps = max_fps
 	_match_t0_ms = Time.get_ticks_msec()
 	_match_frame0 = Engine.get_process_frames()
+	_camera_at_start = get_viewport().get_camera_3d() != null
 	GameManager.goal_scored.connect(func(_t: Team, _s: String, _a: String, _b: String) -> void:
 		_goals += 1)
 	var deadline_ms: int = _t0_ms + int(timeout_s * 1000.0)
@@ -62,7 +71,10 @@ func _finish(outcome: String, team_size: int) -> void:
 		"outcome": outcome,
 		"team_size": team_size,
 		"skaters": get_tree().get_nodes_in_group("skaters").size(),
+		"host": "server" if NetworkManager.is_dedicated_server else "spectator",
 		"host_is_spectator": GameManager.is_local_spectator(),
+		"host_has_skater": GameManager.get_local_player() != null,
+		"host_has_camera": _camera_at_start,
 		"score": scores,
 		"goals_seen": _goals,
 		"period": sm.current_period if sm != null else 0,
@@ -103,7 +115,29 @@ func _last_phase_closed() -> void:
 	})
 
 
-func _start_match(team_size: int, period_s: float, periods: int) -> bool:
+func _open_as_server(team_size: int, period_s: float, periods: int, overtime: bool) -> void:
+	NetworkManager.start_server()
+	for s: int in team_size:
+		for team_id: int in 2:
+			NetworkManager.send_bot_slot(LobbySlotKey.encode(team_id, s), true)
+	var config: Dictionary = {
+		"num_periods": periods,
+		"period_duration": period_s,
+		"ot_enabled": overtime,
+		"ot_duration": GameRules.OT_DURATION,
+		"home_color_slot": TeamColorRegistry.DEFAULT_HOME_SLOT,
+		"away_color_slot": TeamColorRegistry.DEFAULT_AWAY_SLOT,
+		"rule_set": GameRules.DEFAULT_RULE_SET,
+		"team_size": team_size,
+		"fighting": GameRules.FIGHTING_ENABLED,
+		"game_id": PlayerPrefs.generate_uuid(),
+	}
+	NetworkManager.send_game_start(config)
+	NetworkManager.pending_game_config = config
+	get_tree().change_scene_to_file(Constants.SCENE_HOCKEY)
+
+
+func _open_through_lobby(team_size: int, period_s: float, periods: int, overtime: bool) -> void:
 	var tree: SceneTree = get_tree()
 	PlayerPrefs.preferred_team_size = team_size
 	NetworkManager.start_offline()
@@ -114,11 +148,16 @@ func _start_match(team_size: int, period_s: float, periods: int) -> bool:
 	var lobby: LobbyManager = _find_lobby(tree.current_scene)
 	lobby.set("_period_duration", period_s)
 	lobby.set("_num_periods", periods)
+	lobby.set("_ot_enabled", overtime)
 	lobby.call("_on_spectate_pressed")
 	await tree.process_frame
 	_fill_bots(lobby, team_size)
 	await tree.process_frame
 	lobby.call("_on_start_pressed")
+
+
+func _match_scene_up() -> bool:
+	var tree: SceneTree = get_tree()
 	var waited: int = 0
 	while tree.current_scene == null \
 			or tree.current_scene.scene_file_path != Constants.SCENE_HOCKEY \

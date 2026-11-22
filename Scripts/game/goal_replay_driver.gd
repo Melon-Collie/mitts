@@ -221,16 +221,20 @@ func _take_over() -> void:
 		NetworkManager.set_replay_mode_local(true, _clip_start_ts)
 	_saved_prev_camera = get_viewport().get_camera_3d()
 
+	# The cameras follow the puck by a local, not through `_puck`: stop() clears
+	# the field a frame before the freed cameras stop asking, and one of them is
+	# still current then when there was no camera to hand back to.
+	var puck: Puck = _puck
 	_hard_cam = SpectatorCamera.new()
 	add_child(_hard_cam)
-	_hard_cam.setup(func() -> Vector3: return _puck.global_position)
+	_hard_cam.setup(func() -> Vector3: return puck.global_position)
 
 	if _defending_goal_z != 0.0:
 		_net_cam = SpectatorCamera.new()
 		add_child(_net_cam)
 		var goal_z: float = _defending_goal_z
 		_net_cam.setup(func() -> Vector3:
-			return GoalReplayRules.net_cam_look_target(_puck.global_position, goal_z))
+			return GoalReplayRules.net_cam_look_target(puck.global_position, goal_z))
 		_net_cam.set_booth(_net_cam_position, 55.0, 0.15)
 
 

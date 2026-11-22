@@ -11,6 +11,10 @@ extends SceneTree
 #   --periods=<n>       periods (default 3)
 #   --timeout=<sec>     wall-clock limit on the whole run (default 600)
 #   --max-fps=<n>       cap the process step during the match (default: the prefs' cap)
+#   --server            host as a dedicated server (default: a player's machine,
+#                       its host in a spectator seat)
+#   --no-ot             a tie ends the match (default: overtime, which runs
+#                       until a goal and so has no fixed length)
 #
 # A bootstrap only, for the reason pose_capture.gd gives: a `-s` script compiles
 # before the autoloads register, so the typed runner is loaded once the tree is up.
@@ -32,6 +36,8 @@ func _on_frame() -> void:
 	var periods: int = 3
 	var timeout_s: float = 600.0
 	var max_fps: int = 0
+	var as_server: bool = false
+	var overtime: bool = true
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--team-size="):
 			team_size = int(a.trim_prefix("--team-size="))
@@ -43,6 +49,10 @@ func _on_frame() -> void:
 			timeout_s = float(a.trim_prefix("--timeout="))
 		elif a.begins_with("--max-fps="):
 			max_fps = int(a.trim_prefix("--max-fps="))
+		elif a == "--server":
+			as_server = true
+		elif a == "--no-ot":
+			overtime = false
 	var runner: Node = (load(RUNNER) as GDScript).new() as Node
 	root.add_child(runner)
-	runner.call("begin", team_size, period_s, periods, timeout_s, max_fps)
+	runner.call("begin", team_size, period_s, periods, timeout_s, max_fps, as_server, overtime)
