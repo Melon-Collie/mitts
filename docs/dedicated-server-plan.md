@@ -144,42 +144,57 @@ SteamID in the config.
 
 ## 5. Running them
 
-Sized for a closed beta, and deliberately small:
+Sized for a closed beta, and deliberately small.
 
-- **One rented Linux box** with the headless build and an allocator: a small
-  process that starts one server process a match on its own port and says so
-  when it has no room.
-- **The matchmaker on Supabase**, which the game already uses: a queue table
-  and a function that pairs parties and asks the allocator for a server.
-- **One region, central North America (Dallas).** The input lead covers a
-  one-way trip of up to 100 ms (`MAX_ONE_WAY_S`), and from the middle of the
-  continent both coasts sit well inside it.
+**The server is a container image**: the headless Linux export, the game pack
+and the native kernels. It is built in CI beside the release it matches, since
+a server and a client of different builds refuse each other at the join
+handshake. A match is one container, started for it and gone when it exits.
 
-**What one match needs**, for sizing the box: under half a core of main thread
-with the native kernels built (§7) plus the bots' worker thread; about 600 MB
-of memory (the §7 probe's peak, on the editor binary with the HUD and the arena
-built); and 16 KB/s of upload a human client
-(`docs/performance-findings.md`), so 1.3 Mbps for ten humans. The tick is one
-thread, so dedicated cores matter more than many cores: a neighbour taking the
-core is dilated physics for every client in the match.
+**Edgegap first.** One API call starts a container near the players and returns
+an address and a UDP port; it is billed by the vCPU-minute and costs nothing
+idle, which for a pool under ten is less than any box left running. Its free
+trial (one deployment at a time, about 1.5 vCPU, an uptime cap of an hour or
+more) covers Phase 1. Puck, a physics hockey game from a studio of this size,
+runs its official servers this way beside player hosting. Edgegap's API token
+cannot ship in a client, so a Supabase function holds it: the client asks the
+function for a match, and the function asks Edgegap.
 
-A managed fleet is worth its cost once concurrent matches outgrow one box.
-Hathora, one of the two obvious ones, ended its game hosting in May 2026, which
-is the argument for keeping the server a plain Linux process that boots from a
-config: it moves to another host in an afternoon.
+**A rented box is the fallback**, in central North America (Dallas): the input
+lead covers a one-way trip of up to 100 ms (`MAX_ONE_WAY_S`), and from the
+middle of the continent both coasts sit well inside it. It is the move if
+Edgegap's shared hardware puts noise in the tick, if a month's play passes
+what a box costs (about 350 vCPU-hours against a $24 box), or if Edgegap goes
+the way Hathora did in May 2026. The same image runs there, with a small
+allocator in place of Edgegap's API. Player hosting stays under both, so a host
+that is full or gone degrades a match to player-hosted and never to nothing.
+
+**The matchmaker is on Supabase** when the vs-humans queue is built: a queue
+table and a function that pairs parties and asks for a server.
+
+**What one match needs**: under half a core of main thread with the native
+kernels built (§7) plus the bots' worker thread; about 600 MB of memory (the §7
+probe's peak, on the editor binary with the HUD and the arena built); and
+16 KB/s of upload a human client (`docs/performance-findings.md`), so 1.3 Mbps
+for ten humans. The tick is one thread, so a core taken by a neighbour is
+dilated physics for every client in the match.
 
 ## 6. Phases
 
 Each phase is playable on its own and the next is built on it.
 
-1. **Hosted vs AI for one tester.**
-   a. The host path runs with no local player and no camera (§7 is the list).
-   b. A headless launch that boots from a match config and exits after posting.
-   c. ENet between that server and a client on one machine, then across the
-      network.
+1. **Hosted vs AI for one tester.** Each step is one pull request, and the game
+   plays as it does today after every one of them.
+   a. A server launch mode: the host path with no local player, no seat and no
+      camera (§7 is the list). Held by the probe.
+   b. Boot from a match config, seat joiners by SteamID, post the results and
+      exit; exit early when the last human has left.
+   c. ENet: the server listens on a UDP port and a client connects to an
+      address. Proved with both on one machine, which needs no hosting.
    d. The server's telemetry row.
-   e. The allocator on one box, and a button in the client that asks it for a
-      vs-AI match.
+   e. The container image, built and pushed by CI.
+   f. The Supabase function that asks Edgegap for a match, and the button in
+      the client that asks the function and falls back to player-hosted.
 2. **Identity.** Steam auth tickets; the server posts career rows.
 3. **Parties.** The lasting Steam lobby, group free play, the connection swap.
 4. **The vs-humans queue.** The matchmaker, queue tickets, seating.
