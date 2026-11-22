@@ -533,6 +533,10 @@ between the crease and the screen's depth, so neither held him.
 Never hold one by its place: the ice worth holding moves with the play, and
 held where it stood it went stale, half as valuable, and he re-picked 2.3 m a
 time almost once a second.
+With no teammate carrying (our pass in flight, a loose puck) every station's
+shooter is unknown, so the station last read stands and is still skated to
+(`RoleContext.prev_role_target`). Never hold him on his own body instead: a man
+on his way to a station then stops short of it for as long as each pass flies.
 The press pass then wins it while one of ours carries the puck (skating into a man who
 stands on it short of contact, `CLOSE_IN_M`, rather than stopping at the spot
 his body holds), never with it loose: the press takes the stick off the ice, and the rebound it was won for
