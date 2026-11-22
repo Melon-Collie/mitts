@@ -155,7 +155,8 @@ static func _decide_d1(ctx: RoleContext, bracket: float = 0.0,
 			stand += bracket_off
 	elif not gapping_up:
 		stand = depth_first(ctx, ap, stand, d)
-	d.target_position = _clamp_to_house(ctx, stand)
+	d.target_position = AILastManDiscipline.hold_out_to_house_gate(
+			ctx.defending_goal_pos, stand)
 	set_retreat_floor(ctx, ap, d)
 	set_advance_cap(ctx, ap, d, gap, not gapping_up and not holding_line)
 	AIBackLineRunners.hold_depth(ctx, d)
@@ -683,6 +684,10 @@ static func _decide_d2(ctx: RoleContext) -> RoleDecision:
 		# The stand stays on him; the floor on the ride is read against him.
 		var man: SkaterNetworkState = ctx.snapshot.skater_states[man_pid]
 		AIDefensiveVerbs.fill_approach(ctx, man.position, man.velocity, ap)
+		# Still outside my ice (picked up early, for his pace): from my own lane.
+		if AIRoleReads.xz_distance(ctx.rush_read.attacker_leads[
+				ctx.rush_read.attackers.find(man_pid)], ctx.defending_goal_pos) > pickup:
+			d.target_position.x = post.x
 		set_retreat_floor(ctx, ap, d, man_pid)
 		d.arrive_at_speed = true
 		return d
@@ -691,28 +696,30 @@ static func _decide_d2(ctx: RoleContext) -> RoleDecision:
 
 
 # The attacker (excluding the carrier) driving the MIDDLE — the most central one
-# inside the mid-lane band and within `pickup_m` of our net, as a peer id. -1
-# when nobody is, which is BACK_MID's cue to hold his post rather than chase a
-# wide man (see D2_MID_LANE_HALF_WIDTH_M) or one still up the ice.
+# inside the mid-lane band and in my ice, as a peer id: within `pickup_m` of our
+# net, or as much further as he would gain on me while I build to his pace
+# (head_start_on_me). Picked up only on arrival, a driver at pace is past a man
+# still skating his post's. -1 when nobody is, which is BACK_MID's cue to hold
+# his post rather than chase a wide man (see D2_MID_LANE_HALF_WIDTH_M) or one
+# still up the ice.
 static func _mid_lane_man_peer(ctx: RoleContext, read: AIRushRead,
-		pickup_m: float) -> int:
-	var i: int = _mid_lane_man_index(ctx, read, pickup_m)
-	return read.attackers[i] if i != -1 else -1
-
-
-static func _mid_lane_man_index(ctx: RoleContext, read: AIRushRead,
 		pickup_m: float) -> int:
 	var best: int = -1
 	var best_x: float = D2_MID_LANE_HALF_WIDTH_M
 	for i: int in read.attackers.size():
-		if read.attackers[i] == read.carrier_peer:
-			continue
+		var pid: int = read.attackers[i]
 		var lead: Vector3 = read.attacker_leads[i]
-		if AIRoleReads.xz_distance(lead, ctx.defending_goal_pos) > pickup_m:
+		var man: SkaterNetworkState = ctx.snapshot.skater_states.get(pid)
+		if pid == read.carrier_peer or man == null or absf(lead.x) >= best_x:
 			continue
-		if absf(lead.x) < best_x:
-			best_x = absf(lead.x)
-			best = i
+		var to_net := Vector3(ctx.defending_goal_pos.x - lead.x, 0.0,
+				ctx.defending_goal_pos.z - lead.z)
+		var dist: float = maxf(to_net.length(), 0.001)
+		if dist > pickup_m + head_start_on_me(ctx, to_net / dist, man.velocity, dist, pid,
+				RETREAT_FINISH_M):
+			continue
+		best_x = absf(lead.x)
+		best = pid
 	return best
 
 
@@ -722,11 +729,6 @@ static func _mid_lane_man_index(ctx: RoleContext, read: AIRushRead,
 # is the same metres.
 static func stick_m(ctx: RoleContext) -> float:
 	return maxf(ctx.self_blade_reach, 0.5)
-
-
-# The carrier's D never stands deeper than the house gate (top of the circles).
-static func _clamp_to_house(ctx: RoleContext, pos: Vector3) -> Vector3:
-	return AILastManDiscipline.hold_out_to_house_gate(ctx.defending_goal_pos, pos)
 
 
 # Argmax over the retreat-line point plus fan candidates toward each dangerous

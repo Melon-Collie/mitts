@@ -343,7 +343,12 @@ drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
   out at the gate instead: on an odd-man rush the zone coverage is not home to
   take the man there, the ride pulls him in while the stand pulls him back, and
   the driver reaches the crease a stride goal-side of him
-  (`test_odd_man_net_drive.gd`).
+  (`test_odd_man_net_drive.gd`). He picks that man up as far outside his ice as
+  the man would gain on him while he builds to his pace (the ramp cushion,
+  `_mid_lane_man_peer`), and until the man is in his ice he matches him from his
+  own lane: picked up only on arrival, a driver at pace is past a D still
+  skating his post's, and crossing to him up the ice draws the pair into
+  trading men.
 - `BACK_WEAK` (5v5) the weak lane.
 - The back line moves with the carrier only as far as the gap and the ramp
   require (`AIRoleNeutralZone.back_line_depth_m`), never past the house gate, and
