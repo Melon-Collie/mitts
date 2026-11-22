@@ -306,3 +306,31 @@ where the process step is paid 90 times a second: about a third of a core with
 the native kernels, on top of the tick's 0.44. Skipping the cosmetic step on a
 server is the saving worth measuring, once Phase 1c has a client to show what
 it does to the stream, and on a build with the native kernels.
+
+### How much of that step is separable
+
+Most of it already is, by design (`Scripts/actors/CLAUDE.md`, *Cosmetic vs.
+gameplay*). A skater's frame has three parts:
+
+- **The mesh pass** (stick, arms, spine, skin, head, off hand) reads the
+  gameplay markers and writes only mesh, and a skater off camera skips it.
+  `test_off_camera_culling.gd` holds that skipping it moves nothing gameplay
+  reads.
+- **The on-ice chrome** (ring, name, chevrons) and the effects.
+- **The gait.** It runs for a skater nobody sees, because it is not only mesh:
+  a held pose's share of the crouch lowers the gameplay frames
+  (`SkaterSkatingCoordinator.apply` → `Skater.set_skating_crouch_drop`).
+
+A server pays for all three because `SkaterCameraCull.sees` answers true with no
+camera, which is right for a test or a tool and wrong for a machine nobody is
+watching. With a camera that sees no skater mounted (`--look-away`), same match
+as the table above, two runs: the process step fell from 18.0 to 12.5 ms a
+frame, the tick did not move, and the match played out. Freezing the chrome and
+the effects on top of that moved nothing.
+
+So a server counting as nobody watching is a few lines over a path that is
+already tested, and worth doing. What is left is the gait, and skipping that
+means first moving the held pose's crouch onto the tick, which is reconcile
+code. Whether it is worth it depends on what the gait costs with the native
+kernels, which this machine cannot say.
+

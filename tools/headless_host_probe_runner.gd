@@ -57,6 +57,8 @@ func begin(opts: Dictionary) -> void:
 	if int(opts.max_fps) > 0:
 		Engine.max_fps = int(opts.max_fps)
 	_free_nodes(opts.free as PackedStringArray)
+	if opts.look_away:
+		_mount_camera_seeing_nobody()
 	_match_t0_ms = Time.get_ticks_msec()
 	_match_frame0 = Engine.get_process_frames()
 	_camera_at_start = get_viewport().get_camera_3d() != null
@@ -91,6 +93,16 @@ func begin(opts: Dictionary) -> void:
 			await get_tree().process_frame
 			_note_phase()
 	_finish("game_over" if reached else "timed_out", team_size)
+
+
+# A current camera far above the rink and facing up: every skater is off camera
+# to SkaterCameraCull, so each takes the path a skater nobody can see takes.
+func _mount_camera_seeing_nobody() -> void:
+	var cam := Camera3D.new()
+	get_tree().current_scene.add_child(cam)
+	cam.global_position = Vector3(0.0, 500.0, 0.0)
+	cam.rotation = Vector3(PI * 0.5, 0.0, 0.0)
+	cam.make_current()
 
 
 func _free_nodes(paths: PackedStringArray) -> void:
