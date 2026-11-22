@@ -110,6 +110,8 @@ var _zone_peers: Array[int] = []
 # 5v5 DZONE: zone D who hold their label through this tick's election
 # (_keep_the_labels_men_need), peer → slot.
 var _kept_zone_labels: Dictionary[int, int] = {}
+# COVER_HIM orders live this tick, obeyer → his man: held out of the partition.
+var _ping_cover_pins: Dictionary[int, int] = {}
 # Where the puck was last carried, read every batch so a release is placed to
 # within one; INF until it has been.
 var _last_carry_pos: Vector3 = Vector3.INF
@@ -328,19 +330,20 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 		slot_assignments.erase(excluded_pid)
 	_elect_zone_carrier_owner(snapshot, prev_assignments)
 
+	# Smart-ping obedience: force-slot the obeying bots ahead of the partition,
+	# which matches round the order; COVER_HIM's pair is held out of it (the
+	# house-pin shape) so nobody else is sent to that man.
+	var ping_carrier: int = snapshot.puck_state.carrier_peer_id \
+			if snapshot != null and snapshot.puck_state != null else -1
+	_ping_cover_pins.clear()
+	ping_directives.apply_overrides(slot_assignments, _ping_cover_pins, ping_carrier)
+
 	# Excluded peers are already absent from slot_assignments, so they are never
 	# picked as defenders here.
 	threat_assignments = _compute_threat_assignments(snapshot, threat_assignments)
+	threat_assignments.merge(_ping_cover_pins, true)
 
 	_refresh_threat_base_memo(snapshot)
-
-	# Smart-ping obedience: force-slot the obeying bots (COVER_HIM also pins its
-	# man into the threat partition, the house-pin shape). Applied last so a live
-	# human order wins over the geometric assignment.
-	var ping_carrier: int = -1
-	if snapshot != null and snapshot.puck_state != null:
-		ping_carrier = snapshot.puck_state.carrier_peer_id
-	ping_directives.apply_overrides(slot_assignments, threat_assignments, ping_carrier)
 
 
 # 5v5: which role owns a carrier coming at our net at pace — the soonest
@@ -461,7 +464,7 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 		var is_zone: bool = AIRoleSlots5.is_zone_slot(slot)
 		if slot != AIRoleSlots.Slot.MARK and not is_zone:
 			continue
-		if pid == chaser:
+		if pid == chaser or _ping_cover_pins.has(pid):
 			continue
 		# The area that owns the puck is pressuring it, not covering a man.
 		if is_zone and slot == pressure_slot and chaser == -1:
@@ -491,7 +494,7 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == team_id:
 			continue
-		if pid == carrier_pid:
+		if pid == carrier_pid or _ping_cover_pins.find_key(pid) != null:
 			continue
 		var mp: Vector3 = snapshot.skater_states[pid].position
 		if state == AIPossessionState.State.DZONE \

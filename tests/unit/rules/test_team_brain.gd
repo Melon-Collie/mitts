@@ -308,6 +308,48 @@ func test_5v5_dzone_fills_the_five_zone_slots() -> void:
 		assert_true(seen.has(slot), "5v5 DZONE left slot %d unfilled" % slot)
 
 
+# ── Ping orders and the partition ────────────────────────────────────────────
+
+func test_a_marker_ordered_onto_the_carrier_gives_up_his_man() -> void:
+	var brain: TeamBrain = _make_brain_3v3()
+	brain.force_retick()
+	brain.tick(0.001, _make_dzone_3v3())
+	assert_eq(brain.assigned_threat(110), 210, "fixture sanity: 110 has a man")
+	brain.apply_ping(PingRules.Type.PRESSURE_CARRIER, 120, 200, 110, Vector3.ZERO)
+	brain.tick(0.001, _make_dzone_3v3())
+	assert_eq(brain.get_slot(110), AIRoleSlots.Slot.PRESSURE)
+	assert_false(brain.threat_assignments.has(110),
+			"he covers nobody; got %s" % str(brain.threat_assignments))
+
+
+func test_cover_him_sends_one_defender_to_that_man() -> void:
+	# 110 is ordered onto the man 120 has: 120 is matched to the one left, not
+	# left on the same man.
+	var brain: TeamBrain = _make_brain_3v3()
+	brain.force_retick()
+	brain.tick(0.001, _make_dzone_3v3())
+	assert_eq(brain.assigned_threat(120), 220, "fixture sanity: 120 has him")
+	brain.apply_ping(PingRules.Type.COVER_HIM, 100, 220, 110, Vector3.ZERO)
+	brain.tick(0.001, _make_dzone_3v3())
+	assert_eq(brain.assigned_threat(110), 220, "the order holds")
+	assert_eq(brain.assigned_threat(120), 210,
+			"and his partner takes the man he left; got %s" % str(brain.threat_assignments))
+
+
+func test_a_bot_ordered_to_defend_is_handed_a_man() -> void:
+	# The man on the puck is ordered off it to DEFEND, with one marker a long
+	# skate from either receiver: he is a marker in the matching, and nearer
+	# the second man than that marker is.
+	var brain: TeamBrain = _make_brain_3v3()
+	var snap: WorldSnapshot = _make_dzone_3v3()
+	snap.skater_states[120].position = Vector3(-10.0, 0.0, 9.0)
+	brain.apply_ping(PingRules.Type.DEFEND, 110, 100, 100, Vector3.ZERO)
+	brain.tick(0.001, snap)
+	assert_eq(brain.get_slot(100), AIRoleSlots.Slot.MARK)
+	assert_eq(brain.assigned_threat(100), 220,
+			"he has the man nearest him; got %s" % str(brain.threat_assignments))
+
+
 # ── 5v5 zone partition (the matching that replaced five per-role argmaxes) ───
 
 func _make_5v5_zone_snapshot() -> WorldSnapshot:

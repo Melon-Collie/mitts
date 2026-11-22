@@ -5,8 +5,8 @@ extends RefCounted
 # ping" bookkeeping, owned by TeamBrain and never networked. Consumed two ways:
 #
 #   - Slot / threat overrides (apply_overrides), applied by TeamBrain after each
-#     slot-assignment tick so a directive rides the role architecture instead
-#     of bypassing it.
+#     slot election and ahead of the threat partition, so a directive rides the
+#     role architecture instead of bypassing it.
 #   - Per-bot queries (move_target_for / chase_peer / shoot_ping_for /
 #     pass_target_for), frozen into TeamBrainView and read every dispatch
 #     through RoleContext, so obedience is frame-tight while the directive lives.
