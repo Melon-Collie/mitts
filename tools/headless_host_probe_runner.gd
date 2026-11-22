@@ -5,9 +5,10 @@ extends Node
 # GAME_OVER, logging each phase change with the wall time and the tick rate the
 # host held since the last one.
 #
-# Two hosts. As a server (`as_server`) it is NetworkManager.start_server(): no
-# lobby, no seat, no camera. Otherwise it is a player's machine: an offline
-# lobby with the host moved to a spectator seat, its camera and HUD mounted.
+# Two hosts. As a server (`as_server`) it is DedicatedServer.start_match from a
+# MatchConfig: no lobby, no seat, no camera. Otherwise it is a player's machine:
+# an offline lobby with the host moved to a spectator seat, its camera and HUD
+# mounted.
 
 const FrameCost: GDScript = preload("res://tools/frame_cost_runner.gd")
 
@@ -174,25 +175,15 @@ func _last_phase_closed() -> void:
 
 
 func _open_as_server(team_size: int, period_s: float, periods: int, overtime: bool) -> void:
-	NetworkManager.start_server()
-	for s: int in team_size:
-		for team_id: int in 2:
-			NetworkManager.send_bot_slot(LobbySlotKey.encode(team_id, s), true)
-	var config: Dictionary = {
+	var config: MatchConfig = MatchConfig.from_dict({
+		"game_id": PlayerPrefs.generate_uuid(),
+		"team_size": team_size,
 		"num_periods": periods,
 		"period_duration": period_s,
 		"ot_enabled": overtime,
-		"ot_duration": GameRules.OT_DURATION,
-		"home_color_slot": TeamColorRegistry.DEFAULT_HOME_SLOT,
-		"away_color_slot": TeamColorRegistry.DEFAULT_AWAY_SLOT,
-		"rule_set": GameRules.DEFAULT_RULE_SET,
-		"team_size": team_size,
-		"fighting": GameRules.FIGHTING_ENABLED,
-		"game_id": PlayerPrefs.generate_uuid(),
-	}
-	NetworkManager.send_game_start(config)
-	NetworkManager.pending_game_config = config
-	get_tree().change_scene_to_file(Constants.SCENE_HOCKEY)
+		"fill_bots": true,
+	})
+	DedicatedServer.start_match(config)
 
 
 func _open_through_lobby(team_size: int, period_s: float, periods: int, overtime: bool) -> void:

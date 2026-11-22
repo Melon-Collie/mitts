@@ -1,7 +1,10 @@
 extends Node
 
 func _ready() -> void:
-	PlayerPrefs.apply_video()
+	# A server has no window, and its frame cap is not the player's
+	# (DedicatedServer.start_match).
+	if not NetworkManager.is_dedicated_server:
+		PlayerPrefs.apply_video()
 	NetworkManager.on_game_scene_ready()
 	if NetworkManager.is_tutorial_mode:
 		var id: String = NetworkManager.tutorial_id if not NetworkManager.tutorial_id.is_empty() else TutorialRegistry.MOVEMENT_ID

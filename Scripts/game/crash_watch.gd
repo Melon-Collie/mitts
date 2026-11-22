@@ -40,7 +40,8 @@ var _reporter: BugReporter = null
 
 func _ready() -> void:
 	# Dedicated headless / CI runs neither crash-report nor litter user:// state.
-	if OS.has_feature("headless"):
+	# Read off the display server: --headless sets no feature tag.
+	if DisplayServer.get_name() == "headless":
 		return
 	_active = true
 	_session_start_unix = int(Time.get_unix_time_from_system())

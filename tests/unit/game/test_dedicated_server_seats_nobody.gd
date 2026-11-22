@@ -24,6 +24,17 @@ func test_a_server_is_a_host_with_nobody_seated() -> void:
 	assert_true(NetworkManager.is_offline_mode, "it has no transport until one is attached")
 
 
+func test_nobody_watching_sees_no_skater() -> void:
+	var body := Node3D.new()
+	add_child_autofree(body)
+	var was: bool = SkaterCameraCull.nobody_watching
+	SkaterCameraCull.nobody_watching = false
+	assert_true(SkaterCameraCull.sees(body), "with no camera a tool sees every skater")
+	SkaterCameraCull.nobody_watching = true
+	assert_false(SkaterCameraCull.sees(body), "a server sees none")
+	SkaterCameraCull.nobody_watching = was
+
+
 func test_a_server_casts_no_skip_vote() -> void:
 	NetworkManager.is_dedicated_server = false
 	var with_a_player: int = GameManager.call("_total_skip_voters")

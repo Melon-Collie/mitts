@@ -25,6 +25,12 @@ func _ready() -> void:
 	# rather than the default STOP filter swallowing them at the root.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	TeamColorRegistry.ensure_loaded()
+	if DedicatedServer.launch_requested():
+		# No title card and no video settings: the server node starts its match
+		# and this scene is replaced by it. Deferred, because the root is still
+		# adding this scene.
+		get_tree().root.add_child.call_deferred(DedicatedServer.new())
+		return
 	PlayerPrefs.apply_video()
 	# Kick off threaded load of the heavy rink scene immediately. By the time
 	# the user has read the menu the load is almost always done.

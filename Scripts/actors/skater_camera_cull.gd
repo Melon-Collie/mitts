@@ -13,6 +13,10 @@ extends Object
 # (ClipFrameCapture), which can frame skaters the live camera does not.
 static var enabled: bool = true
 
+# On a machine nobody is watching (a dedicated server) no skater is seen,
+# whatever cameras a replay mounts. Set by whoever starts the match.
+static var nobody_watching: bool = false
+
 # Body, stick reach and a lying sprawl about the skater's origin, plus a tick of
 # travel.
 const RADIUS_M: float = 2.5
@@ -27,6 +31,8 @@ static var _has_camera: bool = false
 # True with no camera (tests, headless tools) or with culling off.
 static func sees(node: Node3D) -> bool:
 	_has_camera = false
+	if nobody_watching:
+		return false
 	if not enabled:
 		return true
 	var cam: Camera3D = node.get_viewport().get_camera_3d()

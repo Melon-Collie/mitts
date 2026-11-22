@@ -419,7 +419,8 @@ Twelve rules the rigs sit inside, all easy to break from in here:
   rate would move gameplay geometry. The chain reads both frames and writes
   bones, which are pure mesh.
 - **Off camera, only mesh is skipped.** A skater the camera cannot see
-  (`Skater.on_camera`, `SkaterCameraCull`'s sphere against the frustum) skips the leg, trunk and
+  (`Skater.on_camera`, `SkaterCameraCull`'s sphere against the frustum; every
+  skater on a dedicated server, `SkaterCameraCull.nobody_watching`) skips the leg, trunk and
   sprawl writes, the head, the off hand and the spine/arm/stick rebuild — about
   two thirds of his render pass — and rebuilds on the first frame he is drawn.
   The blade mesh is the one piece of mesh hung from a gameplay marker, so a

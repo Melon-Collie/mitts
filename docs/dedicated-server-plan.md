@@ -1,8 +1,8 @@
 # Dedicated servers — design plan
 
-Status: **design agreed in chat, 2026-11-13. Phase 1a is built (§8); the rest
-is not.** The rows under *Proposed, not confirmed* were put forward in that chat
-and not answered; settle them before the phase that needs them.
+Status: **design agreed in chat, 2026-11-13. Phases 1a and 1b are built (§8);
+the rest is not.** The rows under *Proposed, not confirmed* were put forward in
+that chat and not answered; settle them before the phase that needs them.
 
 Mitts is server-authoritative already: one machine simulates, every other
 machine predicts, reconciles and sends lag-compensated claims. Today that
@@ -188,10 +188,13 @@ Each phase is playable on its own and the next is built on it.
    plays as it does today after every one of them.
    a. A server launch mode: the host path with no local player, no seat and no
       camera (§7 is the list). Held by the probe. **Built, §8.**
-   b. Boot from a match config, seat joiners by SteamID, post the results and
-      exit; exit early when the last human has left.
+   b. Boot from a match config, play it, print the result and exit. **Built,
+      §8.**
    c. ENet: the server listens on a UDP port and a client connects to an
-      address. Proved with both on one machine, which needs no hosting.
+      address. Proved with both on one machine, which needs no hosting. With
+      it, what needs a joiner to exist: the server waits for the players its
+      config names, seats each by SteamID, and exits early when the last human
+      has left.
    d. The server's telemetry row.
    e. The container image, built and pushed by CI.
    f. The Supabase function that asks Edgegap for a match, and the button in
@@ -251,7 +254,9 @@ probe passes over all of them, because its host keeps a viewport and a seat:
    of it. What it costs was not measured.
 5. **The host's own preferences set the bots** (§2).
 
-## 8. Phase 1a as built
+## 8. Phase 1 as built
+
+### 1a: a host with nobody on it
 
 `NetworkManager.start_server()` is a host that seats nobody
 (`is_dedicated_server`). It opens no lobby: the caller fills
@@ -349,3 +354,42 @@ Of the 2.2 ms left, a 3v3 run the same way (1.5 ms for six skaters) puts about
 frame for ten, 0.14 of a core, and that is a ceiling: it is everything a skater
 still does each frame, not the gait alone. Skipping it means first moving the
 held pose's crouch onto the tick, which is reconcile code.
+
+### 1b: boot from a match config
+
+`MatchConfig` (`Scripts/domain/state/`) is the rules and the seats, read from
+JSON: enums by name, a SteamID as a string, any absent key the lobby's default,
+any wrong one a problem and never a silent default. `fill_bots` puts a bot in
+every seat the config names nobody for.
+
+```json
+{"team_size": 5, "rule_set": "arcade", "bot_difficulty": "hard",
+ "seats": [{"team": 0, "slot": 0, "steam_id": "76561198012345679"}],
+ "fill_bots": true}
+```
+
+`DedicatedServer` (`Scripts/game/`) is the process's life: launched with
+`-- --server` and a config (`--match-config=<file>`, or the JSON in
+`MITTS_MATCH_CONFIG`, which is how a container host hands one over), it starts
+the match, prints `[server] result {...}` three seconds after `GAME_OVER` and
+exits 0. A config it cannot use exits 2 and a match scene that never comes up
+exits 3. The result goes to the log and nowhere else yet: a server has no
+backend key until Phase 2.
+
+What a server no longer takes from a player's machine: the bots' and goalies'
+difficulty (the config's), the video settings and their frame cap (it runs a
+tick a frame), the replay file (none), and the crash reporter (off on any
+headless run; its guard read a feature tag `--headless` never sets). It draws
+no skater: `SkaterCameraCull.nobody_watching`.
+
+A seat the config gives a SteamID stays empty for now and the match starts
+without him. Holding the faceoff for the players a config names, seating each
+by SteamID and leaving when the last one has gone all need a joiner, so they
+are 1c's.
+
+Checked 2026-11-22: `run-server-match.sh` launched a 3v3 through `Boot` and it
+exited 0 with its result line; a bad config, a missing file and no config each
+exited 2 saying which; a config in the environment played. On the native
+kernels the 5v5 server probe held 89 of 90 fps with the process step at 2.3 ms
+a frame, the main thread 68% busy and the process on 0.85 of a core.
+

@@ -1578,6 +1578,12 @@ func on_host_started() -> void:
 	if tournament.is_active():
 		bot_diff = tournament.active.bot_difficulty
 		goalie_diff = tournament.active.goalie_difficulty
+	# A server has no player whose preferences these could be: its match config
+	# set them (DedicatedServer.start_match).
+	if NetworkManager.is_dedicated_server:
+		bot_diff = NetworkManager.pending_bot_difficulty
+		goalie_diff = NetworkManager.pending_goalie_difficulty
+	SkaterCameraCull.nobody_watching = NetworkManager.is_dedicated_server
 	bot_skill_profile = BotSkillProfile.for_difficulty(bot_diff)
 	goalie_skill_profile = GoalieSkillProfile.for_difficulty(goalie_diff)
 	# Sync the bots' shot model to the tier — otherwise they score their shots
@@ -3025,6 +3031,17 @@ func get_game_id() -> String:
 	return _game_id
 
 
+# The match as it stands, for a server to report when it ends.
+func match_result() -> Dictionary:
+	var result: Dictionary = {"game_id": _game_id, "version": BuildInfo.VERSION}
+	if _state_machine != null:
+		result["score"] = _state_machine.scores
+		result["periods_played"] = _state_machine.current_period
+		result["overtime"] = _state_machine.is_overtime()
+		result["team_size"] = _state_machine.team_size
+	return result
+
+
 # Host-only accurate. Clients hold only the peers they saw demoted, so callers
 # iterating peer IDs should be host-gated.
 func is_spectator_peer(peer_id: int) -> bool:
@@ -3247,6 +3264,9 @@ func _total_skip_voters() -> int:
 # file's CONTENT — the header, the footer and the event payloads, all built from
 # the roster, the state machine and the shot log this file owns.
 func _open_replay_file_writer() -> void:
+	# A server's disk goes when its match does.
+	if NetworkManager.is_dedicated_server:
+		return
 	_replay_file.open(_game_id, _build_replay_header())
 
 

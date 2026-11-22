@@ -222,6 +222,8 @@ it the host is a player's machine seated as a spectator. The match runs in real
 time, so a run takes as long as the match. It is the check for a change to the
 host path (`docs/dedicated-server-plan.md`): one that quietly needs a local
 player shows up here as a script error or a phase that never ends.
+`.claude/hooks/run-server-match.sh [config.json]` is the launch a container
+makes, through `Boot`: it reports the exit code and the server's result line.
 
 **To check the bots for own goals, stage them.** `.claude/hooks/stage-own-goals.sh
 [sizes]` plays an all-bot match headless and stages a loose puck behind and
