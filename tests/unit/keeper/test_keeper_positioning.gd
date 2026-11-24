@@ -785,6 +785,53 @@ func test_a_carrier_sprinting_across_to_the_far_post_is_gone_with() -> void:
 		assert_true(_brain.kept_down or _brain.planted or _motor.rest != R.FEET, "%s: playing him down" % what)
 
 
+# The live brain, going down for a carrier of theirs driving in, who passes
+# across to a stick of theirs at the back door as he does: he is never asked
+# up for it, and his knees take him across toward that stick's side.
+func test_a_pass_across_from_in_tight_is_gone_for_on_his_knees() -> void:
+	for side: float in [1.0, -1.0]:
+		_brain = KeeperPositioning.new()
+		_brain.play = KeeperPlayRead.new()
+		_motor = KeeperMotor.new()
+		_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+		var what: String = "%+.0f" % side
+		var body := Vector2(0.0, -9.0)
+		var velocity := Vector2(0.0, 6.0)
+		var tick: int = 0
+		while not _brain.kept_down and body.y < -2.0:
+			body += velocity * DT
+			_brain.play.step(DT, body, velocity, false, body, true)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+			_motor.step(DT)
+			tick += 1
+		assert_true(_brain.kept_down and (_motor.rest == R.DOWN or _motor.drops()), "%s: going down for him as he drives in" % what)
+		var stick := Vector2(side * 1.8, -1.0)
+		var puck: Vector2 = body
+		var passed: Vector2 = (stick - puck).normalized() * KeeperPositioning.PASS_M_S
+		var from_x: float = _motor.x
+		var sticks := PackedVector2Array([stick])
+		while puck.distance_to(stick) > 0.1:
+			puck += passed * DT
+			_brain.play.step(DT, puck, passed)
+			_brain.play.read_pass(sticks)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+			_motor.step(DT)
+			tick += 1
+			assert_ne(_motor.route.rest, R.FEET, "%s: never asked up for the pass" % what)
+		assert_true(_brain.play.meets, "%s: the pass read to its stick" % what)
+		assert_gt(side * _motor.route.spot.x, 0.0, "%s: his spot across on the stick's side" % what)
+		for i: int in int(0.6 / DT):
+			_brain.play.step(DT, stick, Vector2.ZERO, false, stick, true)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+			_motor.step(DT)
+			tick += 1
+			assert_ne(_motor.route.rest, R.FEET, "%s: never asked up with it on the stick" % what)
+		assert_gt(side * (_motor.x - from_x), 0.0, "%s: across toward it on his knees" % what)
+
+
 # The live brain against a carrier of theirs who sells one side and stops
 # there, braking as hard as a skater stops: skating across on a diagonal, and
 # driving in with the puck pulled wide of the post. Down for him, he is never

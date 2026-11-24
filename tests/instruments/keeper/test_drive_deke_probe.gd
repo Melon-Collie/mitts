@@ -11,6 +11,7 @@ extends GutTest
 
 const Stager := preload("res://tests/unit/ai/shot_odds_stager.gd")
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
+const SkaterScene := preload("res://Scenes/Skater.tscn")
 
 const DT: float = Stager.DT
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
@@ -20,6 +21,10 @@ const START_M: float = 14.0
 const PULL_S: float = 0.25
 const DELAYS_S: Array[float] = [0.0, 0.1, 0.2]
 const FROMS_M: Array[float] = [6.0, 4.5]
+# The pull up and walk: across at a stride's pace, set off at, and how long.
+const WALK_M_S: float = 4.0
+const WALK_ACCEL_M_S2: float = 6.0
+const WALK_S: float = 1.0
 
 var _s: RefCounted = null
 var _h: RefCounted = null
@@ -27,12 +32,13 @@ var _ctrl: KeeperController = null
 var _goalie: Goalie = null
 var _puck: Puck = null
 var _shooter: Skater = null
+var _dish_stick := Vector3.ZERO
 
 
 func before_each() -> void:
 	_goalie = load("res://Scenes/Goalie.tscn").instantiate() as Goalie
 	_puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
-	_shooter = load("res://Scenes/Skater.tscn").instantiate() as Skater
+	_shooter = SkaterScene.instantiate() as Skater
 	_ctrl = KeeperController.new()
 	add_child_autofree(_goalie)
 	add_child_autofree(_puck)
@@ -82,6 +88,15 @@ static func _at(move: String, from: float, t: float) -> Array:
 			out = from - (DRIVE_M_S * t - 0.5 * 6.0 * minf(t, 0.6) * minf(t, 0.6))
 			bx = -2.2 * cut
 			px = bx - 0.45 * cut + 0.35 * (1.0 - cut)
+		"pull up, walk":
+			# Braking out of the drive while he sets off across, the puck on his
+			# forehand ahead of him the way he goes.
+			var brake: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+			var tb: float = minf(t, DRIVE_M_S / brake)
+			out = from - (DRIVE_M_S * tb - 0.5 * brake * tb * tb)
+			var ta: float = minf(t, WALK_M_S / WALK_ACCEL_M_S2)
+			bx = -(0.5 * WALK_ACCEL_M_S2 * ta * ta + WALK_M_S * maxf(t - ta, 0.0))
+			px = bx - 0.45
 		"stop":
 			var stops: float = DRIVE_M_S / GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 			var tt: float = minf(t, stops)
@@ -97,12 +112,15 @@ static func _move_s(move: String) -> float:
 			return 0.2 + PULL_S
 		"walk wide":
 			return 0.6
+		"pull up, walk":
+			return WALK_S
 		"stop":
 			return DRIVE_M_S / GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 	return PULL_S
 
 
-const MOVES: Array[String] = ["straight", "fore to back", "back to fore", "double", "fake, pull", "walk wide", "stop"]
+const MOVES: Array[String] = ["straight", "fore to back", "back to fore", "double", "fake, pull", "walk wide", "stop",
+		"pull up, walk"]
 
 
 func test_drive_deke() -> void:
@@ -113,7 +131,7 @@ func test_drive_deke() -> void:
 		head += "  %4.2f" % d
 	lines.append(head + " | mean")
 	for move: String in MOVES:
-		if which != "" and not which.split(",").has(move):
+		if which != "" and not which.split(";").has(move):
 			continue
 		for from: float in FROMS_M:
 			var at_move: Vector2 = _run(move, from, 0.0)
@@ -235,3 +253,73 @@ func _save_share(move: String, from: float, until: float) -> float:
 			if r == Harness.GOAL or _h.rebound_goal:
 				goals += 1
 	return 1.0 - float(goals) / maxf(shots, 1)
+
+
+# The drive and dish: the carrier driving straight in passes across, `from`
+# metres out, to a second skater of theirs loaded for a one-timer, at the back
+# door wide of the far post or at the far side of the slot, who shoots it on
+# arrival. Per pass, where the keeper is as it gets there (how far out and
+# across, on his feet or down), and the share of the one-timers he saves.
+const DISH_FROMS_M: Array[float] = [4.0, 3.0]
+const DISH_RECEIVERS: Array[Vector2] = [Vector2(-1.8, 1.0), Vector2(-1.3, 2.6)]
+const ONE_TIMER_M_S: float = 30.0
+
+
+func test_dish() -> void:
+	var receiver: Skater = SkaterScene.instantiate() as Skater
+	add_child_autofree(receiver)
+	_ctrl.set_skater_getter(func() -> Array: return [_shooter, receiver])
+	var lines: PackedStringArray = ["from  receiver     | as it gets there: out    x  rest | one-timers saved"]
+	for from: float in DISH_FROMS_M:
+		for at: Vector2 in DISH_RECEIVERS:
+			var where: Vector3 = _dish(from, at, receiver)
+			var shots: int = 0
+			var goals: int = 0
+			for loft: int in [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_HIGH]:
+				for i: int in range(1, Stager.AIM_POINTS, 3):
+					_dish(from, at, receiver)
+					var r: int = _h.fire_at(_dish_stick, Vector3(Stager.aim_x(i), 0.0, GOAL_Z), loft, ONE_TIMER_M_S, 0.0)
+					if _h.last_part < 0 and r != Harness.GOAL:
+						continue
+					shots += 1
+					goals += 1 if r == Harness.GOAL else 0
+			lines.append("%4.1f  %+.1f,%.1f   | %15.2f %+5.2f  %s | %.2f" % [from, at.x, at.y, where.x, where.y,
+					"down" if where.z > 0.5 else "feet", 1.0 - float(goals) / maxf(shots, 1)])
+	gut.p("\n" + "\n".join(lines))
+	assert_true(true)
+
+
+# Drives the carrier in and passes to the receiver at `at` (x, out), stepping
+# the keeper until the pass gets there. His distance out from the net's centre,
+# his x in the net's frame, and 1 down, then; the receiver's stick is left in
+# `_dish_stick`.
+func _dish(from: float, at: Vector2, receiver: Skater) -> Vector3:
+	_stage("straight", from)
+	receiver.global_position = _ice(at.x, at.y)
+	receiver.velocity = Vector3.ZERO
+	receiver.current_shot_state = SkaterStateMachine.State.SLAPPER_CHARGE_WITHOUT_PUCK
+	var stick: Vector3 = _ice(at.x + 0.4, at.y - 0.2)
+	var start: Vector3 = (_at("straight", from, 0.0) as Array)[1]
+	_puck.clear_carrier()
+	var vel: Vector3 = (stick - start).normalized() * GameRules.DEFAULT_QUICK_PASS_POWER_M_S
+	var ticks: int = int(start.distance_to(stick) / GameRules.DEFAULT_QUICK_PASS_POWER_M_S / DT)
+	var pos: Vector3 = Vector3(start.x, _puck.ice_height, start.z)
+	var was: Vector3 = (_at("stop", from, 0.0) as Array)[0]
+	for i: int in ticks:
+		var body: Vector3 = (_at("stop", from, (i + 1) * DT) as Array)[0]
+		_shooter.global_position = body
+		_shooter.velocity = (body - was) / DT
+		_shooter.current_shot_state = SkaterStateMachine.State.FOLLOW_THROUGH
+		was = body
+		pos += vel * DT
+		_puck.global_position = pos
+		_puck.linear_velocity = vel
+		_ctrl.invalidate_world_view()
+		_ctrl._physics_process(DT)
+		if OS.get_environment("DISH_TRACE") != "":
+			print("dish t %.3f him %+.2f,%+.2f rest %d mover %d goal %+.2f,%+.2f r%d kd%d meets %s" % [(i + 1) * DT,
+					_ctrl.motor.x, _ctrl.motor.z, _ctrl.motor.rest, _ctrl.motor._mover, _ctrl.motor.route.spot.x,
+					_ctrl.motor.route.spot.y, _ctrl.motor.route.rest, int(_ctrl.brain.kept_down), str(_ctrl.play.meets)])
+	_dish_stick = stick
+	var me: Vector3 = _ctrl._net.affine_inverse() * _goalie.global_position
+	return Vector3(Vector2(me.x, me.z).length(), me.x, 0.0 if _ctrl.motor.rest == KeeperRoute.Rest.FEET else 1.0)

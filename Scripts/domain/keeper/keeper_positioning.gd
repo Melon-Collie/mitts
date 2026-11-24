@@ -144,9 +144,17 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var comes: float = -velocity.dot(puck.normalized()) if puck.length() > 1e-4 else 0.0
 	var down_within: float = down_range(comes, motor.save_move.drop_s * motor.low_ready.fall_share())
 	var held: bool = kept_down and (puck.length() <= down_within + MARGIN_M or not _clears_his_hands(puck, me))
+	var was_down: bool = kept_down or motor.rest == KeeperRoute.Rest.DOWN or motor.drops()
 	kept_down = tight and not planted and (held or puck.length() <= down_within) \
 			and (kept_down or motor.rest != KeeperRoute.Rest.FEET or motor.drops()
 					or _covers(me, _spot(_hedged(puck, motor), motor)))
+	# A pass he reads to a stick of theirs while he is down in front of his goal
+	# line he plays from his knees, pushed across onto that stick's angle, as he
+	# would the carrier: getting up shows the low net for as long as it takes,
+	# and from where no shot can be lifted over his hands standing covers nothing
+	# the butterfly does not.
+	if meeting and was_down and zone != Zone.BELOW and not _clears_his_hands(puck, me):
+		kept_down = true
 	if planted or kept_down:
 		_racing = false
 		post_side = 0.0

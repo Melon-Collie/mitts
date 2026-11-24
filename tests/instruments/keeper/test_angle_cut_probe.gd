@@ -21,6 +21,9 @@ const HOLD_S: float = 0.6
 const SHOT_M_S: float = 25.0
 const PUCK_AHEAD_M: float = 0.45
 const SHOT_EVERY_S: float = 0.1
+# Shots go on after the move ends, the carrier held where it left him.
+const HOLD_AFTER_S: float = 0.4
+const LEGS: String = "legs"
 
 var _s: RefCounted = null
 var _h: RefCounted = null
@@ -70,6 +73,13 @@ func _moves() -> Array:
 		_lateral("circle, across 2.0 at 7", Vector2(-5.5, 2.0), Vector2(2.5, 1.8), 7.0),
 		_lateral("circle, across 3.0 at 6", Vector2(-5.0, 3.0), Vector2(3.0, 2.6), 6.0),
 		_lateral("circle, across 2.2 at 8", Vector2(-4.5, 2.2), Vector2(2.5, 2.0), 8.0),
+		# Driven down at the near post from wide, then curled back up and out
+		# above it, and held there: the post he sealed for the drive is no
+		# longer where the shot comes from.
+		["at the post, curl back out", 1.2, Vector2(-3.0, 3.0), Vector2(-1.0, -0.3), Vector2(-2.4, 2.2)],
+		# Two straight legs: down the goal line at the post from the corner side,
+		# to just outside it, and back up and out to above the dots' angle.
+		["at the post, pull up and out", 1.0, Vector2(-4.0, 1.0), Vector2(-1.4, 0.35), Vector2(-2.4, 2.0), LEGS],
 	]
 
 
@@ -79,11 +89,18 @@ static func _lateral(move_name: String, from: Vector2, to: Vector2, speed: float
 
 
 # Before the move (t < 0) the carrier skates in along the curve's opening line
-# at its opening speed, so he arrives at it already moving.
+# at its opening speed, so he arrives at it already moving. A move marked LEGS
+# is two straight legs at one pace, through its bend rather than toward it.
 func _body_at(m: Array, t: float) -> Vector3:
 	var a: Vector2 = m[2]
 	var b: Vector2 = m[3]
 	var c: Vector2 = m[4]
+	if m.size() > 5 and m[5] == LEGS:
+		var pace: float = (a.distance_to(b) + b.distance_to(c)) / float(m[1])
+		var went: float = clampf(t * pace, -INF, a.distance_to(b) + b.distance_to(c))
+		var q1: Vector2 = a + (b - a).normalized() * went if went <= a.distance_to(b) \
+				else b + (c - b).normalized() * (went - a.distance_to(b))
+		return _ice(q1.x, q1.y)
 	if t < 0.0:
 		var q0: Vector2 = a + (b - a) * 2.0 / float(m[1]) * t
 		return _ice(q0.x, q0.y)
@@ -92,11 +109,12 @@ func _body_at(m: Array, t: float) -> Vector3:
 	return _ice(q.x, q.y)
 
 
+# The puck carried ahead of the body along its way; held where the way left it
+# once the move is over.
 func _puck_at(m: Array, t: float) -> Vector3:
 	var body: Vector3 = _body_at(m, t)
-	var way: Vector3 = _body_at(m, t + DT) - body
-	if way.length() < 1e-5:
-		way = body - _body_at(m, t - DT)
+	var along: float = minf(t, float(m[1]) - DT)
+	var way: Vector3 = _body_at(m, along + DT) - _body_at(m, along)
 	return body + way.normalized() * PUCK_AHEAD_M
 
 
@@ -181,7 +199,7 @@ func test_saves_along_the_way() -> void:
 		var t: float = 0.1
 		var sum: float = 0.0
 		var n: int = 0
-		while t <= float(m[1]) + 1e-6:
+		while t <= float(m[1]) + HOLD_AFTER_S + 1e-6:
 			var share: float = _save_share(m, t)
 			row += " %.2f" % share
 			sum += share
