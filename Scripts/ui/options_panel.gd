@@ -396,7 +396,7 @@ func _defaults() -> Dictionary:
 		"shadow_quality": PlayerPrefs.SHADOW_QUALITY_HIGH,
 		"crowd_density": PlayerPrefs.CROWD_DENSITY_HIGH,
 		"ice_scratches_enabled": true,
-		"arena_ads_enabled": true,
+		"arena_ads_enabled": false,
 		"puck_shadow_enabled": true,
 		"player_shadows_enabled": true,
 		"animation_detail": SkaterAnimationLod.DETAIL_BALANCED,

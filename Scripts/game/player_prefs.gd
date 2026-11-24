@@ -278,7 +278,7 @@ var crowd_density: int = CROWD_DENSITY_HIGH
 var ice_scratches_enabled: bool = true
 # The sponsor panels on the dasher boards, the logos under the ice, and the
 # ribbon board in the stands.
-var arena_ads_enabled: bool = true
+var arena_ads_enabled: bool = false
 var puck_shadow_enabled: bool = true
 # Applied in apply_video: see SkaterShadows and SkaterAnimationLod.
 var player_shadows_enabled: bool = true
@@ -1209,7 +1209,7 @@ func _load() -> void:
 		shadow_quality = clamp(cfg.get_value("video", "shadow_quality", SHADOW_QUALITY_HIGH), 0, SHADOW_QUALITY_LABELS.size() - 1)
 		crowd_density = clamp(cfg.get_value("video", "crowd_density", CROWD_DENSITY_HIGH), 0, CROWD_DENSITY_LABELS.size() - 1)
 		ice_scratches_enabled = cfg.get_value("video", "ice_scratches_enabled", true)
-		arena_ads_enabled = cfg.get_value("video", "arena_ads_enabled", true)
+		arena_ads_enabled = cfg.get_value("video", "arena_ads_enabled", false)
 		puck_shadow_enabled = cfg.get_value("video", "puck_shadow_enabled", true)
 		player_shadows_enabled = cfg.get_value("video", "player_shadows_enabled", true)
 		animation_detail = clampi(int(cfg.get_value("video", "animation_detail",
