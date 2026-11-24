@@ -64,6 +64,8 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "tournament_intro", "stage": _STAGE_TOURNAMENT_FINAL, "open": "_open_nothing"},
 	{"name": "tournament_champion", "stage": _STAGE_TOURNAMENT_FINAL, "open": "_open_tournament_champion"},
 	{"name": "hud_match", "stage": _STAGE_MATCH, "open": "_open_nothing"},
+	# Last: the box score closes on Tab, not Escape, so it stays up after its shot.
+	{"name": "scoreboard_match", "stage": _STAGE_MATCH, "open": "_open_scoreboard"},
 ]
 
 # Long enough for a match scene's first-frame setup (camera ease-in, HUD
@@ -348,6 +350,14 @@ func _boot() -> Boot:
 
 func _open_nothing() -> void:
 	pass
+
+
+func _open_scoreboard() -> void:
+	var board: Scoreboard = _find(get_tree().current_scene, Scoreboard) as Scoreboard
+	if board == null:
+		_fail("the match has no Scoreboard")
+		return
+	board.show_board()
 
 
 func _open_boot_options(tab: int) -> void:

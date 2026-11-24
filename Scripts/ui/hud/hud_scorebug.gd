@@ -7,21 +7,12 @@ extends Node
 # Advance warnings the clock crosses; the HUD owns the toast stack.
 signal warning_toast(text: String, color: Color)
 
-# The team badge, flush against the stripe. The crest is over twice the ~34 px
-# row, so the row crops it top and bottom, and a third of it hangs off the
-# badge's left edge behind the stripe. Muted (crest_tone.gdshader) rather than
-# faded: transparency lets the dark panel grey every colour, and the white
-# lettering needs it dark enough on the light fruits (Lemon, Lime) too.
+# The team badge (TeamBadge), flush against the stripe: its crest over twice
+# the ~34 px row's height, and its letters right of its middle, over the crest's
+# body rather than the edge the stripe crops.
 const _BADGE_WIDTH: float = 74.0
 const _CREST_PX: float = 78.0
-const _CREST_BLEED: float = 0.32
-const _CREST_ALPHA: float = 0.85
-const _CREST_SATURATION: float = 0.55
-const _CREST_VALUE: float = 0.75
-# The letters sit right of the badge's middle, over the crest's body rather than
-# the edge the stripe crops.
 const _ABBR_INSET: float = 14.0
-const _CREST_TONE := preload("res://Shaders/crest_tone.gdshader")
 
 var _panel: PanelContainer = null
 var _period_label: Label = null
@@ -32,12 +23,8 @@ var _home_sog_label: Label = null
 var _away_sog_label: Label = null
 var _home_badge_style: StyleBoxFlat = null
 var _away_badge_style: StyleBoxFlat = null
-var _home_crest: ClubCrest = null
-var _away_crest: ClubCrest = null
-var _home_abbr: Label = null
-var _away_abbr: Label = null
-# Both crests share one material: their tone is the same.
-var _crest_tone_material: ShaderMaterial = null
+var _home_badge: TeamBadge = null
+var _away_badge: TeamBadge = null
 var _score_0: int = 0
 var _score_1: int = 0
 var _clock_warning_label: Label = null
@@ -81,8 +68,7 @@ func build(scale_root: Control) -> void:
 	var away_row := _build_team_row(1)
 	_away_badge_style = away_row.get_meta(&"stripe_style") as StyleBoxFlat
 	_away_score_label = away_row.get_meta(&"score_label") as Label
-	_away_crest = away_row.get_meta(&"crest") as ClubCrest
-	_away_abbr = away_row.get_meta(&"abbr_label") as Label
+	_away_badge = away_row.get_meta(&"badge") as TeamBadge
 	var away_stripe: Panel = away_row.get_meta(&"stripe") as Panel
 	_away_badge_style.corner_radius_top_left = 4
 	away_stripe.offset_top = -5
@@ -91,8 +77,7 @@ func build(scale_root: Control) -> void:
 	var home_row := _build_team_row(0)
 	_home_badge_style = home_row.get_meta(&"stripe_style") as StyleBoxFlat
 	_home_score_label = home_row.get_meta(&"score_label") as Label
-	_home_crest = home_row.get_meta(&"crest") as ClubCrest
-	_home_abbr = home_row.get_meta(&"abbr_label") as Label
+	_home_badge = home_row.get_meta(&"badge") as TeamBadge
 	var home_stripe: Panel = home_row.get_meta(&"stripe") as Panel
 	_home_badge_style.corner_radius_bottom_left = 4
 	home_stripe.offset_top = -2
@@ -166,29 +151,9 @@ func _build_team_row(team_id: int) -> HBoxContainer:
 	badge_margin.add_theme_constant_override("margin_left", 0)
 	badge_margin.add_theme_constant_override("margin_right", 4)
 	row.add_child(badge_margin)
-	var badge := Control.new()
-	badge.custom_minimum_size = Vector2(_BADGE_WIDTH, 0)
-	badge.clip_contents = true
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var badge := TeamBadge.new(_BADGE_WIDTH, _CREST_PX, 21, _ABBR_INSET)
+	_set_badge_team(badge, team_id)
 	badge_margin.add_child(badge)
-	var club: int = HudChrome.team_club(team_id)
-	var crest := ClubCrest.new(_CREST_PX, club)
-	crest.modulate.a = _CREST_ALPHA
-	crest.material = _crest_material()
-	crest.anchor_top = 0.5
-	crest.anchor_bottom = 0.5
-	crest.offset_left = -_CREST_PX * _CREST_BLEED
-	crest.offset_right = _CREST_PX * (1.0 - _CREST_BLEED)
-	crest.offset_top = -_CREST_PX * 0.5
-	crest.offset_bottom = _CREST_PX * 0.5
-	badge.add_child(crest)
-	var abbr_label := HudChrome.lbl(_abbr_of(club), 21, MenuStyle.BROADCAST_CREAM)
-	abbr_label.add_theme_font_override("font", MenuStyle.display_font_spaced())
-	abbr_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	abbr_label.offset_left = _ABBR_INSET
-	abbr_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	abbr_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	badge.add_child(abbr_label)
 
 	# Center-aligned in a fixed-width slot so single- vs two-digit scores
 	# don't drift visually — under right-alignment "1" reads as offset from
@@ -206,22 +171,13 @@ func _build_team_row(team_id: int) -> HBoxContainer:
 	row.set_meta(&"stripe_style", stripe_style)
 	row.set_meta(&"stripe", stripe)
 	row.set_meta(&"score_label", score_label)
-	row.set_meta(&"crest", crest)
-	row.set_meta(&"abbr_label", abbr_label)
+	row.set_meta(&"badge", badge)
 	return row
 
 
-func _crest_material() -> ShaderMaterial:
-	if _crest_tone_material == null:
-		_crest_tone_material = ShaderMaterial.new()
-		_crest_tone_material.shader = _CREST_TONE
-		_crest_tone_material.set_shader_parameter(&"saturation", _CREST_SATURATION)
-		_crest_tone_material.set_shader_parameter(&"value", _CREST_VALUE)
-	return _crest_tone_material
-
-
-func _abbr_of(club: int) -> String:
-	return TeamColorRegistry.get_preset_abbr(club) if club >= 0 else ""
+func _set_badge_team(badge: TeamBadge, team_id: int) -> void:
+	var club: int = HudChrome.team_club(team_id)
+	badge.set_team(club, TeamColorRegistry.get_preset_abbr(club) if club >= 0 else "")
 
 # Big, screen-centered countdown shown only in the final 10 seconds of a
 # period — the small scorebug clock is easy to miss while watching the puck,
@@ -277,12 +233,10 @@ func refresh_team_colors() -> void:
 		_home_badge_style.bg_color = HudChrome.team_stripe(0)
 	if _away_badge_style != null:
 		_away_badge_style.bg_color = HudChrome.team_stripe(1)
-	if _home_crest != null:
-		_home_crest.set_club(HudChrome.team_club(0))
-		_home_abbr.text = _abbr_of(HudChrome.team_club(0))
-	if _away_crest != null:
-		_away_crest.set_club(HudChrome.team_club(1))
-		_away_abbr.text = _abbr_of(HudChrome.team_club(1))
+	if _home_badge != null:
+		_set_badge_team(_home_badge, 0)
+	if _away_badge != null:
+		_set_badge_team(_away_badge, 1)
 
 # Flash the scoring team's digit in their primary and spring it back to size.
 func celebrate_goal(team_id: int, primary: Color) -> void:
