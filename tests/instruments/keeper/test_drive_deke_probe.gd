@@ -18,8 +18,8 @@ const SHOT_M_S: float = 25.0
 const DRIVE_M_S: float = 7.5
 const START_M: float = 14.0
 const PULL_S: float = 0.25
-const DELAYS_S: Array[float] = [0.0, 0.1, 0.2, 0.3]
-const FROMS_M: Array[float] = [6.0, 4.5, 3.5]
+const DELAYS_S: Array[float] = [0.0, 0.1, 0.2]
+const FROMS_M: Array[float] = [6.0, 4.5]
 
 var _s: RefCounted = null
 var _h: RefCounted = null
@@ -154,6 +154,7 @@ func test_trace() -> void:
 			rows.append("   t %+.3f mover %d slide phase %d rotating %s yaw %+.2f x %+.2f z %+.2f goal %+.2f,%+.2f facing %+.2f" % [
 					t, _ctrl.motor._mover, sl.phase, str(sl._rotating), _ctrl.motor.yaw, _ctrl.motor.x, _ctrl.motor.z,
 					_ctrl.motor.route.spot.x, _ctrl.motor.route.spot.y, _ctrl.motor.route.facing])
+			rows.append("        read puck %s carrier %s motion %s" % [_ctrl.play.puck, _ctrl.play.carrier, _ctrl.play.motion])
 		if i % 3 == 0 and t > -0.8:
 			var me: Vector3 = _ctrl._net.affine_inverse() * _goalie.global_position
 			var pn: Vector3 = _ctrl._net.affine_inverse() * (now[1] as Vector3)

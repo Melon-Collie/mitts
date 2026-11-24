@@ -226,28 +226,34 @@ func _plant(post: Vector2, side: float, puck: Vector2, velocity: Vector2, motor:
 		motor.go_to(spot, _seal_turn, KeeperRoute.Rest.DOWN)
 
 
-# Down with the carrier in tight in front of him: on the puck's line where the
-# carrier has to get to, square to him there, giving ground with him
+# Down with the carrier in tight in front of him: on the puck's line led on
+# by the angle the carrier's body sweeps round the net on the way he has to
+# skate (`lands`), square to it, giving ground with him as he comes
 # (`_down_spot`); a spot within his knees' reach scooted to and followed as it
 # moves, one beyond it pushed for, a push being a commitment he cannot cut
-# short.
+# short. The way is the body's, read from the body: the puck held out to one
+# side of a body coming straight at him is not a carrier going by him, and a
+# pull across moves his line by no more than it moves the puck.
 func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var at := Vector2(motor.x, motor.z)
 	var heading: Vector2 = velocity.normalized()
+	var body: Vector2 = play.carrier if play.carrier != KeeperPlayRead.NO_CARRIER else puck
 	# Read on no further than level with the back of the paint: by there a
 	# carrier going by him is the post's.
 	var far: float = _committed(velocity.length())
 	if heading.y > 1e-3:
-		far = minf(far, maxf(-DEPTH_FLOOR_M - puck.y, 0.0) / heading.y)
-	var lands: Vector2 = puck + heading * _short_of_him(puck, heading, far, at)
+		far = minf(far, maxf(-DEPTH_FLOOR_M - body.y, 0.0) / heading.y)
+	var lands: Vector2 = body + heading * _short_of_him(body, heading, far, at)
+	var led: Vector2 = puck.rotated(angle_difference(body.angle(), lands.angle())) \
+			if body.length() > 1e-4 and lands.length() > 1e-4 else puck
 	# Sliding back on the speed he dropped with, he gives the ground it carries
 	# him over for as long as the carrier could still be coming on at his own
 	# speed, not only as far as he has to: an error along the puck's line
 	# leaves him on it, where one across it leaves the net.
 	var slides: float = _carried_back(puck, motor)
 	var friction: float = motor.save_move.pad_friction
-	var comes: float = maxf(-velocity.dot(lands.normalized()), 0.0)
-	var to: Vector2 = _down_spot(lands, at, maxf(KeeperRoute.KNEE_REACH_M, slides * slides / (2.0 * friction)),
+	var comes: float = maxf(-velocity.dot(led.normalized()), 0.0) if led.length() > 1e-4 else 0.0
+	var to: Vector2 = _down_spot(led, at, maxf(KeeperRoute.KNEE_REACH_M, slides * slides / (2.0 * friction)),
 			lands.length() - comes * slides / friction)
 	# Still on his feet, a spot further off than his knees reach and his speed
 	# slides him he skates to and drops on: quicker than dropping where he is
@@ -255,13 +261,13 @@ func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var carried: float = motor.moving().length()
 	if motor.rest == KeeperRoute.Rest.FEET and not motor.drops() \
 			and at.distance_to(to) > KeeperRoute.KNEE_REACH_M + carried * carried / (2.0 * friction):
-		motor.go_to(to, facing(to, lands), KeeperRoute.Rest.FEET, Vector2.ZERO, true)
+		motor.go_to(to, facing(to, led), KeeperRoute.Rest.FEET, Vector2.ZERO, true)
 		return
 	# A spot as near as half a pad's width to the one he is pushing for is no
 	# new push.
 	if motor.slides() and to.distance_to(motor.route.spot) <= SEAL_NEAR_M:
 		to = motor.route.spot
-	motor.go_to(to, facing(to, lands), KeeperRoute.Rest.DOWN)
+	motor.go_to(to, facing(to, led), KeeperRoute.Rest.DOWN)
 
 
 # How fast the speed he drops with slides him back along the line of a puck at
