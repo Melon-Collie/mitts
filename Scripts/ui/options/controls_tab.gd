@@ -117,9 +117,7 @@ func _build_content() -> void:
 
 	# No inner scroll here — the whole tab scrolls via the parent's viewport, so
 	# the rebind list just flows into the page.
-	var grid := VBoxContainer.new()
-	grid.add_theme_constant_override("separation", 6)
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var grid := _binding_grid()
 	add_child(grid)
 
 	for entry: Dictionary in _REBINDABLE_ACTIONS:
@@ -145,9 +143,7 @@ func _build_content() -> void:
 	add_child(pad_grid_hint)
 
 	_pending_pad_bindings = PlayerPrefs.pad_bindings.duplicate(true)
-	var pad_grid := VBoxContainer.new()
-	pad_grid.add_theme_constant_override("separation", 6)
-	pad_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var pad_grid := _binding_grid()
 	add_child(pad_grid)
 
 	for entry: Dictionary in _PAD_REBINDABLE:
@@ -167,6 +163,17 @@ func _build_content() -> void:
 	_conflict_label.add_theme_color_override("font_color", MenuStyle.DANGER)
 	_conflict_label.text = ""
 	add_child(_conflict_label)
+
+# Two bindings a row: a binding row is far narrower than the tab, and the list
+# is the bulk of its height.
+func _binding_grid() -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 40)
+	grid.add_theme_constant_override("v_separation", 6)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return grid
+
 
 # Leaving the tab mid-rebind cancels the pending key-listen. The tab is
 # shown/hidden via its scroll-wrapper
