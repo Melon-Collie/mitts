@@ -123,6 +123,10 @@ signal local_spectator_state_changed(is_spectator: bool)
 # grace window). HUD listens to flash the "PUCK OUT OF PLAY" toast; the
 # FACEOFF_PREP phase change drives the countdown banner separately.
 signal puck_out_of_play()
+# The authoritative board hit on every peer — the host's own, a client's from the
+# host — never a client's predicted one, so a mark is left only where every peer
+# agrees the puck struck.
+signal puck_marked_boards(position: Vector3, speed: float)
 # Emitted on every peer when an NHL-rule stoppage fires. Same role as
 # puck_out_of_play but lets HUD differentiate the toast text. Hosts emit
 # inside _consume_pending_faceoff; clients emit from the RPC handler.
@@ -2394,6 +2398,7 @@ func _wire_sound_signals() -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManagerScript.board_contact_sound(puck.get_puck_position()), puck.get_puck_position(), _puck_speed_volume(spd), 0.05)
 			puck.fire_board_impact_vfx(spd)
+			puck_marked_boards.emit(puck.get_puck_position(), spd)
 			NetworkManager.send_board_hit_to_all(puck.get_puck_position(), spd)
 			_record_replay_audio_event("puck_boards", puck.get_puck_position(), spd))
 		puck.puck_hit_goal_body.connect(func() -> void:
@@ -2482,6 +2487,7 @@ func _wire_sound_signals() -> void:
 			SoundManager.play_crowd(SoundManager.Sound.GOAL_HORN))
 	NetworkManager.board_hit_received.connect(
 		func(pos: Vector3, spd: float) -> void:
+			puck_marked_boards.emit(pos, spd)
 			if _cue_is_echo(_local_boards_cue_at):
 				return
 			SoundManager.play_world(SoundManagerScript.board_contact_sound(pos), pos, _puck_speed_volume(spd), 0.05)
