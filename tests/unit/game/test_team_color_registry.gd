@@ -121,6 +121,27 @@ func test_every_preset_has_a_contrasting_glove_accent() -> void:
 
 # The collar and the yoke are optional; a kit that omits them parses them null,
 # which the painters read as "fall back" (UniformPaint.collar_color / yoke_color).
+# The scorebug letters a team by its abbreviation alone, so two teams sharing
+# one could not be told apart.
+func test_every_bundled_team_has_its_own_three_letter_abbreviation() -> void:
+	var raw: Dictionary = JSON.parse_string(
+			FileAccess.get_file_as_string("res://data/team_colors.json"))
+	var three_caps := RegEx.create_from_string("^[A-Z]{3}$")
+	var seen: Dictionary = {}
+	for entry: Dictionary in raw.teams:
+		var abbr: String = entry.get("abbr", "")
+		assert_not_null(three_caps.search(abbr), "%s abbreviation '%s'" % [entry.name, abbr])
+		assert_false(seen.has(abbr), "%s shares %s with %s" % [entry.name, abbr, seen.get(abbr)])
+		seen[abbr] = entry.name
+
+
+func test_the_registry_hands_out_the_files_abbreviation() -> void:
+	var raw: Dictionary = JSON.parse_string(
+			FileAccess.get_file_as_string("res://data/team_colors.json"))
+	for slot: int in raw.teams.size():
+		assert_eq(TeamColorRegistry.get_preset_abbr(slot), raw.teams[slot].abbr)
+
+
 func test_collar_and_yoke_are_optional_and_parse_null() -> void:
 	var bare: Dictionary = TeamColorRegistry._parse_kit({"jersey": {"base": "#FF0000"}})
 	assert_true(bare.jersey.has("collar"), "every kit carries the collar key")
@@ -178,6 +199,9 @@ func test_hardcoded_fallback_mirrors_the_bundled_first_slots() -> void:
 		var entry: Dictionary = raw.teams[slot]
 		var preset: Dictionary = fallbacks[slot]
 		assert_eq(preset.name, entry.name, "slot %d fallback is the bundled team" % slot)
+		# The fallback carries no abbreviation; the name's first letters must give
+		# the bundled one.
+		assert_eq(preset.name.left(3).to_upper(), entry.abbr, "%s abbreviation" % entry.name)
 		for key: String in ["primary", "secondary", "light"]:
 			assert_eq(preset[key], Color(entry[key]), "%s %s" % [entry.name, key])
 		for side: String in ["home", "away"]:

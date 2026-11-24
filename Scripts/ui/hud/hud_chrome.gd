@@ -45,6 +45,13 @@ static func team_stripe(team_id: int) -> Color:
 		return pair.home if team_id == 0 else pair.away
 	return _UNRESOLVED
 
+# The club a side plays as, for its crest and abbreviation; -1 before the teams
+# are known.
+static func team_club(team_id: int) -> int:
+	if GameManager.teams.size() > 1:
+		return GameManager.teams[team_id].color_slot
+	return -1
+
 # The team's colour as text on the broadcast background — the stripe lifted
 # until it reads (TeamColorRegistry.get_score_ink_pair).
 static func team_ink(team_id: int) -> Color:
