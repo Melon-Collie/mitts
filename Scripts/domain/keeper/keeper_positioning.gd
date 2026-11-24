@@ -310,15 +310,16 @@ static func _committed(speed: float) -> float:
 
 
 # The puck at `puck` led round the net's centre by the angle its carrier's
-# body sweeps from `body` to `lands`, no further round than the wider of the
-# puck itself and `lands`: a lead that would turn it on past either, as a
-# carrier coming in beside a post does, would put his line behind his goal
-# line.
+# body sweeps from `body` to `lands`; past a sharp angle (SHARP_RAD), where the
+# post is his, no further round than the wider of the puck itself and `lands`:
+# a lead that would turn it on past both, as a carrier coming in beside a post
+# does, would put his line behind his goal line. Short of it the lead is the
+# puck's own, carried ahead of a body that sweeps across in front of him.
 static func _led(puck: Vector2, body: Vector2, lands: Vector2) -> Vector2:
 	if body.length() < 1e-4 or lands.length() < 1e-4 or puck.length() < 1e-4:
 		return puck
 	var led: Vector2 = puck.rotated(angle_difference(body.angle(), lands.angle()))
-	var widest: float = maxf(absf(_off_out(puck)), absf(_off_out(lands)))
+	var widest: float = maxf(maxf(absf(_off_out(puck)), absf(_off_out(lands))), SHARP_RAD)
 	var off: float = _off_out(led)
 	if absf(off) <= widest:
 		return led

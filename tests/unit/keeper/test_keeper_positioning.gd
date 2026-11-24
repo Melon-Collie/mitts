@@ -655,8 +655,8 @@ func test_a_carrier_is_read_on_no_further_than_he_has_to_go() -> void:
 # straight in has nowhere across to go, one with a sway in his stride only as
 # far as stopping the sway takes, one skating across all of his stopping
 # distance, and none further than stopping outright along his heading; and the
-# puck led round by the angle his body sweeps, no further round than the wider
-# of the puck and where the body gets to.
+# puck led round by the angle his body sweeps, past a sharp angle no further
+# round than the wider of the puck and where the body gets to.
 func test_a_carrier_is_read_on_only_as_far_as_each_way_he_cannot_stop() -> void:
 	var stop: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 	var straight: Vector2 = KeeperPositioning._committed_way(Vector2(0.0, 7.0))
@@ -677,7 +677,7 @@ func test_a_carrier_is_read_on_only_as_far_as_each_way_he_cannot_stop() -> void:
 	var led: Vector2 = KeeperPositioning._led(puck, Vector2(0.0, -3.0), beside)
 	assert_lte(absf(KeeperPositioning._off_out(led)),
 			maxf(absf(KeeperPositioning._off_out(puck)), absf(KeeperPositioning._off_out(beside))) + 1e-6,
-			"led no further round than the wider of the puck and where he gets to")
+			"past a sharp angle, led no further round than the wider of the puck and where he gets to")
 	assert_lt(led.y, 0.0, "in front of his goal line")
 
 
