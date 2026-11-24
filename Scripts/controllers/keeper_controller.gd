@@ -309,9 +309,6 @@ func _play(delta: float) -> void:
 	read.step(delta, in_net, flight)
 	_save_the_shot()
 	_cover_the_puck(delta, in_net)
-	if _ticks % PLANNER_EVERY == 0:
-		_reach_wide()
-		_set_hands()
 	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering and not _squaring:
 		_read_receivers()
 		if _at_feet:
@@ -322,6 +319,11 @@ func _play(delta: float) -> void:
 			_fetch_the_puck(in_net)
 			if not _fetching:
 				brain.decide(play.puck, play.motion, motor)
+	# After the brain, so a pad out and his hands answer whether it has him down
+	# for the carrier this planner tick, not the last.
+	if _ticks % PLANNER_EVERY == 0:
+		_reach_wide()
+		_set_hands()
 	_ticks += 1
 	motor.step(delta)
 	_place_body()
