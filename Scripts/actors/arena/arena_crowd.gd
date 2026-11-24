@@ -70,6 +70,8 @@ static func release_shared_material() -> void:
 static func shared_material() -> ShaderMaterial:
 	if _crowd_material == null:
 		_crowd_material = ArenaFigureMesh.new_material()
+		_crowd_material.set_shader_parameter("house_light", ArenaBowlSpec.HOUSE_LIGHT)
+		_crowd_material.set_shader_parameter("house_saturation", ArenaBowlSpec.HOUSE_SATURATION)
 	return _crowd_material
 
 

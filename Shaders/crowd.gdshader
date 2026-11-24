@@ -42,6 +42,10 @@ uniform vec3 look_at = vec3(0.0);
 uniform float look_weight : hint_range(0.0, 1.0) = 0.0;
 uniform float head_turn_max;
 uniform float trunk_turn_max;
+// The bowl's dimmer light and the colour it leaves (ArenaBowlSpec). 1 for
+// figures down at the ice, the rinkside staff.
+uniform float house_light = 1.0;
+uniform float house_saturation = 1.0;
 
 // The crowd casts no shadows (ArenaCrowd.attach), so nothing darkens a lap in
 // the row's shade of the seat back and the fan in front; this does instead, from
@@ -224,7 +228,9 @@ void fragment() {
 	}
 	float lap = v_head > 0.5 ? 1.0
 			: mix(LAP_SHADE, 1.0, smoothstep(0.0, body_top_y, v_height));
-	ALBEDO = paint * v_shade * lap;
+	vec3 lit = paint * v_shade * lap;
+	float luma = dot(lit, vec3(0.2126, 0.7152, 0.0722));
+	ALBEDO = mix(vec3(luma), lit, house_saturation) * house_light;
 	ROUGHNESS = 0.85;
 	// Cloth and skin, not plastic: well under the 0.5 default's F0.
 	SPECULAR = 0.3;

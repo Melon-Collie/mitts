@@ -11,6 +11,21 @@ extends RefCounted
 # moves. The defaults here are never used in anger — `ArenaStands` overwrites
 # every field — but they keep a bare `ArenaBowlSpec.new()` buildable in a test.
 
+# ── House light ──────────────────────────────────────────────────────────────
+# The share of the sheet's light that reaches the seats. The rig is aimed at the
+# ice, and a real bowl sits well below it, so the eye lands on the play. The
+# environment's ambient fills the bowl and the ice alike and cannot tell them
+# apart, so the bowl's own surfaces carry the difference in their albedo.
+const HOUSE_LIGHT: float = 0.55
+# How much of a fan's colour survives that dimmer light. The crowd is mostly
+# team colours at full saturation; at full chroma it reads as confetti.
+const HOUSE_SATURATION: float = 0.7
+
+
+static func in_house_light(c: Color) -> Color:
+	return Color(c.r * HOUSE_LIGHT, c.g * HOUSE_LIGHT, c.b * HOUSE_LIGHT, c.a)
+
+
 # ── Rink footprint ───────────────────────────────────────────────────────────
 var rink_length: float = 60.96
 var rink_width: float = 26.0

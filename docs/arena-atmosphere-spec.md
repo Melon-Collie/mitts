@@ -149,6 +149,24 @@ Two changes that unify the frame and make the figures read as intentional:
   Goalie: a matching Fresnel emission term in `keeper_kit.gdshader`. Dials:
   the rim constants (up = stronger edge) and the goalie's `rim * 0.2`.
 
+## House light (applied)
+
+From the top-down camera the stands fill both sides of the frame, and lit as
+brightly as the sheet the crowd (mostly team colours at full saturation) read
+louder than the play. A real bowl sits well below the ice's light. Ambient can't
+make that split: it fills the bowl and the ice alike, and lowering it starves
+the corners (above). So the bowl's own surfaces take it in their albedo:
+
+- `ArenaBowlSpec.HOUSE_LIGHT` (`0.55`) multiplies the concrete, the shell, the
+  seats and the fans (`ArenaBowlSpec.in_house_light`, and the crowd shader's
+  `house_light` uniform).
+- `ArenaBowlSpec.HOUSE_SATURATION` (`0.7`) pulls the fans' colour toward grey.
+- Not dimmed: the rinkside staff and furniture (down at the ice), the unshaded
+  vomitory tunnels (the concourse keeps its own light), and everything emissive.
+
+Dials: `HOUSE_LIGHT` up toward `1.0` for a brighter house, `HOUSE_SATURATION` up
+for louder fans. Both are one-liners.
+
 ## Options wiring (done)
 
 Per-effect toggles in **Options → Video → Performance** — "Volumetric Fog"
