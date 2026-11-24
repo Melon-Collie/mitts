@@ -7,11 +7,21 @@ extends Node
 # Advance warnings the clock crosses; the HUD owns the toast stack.
 signal warning_toast(text: String, color: Color)
 
-# The team badge: wide enough for three capitals at 20 px, with the crest larger
-# than the ~34 px row so the row crops it, and faded so the lettering reads.
-const _BADGE_WIDTH: float = 54.0
-const _CREST_PX: float = 46.0
-const _CREST_ALPHA: float = 0.45
+# The team badge, flush against the stripe. The crest is over twice the ~34 px
+# row, so the row crops it top and bottom, and a third of it hangs off the
+# badge's left edge behind the stripe. Muted (crest_tone.gdshader) rather than
+# faded: transparency lets the dark panel grey every colour, and the white
+# lettering needs it dark enough on the light fruits (Lemon, Lime) too.
+const _BADGE_WIDTH: float = 74.0
+const _CREST_PX: float = 78.0
+const _CREST_BLEED: float = 0.32
+const _CREST_ALPHA: float = 0.85
+const _CREST_SATURATION: float = 0.55
+const _CREST_VALUE: float = 0.75
+# The letters sit right of the badge's middle, over the crest's body rather than
+# the edge the stripe crops.
+const _ABBR_INSET: float = 14.0
+const _CREST_TONE := preload("res://Shaders/crest_tone.gdshader")
 
 var _panel: PanelContainer = null
 var _period_label: Label = null
@@ -26,6 +36,8 @@ var _home_crest: ClubCrest = null
 var _away_crest: ClubCrest = null
 var _home_abbr: Label = null
 var _away_abbr: Label = null
+# Both crests share one material: their tone is the same.
+var _crest_tone_material: ShaderMaterial = null
 var _score_0: int = 0
 var _score_1: int = 0
 var _clock_warning_label: Label = null
@@ -150,31 +162,32 @@ func _build_team_row(team_id: int) -> HBoxContainer:
 	stripe.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stripe_slot.add_child(stripe)
 
-	var abbr_margin := MarginContainer.new()
-	abbr_margin.add_theme_constant_override("margin_left", 8)
-	abbr_margin.add_theme_constant_override("margin_right", 4)
-	row.add_child(abbr_margin)
-	# The club's crest, faded and cropped by the row, behind its abbreviation.
+	var badge_margin := MarginContainer.new()
+	badge_margin.add_theme_constant_override("margin_left", 0)
+	badge_margin.add_theme_constant_override("margin_right", 4)
+	row.add_child(badge_margin)
 	var badge := Control.new()
 	badge.custom_minimum_size = Vector2(_BADGE_WIDTH, 0)
 	badge.clip_contents = true
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	abbr_margin.add_child(badge)
+	badge_margin.add_child(badge)
 	var club: int = HudChrome.team_club(team_id)
 	var crest := ClubCrest.new(_CREST_PX, club)
 	crest.modulate.a = _CREST_ALPHA
-	crest.set_anchors_preset(Control.PRESET_CENTER)
-	crest.offset_left = -_CREST_PX * 0.5
-	crest.offset_right = _CREST_PX * 0.5
+	crest.material = _crest_material()
+	crest.anchor_top = 0.5
+	crest.anchor_bottom = 0.5
+	crest.offset_left = -_CREST_PX * _CREST_BLEED
+	crest.offset_right = _CREST_PX * (1.0 - _CREST_BLEED)
 	crest.offset_top = -_CREST_PX * 0.5
 	crest.offset_bottom = _CREST_PX * 0.5
 	badge.add_child(crest)
-	var abbr_label := HudChrome.lbl(_abbr_of(club), 20, MenuStyle.BROADCAST_CREAM)
+	var abbr_label := HudChrome.lbl(_abbr_of(club), 21, MenuStyle.BROADCAST_CREAM)
+	abbr_label.add_theme_font_override("font", MenuStyle.display_font_spaced())
 	abbr_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	abbr_label.offset_left = _ABBR_INSET
 	abbr_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	abbr_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	abbr_label.add_theme_constant_override("outline_size", 5)
-	abbr_label.add_theme_color_override("font_outline_color", MenuStyle.BROADCAST_BG)
 	badge.add_child(abbr_label)
 
 	# Center-aligned in a fixed-width slot so single- vs two-digit scores
@@ -196,6 +209,15 @@ func _build_team_row(team_id: int) -> HBoxContainer:
 	row.set_meta(&"crest", crest)
 	row.set_meta(&"abbr_label", abbr_label)
 	return row
+
+
+func _crest_material() -> ShaderMaterial:
+	if _crest_tone_material == null:
+		_crest_tone_material = ShaderMaterial.new()
+		_crest_tone_material.shader = _CREST_TONE
+		_crest_tone_material.set_shader_parameter(&"saturation", _CREST_SATURATION)
+		_crest_tone_material.set_shader_parameter(&"value", _CREST_VALUE)
+	return _crest_tone_material
 
 
 func _abbr_of(club: int) -> String:
