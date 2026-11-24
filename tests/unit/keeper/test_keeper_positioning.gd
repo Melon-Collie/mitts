@@ -648,6 +648,40 @@ func test_a_carrier_is_read_on_no_further_than_he_has_to_go() -> void:
 	assert_eq(KeeperPositioning._short_of_him(puck, by_him, 3.0, at), 3.0, "going wide by him: all of it")
 
 
+# Where a carrier's body has to get to, in toward the net and across it, each
+# as far as stopping that much of his motion carries him: a body driving
+# straight in has nowhere across to go, one with a sway in his stride only as
+# far as stopping the sway takes, and one skating across all of his stopping
+# distance; and the puck led round by the angle that sweeps, no further round
+# than the wider of the puck and where the body gets to.
+func test_a_carrier_is_read_on_only_as_far_as_each_way_he_cannot_stop() -> void:
+	var stop: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+	var body := Vector2(0.3, -3.1)
+	var inward: Vector2 = -body.normalized()
+	var across: Vector2 = inward.orthogonal()
+	var straight: Vector2 = KeeperPositioning._committed_way(body, inward * 7.0)
+	assert_almost_eq(straight.dot(across), 0.0, 1e-6, "driving straight in: nowhere across")
+	assert_almost_eq(straight.dot(inward), 49.0 / (2.0 * stop), 1e-6, "in: his stopping distance")
+	var sway := Vector2(1.5, 6.0)
+	var swaying: Vector2 = KeeperPositioning._committed_way(body, sway)
+	var swings: float = sway.dot(across)
+	assert_almost_eq(absf(swaying.dot(across)), swings * swings / (2.0 * stop), 1e-6, "a sway: as far as stopping it")
+	for v: Vector2 in [sway, inward * 7.0, across * 8.0, Vector2(-3.0, 4.0)]:
+		assert_lte(KeeperPositioning._committed_way(body, v).length(), KeeperPositioning._committed(v.length()) + 1e-6,
+				"%s: no further than stopping outright along his heading carries him" % v)
+	var skating: Vector2 = KeeperPositioning._committed_way(body, across * 8.0)
+	assert_almost_eq(skating.dot(across), 64.0 / (2.0 * stop), 1e-6, "skating across: all of it across")
+	var puck := Vector2(0.8, -2.9)
+	assert_almost_eq(KeeperPositioning._led(puck, body, body + inward * 2.0).distance_to(puck), 0.0, 1e-5,
+			"a body coming straight at the net leads the puck nowhere")
+	var beside := Vector2(1.6, -0.5)
+	var led: Vector2 = KeeperPositioning._led(puck, Vector2(0.0, -3.0), beside)
+	assert_lte(absf(KeeperPositioning._off_out(led)),
+			maxf(absf(KeeperPositioning._off_out(puck)), absf(KeeperPositioning._off_out(beside))) + 1e-6,
+			"led no further round than the wider of the puck and where he gets to")
+	assert_lt(led.y, 0.0, "in front of his goal line")
+
+
 # The live brain, down for a carrier of theirs who then carries wide round him
 # toward the post: he stays on his knees, reads the carrier on along his way
 # rather than pushing for where the puck was, and ends back by that post

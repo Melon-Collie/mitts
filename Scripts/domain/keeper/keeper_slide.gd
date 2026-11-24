@@ -325,6 +325,11 @@ func stop_turning() -> void:
 	_turn_s = FOLD_S
 
 
+# The turn the rotation under way ends on.
+func turning_to() -> float:
+	return _yaw_to
+
+
 # Whether he is loaded, or loading, for a push from the butterfly he has not
 # yet made.
 func loads() -> bool:

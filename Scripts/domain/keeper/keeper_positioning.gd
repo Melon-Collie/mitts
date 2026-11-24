@@ -236,16 +236,16 @@ func _plant(post: Vector2, side: float, puck: Vector2, velocity: Vector2, motor:
 # pull across moves his line by no more than it moves the puck.
 func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var at := Vector2(motor.x, motor.z)
-	var heading: Vector2 = velocity.normalized()
 	var body: Vector2 = play.carrier if play.carrier != KeeperPlayRead.NO_CARRIER else puck
+	var way: Vector2 = _committed_way(body, velocity)
+	var heading: Vector2 = way.normalized()
 	# Read on no further than level with the back of the paint: by there a
 	# carrier going by him is the post's.
-	var far: float = _committed(velocity.length())
+	var far: float = way.length()
 	if heading.y > 1e-3:
 		far = minf(far, maxf(-DEPTH_FLOOR_M - body.y, 0.0) / heading.y)
 	var lands: Vector2 = body + heading * _short_of_him(body, heading, far, at)
-	var led: Vector2 = puck.rotated(angle_difference(body.angle(), lands.angle())) \
-			if body.length() > 1e-4 and lands.length() > 1e-4 else puck
+	var led: Vector2 = _led(puck, body, lands)
 	# Sliding back on the speed he dropped with, he gives the ground it carries
 	# him over for as long as the carrier could still be coming on at his own
 	# speed, not only as far as he has to: an error along the puck's line
@@ -299,6 +299,44 @@ static func _down_spot(puck: Vector2, at: Vector2, back: float, nearest: float) 
 # which cannot be cut short, is not spent on a choice he has not made.
 static func _committed(speed: float) -> float:
 	return speed * speed / (2.0 * GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2)
+
+
+# The puck at `puck` led round the net's centre by the angle its carrier's
+# body sweeps from `body` to `lands`, no further round than the wider of the
+# puck itself and `lands`: a lead that would turn it on past either, as a
+# carrier coming in beside a post does, would put his line behind his goal
+# line.
+static func _led(puck: Vector2, body: Vector2, lands: Vector2) -> Vector2:
+	if body.length() < 1e-4 or lands.length() < 1e-4 or puck.length() < 1e-4:
+		return puck
+	var led: Vector2 = puck.rotated(angle_difference(body.angle(), lands.angle()))
+	var widest: float = maxf(absf(_off_out(puck)), absf(_off_out(lands)))
+	var off: float = _off_out(led)
+	if absf(off) <= widest:
+		return led
+	var turned: float = signf(off) * widest
+	return Vector2(sin(turned), -cos(turned)) * puck.length()
+
+
+# How far round from straight out in front of the net `v` lies, + toward +x.
+static func _off_out(v: Vector2) -> float:
+	return atan2(v.x, -v.y)
+
+
+# Where a carrier's body at `body` skating at `velocity` has to get to, from
+# where it is: in toward the net and across it, each as far as stopping that
+# much of his motion as hard as a skater stops still carries him
+# (`_committed`), since he can stop either without the other. Across is all a
+# carrier skating across has to go; one driving in with a sway in his stride
+# has to go across hardly at all.
+static func _committed_way(body: Vector2, velocity: Vector2) -> Vector2:
+	if body.length() < 1e-4:
+		return velocity.normalized() * _committed(velocity.length())
+	var inward: Vector2 = -body.normalized()
+	var across: Vector2 = inward.orthogonal()
+	var comes: float = velocity.dot(inward)
+	var swings: float = velocity.dot(across)
+	return inward * signf(comes) * _committed(absf(comes)) + across * signf(swings) * _committed(absf(swings))
 
 
 # How far of the `far` a carrier at `puck` has to go along `heading` he is read

@@ -365,6 +365,40 @@ func test_a_turn_on_his_knees_gives_way_to_a_push() -> void:
 	assert_lt(started[1], started[0] - 2.0 * DT, "pushing sooner for having stopped the turn")
 
 
+# Down and turning on his knees, a goal he has to push for whose facing lies on
+# round the way he is turning lets the turn come round to its end: stopped, its
+# leg would fold down only for the push's load to swivel him through the same
+# turn again. One that wants less of the turn, or the other way, stops it.
+func test_a_turn_coming_round_toward_a_push_is_not_stopped_for_it() -> void:
+	_motor.rest = R.DOWN
+	_motor.z = -1.0
+	_motor.go_to(Vector2(0.0, -1.0), deg_to_rad(40.0), R.DOWN)
+	var t: float = 0.0
+	while not _motor.slide.turns() and t < 1.0:
+		_motor.step(DT)
+		t += DT
+	assert_true(_motor.slide.turns(), "turning on his knees")
+	for i: int in 3:
+		_motor.step(DT)
+	var ends: float = _motor.slide.turning_to()
+	var spot := Vector2(-1.2, -1.3)
+	_motor.go_to(spot, deg_to_rad(80.0), R.DOWN)
+	t = 0.0
+	while _motor.slide.turns() and t < 1.0:
+		_motor.step(DT)
+		t += DT
+	assert_almost_eq(_motor.yaw, ends, 1e-3, "the turn came round to its end")
+	t = 0.0
+	while not (_motor.is_idle() and Vector2(_motor.x, _motor.z).distance_to(spot) <= KeeperRoute.THERE_M) and t < 3.0:
+		_motor.step(DT)
+		t += DT
+		assert_eq(_motor.rest, R.DOWN, "on his knees throughout")
+	assert_lt(Vector2(_motor.x, _motor.z).distance_to(spot), KeeperRoute.THERE_M, "on to the goal he pushed for")
+	assert_true(KeeperMotor.turns_on_toward(0.0, deg_to_rad(40.0), deg_to_rad(80.0)), "on round the same way: let come")
+	assert_false(KeeperMotor.turns_on_toward(0.0, deg_to_rad(40.0), deg_to_rad(20.0)), "less of it: stopped")
+	assert_false(KeeperMotor.turns_on_toward(0.0, deg_to_rad(40.0), deg_to_rad(-30.0)), "the other way: stopped")
+
+
 # Dropped while he skates back, a goal across him rather than behind is a push
 # from where he lands: his edges take off the speed that was carrying him back
 # as he drops, and the push goes as he lands.
