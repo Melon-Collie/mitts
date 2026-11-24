@@ -383,6 +383,32 @@ func test_his_depth_answers_how_the_puck_moves() -> void:
 			"a faster swing deeper")
 
 
+# A carrier of theirs skating across in front of him off a sharp angle, out of
+# the bottom of the circle: his depth is one his shuffle keeps on the angle of
+# every point the carrier has to skate through before he could stop, not only
+# where the carrier is, so he backs in as the carrier comes rather than out to
+# meet him. A carrier skating straight at the net, or stopped, asks nothing of it.
+func test_a_carrier_coming_across_backs_him_in_ahead_of_his_swing() -> void:
+	var skates := KeeperFootwork.new()
+	for case: Array in [[Vector2(4.0, -2.5), 7.0], [Vector2(3.0, -2.2), 8.0], [Vector2(4.5, -3.0), 6.0]]:
+		var puck: Vector2 = case[0]
+		var speed: float = case[1]
+		var v := Vector2(-speed, 0.0)
+		var d: float = KeeperPositioning.depth_for(puck, v, skates, true)
+		var stops: float = speed * speed / (2.0 * GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2)
+		for i: int in 11:
+			var p: Vector2 = puck + v.normalized() * stops * i / 10.0
+			var swing: float = absf(p.cross(v)) / p.length_squared()
+			assert_lte(d * swing, skates.shuffle_speed + 1e-6,
+					"%s at %.0f m/s: on the angle %.1f m along his way" % [puck, speed, stops * i / 10.0])
+		var now: float = absf(puck.cross(v)) / puck.length_squared()
+		assert_lt(d, skates.shuffle_speed / now - 0.1, "%s: deeper than the swing he has now asks" % puck)
+	var wide := Vector2(3.0, -3.0)
+	assert_almost_eq(KeeperPositioning.swing_ahead(wide, -wide.normalized() * 8.0), 0.0, 1e-6,
+			"skating straight at the net: no swing")
+	assert_eq(KeeperPositioning.swing_ahead(wide, Vector2.ZERO), 0.0, "stopped: none")
+
+
 # The lines from a puck `from_m` straight out to both posts, ice to bar: whether
 # every one meets his gear, set in the low ready `depth` out, square to it.
 func _hides_both_posts(from_m: float, depth: float) -> bool:

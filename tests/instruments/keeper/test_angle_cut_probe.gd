@@ -1,7 +1,8 @@
 extends GutTest
 
 # The live keeper against a carrier of theirs coming in at an angle up close
-# and cutting across the top of the crease past him. Per move, the carrier's
+# and cutting across the top of the crease past him, or skating near straight
+# across in front of him off the bottom of the circle. Per move, the carrier's
 # body runs a quadratic curve from its start through its bend to its end at a
 # skating pace, the puck carried ahead of the body along its way. Per tick, as
 # the close-play probe measures it (`covered`: the share of the mouth a shot
@@ -59,7 +60,19 @@ func _moves() -> Array:
 		["low, curl across 2.0", 0.8, Vector2(-3.8, 2.4), Vector2(-1.8, 1.8), Vector2(1.2, 2.0)],
 		["slot angle, curl across 3", 1.0, Vector2(-3.0, 6.0), Vector2(-1.2, 3.0), Vector2(1.8, 2.8)],
 		["angle at post, curl across", 0.9, Vector2(-3.6, 3.6), Vector2(-1.6, 1.4), Vector2(1.2, 2.0)],
+		# Off the bottom of the faceoff circle, near straight across in front of
+		# him, out of the corner: from the circle's low inside edge to the far
+		# post's side.
+		_lateral("circle, across 2.6 at 7", Vector2(-5.5, 2.6), Vector2(2.5, 2.2), 7.0),
+		_lateral("circle, across 2.0 at 7", Vector2(-5.5, 2.0), Vector2(2.5, 1.8), 7.0),
+		_lateral("circle, across 3.0 at 6", Vector2(-5.0, 3.0), Vector2(3.0, 2.6), 6.0),
+		_lateral("circle, across 2.2 at 8", Vector2(-4.5, 2.2), Vector2(2.5, 2.0), 8.0),
 	]
+
+
+# A straight move from `from` to `to` at `speed`.
+static func _lateral(move_name: String, from: Vector2, to: Vector2, speed: float) -> Array:
+	return [move_name, from.distance_to(to) / speed, from, (from + to) * 0.5, to]
 
 
 # Before the move (t < 0) the carrier skates in along the curve's opening line
@@ -89,7 +102,7 @@ func test_trace() -> void:
 	var lines: PackedStringArray = []
 	var moves: Array = _moves()
 	for k: int in moves.size():
-		if which != "" and int(which) != k:
+		if which != "" and not which.split(",").has(str(k)):
 			continue
 		lines.append(_track(moves[k]))
 	gut.p("\n" + "\n".join(lines))
@@ -152,7 +165,7 @@ func test_saves_along_the_way() -> void:
 	var lines: PackedStringArray = ["move                       | save share released every 0.1 s from 0.1 s"]
 	var moves: Array = _moves()
 	for k: int in moves.size():
-		if which != "" and int(which) != k:
+		if which != "" and not which.split(",").has(str(k)):
 			continue
 		var m: Array = moves[k]
 		var row: String = "%-26s |" % m[0]

@@ -452,7 +452,8 @@ func _cannot_react(puck: Vector2, meeting: bool, motor: KeeperMotor) -> bool:
 # How far out along the puck's line he stands in the zone: the top of the
 # crease, or deeper as the puck at `puck` moving at `velocity` asks, from his
 # own skating (`skates`), and no further than his square shuffle keeps on the
-# angle of one moving across him.
+# angle of one moving across him: for a `carried` one, at the fastest it will
+# swing on the way its carrier has to skate (`swing_ahead`).
 #
 # A loose puck coming at him: no further out than C-cuts from a standstill set
 # him on the floor by the time it reaches the crease.
@@ -484,9 +485,26 @@ static func depth_for(puck: Vector2, velocity: Vector2, skates: KeeperFootwork, 
 		var arrives: float = maxf(r - top, 0.0) / coming
 		depth = minf(depth, DEPTH_FLOOR_M + GoaliePushRules.set_reach(skates.c_cut_speed, skates.accel, arrives))
 	var swing: float = absf(out.x * velocity.y - out.y * velocity.x) / maxf(r, 1e-3)
+	if carried:
+		swing = maxf(swing, swing_ahead(puck, velocity))
 	if swing > 1e-4:
 		depth = minf(depth, skates.shuffle_speed / swing)
 	return clampf(depth, minf(DEPTH_FLOOR_M, top), top)
+
+
+# The fastest a carried puck at `puck` moving at `velocity` swings across him
+# (rad/s, round the net's centre) on the stretch of its line its carrier has to
+# skate (`_committed`): at the nearest that stretch comes to the net. A carrier
+# coming across in front from a sharp angle sweeps slowly while wide and fast
+# as he passes in front, so a depth set on the swing he has now is one the
+# shuffle cannot keep by the time he gets there.
+static func swing_ahead(puck: Vector2, velocity: Vector2) -> float:
+	var speed: float = velocity.length()
+	if speed < 1e-4:
+		return 0.0
+	var heading: Vector2 = velocity / speed
+	var nearest: Vector2 = puck + heading * clampf(-puck.dot(heading), 0.0, _committed(speed))
+	return speed * absf(nearest.cross(heading)) / maxf(nearest.length_squared(), 1e-6)
 
 
 # The furthest back from a carried puck at `puck` he can stand on its line,
