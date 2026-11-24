@@ -1,0 +1,200 @@
+extends GutTest
+
+# The live keeper against a carrier of theirs coming in at an angle up close
+# and cutting across the top of the crease past him. Per move, the carrier's
+# body runs a quadratic curve from its start through its bend to its end at a
+# skating pace, the puck carried ahead of the body along its way. Per tick, as
+# the close-play probe measures it (`covered`: the share of the mouth a shot
+# from the puck now can reach that a straight shot meets his gear in), and
+# where his brain sends him: his zone, planted on the post, kept down, raced
+# to it. The save share is shots released cold at points along the way, saves
+# played out.
+
+const Stager := preload("res://tests/unit/ai/shot_odds_stager.gd")
+const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
+const Probe := preload("res://tests/instruments/keeper/test_close_play_probe.gd")
+
+const DT: float = Stager.DT
+const GOAL_Z: float = -GameRules.GOAL_LINE_Z
+const HOLD_S: float = 0.6
+const SHOT_M_S: float = 25.0
+const PUCK_AHEAD_M: float = 0.45
+const SHOT_EVERY_S: float = 0.1
+
+var _s: RefCounted = null
+var _h: RefCounted = null
+var _p: Probe = null
+var _ctrl: KeeperController = null
+var _goalie: Goalie = null
+var _puck: Puck = null
+var _shooter: Skater = null
+
+
+func before_each() -> void:
+	_goalie = load("res://Scenes/Goalie.tscn").instantiate() as Goalie
+	_puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
+	_shooter = load("res://Scenes/Skater.tscn").instantiate() as Skater
+	_ctrl = KeeperController.new()
+	add_child_autofree(_goalie)
+	add_child_autofree(_puck)
+	add_child_autofree(_shooter)
+	add_child_autofree(_ctrl)
+	_s = Stager.new(_goalie, _puck, _ctrl, _shooter)
+	_h = _s._h
+	_p = Probe.new()
+	_p._goalie = _goalie
+	_p._ctrl = _ctrl
+
+
+static func _ice(x: float, out: float) -> Vector3:
+	return Vector3(x, 0.0, GOAL_Z + out)
+
+
+# Each move: its name, its length in seconds, the body's start, bend and end
+# as (x, out).
+func _moves() -> Array:
+	return [
+		["hash, curl across 2.6", 0.9, Vector2(-3.6, 4.6), Vector2(-1.6, 2.4), Vector2(1.6, 2.6)],
+		["dot-ish, curl across 2.2", 0.9, Vector2(-4.2, 3.6), Vector2(-1.8, 2.0), Vector2(1.4, 2.3)],
+		["low, curl across 2.0", 0.8, Vector2(-3.8, 2.4), Vector2(-1.8, 1.8), Vector2(1.2, 2.0)],
+		["slot angle, curl across 3", 1.0, Vector2(-3.0, 6.0), Vector2(-1.2, 3.0), Vector2(1.8, 2.8)],
+		["angle at post, curl across", 0.9, Vector2(-3.6, 3.6), Vector2(-1.6, 1.4), Vector2(1.2, 2.0)],
+	]
+
+
+# Before the move (t < 0) the carrier skates in along the curve's opening line
+# at its opening speed, so he arrives at it already moving.
+func _body_at(m: Array, t: float) -> Vector3:
+	var a: Vector2 = m[2]
+	var b: Vector2 = m[3]
+	var c: Vector2 = m[4]
+	if t < 0.0:
+		var q0: Vector2 = a + (b - a) * 2.0 / float(m[1]) * t
+		return _ice(q0.x, q0.y)
+	var u: float = clampf(t / float(m[1]), 0.0, 1.0)
+	var q: Vector2 = a.lerp(b, u).lerp(b.lerp(c, u), u)
+	return _ice(q.x, q.y)
+
+
+func _puck_at(m: Array, t: float) -> Vector3:
+	var body: Vector3 = _body_at(m, t)
+	var way: Vector3 = _body_at(m, t + DT) - body
+	if way.length() < 1e-5:
+		way = body - _body_at(m, t - DT)
+	return body + way.normalized() * PUCK_AHEAD_M
+
+
+func test_trace() -> void:
+	var which: String = OS.get_environment("ANGLE_CUT_MOVE")
+	var lines: PackedStringArray = []
+	var moves: Array = _moves()
+	for k: int in moves.size():
+		if which != "" and int(which) != k:
+			continue
+		lines.append(_track(moves[k]))
+	gut.p("\n" + "\n".join(lines))
+	assert_true(true)
+
+
+func _track(m: Array) -> String:
+	var rows: PackedStringArray = ["== %s" % m[0]]
+	_stage(m)
+	var ticks: int = int(float(m[1]) / DT) + int(0.2 / DT)
+	var was: Vector3 = _body_at(m, 0.0)
+	var worst: float = 1.0
+	for i: int in ticks:
+		var t: float = (i + 1) * DT
+		var body: Vector3 = _body_at(m, t)
+		var puck: Vector3 = _puck_at(m, t)
+		_carry(body, (body - was) / DT, puck)
+		was = body
+		var c: Vector2 = _p._covered(puck)
+		worst = minf(worst, c.x)
+		if i % 3 == 0:
+			var me: Vector3 = _ctrl._net.affine_inverse() * _goalie.global_position
+			var pn: Vector3 = _ctrl._net.affine_inverse() * puck
+			var pos: KeeperPositioning = _ctrl.brain
+			rows.append("t %.2f puck %+.2f,%+.2f | him %+.2f,%+.2f rest %d mover %d goal %+.2f,%+.2f r%d | z%d pl%d kd%d post %+.0f | cov %.2f low %.2f" % [
+					t, pn.x, pn.z, me.x, me.z, _ctrl.motor.rest, _ctrl.motor._mover,
+					_ctrl.motor.route.spot.x, _ctrl.motor.route.spot.y, _ctrl.motor.route.rest,
+					pos.zone, int(pos.planted), int(pos.kept_down), pos.post_side, c.x, c.y])
+	rows.append("worst cov %.2f" % worst)
+	return "\n".join(rows)
+
+
+# Settled on the carrier where he starts skating in from, then skated in to the
+# move's opening.
+func _stage(m: Array) -> void:
+	var ticks: int = int(HOLD_S / DT)
+	_s._settle_on(_body_at(m, -ticks * DT))
+	var was: Vector3 = _body_at(m, -(ticks + 1) * DT)
+	for i: int in ticks:
+		var t: float = (i - ticks) * DT
+		var body: Vector3 = _body_at(m, t)
+		_carry(body, (body - was) / DT, _puck_at(m, t))
+		was = body
+
+
+func _carry(body: Vector3, velocity: Vector3, puck: Vector3) -> void:
+	_shooter.global_position = body
+	_shooter.velocity = velocity
+	_shooter.current_shot_state = SkaterStateMachine.State.SKATING_WITH_PUCK
+	if _puck.get_carrier() != _shooter:
+		_puck.set_carrier(_shooter)
+	_puck.global_position = Vector3(puck.x, _puck.ice_height, puck.z)
+	_puck.linear_velocity = Vector3.ZERO
+	_ctrl._physics_process(DT)
+
+
+# Shots released cold at points along each move: the save share at each.
+func test_saves_along_the_way() -> void:
+	var which: String = OS.get_environment("ANGLE_CUT_MOVE")
+	var lines: PackedStringArray = ["move                       | save share released every 0.1 s from 0.1 s"]
+	var moves: Array = _moves()
+	for k: int in moves.size():
+		if which != "" and int(which) != k:
+			continue
+		var m: Array = moves[k]
+		var row: String = "%-26s |" % m[0]
+		var t: float = 0.1
+		var sum: float = 0.0
+		var n: int = 0
+		while t <= float(m[1]) + 1e-6:
+			var share: float = _save_share(m, t)
+			row += " %.2f" % share
+			sum += share
+			n += 1
+			t += SHOT_EVERY_S
+		lines.append(row + " | mean %.3f" % (sum / maxf(n, 1)))
+	gut.p("\n" + "\n".join(lines))
+	assert_true(true)
+
+
+func _save_share(m: Array, until: float) -> float:
+	var shots: int = 0
+	var goals: int = 0
+	for loft: int in Stager.LOFTS:
+		for i: int in range(1, Stager.AIM_POINTS, 3):
+			_stage(m)
+			var t: float = 0.0
+			var was: Vector3 = _body_at(m, 0.0)
+			while t < until - 1e-6:
+				t += DT
+				var body: Vector3 = _body_at(m, t)
+				_carry(body, (body - was) / DT, _puck_at(m, t))
+				was = body
+			var at: Vector3 = _puck_at(m, t)
+			var aim := Vector3(Stager.aim_x(i), 0.0, GOAL_Z)
+			var vel: Vector3 = _h.shot_velocity_at(at, aim, loft, SHOT_M_S, 0.0)
+			_shooter.current_shot_state = SkaterStateMachine.State.FOLLOW_THROUGH
+			_puck.clear_carrier()
+			_puck.global_position = Vector3(at.x, _puck.ice_height, at.z)
+			_puck.apply_release_velocity(vel)
+			_puck.puck_released.emit()
+			var r: int = _h.fire_tracking_rebound(at, aim, loft, SHOT_M_S, 0.0)
+			if _h.last_part < 0 and r != Harness.GOAL:
+				continue
+			shots += 1
+			if r == Harness.GOAL or _h.rebound_goal:
+				goals += 1
+	return 1.0 - float(goals) / maxf(shots, 1)
