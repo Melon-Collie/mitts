@@ -123,6 +123,11 @@ func _track(m: Array) -> String:
 		was = body
 		var c: Vector2 = _p._covered(puck)
 		worst = minf(worst, c.x)
+		if OS.get_environment("ANGLE_CUT_EVERY") != "":
+			var sl: KeeperSlide = _ctrl.motor.slide
+			rows.append("   t %.3f mover %d slide phase %d rotating %s yaw %+.2f turning_to %+.2f at %+.2f,%+.2f goal %+.2f,%+.2f facing %+.2f" % [
+					t, _ctrl.motor._mover, sl.phase, str(sl._rotating), _ctrl.motor.yaw, sl.turning_to(), _ctrl.motor.x,
+					_ctrl.motor.z, _ctrl.motor.route.spot.x, _ctrl.motor.route.spot.y, _ctrl.motor.route.facing])
 		if i % 3 == 0:
 			var me: Vector3 = _ctrl._net.affine_inverse() * _goalie.global_position
 			var pn: Vector3 = _ctrl._net.affine_inverse() * puck

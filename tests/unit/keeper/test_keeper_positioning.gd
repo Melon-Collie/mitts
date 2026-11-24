@@ -648,31 +648,28 @@ func test_a_carrier_is_read_on_no_further_than_he_has_to_go() -> void:
 	assert_eq(KeeperPositioning._short_of_him(puck, by_him, 3.0, at), 3.0, "going wide by him: all of it")
 
 
-# Where a carrier's body has to get to, in toward the net and across it, each
-# as far as stopping that much of his motion carries him: a body driving
+# Where a carrier has to get to, across the mouth and toward the goal line,
+# each as far as stopping that much of his motion carries him: one driving
 # straight in has nowhere across to go, one with a sway in his stride only as
-# far as stopping the sway takes, and one skating across all of his stopping
-# distance; and the puck led round by the angle that sweeps, no further round
-# than the wider of the puck and where the body gets to.
+# far as stopping the sway takes, one skating across all of his stopping
+# distance, and none further than stopping outright along his heading; and the
+# puck led round by the angle his body sweeps, no further round than the wider
+# of the puck and where the body gets to.
 func test_a_carrier_is_read_on_only_as_far_as_each_way_he_cannot_stop() -> void:
 	var stop: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
-	var body := Vector2(0.3, -3.1)
-	var inward: Vector2 = -body.normalized()
-	var across: Vector2 = inward.orthogonal()
-	var straight: Vector2 = KeeperPositioning._committed_way(body, inward * 7.0)
-	assert_almost_eq(straight.dot(across), 0.0, 1e-6, "driving straight in: nowhere across")
-	assert_almost_eq(straight.dot(inward), 49.0 / (2.0 * stop), 1e-6, "in: his stopping distance")
+	var straight: Vector2 = KeeperPositioning._committed_way(Vector2(0.0, 7.0))
+	assert_almost_eq(straight.x, 0.0, 1e-6, "driving straight in: nowhere across")
+	assert_almost_eq(straight.y, 49.0 / (2.0 * stop), 1e-6, "in: his stopping distance")
 	var sway := Vector2(1.5, 6.0)
-	var swaying: Vector2 = KeeperPositioning._committed_way(body, sway)
-	var swings: float = sway.dot(across)
-	assert_almost_eq(absf(swaying.dot(across)), swings * swings / (2.0 * stop), 1e-6, "a sway: as far as stopping it")
-	for v: Vector2 in [sway, inward * 7.0, across * 8.0, Vector2(-3.0, 4.0)]:
-		assert_lte(KeeperPositioning._committed_way(body, v).length(), KeeperPositioning._committed(v.length()) + 1e-6,
+	assert_almost_eq(KeeperPositioning._committed_way(sway).x, 2.25 / (2.0 * stop), 1e-6, "a sway: as far as stopping it")
+	assert_almost_eq(KeeperPositioning._committed_way(Vector2(-8.0, 0.0)).x, -64.0 / (2.0 * stop), 1e-6,
+			"skating across: all of it across")
+	for v: Vector2 in [sway, Vector2(0.0, 7.0), Vector2(-8.0, 0.0), Vector2(-3.0, 4.0), Vector2(5.0, -2.0)]:
+		assert_lte(KeeperPositioning._committed_way(v).length(), KeeperPositioning._committed(v.length()) + 1e-6,
 				"%s: no further than stopping outright along his heading carries him" % v)
-	var skating: Vector2 = KeeperPositioning._committed_way(body, across * 8.0)
-	assert_almost_eq(skating.dot(across), 64.0 / (2.0 * stop), 1e-6, "skating across: all of it across")
+	var body := Vector2(0.3, -3.1)
 	var puck := Vector2(0.8, -2.9)
-	assert_almost_eq(KeeperPositioning._led(puck, body, body + inward * 2.0).distance_to(puck), 0.0, 1e-5,
+	assert_almost_eq(KeeperPositioning._led(puck, body, body * 0.5).distance_to(puck), 0.0, 1e-5,
 			"a body coming straight at the net leads the puck nowhere")
 	var beside := Vector2(1.6, -0.5)
 	var led: Vector2 = KeeperPositioning._led(puck, Vector2(0.0, -3.0), beside)

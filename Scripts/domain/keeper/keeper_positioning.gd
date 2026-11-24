@@ -237,7 +237,7 @@ func _plant(post: Vector2, side: float, puck: Vector2, velocity: Vector2, motor:
 func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var at := Vector2(motor.x, motor.z)
 	var body: Vector2 = play.carrier if play.carrier != KeeperPlayRead.NO_CARRIER else puck
-	var way: Vector2 = _committed_way(body, velocity)
+	var way: Vector2 = _committed_way(velocity)
 	var heading: Vector2 = way.normalized()
 	# Read on no further than level with the back of the paint: by there a
 	# carrier going by him is the post's.
@@ -323,20 +323,14 @@ static func _off_out(v: Vector2) -> float:
 	return atan2(v.x, -v.y)
 
 
-# Where a carrier's body at `body` skating at `velocity` has to get to, from
-# where it is: in toward the net and across it, each as far as stopping that
-# much of his motion as hard as a skater stops still carries him
-# (`_committed`), since he can stop either without the other. Across is all a
-# carrier skating across has to go; one driving in with a sway in his stride
-# has to go across hardly at all.
-static func _committed_way(body: Vector2, velocity: Vector2) -> Vector2:
-	if body.length() < 1e-4:
-		return velocity.normalized() * _committed(velocity.length())
-	var inward: Vector2 = -body.normalized()
-	var across: Vector2 = inward.orthogonal()
-	var comes: float = velocity.dot(inward)
-	var swings: float = velocity.dot(across)
-	return inward * signf(comes) * _committed(absf(comes)) + across * signf(swings) * _committed(absf(swings))
+# Where a carrier skating at `velocity` has to get to from where he is: across
+# the mouth and toward the goal line, each as far as stopping that much of his
+# motion as hard as a skater stops still carries him (`_committed`), since he
+# can stop either without the other. A carrier skating across the slot has all
+# of his stopping distance to go across; one driving in with a sway in his
+# stride hardly any.
+static func _committed_way(velocity: Vector2) -> Vector2:
+	return Vector2(signf(velocity.x) * _committed(absf(velocity.x)), signf(velocity.y) * _committed(absf(velocity.y)))
 
 
 # How far of the `far` a carrier at `puck` has to go along `heading` he is read
