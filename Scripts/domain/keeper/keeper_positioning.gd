@@ -463,10 +463,10 @@ func _spot(puck: Vector2, motor: KeeperMotor) -> Vector2:
 	if zone == Zone.AWAY:
 		return out * crease_edge(out) * AWAY_DEPTH_SHARE
 	# Set for a shot he sees wound up: no retreat for the shooter's approach,
-	# only for where he is.
+	# only for where he is; his swing across answered as any carrier's.
 	var winding: bool = play != null and play.winding_up
 	var carried: bool = play != null and play.theirs and not play.loose
-	var depth: float = depth_for(puck, Vector2.ZERO if winding else _velocity, motor.footwork, carried)
+	var depth: float = depth_for(puck, _velocity, motor.footwork, carried, winding)
 	if play != null:
 		for receiver: Vector2 in play.receivers:
 			depth = minf(depth, pass_depth(puck, receiver, motor.footwork, play.delay_s))
@@ -505,12 +505,16 @@ func _cannot_react(puck: Vector2, meeting: bool, motor: KeeperMotor) -> bool:
 # from the speed he already has toward the net (the skaters' stride,
 # AIStrideRamp). Never deeper than the closing depth for a carrier's approach:
 # backed onto the floor he shows a shot from the slot both sides of the net.
-static func depth_for(puck: Vector2, velocity: Vector2, skates: KeeperFootwork, carried: bool = false) -> float:
+#
+# Set for a shot he sees `wound_up`, he backs in for no more of the shooter's
+# approach than one standing there; the swing is answered all the same.
+static func depth_for(puck: Vector2, velocity: Vector2, skates: KeeperFootwork, carried: bool = false,
+		wound_up: bool = false) -> float:
 	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
 	var top: float = crease_edge(out)
 	var depth: float = top
 	var r: float = puck.length()
-	var coming: float = -velocity.dot(out)
+	var coming: float = 0.0 if wound_up else -velocity.dot(out)
 	if carried:
 		depth = minf(depth, closing_depth(puck))
 		if r > TIGHT_M:

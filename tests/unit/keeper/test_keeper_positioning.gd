@@ -387,14 +387,16 @@ func test_his_depth_answers_how_the_puck_moves() -> void:
 # the bottom of the circle: his depth is one his shuffle keeps on the angle of
 # every point the carrier has to skate through before he could stop, not only
 # where the carrier is, so he backs in as the carrier comes rather than out to
-# meet him. A carrier skating straight at the net, or stopped, asks nothing of it.
+# meet him; wound up to shoot as he comes, the same. A carrier skating straight
+# at the net, or stopped, asks nothing of it.
 func test_a_carrier_coming_across_backs_him_in_ahead_of_his_swing() -> void:
 	var skates := KeeperFootwork.new()
-	for case: Array in [[Vector2(4.0, -2.5), 7.0], [Vector2(3.0, -2.2), 8.0], [Vector2(4.5, -3.0), 6.0]]:
+	for case: Array in [[Vector2(4.0, -2.5), 7.0, false], [Vector2(3.0, -2.2), 8.0, false], [Vector2(4.5, -3.0), 6.0, false],
+			[Vector2(4.0, -2.5), 7.0, true], [Vector2(3.0, -2.2), 8.0, true]]:
 		var puck: Vector2 = case[0]
 		var speed: float = case[1]
 		var v := Vector2(-speed, 0.0)
-		var d: float = KeeperPositioning.depth_for(puck, v, skates, true)
+		var d: float = KeeperPositioning.depth_for(puck, v, skates, true, case[2])
 		var stops: float = speed * speed / (2.0 * GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2)
 		for i: int in 11:
 			var p: Vector2 = puck + v.normalized() * stops * i / 10.0

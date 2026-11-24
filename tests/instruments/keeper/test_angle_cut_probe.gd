@@ -29,6 +29,9 @@ var _ctrl: KeeperController = null
 var _goalie: Goalie = null
 var _puck: Puck = null
 var _shooter: Skater = null
+# ANGLE_CUT_WINDING: the carrier holds a wrister wound up the whole way, as a
+# human can, skating with the shot loaded.
+var _winding: bool = OS.get_environment("ANGLE_CUT_WINDING") != ""
 
 
 func before_each() -> void:
@@ -156,7 +159,8 @@ func _stage(m: Array) -> void:
 func _carry(body: Vector3, velocity: Vector3, puck: Vector3) -> void:
 	_shooter.global_position = body
 	_shooter.velocity = velocity
-	_shooter.current_shot_state = SkaterStateMachine.State.SKATING_WITH_PUCK
+	_shooter.current_shot_state = SkaterStateMachine.State.WRISTER_AIM if _winding \
+			else SkaterStateMachine.State.SKATING_WITH_PUCK
 	if _puck.get_carrier() != _shooter:
 		_puck.set_carrier(_shooter)
 	_puck.global_position = Vector3(puck.x, _puck.ice_height, puck.z)
