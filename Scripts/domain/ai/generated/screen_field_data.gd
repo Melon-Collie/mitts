@@ -8,7 +8,7 @@ class_name AIScreenFieldData
 # (-1: the baseline, nobody in front), his distance off the line (positive
 # to the shooter's left), goals, shots (3 lofts x AIM_POINTS aims).
 
-const FINGERPRINT: String = "53b316d27a784f476af84c40776f2270"
+const FINGERPRINT: String = "af98c537c716dc9e652964091270bc56"
 const SPOT_X: Array[float] = [-8.0, -4.0, 0.0, 4.0, 8.0]
 const SPOT_FWD: Array[float] = [6.0, 9.5, 15.0, 19.5]
 const STATION_ALONG_M: Array[float] = [1.5, 2.5, 3.5, 5.0]
