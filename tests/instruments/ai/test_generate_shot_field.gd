@@ -75,6 +75,14 @@ const DRIVE_MAX_FWD_M: float = 9.5
 # A drive's deke onto the spot from a lane this far to either side
 # (Stager.stage_drive_deke).
 const DRIVE_DEKE_ACROSS_M: Array[float] = [-2.0, -1.0, 1.0, 2.0]
+# A drive he plays down (a spot inside his down_range at the drive's pace) turns
+# on centimetres of the carrier's lane: when he drops, and where to, takes a
+# cell's open set from none of its aims to an eighth of them over a 15 cm lane
+# change, and no carrier places his lane that finely. So each such drive and
+# drive-deke is measured again from lanes this far to either side, the release
+# shifted with it, each its own row of the spot: the kernel averages over them
+# as it does over the feeds, rather than reading one lane's luck as the spot's.
+const DRIVE_LANE_JITTER_M: Array[float] = [-0.3, -0.15, 0.15, 0.3]
 
 var _s: RefCounted = null
 var _body_radius: float = 0.0
@@ -140,12 +148,25 @@ func _cells() -> Array:
 						for mode: String in ["O", "K"]:
 							out.append([x, fwd, "PASSOUT", mode, passer.x, speed])
 			if fwd <= DRIVE_MAX_FWD_M:
-				out.append([x, fwd, "DRIVE", "D", x, Stager.DRIVE_M_S])
-				for across: float in DRIVE_DEKE_ACROSS_M:
-					var from: float = x - across
-					if _on_ice(from, fwd + Stager.DEKE_FORWARD_M_S * Stager.DEKE_S):
-						out.append([x, fwd, "DRIVE_DEKE", "C", from, Stager.DRIVE_M_S])
+				var lanes: Array[float] = [0.0]
+				if _played_down(x, fwd):
+					lanes.append_array(DRIVE_LANE_JITTER_M)
+				for dx: float in lanes:
+					if _on_ice(x + dx, fwd):
+						out.append([x, fwd, "DRIVE", "D", x + dx, Stager.DRIVE_M_S, dx])
+					for across: float in DRIVE_DEKE_ACROSS_M:
+						var from: float = x - across + dx
+						if _on_ice(from, fwd + Stager.DEKE_FORWARD_M_S * Stager.DEKE_S) \
+								and _on_ice(x + dx, fwd):
+							out.append([x, fwd, "DRIVE_DEKE", "C", from, Stager.DRIVE_M_S, dx])
 	return out
+
+
+# Whether he plays a drive to the spot `x`, `fwd` metres out down: inside the
+# range he leaves his feet at for a carrier coming at a drive's pace.
+static func _played_down(x: float, fwd: float) -> bool:
+	return Vector2(x, fwd).length() \
+			<= KeeperPositioning.down_range(Stager.DRIVE_M_S, AIGoalieModel.goalie_drop_s)
 
 
 # Whether a skater at `x`, `fwd` metres out from the goal line stands clear of
@@ -176,10 +197,12 @@ func _stage_for(cell: Array) -> Callable:
 			var pace: float = cell[5]
 			return func() -> Vector3: return _s.stage_pass_out(spot, from, pace)
 		"DRIVE":
-			return func() -> Vector3: return _s.stage_drive(spot)
+			var lane := Vector3(cell[4], 0.0, spot.z)
+			return func() -> Vector3: return _s.stage_drive(lane)
 		"DRIVE_DEKE":
-			var across: float = spot.x - float(cell[4])
-			return func() -> Vector3: return _s.stage_drive_deke(spot, across)
+			var onto: Vector3 = spot + Vector3(cell[6], 0.0, 0.0)
+			var across: float = onto.x - float(cell[4])
+			return func() -> Vector3: return _s.stage_drive_deke(onto, across)
 	return func() -> Vector3: return _s.stage_set(spot)
 
 
