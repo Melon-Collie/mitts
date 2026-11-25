@@ -205,10 +205,11 @@ func test_trace() -> void:
 			var me: Vector3 = _ctrl._net.affine_inverse() * _goalie.global_position
 			var pn: Vector3 = _ctrl._net.affine_inverse() * (now[1] as Vector3)
 			var b: KeeperPositioning = _ctrl.brain
-			rows.append("t %+.2f puck %+.2f,%+.2f | him %+.2f,%+.2f (out %.2f) rest %d mover %d goal %+.2f,%+.2f r%d | kd%d low%d" % [
+			rows.append("t %+.2f puck %+.2f,%+.2f | him %+.2f,%+.2f (out %.2f) rest %d mover %d goal %+.2f,%+.2f r%d | kd%d low%d poke%d save%d%d" % [
 					t, pn.x, pn.z, me.x, me.z, Vector2(me.x, me.z).length(), _ctrl.motor.rest, _ctrl.motor._mover,
 					_ctrl.motor.route.spot.x, _ctrl.motor.route.spot.y, _ctrl.motor.route.rest, int(b.kept_down),
-					int(_ctrl.motor.low_ready.asked)])
+					int(_ctrl.motor.low_ready.asked), int(_ctrl._poking), int(_ctrl.motor.can_save(false)),
+					int(_ctrl.motor.can_save(true))])
 		i += 1
 	gut.p("\n" + "\n".join(rows))
 	assert_true(true)
