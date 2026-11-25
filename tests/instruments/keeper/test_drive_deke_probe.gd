@@ -25,6 +25,10 @@ const FROMS_M: Array[float] = [6.0, 4.5]
 const WALK_M_S: float = 4.0
 const WALK_ACCEL_M_S2: float = 6.0
 const WALK_S: float = 1.0
+# The bait for his poke: the puck pushed out ahead of the carrier, and pulled
+# back in.
+const BAIT_OUT_M: float = 0.9
+const BAIT_PULL_S: float = 0.15
 
 var _s: RefCounted = null
 var _h: RefCounted = null
@@ -61,6 +65,8 @@ static func _at(move: String, from: float, t: float) -> Array:
 	var px: float = 0.35
 	var winding: bool = false
 	if t <= 0.0:
+		if move == "bait poke":
+			return [_ice(bx, out), _ice(0.1, out - BAIT_OUT_M), false]
 		return [_ice(bx, out), _ice(px, out - 0.3), false]
 	var pull: float = smoothstep(0.0, PULL_S, t)
 	match move:
@@ -88,6 +94,14 @@ static func _at(move: String, from: float, t: float) -> Array:
 			out = from - (DRIVE_M_S * t - 0.5 * 6.0 * minf(t, 0.6) * minf(t, 0.6))
 			bx = -2.2 * cut
 			px = bx - 0.45 * cut + 0.35 * (1.0 - cut)
+		"bait poke":
+			# Driven in with the puck pushed out ahead of him, then pulled back
+			# in tight to the backhand.
+			out = from - DRIVE_M_S * 0.85 * t
+			var back: float = smoothstep(0.0, BAIT_PULL_S, t)
+			px = lerpf(0.1, -0.5, back)
+			bx = -0.1 * back
+			return [_ice(bx, out), _ice(px, out - lerpf(BAIT_OUT_M, 0.15, back)), false]
 		"pull up, walk":
 			# Braking out of the drive while he sets off across, the puck on his
 			# forehand ahead of him the way he goes.
@@ -114,13 +128,15 @@ static func _move_s(move: String) -> float:
 			return 0.6
 		"pull up, walk":
 			return WALK_S
+		"bait poke":
+			return BAIT_PULL_S
 		"stop":
 			return DRIVE_M_S / GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 	return PULL_S
 
 
 const MOVES: Array[String] = ["straight", "fore to back", "back to fore", "double", "fake, pull", "walk wide", "stop",
-		"pull up, walk"]
+		"pull up, walk", "bait poke"]
 
 
 func test_drive_deke() -> void:
@@ -133,7 +149,7 @@ func test_drive_deke() -> void:
 	for move: String in MOVES:
 		if which != "" and not which.split(";").has(move):
 			continue
-		for from: float in FROMS_M:
+		for from: float in _froms():
 			var at_move: Vector2 = _run(move, from, 0.0)
 			var at_end: Vector2 = _run(move, from, _move_s(move))
 			var row: String = "%-13s %4.1f | %8.2f  %s | %7.2f  %s |" % [move, from, at_move.x,
@@ -146,6 +162,18 @@ func test_drive_deke() -> void:
 			lines.append(row + " | %.2f" % (sum / DELAYS_S.size()))
 	gut.p("\n" + "\n".join(lines))
 	assert_true(true)
+
+
+# The distances out the moves start from: FROMS_M, or DRIVE_DEKE_FROMS
+# ("6;4.5;3.5").
+func _froms() -> Array[float]:
+	var env: String = OS.get_environment("DRIVE_DEKE_FROMS")
+	if env == "":
+		return FROMS_M
+	var out: Array[float] = []
+	for f: String in env.split(";"):
+		out.append(float(f))
+	return out
 
 
 # Traces one move tick by tick: DRIVE_DEKE_TRACE="<move>@<from>".
