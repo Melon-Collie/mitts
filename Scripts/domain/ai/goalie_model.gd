@@ -244,12 +244,16 @@ const GOALIE_JAM_DISTANCE_M: float = 0.4
 #
 # A release on/behind the GOAL LINE is returned unchanged: there is no shot
 # from back there, and clamping it would invent a point-blank release in front
-# of the keeper.
+# of the keeper. So is one wider of him than his pads reach across: beside him,
+# not behind him, it leaves from where it is. Lifted out in front of him, a
+# carrier going wide to the goal line read a look from the slot's doorstep.
 static func release_ahead_of_goalie(
 		release: Vector3, attacking_goal: Vector3, goalie_pos: Vector3) -> Vector3:
 	var net_normal_z: float = -signf(attacking_goal.z)
 	var release_fwd: float = (release.z - attacking_goal.z) * net_normal_z
 	if release_fwd < 0.001:
+		return release
+	if absf(release.x - goalie_pos.x) > standing_pad_reach_m + GameRules.PUCK_COLLISION_RADIUS:
 		return release
 	var goalie_fwd: float = (goalie_pos.z - attacking_goal.z) * net_normal_z
 	var min_fwd: float = goalie_fwd + GOALIE_JAM_DISTANCE_M

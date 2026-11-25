@@ -661,11 +661,37 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var share: float = _field.holds.share[k]
 		var pull_s: float = _field.holds.pull_s[k]
 		var sample_speed: float = ctx.self_wrister_shot_speed * share
-		# Priced through the seam like the carry and pass legs, against the
-		# keeper as he reads now: the field prices what he does over the wind-up
-		# and flight. With no keeper replicated he is taken square and set. Over
-		# where the hands can let it go (AIBotMechanics.shot_hold_sample_s): a
-		# release on the line is no shot, and a hold with none left is none.
+		# The field reads the keeper as the charge starts, so a pull before it is
+		# time he has: one he reads (longer than his leg read) he tracks, and that
+		# hold is priced against him as the pull leaves him, squared toward the
+		# puck where the charge starts and still moving onto it
+		# (AIGoalieModel.predict_goalie_pos). Read as he stands now, a pull across
+		# the body at a breakaway's pace priced a keeper the carry had beaten, and
+		# the press waited on the load until the puck was on the goal line.
+		var keeper_at: Vector3 = keeper_now
+		var keeper_vel_at: float = keeper_vel_x
+		var keeper_yaw_at: float = keeper_yaw
+		if keeper_now.is_finite() and pull_s > AIGoalieModel.goalie_leg_delay_s:
+			var charged_at: Vector3 = self_pos + hold + horizontal_velocity * pull_s
+			var to_net: Vector3 = attacking_goal - charged_at
+			to_net.y = 0.0
+			var closing: float = horizontal_velocity.dot(to_net.normalized()) \
+					if to_net.length_squared() > 0.0001 else 0.0
+			keeper_at = AIGoalieModel.predict_goalie_pos(keeper_now, attacking_goal, pull_s,
+					charged_at, closing)
+			if ctx.reads_goalie_motion:
+				var across: float = AIGoalieModel.goalie_arc_match_x(keeper_at, attacking_goal,
+						charged_at) - keeper_at.x
+				keeper_vel_at = signf(across) * AIGoalieModel.GOALIE_MAX_LATERAL_SPEED_MPS \
+						* AIGoalieModel.goalie_unsettled(keeper_now, attacking_goal, pull_s,
+								charged_at, closing)
+			if not is_nan(keeper_yaw):
+				keeper_yaw_at = atan2(-(charged_at.x - keeper_at.x), -(charged_at.z - keeper_at.z))
+		# Priced through the seam like the carry and pass legs: the field prices
+		# what he does over the wind-up and flight. With no keeper replicated he is
+		# taken square and set. Over where the hands can let it go
+		# (AIBotMechanics.shot_hold_sample_s): a release on the line is no shot, and
+		# a hold with none left is none.
 		var sum: float = 0.0
 		var shootable: bool = false
 		for j: int in hold_samples:
@@ -676,14 +702,15 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 				continue
 			shootable = true
 			sum += AIActionScoring.score_shoot_value(
-					AIGoalieModel.release_ahead_of_goalie(released_at, attacking_goal, goalie_now),
-					attacking_goal, keeper_now, _field.opponents_release,
-					keeper_vel_x, _stance_met(keeper_stance, released_at, attacking_goal, horizontal_velocity),
+					AIGoalieModel.release_ahead_of_goalie(released_at, attacking_goal,
+							keeper_at if keeper_at.is_finite() else goalie_now),
+					attacking_goal, keeper_at, _field.opponents_release,
+					keeper_vel_at, _stance_met(keeper_stance, released_at, attacking_goal, horizontal_velocity),
 					sample_speed,
-					_field.opponent_caps, -1.0, keeper_yaw,
+					_field.opponent_caps, -1.0, keeper_yaw_at,
 					AIActionScoring.FLAT_REBOUND_CREDIT, _shot_history(),
-					AIScreenField.best_uplift(released_at, attacking_goal, keeper_now,
-							_field.screens_release, _field.screen_cfg) if keeper_now.is_finite() else 0.0)
+					AIScreenField.best_uplift(released_at, attacking_goal, keeper_at,
+							_field.screens_release, _field.screen_cfg) if keeper_at.is_finite() else 0.0)
 		if not shootable:
 			continue
 		var s: float = sum / hold_samples * _field.holds.keep[k]
