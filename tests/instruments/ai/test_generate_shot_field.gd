@@ -102,8 +102,8 @@ func before_each() -> void:
 
 
 # Every cell, in a fixed order: [spot_x, spot_fwd, kind, mode, passer_x,
-# feed_speed]. kind is SET / DEKE / FEED / DECOY / WRAP / PASSOUT / DRIVE /
-# DRIVE_DEKE; mode C
+# feed_speed], and for a drive its lane's offset (DRIVE_LANE_JITTER_M). kind is
+# SET / DEKE / FEED / DECOY / WRAP / PASSOUT / DRIVE / DRIVE_DEKE; mode C
 # (charged), O (one-timer), K (caught, then charged) or D (charged in stride);
 # passer_x is the deke's start for a deke, the decoy's or the wrap carrier's x
 # for those, whose metres out ride in feed_speed's column (a wrap's negative:
@@ -156,9 +156,8 @@ func _cells() -> Array:
 						out.append([x, fwd, "DRIVE", "D", x + dx, Stager.DRIVE_M_S, dx])
 					for across: float in DRIVE_DEKE_ACROSS_M:
 						var from: float = x - across + dx
-						if _on_ice(from, fwd + Stager.DEKE_FORWARD_M_S * Stager.DEKE_S) \
-								and _on_ice(x + dx, fwd):
-							out.append([x, fwd, "DRIVE_DEKE", "C", from, Stager.DRIVE_M_S, dx])
+						if _on_ice(from, Stager.drive_deke_from_m(fwd)) and _on_ice(x + dx, fwd):
+							out.append([x, fwd, "DRIVE_DEKE", "D", from, Stager.DRIVE_M_S, dx])
 	return out
 
 

@@ -47,7 +47,7 @@ func _cells() -> Array:
 				true, false, false],
 		["drive", func() -> Vector3: return _s.stage_drive(_at(1.0, 6.0)), false, false, true],
 		["drive and deke", func() -> Vector3: return _s.stage_drive_deke(_at(0.0, 4.5), 1.0), false, false,
-				false],
+				true],
 	]
 
 
