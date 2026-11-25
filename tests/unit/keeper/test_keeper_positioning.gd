@@ -724,50 +724,6 @@ func test_a_carrier_going_round_him_is_pushed_back_to_the_post_with() -> void:
 		assert_gt(-side * _motor.yaw, 0.0, "%s: turned toward the carrier" % what)
 
 
-# The live brain, down for a carrier of theirs driven down the goal line at
-# the near post, who then pulls back up and out to the edge of the slot and
-# holds there: where he went down the low net is no longer sealed from the
-# puck, and he is asked back up though no shot from there could be lifted over
-# his hands.
-func test_down_by_the_post_he_gets_up_once_the_carrier_pulls_back_out() -> void:
-	for side: float in [1.0, -1.0]:
-		_brain = KeeperPositioning.new()
-		_brain.play = KeeperPlayRead.new()
-		_motor = KeeperMotor.new()
-		_motor.x = side * 0.8
-		_motor.z = -0.5
-		var what: String = "%+.0f" % side
-		var legs: Array[Vector2] = [Vector2(side * 4.0, -1.0), Vector2(side * 1.4, -0.35), Vector2(side * 2.4, -2.0)]
-		var body: Vector2 = legs[0]
-		var heading: Vector2 = (legs[1] - legs[0]).normalized()
-		var tick: int = 0
-		var was_down: bool = false
-		var asked_up: bool = false
-		for leg: int in 2:
-			var to: Vector2 = legs[leg + 1]
-			heading = (to - body).normalized()
-			while body.distance_to(to) > 0.05:
-				body += heading * 4.6 * DT
-				_brain.play.step(DT, body + heading * 0.45, heading * 4.6, false, body, true)
-				if tick % PLANNER_EVERY == 0:
-					_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
-				_motor.step(DT)
-				tick += 1
-				was_down = was_down or _motor.rest == R.DOWN
-		assert_true(was_down, "%s: down for him at the post" % what)
-		for i: int in int(1.2 / DT):
-			_brain.play.step(DT, body + heading * 0.45, Vector2.ZERO, false, body, true)
-			if tick % PLANNER_EVERY == 0:
-				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
-			_motor.step(DT)
-			tick += 1
-			asked_up = asked_up or _motor.route.rest == R.FEET
-		var puck: Vector2 = body + heading * 0.45
-		assert_false(KeeperPositioning._clears_his_hands(puck, Vector2(side * 0.5, -0.2)),
-				"%s: from out there nothing is lifted over his hands" % what)
-		assert_true(asked_up, "%s: asked back up with the carrier pulled out" % what)
-
-
 # Once he is down, he is not stood up while a puck from where the carrier has
 # it cannot be lifted over his hands: the live brain, down for a carrier in
 # tight who then backs out, stays on his knees until the carrier is far enough

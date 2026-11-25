@@ -121,14 +121,6 @@ var planted: bool = false
 var kept_down: bool = false
 # The seal's turn, as `_seal` leaves it.
 var _seal_turn: float = 0.0
-# Whether he catches right-handed, his body the left-catcher's reflected
-# (KeeperSkeleton.mirrored): his controller's, set before each decision.
-var mirrored: bool = false
-# Scratch for `_seals_the_posts_down`: his pose and bones as the motor has him.
-var _down_pose := KeeperPose.new()
-var _down_skel := KeeperSkeleton.new()
-var _hit := SweptDiscOBB.Result.new()
-var _hit_scratch := SweptDiscOBB.Result.new()
 
 
 # Sets `motor`'s goal for the puck at `puck` moving at `velocity`, both in the
@@ -151,8 +143,7 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var me := Vector2(motor.x, motor.z)
 	var comes: float = -velocity.dot(puck.normalized()) if puck.length() > 1e-4 else 0.0
 	var down_within: float = down_range(comes, motor.save_move.drop_s * motor.low_ready.fall_share())
-	var held: bool = kept_down and (puck.length() <= down_within + MARGIN_M
-			or (not _clears_his_hands(puck, me) and _seals_the_posts_down(puck, motor)))
+	var held: bool = kept_down and (puck.length() <= down_within + MARGIN_M or not _clears_his_hands(puck, me))
 	var was_down: bool = kept_down or motor.rest == KeeperRoute.Rest.DOWN or motor.drops()
 	kept_down = tight and not planted and (held or puck.length() <= down_within) \
 			and (kept_down or motor.rest != KeeperRoute.Rest.FEET or motor.drops()
@@ -213,29 +204,6 @@ static func down_range(coming: float, drop_s: float) -> float:
 static func _clears_his_hands(puck: Vector2, me: Vector2) -> bool:
 	return GameRules.PUCK_COLLISION_HALF_HEIGHT + PlayerAttributes.steepest_loft_tan() * puck.distance_to(me) \
 			> KeeperHandsLow.highest()
-
-
-# Whether down as the motor has him, where he is, he still seals the low net
-# at both posts from a puck at `puck`: the line it has inside either post along
-# the ice, half a pad up and at a pad's height (KeeperReach's) meets his gear.
-# That is the butterfly's job, and standing on his spot he hides the posts
-# (`closing_depth`); one that no longer does it, as after a carrier pulls back
-# out from beside a post he went down on, is out of place, not only down, and
-# getting up covers more of the net than staying there.
-func _seals_the_posts_down(puck: Vector2, motor: KeeperMotor) -> bool:
-	motor.pose(_down_pose)
-	_down_skel.mirrored = mirrored
-	_down_skel.pose(_down_pose)
-	var from: Vector3 = KeeperPoke.in_his_space(puck, motor, mirrored)
-	from.y = GameRules.PUCK_COLLISION_HALF_HEIGHT
-	for i: int in 2:
-		var to: Vector3 = KeeperPoke.in_his_space(Vector2((2.0 * i - 1.0) * KeeperCoverage.MOUTH_HALF_M, 0.0),
-				motor, mirrored)
-		for y: float in KeeperReach.HEIGHTS_M:
-			to.y = y
-			if KeeperGear.nearest(_down_skel, from, to, GameRules.PUCK_COLLISION_RADIUS, _hit, _hit_scratch) < 0:
-				return false
-	return true
 
 
 # Whether he at `me` covers what he would from `spot`: on its line from the
