@@ -318,6 +318,7 @@ func _play(delta: float) -> void:
 			_poke_check()
 			_fetch_the_puck(in_net)
 			if not _fetching:
+				brain.mirrored = _keeper.skeleton.mirrored
 				brain.decide(play.puck, play.motion, motor)
 	# After the brain, so a pad out and his hands answer whether it has him down
 	# for the carrier this planner tick, not the last.

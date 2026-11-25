@@ -133,7 +133,7 @@ func test_trace() -> void:
 func _track(m: Array) -> String:
 	var rows: PackedStringArray = ["== %s" % m[0]]
 	_stage(m)
-	var ticks: int = int(float(m[1]) / DT) + int(0.2 / DT)
+	var ticks: int = int((float(m[1]) + HOLD_AFTER_S + 0.2) / DT)
 	var was: Vector3 = _body_at(m, 0.0)
 	var worst: float = 1.0
 	for i: int in ticks:
