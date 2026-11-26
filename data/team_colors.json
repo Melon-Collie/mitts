@@ -1997,14 +1997,24 @@
           "yoke": "#1E2A5A",
           "stripes": [
             {
-              "pos": 0.074,
-              "width": 0.03,
+              "pos": 0.07,
+              "width": 0.022,
               "color": "#EED35C"
             },
             {
-              "pos": 0.104,
-              "width": 0.03,
+              "pos": 0.092,
+              "width": 0.022,
               "color": "#F6AD4E"
+            },
+            {
+              "pos": 0.114,
+              "width": 0.022,
+              "color": "#F25F70"
+            },
+            {
+              "pos": 0.79,
+              "width": 0.06,
+              "color": "#F25F70"
             },
             {
               "pos": 0.85,
@@ -2040,6 +2050,16 @@
               "pos": 0.343,
               "width": 0.04,
               "color": "#F6AD4E"
+            },
+            {
+              "pos": 0.383,
+              "width": 0.04,
+              "color": "#F25F70"
+            },
+            {
+              "pos": 0.54,
+              "width": 0.04,
+              "color": "#F25F70"
             },
             {
               "pos": 0.58,
