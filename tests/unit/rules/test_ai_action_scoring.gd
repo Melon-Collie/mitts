@@ -362,6 +362,15 @@ func test_release_clamped_when_behind_goalie() -> void:
 	assert_almost_eq(clamped.x, 0.5, 1e-6, "lateral offset is untouched")
 
 
+func test_release_beside_the_goalie_is_untouched() -> void:
+	# Wider of him than his pads reach, a release level with him or deeper is
+	# beside him, not behind him: it leaves from where it is.
+	var goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 1.0)
+	var wide := Vector3(AIGoalieModel.standing_pad_reach_m + 0.5, 0.0, GameRules.GOAL_LINE_Z - 0.4)
+	assert_eq(AIGoalieModel.release_ahead_of_goalie(wide, GOAL, goalie), wide,
+			"a release beside the keeper is not lifted out in front of him")
+
+
 func test_release_untouched_when_in_front_of_goalie() -> void:
 	var goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 2.0)
 	var in_front := Vector3(1.0, 0.0, 20.0)         # out in the slot, well in front

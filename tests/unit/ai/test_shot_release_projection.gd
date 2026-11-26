@@ -221,9 +221,12 @@ func test_a_sharp_angle_shot_arrives_where_it_was_aimed() -> void:
 
 func test_a_doorstep_shot_arrives_where_it_was_aimed() -> void:
 	# Short range beside the net — the other shape that went wide in the log
-	# (several of the misses were inside 3 m).
-	var p: Probe = _measure(Vector3(1.4, 0.0, -24.6), Vector3(0.5, 0.0, -2.0),
-			[Vector3(-1.0, 0.0, -25.2)])
+	# (several of the misses were inside 3 m). Started where every nearby start
+	# shoots (released 2 to 2.6 m out): from 2.5 m out on the post's side the
+	# carrier goes on wide to the angle the shot field reads the keeper weak at,
+	# and the test would skip.
+	var p: Probe = _measure(Vector3(1.0, 0.0, -GameRules.GOAL_LINE_Z + 3.0),
+			Vector3(0.0, 0.0, -2.0), [Vector3(-1.0, 0.0, -25.2)])
 	if not p.fired or not p.aim_point.is_finite():
 		pending("no shot with a locked aim in the doorstep fixture")
 		return

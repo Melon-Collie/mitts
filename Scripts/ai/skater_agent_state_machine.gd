@@ -433,6 +433,10 @@ const _ONE_TICK_S: float = 1.0 / _PhysicsConstants.PHYSICS_TICK
 # goalie and the cursor never converges. INF on CARRY entry and after pre-aim
 # hands off to the press state.
 var _locked_pre_aim_point: Vector3 = Vector3.INF
+# Where a latched shot whose puck already carries its load keeps the blade off
+# the body while the press waits for its point (_pre_aim_target); INF until the
+# wait finds the load there.
+var _rest_blade_offset: Vector3 = Vector3.INF
 # The carrier's shot_press_point, mirrored at the intent transition: a latched
 # shot presses once the body reaches it (_press_point_reached).
 var _shot_press_point: Vector3 = Vector3.INF
@@ -1770,6 +1774,7 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 							if _shot_aim_locked.is_finite()
 							else _shot_aim_point(snapshot, self_pos))
 					_shot_press_point = _carrier.shot_press_point
+					_rest_blade_offset = Vector3.INF
 				State.PASS_PRESSED:
 					_locked_pre_aim_point = _pass_aim_point(snapshot, self_pos)
 					_lock_pass_hold()
@@ -1867,14 +1872,22 @@ func _lock_pass_hold() -> void:
 # committed aim from wherever the puck sits, so while the press waits for its
 # planned point the puck stays there: pulled on to the hold, its sweep across
 # the body unloads it, and the press then waits on the load with the body
-# skating on at the keeper.
+# skating on at the keeper. The puck stays by the blade staying where the load
+# found it, off the body (_rest_blade_offset). Never aim the cursor at the
+# puck instead: the cursor names mid-blade, so each step re-seats the puck a
+# little further along it, and at skating pace it slid across the body off
+# its load within a few tenths of a second.
 func _pre_aim_target(snapshot: WorldSnapshot, self_pos: Vector3,
 		self_state: SkaterNetworkState) -> Vector3:
 	if _intended_action == State.SHOOT_PRESSED and _pre_aim_holds_puck() \
 			and snapshot.puck_state != null and self_state != null \
 			and _load_ready(snapshot, self_pos, self_state):
-		var p: Vector3 = snapshot.puck_state.position
-		return Vector3(p.x, 0.0, p.z)
+		if not _rest_blade_offset.is_finite():
+			_rest_blade_offset = _mouse_pos - self_pos if _mouse_pos_initialized \
+					else snapshot.puck_state.position - self_pos
+			_rest_blade_offset.y = 0.0
+		return self_pos + _rest_blade_offset
+	_rest_blade_offset = Vector3.INF
 	return _aim_target_for_intent(snapshot, self_pos)
 
 

@@ -358,13 +358,23 @@ func _step_mover(dt: float) -> void:
 			elif drop.state == KeeperDrop.State.DOWN:
 				_rest_on(Rest.DOWN)
 		Mover.SLIDE:
-			# A turn on his knees gives way to a goal he has to push for, and a
-			# push not yet made to a goal back within his knees' reach.
-			if _goal and route.rest == Rest.DOWN:
+			# A turn on his knees goes on only while he is still asked down and it
+			# is coming round toward the goal's facing and no further, or the goal
+			# is within his knees' reach and the turn ends on its facing: stopped
+			# short of that, its leg folds down before a push can load, which then
+			# swivels him through the same turn again. Any other turn, one going
+			# round the wrong way or for a goal on his feet, is stopped where it
+			# has got to: a rotation commits him to nothing. A push not yet made
+			# gives way to a goal back within his knees' reach.
+			if _goal and slide.turns():
 				var near: bool = Vector2(x, z).distance_to(route.spot) <= KeeperRoute.KNEE_REACH_M
-				if slide.turns() and not near:
+				var ends_faced: bool = absf(angle_difference(slide.turning_to(), route.facing)) <= KeeperRoute.DOWN_FACED_RAD
+				if not (route.rest == Rest.DOWN
+						and (turns_on_toward(yaw, slide.turning_to(), route.facing) or (near and ends_faced))):
 					slide.stop_turning()
-				elif slide.loads() and near and slide.bound_for().distance_to(route.spot) > KeeperRoute.KNEE_REACH_M:
+			elif _goal and route.rest == Rest.DOWN:
+				var near: bool = Vector2(x, z).distance_to(route.spot) <= KeeperRoute.KNEE_REACH_M
+				if slide.loads() and near and slide.bound_for().distance_to(route.spot) > KeeperRoute.KNEE_REACH_M:
 					slide.turn_instead(route.facing)
 			slide.step(dt)
 			x = slide.x
@@ -526,6 +536,14 @@ func drops() -> bool:
 # Whether the speed he dropped with as he skated is still sliding him.
 func carries() -> bool:
 	return _mover == Mover.SAVE and _landing and save_move.velocity != Vector2.ZERO
+
+
+# Whether a turn on his knees from `at` to `ends` goes the way round that
+# `facing` lies from `at`, and no further round than it.
+static func turns_on_toward(at: float, ends: float, facing: float) -> bool:
+	var going: float = wrapf(ends - at, -PI, PI)
+	var wanted: float = wrapf(facing - at, -PI, PI)
+	return going * wanted > 0.0 and absf(going) <= absf(wanted)
 
 
 # Landed from a glide and still sliding on his pads: whether the slide is

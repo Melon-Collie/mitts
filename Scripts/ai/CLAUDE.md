@@ -215,9 +215,11 @@ carried), the carry cursor rests the puck in that release's hold, and it is
 the hold the carrier locks at commit, so the cursor does not jump when the
 press takes over (`SkaterAgentCarryCursor`). A latched shot whose puck already
 carries its priced share where it sits stays there while the press waits for
-its planned point (`_pre_aim_target`): pulled on to the hold, the sweep across
+its planned point (`_pre_aim_target`), the blade held where the load found it
+off the body (`_rest_blade_offset`): pulled on to the hold, the sweep across
 the body unloaded it, and a lower tier's press waited on the load until it was
-on the keeper.
+on the keeper. Never hold it by aiming the cursor at the puck: the cursor names
+mid-blade, and the puck slid across the body off its load as badly.
 
 ## Reception doctrine
 

@@ -1167,7 +1167,10 @@ reaches back into what remains.
     is never settled. DRIVE cells measure him (a carrier driving straight in at
     breakaway pace from 25 m, charging in stride), and DRIVE_DEKE cells the same
     drive dekeing onto the spot from a lane either side; both are carried-in
-    history.
+    history. Where he plays the drive down, each is measured again from lanes
+    a little either side (`DRIVE_LANE_JITTER_M`), each its own row of the
+    spot: there the open set turns on centimetres of lane, and one lane's
+    staging read alone priced a lucky hole as the spot's.
   - **The keeper is read as a Stance** — upright, down, or sealed on the post —
     plus his offset off the square, his lateral speed, his depth, and how
     square he faces the release (`AIShotOdds.squareness`, left out when his

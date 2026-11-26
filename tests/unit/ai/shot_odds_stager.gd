@@ -167,13 +167,24 @@ func stage_drive(spot: Vector3) -> Vector3:
 
 
 # The keeper tracking a carrier driving straight in at DRIVE_M_S in the lane
-# `across` metres to the side of `spot`, who then dekes across onto it as
-# stage_deke's does. Returns where the puck ends up, the release point.
+# `across` metres to the side of `spot`, who dekes across onto the spot's lane
+# over DEKE_S still at that pace, the puck on his body, to a charge's skate
+# short of it; release(driven) skates the charge. A skater sheds at most
+# GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2 of it, nowhere near enough in a
+# deke's time to stop on a spot in tight, so the deke never slows him. Returns
+# the release point.
 func stage_drive_deke(spot: Vector3, across: float) -> Vector3:
-	var start := Vector3(spot.x - across, 0.0, spot.z + DEKE_FORWARD_M_S * DEKE_S)
-	_h.settle_ready(Vector3(start.x, 0.0, GOAL_Z + DRIVE_FROM_M))
-	_h.drive_in(start.x, DRIVE_FROM_M, start.z - GOAL_Z, DRIVE_M_S)
-	return _h.deke_across(spot.x, DEKE_S, DEKE_FORWARD_M_S)
+	var lane: float = spot.x - across
+	_h.settle_ready(Vector3(lane, 0.0, GOAL_Z + DRIVE_FROM_M))
+	_h.drive_in(lane, DRIVE_FROM_M, drive_deke_from_m(spot.z - GOAL_Z), DRIVE_M_S)
+	_h.deke_across(spot.x, DEKE_S, DRIVE_M_S, 0.0)
+	return spot
+
+
+# How far out a drive dekes from onto a release `fwd` metres out: a deke's and
+# a charge's skate at the drive's pace short of it.
+static func drive_deke_from_m(fwd: float) -> float:
+	return fwd + DRIVE_M_S * DEKE_S + CHARGE_M
 
 
 # The keeper set on a carrier who skated in to `at` straight from up the ice.
