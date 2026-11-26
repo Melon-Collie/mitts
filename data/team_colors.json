@@ -1887,26 +1887,36 @@
       "home": {
         "helmet": "#1E2A5A",
         "shoulders": {
-          "text": "#1E2A5A"
+          "text": "#F5EBDA"
         },
         "jersey": {
-          "base": "#1E2A5A",
-          "collar": "#EE7F62",
+          "base": "#EE7F62",
+          "yoke": "#1E2A5A",
           "stripes": [
             {
-              "pos": 0.77,
-              "width": 0.05,
+              "pos": 0.07,
+              "width": 0.022,
               "color": "#F6B23F"
             },
             {
-              "pos": 0.82,
-              "width": 0.05,
-              "color": "#EE7F62"
+              "pos": 0.092,
+              "width": 0.022,
+              "color": "#D44A3C"
             },
             {
-              "pos": 0.87,
-              "width": 0.05,
+              "pos": 0.807,
+              "width": 0.022,
               "color": "#D44A3C"
+            },
+            {
+              "pos": 0.829,
+              "width": 0.022,
+              "color": "#F6B23F"
+            },
+            {
+              "pos": 0.92,
+              "width": 0.16,
+              "color": "#1E2A5A"
             }
           ]
         },
@@ -1914,29 +1924,44 @@
           "base": "#EE7F62",
           "stripes": [
             {
-              "pos": 0.858,
-              "width": 0.472,
+              "pos": 0.1415,
+              "width": 0.283,
               "color": "#1E2A5A"
             },
             {
-              "pos": 0.623,
-              "width": 0.057,
+              "pos": 0.294,
+              "width": 0.022,
               "color": "#F6B23F"
             },
             {
-              "pos": 0.679,
-              "width": 0.057,
-              "color": "#EE7F62"
-            },
-            {
-              "pos": 0.736,
-              "width": 0.057,
+              "pos": 0.316,
+              "width": 0.022,
               "color": "#D44A3C"
             },
             {
-              "pos": 0.566,
-              "width": 0.057,
+              "pos": 0.527,
+              "width": 0.022,
+              "color": "#D44A3C"
+            },
+            {
+              "pos": 0.549,
+              "width": 0.022,
+              "color": "#F6B23F"
+            },
+            {
+              "pos": 0.62,
+              "width": 0.12,
               "color": "#1E2A5A"
+            },
+            {
+              "pos": 0.691,
+              "width": 0.022,
+              "color": "#F6B23F"
+            },
+            {
+              "pos": 0.713,
+              "width": 0.022,
+              "color": "#D44A3C"
             }
           ]
         },
@@ -1967,8 +1992,9 @@
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#F5EBDA",
-          "outline": "#F5EBDA"
+          "color": "#1E2A5A",
+          "stroke": "#F6B23F",
+          "outline": "#1E2A5A"
         }
       },
       "away": {
