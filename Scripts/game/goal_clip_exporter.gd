@@ -47,6 +47,7 @@ signal stored_replay_taking_over
 signal stored_replay_frame_changed(game_state: Dictionary, carrier_team: int)
 signal stored_replay_stopped
 signal stored_replay_body_check(force: float)
+signal stored_replay_boards_check(contact: Vector3, force: float)
 
 var _capture: ClipFrameCapture = null
 var _exporter: GifExporter = null
@@ -73,6 +74,7 @@ func _ready() -> void:
 	_stored_driver.taking_over.connect(stored_replay_taking_over.emit)
 	_stored_driver.replay_frame_changed.connect(stored_replay_frame_changed.emit)
 	_stored_driver.body_check_replayed.connect(stored_replay_body_check.emit)
+	_stored_driver.boards_check_replayed.connect(stored_replay_boards_check.emit)
 	_stored_driver.replay_finishing.connect(_close_segment)
 	_stored_driver.replay_stopped.connect(_on_stored_replay_stopped)
 

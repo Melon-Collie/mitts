@@ -286,6 +286,11 @@ const _EXCITE_DECAY_TIME: float = 3.0
 # Through a fight's stoppage the bowl is on its feet the whole time, arms up,
 # turned to the fight; it turns there quicker than it settles back after.
 const _FIGHT_EXCITEMENT: float = 0.9
+# A body into the boards brings the fans behind that glass up at once, then lets
+# them settle; the softest heard check still rouses them this much.
+const _BANG_RISE_TIME: float = 0.12
+const _BANG_DECAY_TIME: float = 1.6
+const _BANG_SOFT: float = 0.45
 const _LOOK_TURN_TIME: float = 0.6
 
 # The ceiling rig's housings and its intro cue. Outlives rebuilds (see _ready).
@@ -296,6 +301,8 @@ const _REFLECTION_NAME: StringName = &"ArenaReflection"
 
 var _excitement: float = 0.0
 var _excite_tween: Tween = null
+var _bang_tween: Tween = null
+var _bang_at: Vector3 = Vector3.ZERO
 # The look at a fight: how far the bowl has turned to it, and where it is.
 var _look_weight: float = 0.0
 var _look_tween: Tween = null
@@ -401,6 +408,8 @@ func _wire_game_signals() -> void:
 	for check_sig: String in ["body_check_broadcast", "replay_body_check"]:
 		if gm.has_signal(check_sig):
 			gm.connect(check_sig, _on_body_check)
+	if gm.has_signal("boards_checked"):
+		gm.boards_checked.connect(_on_boards_checked)
 	for frame_sig: String in ["goal_replay_frame_changed", "highlight_frame_changed"]:
 		if gm.has_signal(frame_sig):
 			gm.connect(frame_sig, _on_replay_frame)
@@ -698,6 +707,23 @@ func _calm() -> void:
 # intensity curve the impact burst/sound use. Soft contact barely registers.
 func _on_body_check(force: float) -> void:
 	excite(SkaterVFX.check_intensity(force) * 0.45)
+
+
+# A body into the boards: the fans behind that glass jump.
+func _on_boards_checked(contact: Vector3, force: float) -> void:
+	_bang_at = contact
+	var peak: float = lerpf(_BANG_SOFT, 1.0, SkaterVFX.check_intensity(force))
+	if _bang_tween != null and _bang_tween.is_valid():
+		_bang_tween.kill()
+	_bang_tween = create_tween()
+	_bang_tween.tween_method(_set_bang, 0.0, peak, _BANG_RISE_TIME)
+	_bang_tween.tween_method(_set_bang, peak, 0.0, _BANG_DECAY_TIME) \
+		.set_ease(Tween.EASE_IN)
+
+
+func _set_bang(amount: float) -> void:
+	if _crowd != null:
+		_crowd.set_bang(_bang_at, amount)
 
 
 # Pre-game buzz: the bowl comes alive under the opening camera sweep.

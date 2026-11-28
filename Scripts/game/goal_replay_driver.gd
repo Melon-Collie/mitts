@@ -53,6 +53,8 @@ signal replay_frame_changed(game_state: Dictionary, carrier_team: int)
 # A recorded body check the replay re-fires, with the live broadcast's force, so
 # the crowd rises to it as it did live.
 signal body_check_replayed(force: float)
+# A replayed check that drove its victim into the boards, at its contact.
+signal boards_check_replayed(contact: Vector3, force: float)
 
 var _codec: WorldStateCodec = null
 var _registry: PlayerRegistry = null
@@ -392,4 +394,7 @@ func _dispatch_due_events() -> void:
 		ReplayEventReplayer.dispatch(event, _registry)
 		if event.get("kind", "") == "body_check":
 			body_check_replayed.emit(float(event.get("speed", 0.0)))
+			var contact: Vector3 = ReplayEventReplayer.board_contact(event, _registry.all())
+			if contact != BoardCheckRules.NONE:
+				boards_check_replayed.emit(contact, float(event.get("speed", 0.0)))
 		_next_event_idx += 1

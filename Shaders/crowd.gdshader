@@ -42,6 +42,15 @@ uniform vec3 look_at = vec3(0.0);
 uniform float look_weight : hint_range(0.0, 1.0) = 0.0;
 uniform float head_turn_max;
 uniform float trunk_turn_max;
+// A body driven into the boards (ArenaStands): the fans behind that stretch of
+// glass jump up as if the whole bowl had, the nearest hardest. `bang_pos` is the
+// point on the glass in world space, `bang` how hard, 0..1, eased off over a
+// second or so.
+uniform vec3 bang_pos = vec3(0.0, -100.0, 0.0);
+uniform float bang = 0.0;
+// Fans this far along the boards from it jump fully, out to BANG_REACH_M not at all.
+const float BANG_FULL_M = 3.0;
+const float BANG_REACH_M = 9.0;
 // The bowl's dimmer light and the colour it leaves (ArenaBowlSpec). 1 for
 // figures down at the ice, the rinkside staff.
 uniform float house_light = 1.0;
@@ -153,13 +162,16 @@ void vertex() {
 	v_trousers = trouser_colour(roll(seed, 27.119));
 	v_bald = step(roll(seed, 39.346), BALD_SHARE);
 	int part = int(UV.x + 0.5);
+	float near_bang = bang * (1.0 - smoothstep(BANG_FULL_M, BANG_REACH_M,
+			distance(MODEL_MATRIX[3].xz, bang_pos.xz)));
+	float roused = clamp(max(excitement, near_bang), 0.0, 1.0);
 	v_leg = part == 3 ? 1.0 : 0.0;
 	v_shoe = part == 4 ? 1.0 : 0.0;
 	v_head = part == 5 ? 1.0 : 0.0;
 
 	if (part == 1 || part == 2) {
 		float side = sign(VERTEX.x);
-		float cheer = excitement * step(roll(seed, 5.731), CHEER_SHARE)
+		float cheer = roused * step(roll(seed, 5.731), CHEER_SHARE)
 				* mix(0.75, 1.0, roll(seed, 9.137));
 		float pump = ARM_PUMP * sin(TIME * hop_freq + phase);
 		float raise = cheer * (ARM_RAISE + pump);
@@ -196,10 +208,10 @@ void vertex() {
 	float sway_amp = INSTANCE_CUSTOM.y;
 	float hop_amp = INSTANCE_CUSTOM.z;
 	// Sway: lean grows with height, so heads move more than hips.
-	float sway = sin(TIME * 1.4 + phase) * mix(0.03, 0.10, excitement) * sway_amp;
+	float sway = sin(TIME * 1.4 + phase) * mix(0.03, 0.10, roused) * sway_amp;
 	VERTEX.x += sway * VERTEX.y;
 	// Celebration hop: whole spectator bounces, frequency de-synced per fan.
-	float hop = abs(sin(TIME * hop_freq + phase)) * 0.18 * hop_amp * excitement;
+	float hop = abs(sin(TIME * hop_freq + phase)) * 0.18 * hop_amp * roused;
 	VERTEX.y += hop;
 }
 

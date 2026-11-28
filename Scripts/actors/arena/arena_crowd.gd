@@ -85,6 +85,13 @@ func set_excitement(v: float) -> void:
 
 # Something on the ice the bowl turns to watch (world space), and how far it
 # has turned, 0..1. The sink again: the owner eases the weight.
+# The fans behind the glass at `at` (world space) jump up, `amount` 0..1.
+func set_bang(at: Vector3, amount: float) -> void:
+	var mat: ShaderMaterial = shared_material()
+	mat.set_shader_parameter("bang_pos", at)
+	mat.set_shader_parameter("bang", amount)
+
+
 func set_look(at: Vector3, weight: float) -> void:
 	var mat: ShaderMaterial = shared_material()
 	mat.set_shader_parameter("look_at", at)

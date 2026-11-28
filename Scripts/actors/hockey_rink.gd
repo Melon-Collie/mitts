@@ -254,6 +254,7 @@ var _ads_shown: bool = true
 var _render_targets_freed: bool = false
 var _ring_field: IceRingField = null
 var _puck_marks: BoardPuckMarks = null
+var _board_check_vfx: BoardCheckVFX = null
 
 func _ready() -> void:
 	_rebuild()
@@ -265,6 +266,7 @@ func _ready() -> void:
 	if not Engine.is_editor_hint():
 		# Through methods rather than bound to the marks node: a rebuild replaces it.
 		GameManager.puck_marked_boards.connect(_on_puck_marked_boards)
+		GameManager.boards_checked.connect(_on_boards_checked)
 		GameManager.game_reset.connect(_on_game_reset)
 	if not Engine.is_editor_hint() and _ring_field != null:
 		GameManager.phase_changed.connect(_ring_field.on_phase_changed)
@@ -381,7 +383,9 @@ func _rebuild() -> void:
 	_add_band_instance(products.band_kickplate, kp_mat)
 	_add_band_instance(products.band_board, board_mat)
 	_add_band_instance(products.band_cap, cap_mat)
-	_add_band_instance(products.band_glass, _make_glass_material())
+	var glass: ShaderMaterial = _make_glass_material()
+	_add_band_instance(products.band_glass, glass)
+	_add_board_check_vfx(glass)
 
 	# --- Painted stripes ---
 	# Goal-line stripes on each corner's white-board zone, drawn where the line
@@ -1012,6 +1016,21 @@ func _add_puck_marks(ribbon: ArrayMesh) -> void:
 	add_child(_puck_marks)
 	_puck_marks.setup(ribbon, rink_width / 2.0, rink_length / 2.0, corner_radius,
 			wall_height - CAP_RAIL_HEIGHT)
+
+
+# Runtime only, like the puck marks.
+func _add_board_check_vfx(glass: ShaderMaterial) -> void:
+	if Engine.is_editor_hint():
+		return
+	_board_check_vfx = BoardCheckVFX.new()
+	_board_check_vfx.name = "BoardCheckVFX"
+	add_child(_board_check_vfx)
+	_board_check_vfx.setup(glass)
+
+
+func _on_boards_checked(contact: Vector3, force: float) -> void:
+	if is_instance_valid(_board_check_vfx):
+		_board_check_vfx.fire(to_local(contact), SkaterVFX.check_intensity(force))
 
 
 func _on_puck_marked_boards(world_pos: Vector3, speed: float) -> void:

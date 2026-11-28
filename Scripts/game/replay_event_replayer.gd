@@ -40,6 +40,18 @@ const _POST_SAVE_VOLUME_BUMP_DB: float = 4.0
 const _PAD_SAVE_VOLUME_BUMP_DB: float = 2.0
 
 
+# Where a recorded check drove its victim into the boards (BoardCheckRules),
+# from the victim as the replay has him posed; NONE for any other event.
+static func board_contact(event: Dictionary, records: Dictionary) -> Vector3:
+	if event.get("kind", "") != "body_check":
+		return BoardCheckRules.NONE
+	var victim_rec: PlayerRecord = records.get(int(event.get("victim_peer_id", -1)))
+	if victim_rec == null or victim_rec.skater == null:
+		return BoardCheckRules.NONE
+	return BoardCheckRules.contact(victim_rec.skater.global_position,
+			_pos_from_array(event.get("hit_dir", [])))
+
+
 static func dispatch(event: Dictionary, registry: PlayerRegistry) -> void:
 	dispatch_with_records(event, _registry_to_records(registry))
 
