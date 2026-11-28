@@ -6,43 +6,49 @@ extends GutTest
 const SHOULDER := Vector3(0.2, 0.45, 0.0)
 const REACH: float = 0.6
 const GUARD_Y: float = 0.57
-const CHIN_Y: float = 0.6
+const HEAD_Y: float = 0.7
 const DT: float = 1.0 / 90.0
 
 
 func test_the_fist_goes_where_the_cursor_is_within_reach() -> void:
 	var t: Vector3 = FightFistRules.target(SHOULDER, Vector3(0.25, 0.0, -0.3), REACH,
-			GUARD_Y, CHIN_Y)
+			GUARD_Y, HEAD_Y)
 	assert_almost_eq(Vector2(t.x, t.z), Vector2(0.25, -0.3), Vector2(0.001, 0.001))
 
 
-func test_a_cursor_past_reach_holds_the_fist_at_the_reach() -> void:
+func test_a_cursor_past_reach_is_thrown_at_not_drawn_back() -> void:
 	var t: Vector3 = FightFistRules.target(SHOULDER, Vector3(0.2, 0.0, -3.0), REACH,
-			GUARD_Y, CHIN_Y)
-	assert_almost_eq(t.distance_to(SHOULDER), REACH, 0.001)
-	assert_lt(t.z, SHOULDER.z, "straight out in front")
+			GUARD_Y, HEAD_Y)
+	assert_almost_eq(Vector2(t.x, t.z), Vector2(0.2, -3.0), Vector2(0.001, 0.001))
+	assert_almost_eq(t.y, HEAD_Y, 0.001, "at his head's height")
 
 
 func test_no_fist_goes_back_into_its_own_chest() -> void:
 	var t: Vector3 = FightFistRules.target(SHOULDER, Vector3(0.0, 0.0, 0.5), REACH,
-			GUARD_Y, CHIN_Y)
+			GUARD_Y, HEAD_Y)
 	assert_almost_eq(t.z, SHOULDER.z - FightFistRules.MIN_FORWARD_M, 0.001)
 
 
-func test_the_fist_rises_from_the_guard_to_his_chin_as_the_arm_straightens() -> void:
-	var low_chin: float = 0.3
+func test_the_fist_rises_from_the_guard_to_his_head_as_the_arm_straightens() -> void:
+	var low_head: float = 0.3
 	var bent: Vector3 = FightFistRules.target(SHOULDER, SHOULDER + Vector3(0.0, 0.0, -0.2),
-			REACH, GUARD_Y, low_chin)
+			REACH, GUARD_Y, low_head)
 	var straight: Vector3 = FightFistRules.target(SHOULDER, SHOULDER + Vector3(0.0, 0.0, -2.0),
-			REACH, GUARD_Y, low_chin)
+			REACH, GUARD_Y, low_head)
 	assert_almost_eq(bent.y, GUARD_Y, 0.001, "held at the guard while bent")
-	assert_almost_eq(straight.y, low_chin, 0.001, "at his chin, straight out at him")
+	assert_almost_eq(straight.y, low_head, 0.001, "at his head, straight out at him")
+	var guard_reach: float = Vector2(FightGuardRules.GUARD_FORWARD_M,
+			FightGuardRules.GUARD_UP_M).length()
+	var guarding: Vector3 = FightFistRules.target(SHOULDER,
+			SHOULDER + Vector3(0.0, 0.0, -guard_reach), guard_reach / FightFistRules.RISE_FROM,
+			GUARD_Y, low_head)
+	assert_almost_eq(guarding.y, GUARD_Y, 0.001, "a fist no further out than the guard is at the guard")
 
 
 func test_the_fist_never_outruns_its_speed_or_acceleration() -> void:
 	var pos := Vector3(0.1, GUARD_Y, -0.3)
 	var vel := Vector3.ZERO
-	var target := Vector3(0.1, CHIN_Y, -0.9)
+	var target := Vector3(0.1, HEAD_Y, -0.9)
 	var top: float = 0.0
 	for i: int in 30:
 		var next: Vector3 = FightFistRules.step_velocity(pos, vel, target, DT,
@@ -54,6 +60,19 @@ func test_the_fist_never_outruns_its_speed_or_acceleration() -> void:
 	assert_lte(top, FightFistRules.MAX_SPEED_M_S + 1e-4)
 	assert_gt(top, 0.5 * FightFistRules.MAX_SPEED_M_S, "a punch gets up to speed")
 	assert_almost_eq(pos.distance_to(target), 0.0, 0.01, "and arrives")
+
+
+func test_a_fist_laid_on_his_head_lands_at_its_top_speed() -> void:
+	var pos := Vector3(0.1, GUARD_Y, -0.3)
+	var vel := Vector3.ZERO
+	var head := Vector3(0.1, GUARD_Y, -0.9)
+	var touch: float = FightPunchRules.HEAD_RADIUS_M + FightPunchRules.FIST_RADIUS_M
+	while pos.distance_to(head) > touch:
+		vel = FightFistRules.step_velocity(pos, vel, head, DT, FightFistRules.MAX_SPEED_M_S,
+				FightFistRules.MAX_ACCEL_M_S2)
+		pos += vel * DT
+	assert_almost_eq(vel.length(), FightFistRules.MAX_SPEED_M_S, 0.01,
+			"still at speed as it touches a head the cursor sits on")
 
 
 func test_a_straight_arm_holds_the_fist() -> void:

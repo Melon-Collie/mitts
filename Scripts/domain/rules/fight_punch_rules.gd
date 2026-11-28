@@ -3,18 +3,17 @@ extends RefCounted
 
 # Whether a punch lands, where, and what it does (docs/fighting-plan.md §4).
 # The punching fist (FightFistRules) is swept from where it was last tick to
-# where it is now through the other man's head, his chest and his arms; the
-# first it meets is what it hits, and an arm in the way is a block. A fist
-# moving onto him slower than MIN_LAND_M_S is a hand on him, not a punch.
+# where it is now through the other man's head, his chest and the arms he holds
+# in his guard; the first it meets is what it hits, and an arm in the way is a
+# block. A fist moving onto him slower than MIN_LAND_M_S is a hand on him, not a
+# punch.
 #
-# What it does is mostly the rattle: a fist moves a man only ~0.4 m/s (an arm's
-# mass on his body's), far under the 2.4 m/s his balance rides
-# (BodyBalanceRules), so punches knock nobody over by their momentum. A head
-# that is hit leaves its legs less sure under it, and that is what the rattle
-# models: a timer, in seconds, that each punch adds to by where and how hard it
-# landed, that wears off, and that takes his balance away with it. A man
-# rattled to the full has almost no balance left, and a clean shot to the head
-# then puts him down through the same balance rule a check does.
+# What it does is the rattle: a fist moves a man only ~0.4 m/s (an arm's mass on
+# his body's), a tenth of what his balance rides (BodyBalanceRules), so no punch
+# knocks a man over by its momentum. The rattle is a timer, in seconds, that
+# each punch adds to by where and how hard it landed and that wears off; it is
+# all a man can take, and the punch that takes it past RATTLE_MAX_S puts him
+# down (puts_down).
 
 enum Hit { NONE, HEAD, BODY, BLOCKED }
 
@@ -25,8 +24,11 @@ const HEAD_ABOVE_CHIN_M: float = 0.1
 # The chest: a ball this big, this far under the shoulders' line.
 const BODY_RADIUS_M: float = 0.2
 const BODY_BELOW_SHOULDERS_M: float = 0.22
-# A forearm, as a capsule from shoulder to fist, and the fist's own size.
+# An arm up in a guard blocks with its fist and the forearm behind it: a capsule
+# this thick over this share of the line from the fist back to its shoulder.
+# And the size of the fist that meets it.
 const ARM_RADIUS_M: float = 0.06
+const GUARD_ARM_SHARE: float = 0.5
 const FIST_RADIUS_M: float = 0.05
 # A fist closing on him slower than this lands nothing.
 const MIN_LAND_M_S: float = 2.5
@@ -38,18 +40,20 @@ const ARM_MASS_KG: float = 4.0
 # A body of Skater.weight 1.0, the neutral build's 201 lb, kg.
 const NEUTRAL_MASS_KG: float = 91.2
 
-# The rattle, seconds: its most, what a clean full-speed punch adds (to the
-# head, the body, or through a block, as shares of that), and how fast it wears
-# off.
+# The rattle, seconds: the most a man takes on his skates, what a clean
+# full-speed punch adds (to the head, the body, or through a block, as shares of
+# that), and how fast it wears off. Three full-speed head shots a second apart
+# put a man down; a guard takes three times the punches.
 const RATTLE_MAX_S: float = 3.0
 const RATTLE_HEAD_S: float = 1.2
-const RATTLE_BODY_SHARE: float = 0.3
-const RATTLE_BLOCKED_SHARE: float = 0.08
-const RATTLE_DECAY_PER_S: float = 0.4
-# Fully rattled, his balance is this share short of a sound man's...
-const RATTLE_BALANCE_LOSS: float = 0.95
-# ...and his fists this share short of their speed.
+const RATTLE_BODY_SHARE: float = 0.4
+const RATTLE_BLOCKED_SHARE: float = 0.33
+const RATTLE_DECAY_PER_S: float = 0.15
+# Fully rattled, his fists are this share short of their speed.
 const RATTLE_FIST_LOSS: float = 0.5
+# A man put down lies this long before he starts up: longer than a check leaves
+# him (BodyCheckRules.Config.max_lie_seconds).
+const OUT_LIE_S: float = 0.9
 # The reel a full-speed punch throws him into, as a check's stagger strength
 # (m/s, BodyCheckRules), to the head; the body takes a share of it.
 const REEL_HEAD_M_S: float = 1.1
@@ -123,10 +127,10 @@ static func rattle_share(rattle: float) -> float:
 	return clampf(rattle / RATTLE_MAX_S, 0.0, 1.0)
 
 
-# What a Δv on a rattled man does to his balance, as a multiple of what it does
-# to a sound one: his budget is shrunk, which is the same as the Δv grown.
-static func balance_scale(rattle: float) -> float:
-	return 1.0 / maxf(1.0 - RATTLE_BALANCE_LOSS * rattle_share(rattle), 0.05)
+# Whether a punch at `speed` puts down a man already rattled by `rattle`: it
+# takes him past all he can take.
+static func puts_down(hit: Hit, rattle: float, speed: float) -> bool:
+	return rattle + rattle_added(hit, speed) > RATTLE_MAX_S
 
 
 static func fist_scale(rattle: float) -> float:

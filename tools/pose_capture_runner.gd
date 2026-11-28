@@ -84,7 +84,8 @@ const CAM_HAND_FOV: float = 22.0
 # the posed skater, "face", and the "input" spec he holds every tick — the
 # press's other body), celebrate (the goal-celebration window started before the
 # first tick, in seconds), fight (the gloves off: FightRules.Role.FIGHTING on the
-# posed skater and any partner; fight_at, the tick it comes on instead).
+# posed skater and any partner; fight_at, the tick it comes on instead),
+# punched_out_at (the tick a punch more than he can take lands on his face).
 # "readout": true also prints the pose's speed
 # and body lean, which a tile can't be read for.
 const POSES: Array = [
@@ -470,6 +471,28 @@ const POSES: Array = [
 		"steps": [[60, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}],
 			[2, {"aim": Vector3(0.0, 0.0, -0.35), "slap": true}],
 			[30, {"aim": Vector3(0.0, 0.0, -2.0), "shoot": true}]]},
+	# A punch that puts him down: going over, lying, and getting up, his gloves
+	# still off and the other man standing over him.
+	{"name": "fight_down_falling", "puck": false, "fight": true, "punched_out_at": 60,
+		"cam": Vector3(3.2, 0.7, 0.2), "cam_aim": Vector3(0.0, 0.3, 0.1),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.8), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[105, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	{"name": "fight_down_lying", "puck": false, "fight": true, "punched_out_at": 60,
+		"cam": Vector3(3.2, 0.7, 0.2), "cam_aim": Vector3(0.0, 0.3, 0.1),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.8), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[190, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	{"name": "fight_down_getup", "puck": false, "fight": true, "punched_out_at": 60,
+		"cam": Vector3(3.2, 0.7, 0.2), "cam_aim": Vector3(0.0, 0.3, 0.1),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.8), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[310, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}]]},
+	{"name": "fight_down_game", "puck": false, "fight": true, "punched_out_at": 60,
+		"game_cam": true,
+		"partner": {"offset": Vector3(0.0, 0.0, -0.8), "face": Vector2(0.0, 1.0),
+			"input": {"aim": Vector3(0.0, 0.0, 0.35)}},
+		"steps": [[190, {"aim": Vector3(0.0, 0.0, -0.35), "face": Vector3(0.0, 0.0, -1.0)}]]},
 	# ── FACEOFF_PREP ──────────────────────────────────────────────────────────
 	# The locked-phase path (begin_approach → tick_faceoff_approach →
 	# apply_blade_aim_only), which _process_input never reaches, so the specs
@@ -743,6 +766,15 @@ func _teardown() -> void:
 		_partner_controller = null
 
 
+# A full-speed punch to the face of a man already rattled to the full.
+func _punch_out() -> void:
+	var back: Vector3 = _skater.global_transform.basis.z.normalized()
+	_skater.fight_rattle = FightPunchRules.RATTLE_MAX_S
+	_controller.absorb_punch(back * FightPunchRules.impulse_dv(FightFistRules.MAX_SPEED_M_S,
+			_skater.weight * FightPunchRules.NEUTRAL_MASS_KG), FightPunchRules.Hit.HEAD,
+			FightFistRules.MAX_SPEED_M_S)
+
+
 func _set_fight_role(role: int) -> void:
 	_skater.fight_role = role
 	if _partner != null:
@@ -777,6 +809,8 @@ func _run_pose() -> void:
 		for t: int in ticks:
 			if tick == fight_at:
 				_set_fight_role(FightRules.Role.FIGHTING)
+			if tick == int(pose.get("punched_out_at", -1)):
+				_punch_out()
 			tick += 1
 			_fill_input(input, spec, t == 0)
 			# Same order as a live tick: the controller runs at physics priority

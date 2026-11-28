@@ -50,6 +50,7 @@ func before_each() -> void:
 	_controller = _control(_skater, attrs)
 	_input = InputState.new()
 	_input.delta = DT
+	_man_still = false
 	_aim(Vector3(0.0, 0.0, -0.35))
 
 
@@ -235,6 +236,37 @@ func test_an_arm_he_holds_is_tied_up() -> void:
 			_reach() * FightFistRules.TIED_REACH_SHARE, 0.02, "held short")
 
 
+func test_a_caught_arm_tears_free_and_is_not_caught_again_until_it_is_pulled_back() -> void:
+	_square_up(0.85)
+	_fight()
+	_man_input.mouse_world_pos = _man.global_position + Vector3(0.0, 0.0, 3.0)
+	_tick(30)
+	_input.shoot_held = true
+	_tick(5)
+	var his_arm: int = FightHoldRules.arm_grip_for(_man.fight_punch_side)
+	assert_eq(_skater.fight_grip, his_arm)
+	_tick(roundi(FightHoldRules.ARM_HOLD_S / DT) - 10)
+	assert_eq(_skater.fight_grip, his_arm, "held for a punch's worth")
+	_tick(12)
+	assert_eq(_skater.fight_grip, Grip.JERSEY, "then the sleeve tears free, the hand back on his sweater")
+	# His fist still out at us: letting go and grabbing again takes the sweater.
+	_input.shoot_held = false
+	_tick()
+	_input.shoot_held = true
+	_tick(5)
+	assert_eq(_skater.fight_grip, Grip.JERSEY)
+	# Pulled back and thrown again, it can be caught again by a hand back up in
+	# its guard.
+	_man_input.mouse_world_pos = _man.global_position + Vector3(0.0, 0.0, 0.35)
+	_tick(30)
+	_input.shoot_held = false
+	_man_input.mouse_world_pos = _man.global_position + Vector3(0.0, 0.0, 3.0)
+	_tick(30)
+	_input.shoot_held = true
+	_tick()
+	assert_eq(_skater.fight_grip, his_arm)
+
+
 func test_the_pair_cannot_pass_through_each_other() -> void:
 	_square_up(0.9)
 	_fight()
@@ -296,7 +328,7 @@ func test_the_stick_and_gloves_drop_and_lie_on_the_ice_until_the_fight_is_over()
 	assert_eq(_skater.fight_punch_side, Side.TOP, "the next fight starts with the top hand")
 
 
-func test_a_punch_rattles_him_and_a_full_rattle_puts_him_down() -> void:
+func test_a_punch_rattles_him_and_one_more_than_he_can_take_puts_him_down() -> void:
 	_fight()
 	_tick(5)
 	var back: Vector3 = _skater.global_transform.basis.z.normalized()
@@ -306,9 +338,60 @@ func test_a_punch_rattles_him_and_a_full_rattle_puts_him_down() -> void:
 	assert_almost_eq(_skater.fight_rattle, FightPunchRules.RATTLE_HEAD_S, 1e-4)
 	assert_eq(_controller.knockdown_timer, 0.0, "a sound man rides a punch")
 	assert_gt(_controller.stagger_timer, 0.0, "and reels from it")
-	_skater.fight_rattle = FightPunchRules.RATTLE_MAX_S
+	_skater.fight_rattle = FightPunchRules.RATTLE_MAX_S - 0.1
 	_controller.absorb_punch(dv, FightPunchRules.Hit.HEAD, FightFistRules.MAX_SPEED_M_S)
-	assert_gt(_controller.knockdown_timer, 0.0, "rattled to the full, a clean shot drops him")
+	assert_almost_eq(_controller.knockdown_timer,
+			_controller.punch_knockdown_seconds(dv.length()), 1e-4, "it drops him")
+	_tick(1)
+	assert_true(_skater.is_knocked_down)
+	assert_false(_skater.is_stumbling, "flat on the ice, not onto a knee")
+
+
+# WorldStateCodec carries the knockdown timer in a byte of hundredths.
+func test_a_punchs_knockdown_fits_the_wire() -> void:
+	var hardest: float = FightPunchRules.impulse_dv(FightFistRules.MAX_SPEED_M_S,
+			_skater.weight * FightPunchRules.NEUTRAL_MASS_KG)
+	assert_lte(_controller.punch_knockdown_seconds(0.0), 2.55)
+	assert_lte(_controller.punch_knockdown_seconds(hardest), 2.55)
+	assert_gt(FightPunchRules.OUT_LIE_S, BodyCheckRules.Config.new().max_lie_seconds,
+			"he lies longer than a check leaves him")
+
+
+func test_a_fighter_does_not_dive() -> void:
+	_fight()
+	_input.stance_held = true
+	_input.block_held = true
+	_tick(5)
+	assert_eq(_controller.knockdown_timer, 0.0)
+	assert_false(_skater.is_diving)
+
+
+# The hold's band and the punch's reach have to agree: a man held at the band's
+# end is still where a fist reaches his head.
+func test_a_punch_reaches_the_head_of_a_man_held_at_the_bands_end() -> void:
+	_square_up(FightHoldRules.band_max(_reach()))
+	_fight()
+	# Long enough for both to have turned into their stance.
+	_tick(roundi(1.0 / DT))
+	_man_still = true
+	var judge := FightPunchJudge.new()
+	var landed: Array[int] = []
+	judge.setup(func(s: Skater) -> Skater: return _man if s == _skater else _skater,
+			func() -> float: return 0.0)
+	judge.punch_landed.connect(func(_a: Skater, _v: Skater, hit: int, _speed: float,
+			_toward: Vector3) -> void: landed.append(hit))
+	# His hands down, so nothing is in the way.
+	_man.set_top_hand_position(_man.upper_body_to_local(_man.global_position + Vector3(0.3, -0.5, 0.0)))
+	_man.set_blade_position(_man.upper_body_to_local(_man.global_position + Vector3(-0.3, -0.5, 0.0)))
+	var fighters: Array[Skater] = [_skater]
+	judge.tick(fighters, DT)
+	# The cursor through his head and out the back of it.
+	var head: Vector3 = FightPunchJudge.head_center(_man)
+	_input.mouse_world_pos = Vector3(head.x, 0.0, head.z - 0.3)
+	for i: int in 30:
+		_tick()
+		judge.tick(fighters, DT)
+	assert_eq(landed, [FightPunchRules.Hit.HEAD] as Array[int])
 
 
 func test_the_rattle_wears_off_on_the_host() -> void:
@@ -333,3 +416,5 @@ func test_a_rattled_fist_is_slower() -> void:
 		prev = now
 	assert_lte(top, FightFistRules.MAX_SPEED_M_S
 			* FightPunchRules.fist_scale(FightPunchRules.RATTLE_MAX_S) + 0.01)
+
+
