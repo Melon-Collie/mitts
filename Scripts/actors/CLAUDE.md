@@ -66,14 +66,19 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   straight down (`bind_arm`). Each bind's inverse rest is its bone's global pose there
   (`bind_rests`), so it rides the rigs' bones untouched; the torso's rings are
   built round `SkaterMeshBuilder`'s rest stations (`torso_ring`), and its tail
-  hangs from the belt on `SkaterHemFlaps`' column bones. Its pants stand their
-  rim up under a tuck: a padded band eased up
-  as far as each column is tucked (no spike at a half tuck's corner), with the
-  jersey bloused wider above it and kidney pads behind. Beside a half tuck's
-  corner its tail is drawn in taut (`tail_ring`): the belt ring toward the
-  tucked girth and the hem lifted all but up to it, and the flaps hold those
-  columns to that drape as far, so the hem runs up into the waistband rather
-  than flaring out beside it.
+  hangs from the belt on `SkaterHemFlaps`' column bones. Its pants flare their
+  rim under a tuck: a padded band at the pants' own height (risen, it hides the
+  back number), eased up as far as each column is tucked, with kidney pads
+  behind, and the jersey sagging out over it before it goes in behind it —
+  sagging, not standing out, or the cloth reads as a shelf. A half tuck is a
+  front corner pushed in at the front of the hip: the back hangs loose. Beside
+  the corner its tail is drawn up (`tail_ring`): the belt ring toward the
+  tucked girth and the hem lifted toward it in a taut diagonal, each lifted
+  ring lying where the loose tail hangs at that height (drawn in to the tucked
+  girth, a lifted hem is pushed out of the pants into a fin), and part of the
+  length it loses folded out of sight (`_TAIL_FOLD_SHARE`), so its stripes
+  follow the hem up without all crushing into the corner. The flaps hold those
+  columns to that drape as far.
 - **The arms get deform bones of their own** (`SkaterConnectedRig`, after the
   TAIL bone on the skeleton): the arm bones roll from world up, and a blended
   elbow needs both halves turning about one hinge. Per side the upper arm, the

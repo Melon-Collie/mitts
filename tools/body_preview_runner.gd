@@ -30,8 +30,8 @@ const PANTS_FOV: float = 22.0
 const HEAD_FOV: float = 7.0
 # --waist: framed on the belt, where a tuck goes in, from the WAIST bone, so a
 # crouch keeps it in frame.
-const WAIST_FOV: float = 13.0
-const WAIST_AIM_Y: float = -0.22
+const WAIST_FOV: float = 16.0
+const WAIST_AIM_Y: float = 0.0
 # --shoulders: framed on the yoke, square on from the front, the side, the back
 # and from above behind: where the shoulders meet the trunk.
 const SHOULDERS_FOV: float = 13.0

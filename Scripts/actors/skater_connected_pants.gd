@@ -29,11 +29,11 @@ const _PANTS_ROUND: int = 4
 # rolling back in to the belt, so the rim is a padded band proud of the jersey
 # going in behind it. Above it the jersey blouses out by TUCK_BLOUSE_M, wider than the
 # rim, so it overhangs the rim before it goes in (test_connected_body.gd).
-const _RIM_LIP_RISE_M: float = 0.045
+const _RIM_LIP_RISE_M: float = 0.012
 const _RIM_LIP_FLARE_M: float = 0.026
-const _RIM_RISE_M: float = 0.022
+const _RIM_RISE_M: float = 0.006
 const _RIM_FLARE_M: float = 0.035
-const TUCK_BLOUSE_M: float = 0.030
+const TUCK_BLOUSE_M: float = 0.014
 # How far tucked a column is before the rim under it starts to flare.
 const _RIM_FLARE_FROM: float = 0.6
 # Drawn in under a loose jersey (_stand_rim): the centre's fold over the dot

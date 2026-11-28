@@ -98,8 +98,8 @@ const _CHEST: Array[Vector3] = [
 	Vector3(0.075, 0.222, 0.002), # under the arm: its bottom row
 	Vector3(0.025, 0.216, 0.004),
 ]
-# SkaterMeshBuilder's torso stations the chest runs on through (waist, the
-# ring that bunches over a tuck's pad, the ring under the pad), then the tail's
+# SkaterMeshBuilder's torso stations the chest runs on through (waist, where a
+# tuck's sag starts, the ring that sags widest over its rim), then the tail's
 # from the belt to the hem.
 const _RIG_STATIONS: Array[int] = [4, 5, 6]
 const _BELT_STATION: int = SkaterMeshBuilder.TORSO_BELT_STATION
@@ -107,6 +107,10 @@ const _LAST_TORSO_STATION: int = SkaterMeshBuilder.TORSO_HEM_STATION
 # How much of its length below the belt the hem beside a tucked corner is taken
 # up by: short of all of it, so a flap keeps some length to swing.
 const _TAIL_LIFT_MAX: float = 0.95
+# Of the length a lifted column is taken up by, the share that goes into a fold
+# against the body, its pattern out of sight; the rest is drawn up the column,
+# its stripes following the hem up to the corner.
+const _TAIL_FOLD_SHARE: float = 0.6
 # The neckline (the chest's first ring): this much higher than the ring's
 # nominal height round the back and sides, scooped this far below that at the
 # front, rounding off over this angle either side of straight ahead — close
@@ -334,6 +338,7 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 	var profile: Array[Vector3] = _chest_profile()
 	var rings: Array[PackedInt32Array] = []
 	var ys := PackedFloat32Array()
+	var vs: Array[PackedFloat32Array] = []
 	for station: Vector3 in profile:
 		var pts: PackedVector3Array = SkaterJerseyHem.tuck_ring(
 				_lathe_ring(station, _CHEST_SIDES, phase), station.x, station.y, station.z, tuck,
@@ -346,23 +351,28 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 			ids.append(_torso_vertex(b, shaped + lift, station.x, theta, tuck, -1))
 		rings.append(ids)
 		ys.append(station.x)
+		vs.append(_uniform_v(_side_v(station.x, y_top, span), _CHEST_SIDES))
+	var belt_y: float = _rig_station(_BELT_STATION).x
 	for station: int in range(_BELT_STATION, _LAST_TORSO_STATION + 1):
 		var rest_y: float = _rig_station(station).x
 		var pts: PackedVector3Array = tail_ring(station, tuck)
 		var ids := PackedInt32Array()
+		var v := PackedFloat32Array()
 		for k: int in TAIL_COLUMNS:
 			var theta: float = TAU * float(k) / float(TAIL_COLUMNS) + phase
 			ids.append(_torso_vertex(b, pts[k] + lift, rest_y, theta, tuck, k))
+			# A lifted column's lost length goes partly into a fold, out of sight.
+			var shown: float = 1.0 - _TAIL_FOLD_SHARE * _tail_lift(station, tuck, theta)
+			v.append(_side_v(belt_y + (rest_y - belt_y) * shown, y_top, span))
 		rings.append(ids)
 		ys.append(rest_y)
+		vs.append(v)
 	var holes: Array[PackedInt32Array] = []
 	for i: int in _ARMHOLE_COLUMN.size():
 		holes.append(_cut_armhole(b, rings, _ARMHOLE_COLUMN[i], -1.0 if i == 0 else 1.0))
 
 	var torso_zone: int = zone(_UpperSurface.TORSO)
 	for i: int in rings.size() - 1:
-		var v0: float = maxf(0.5 * (y_top - ys[i]) / span, JerseyDecal.SIDE_TOP_V)
-		var v1: float = 0.5 * (y_top - ys[i + 1]) / span
 		var inside := Vector3(0.0, (ys[i] + ys[i + 1]) * 0.5, 0.0) + lift
 		var n: int = rings[i].size()
 		for k: int in n:
@@ -372,8 +382,9 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 			var u0: float = float(k) / float(n)
 			var u1: float = float(k + 1) / float(n)
 			b.quad(rings[i][k], rings[i][k1], rings[i + 1][k1], rings[i + 1][k],
-					Vector2(u0, v0), Vector2(u1, v0), Vector2(u1, v1), Vector2(u0, v1),
-					torso_zone, inside)
+					Vector2(u0, maxf(vs[i][k], JerseyDecal.SIDE_TOP_V)),
+					Vector2(u1, maxf(vs[i][k1], JerseyDecal.SIDE_TOP_V)),
+					Vector2(u1, vs[i + 1][k1]), Vector2(u0, vs[i + 1][k]), torso_zone, inside)
 	_build_collar(b, rings[0], lift)
 	# The hem closes as a lathe closes it, with its cap UVs.
 	var hem_y: float = ys[ys.size() - 1]
@@ -488,12 +499,13 @@ static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
 			* Vector2(1.0, SkaterMeshBuilder.torso_depth_at(s.x))
 	var ring: PackedVector3Array = SkaterJerseyHem.tuck_ring(_lathe_ring(s, TAIL_COLUMNS, phase),
 			s.x, s.y, s.z, tuck, phase, xz.x, xz.y, SkaterConnectedPants.TUCK_BLOUSE_M)
-	# Beside a tucked corner the jersey is pulled toward the waistband, taut
-	# against the body: its belt ring drawn in toward the tucked ring's girth
-	# (by the square of the share, so it closes on the pants only under the
-	# rim's flare), and the hem below lifted all but up to it, at its girth
-	# rather than holding the hem's flare out, so the hem meets the waistband
-	# where the tucked columns go in.
+	# Beside a tucked corner the jersey is pulled toward the waistband: its belt
+	# ring drawn in toward the tucked ring's girth (by the square of the share,
+	# so it closes on the pants only under the rim's flare), and the hem below
+	# lifted toward it, each ring lying where the loose tail hangs at the height
+	# it is lifted to — clear of the pants, which flare out under the belt —
+	# and drawn in toward the tucked girth only close to the corner, so the hem
+	# meets the waistband where the tucked columns go in.
 	var belt: Vector3 = _rig_station(_BELT_STATION)
 	for k: int in ring.size():
 		var theta: float = TAU * float(k) / float(TAIL_COLUMNS) + phase
@@ -501,13 +513,50 @@ static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
 		if share <= 0.0 or SkaterJerseyHem.tucked_in(tuck, theta) > 0.0:
 			continue
 		var drawn_in: float = share * share
-		var belt_r: float = lerpf(belt.y, SkaterJerseyHem.BELT_IN_RADIUS_M, drawn_in)
-		var belt_sway: float = lerpf(belt.z, SkaterJerseyHem.TUCKED_REAR_SWAY_M, drawn_in)
-		var lift: float = 1.0 if station == _BELT_STATION else _TAIL_LIFT_MAX * share
-		var r: float = lerpf(s.y, belt_r, lift)
-		ring[k] = Vector3(sin(theta) * r * xz.x, lerpf(s.x, belt.x, lift),
-				lerpf(s.z, belt_sway, lift) + cos(theta) * r * xz.y)
+		var y: float = lerpf(s.x, belt.x, _tail_lift(station, tuck, theta))
+		var drape: Vector3 = _tail_drape_at(y)
+		var r: float = lerpf(drape.y, SkaterJerseyHem.BELT_IN_RADIUS_M, drawn_in)
+		var sway: float = lerpf(drape.z, SkaterJerseyHem.TUCKED_REAR_SWAY_M, drawn_in)
+		var zs: float = SkaterMeshBuilder.PELVIS_XZ_SCALE.y * SkaterMeshBuilder.torso_depth_at(y)
+		ring[k] = Vector3(sin(theta) * r * xz.x, y, sway + cos(theta) * r * zs)
 	return ring
+
+
+# How much of its length below the belt the tail at `theta` is taken up by at
+# tail station `station` under `tuck`: the belt ring all of it beside a tucked
+# corner, the rings below as far as the corner lifts the hem, a column tucked
+# in or loose none.
+static func _tail_lift(station: int, tuck: int, theta: float) -> float:
+	var share: float = SkaterJerseyHem.tuck_share(tuck, theta)
+	if share <= 0.0 or SkaterJerseyHem.tucked_in(tuck, theta) > 0.0:
+		return 0.0
+	return 1.0 if station == _BELT_STATION else _TAIL_LIFT_MAX * share
+
+
+# The loose tail's ring at torso-local height `y` between the belt and the hem,
+# as (y, radius, sway): where a hem lifted to `y` lies, clear of the pants as the
+# hanging jersey is there.
+static func _tail_drape_at(y: float) -> Vector3:
+	var above: Vector3 = _rig_station(_BELT_STATION)
+	for station: int in range(_BELT_STATION + 1, _LAST_TORSO_STATION + 1):
+		var below: Vector3 = _rig_station(station)
+		if y >= below.x:
+			return above.lerp(below, (above.x - y) / (above.x - below.x))
+		above = below
+	return above
+
+
+# The torso texture's V at torso-local height `y`: the side runs over the top
+# half of the texture, from the collar (`y_top`) down the jersey's `span`.
+static func _side_v(y: float, y_top: float, span: float) -> float:
+	return 0.5 * (y_top - y) / span
+
+
+static func _uniform_v(v: float, sides: int) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(sides)
+	out.fill(v)
+	return out
 
 
 # A ring of the rig's section (SkaterMeshBuilder._ring's layout: `sides` + 1

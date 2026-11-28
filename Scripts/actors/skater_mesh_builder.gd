@@ -32,8 +32,8 @@ const _TORSO_PROFILE: Array[Vector2] = [
 	Vector2(0.215, 0.222),   # shoulder line — the pads' widest
 	Vector2(0.130, 0.222),   # chest — from here the sweater hangs nearly straight,
 	Vector2(0.000, 0.212),   # barely in at the waist
-	Vector2(-0.070, 0.214),  # bunches over a tuck's pad (SkaterJerseyHem.BUNCH_Y_M)
-	Vector2(-0.125, 0.218),  # goes in under a tuck's pad (SkaterJerseyHem.PAD_Y_M)
+	Vector2(-0.070, 0.214),  # where a tuck's sag starts (SkaterJerseyHem.BUNCH_Y_M)
+	Vector2(-0.125, 0.218),  # sags widest over a tuck's rim (SkaterJerseyHem.PAD_Y_M)
 	Vector2(-0.150, 0.219),  # the pants' waistband line (SkaterJerseyHem.BELT_Y_M)
 	Vector2(-0.210, 0.232),  # from here the tail hangs over the pants, flaring
 	Vector2(-0.280, 0.263),  # out round the thighs' widest
