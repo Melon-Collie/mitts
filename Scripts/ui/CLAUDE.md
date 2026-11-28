@@ -40,6 +40,11 @@ pref applied via `LocaleManager`; the catalogue compiles from the CSV (re-run
 existing `_unhandled_input` block in the relevant script — check `popup.visible`,
 hide it, and call `get_viewport().set_input_as_handled()`.
 
+The Tab box score (`Scoreboard`) is the one exception: it is a board held up
+during play, not a popup, and closes on Tab (or the pad's Back) only. Escape
+still opens the menu while it is up, which draws over it (layer 20 against its
+10), so it must not take `ui_cancel` for itself.
+
 ## Device awareness
 
 Which device drives is pure last-input-wins, tracked by the `InputDeviceTracker`

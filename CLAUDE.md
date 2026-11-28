@@ -508,3 +508,4 @@ properly.
 **All popups and modal dialogs must be closeable via `ui_cancel` (Escape).** Add
 the popup to the existing `_unhandled_input` block in the relevant UI script —
 check `popup.visible`, hide it, call `get_viewport().set_input_as_handled()`.
+The Tab box score is the one exception (`Scripts/ui/CLAUDE.md`).
