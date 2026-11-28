@@ -7,6 +7,7 @@
 #   .claude/hooks/render-ui.sh options,side     # shot names or group prefixes
 #   .claude/hooks/render-ui.sh --list           # print the shot list
 #   UI_PREVIEW_OUT=/tmp/ui .claude/hooks/render-ui.sh
+#   UI_PREVIEW_RENDERER=forward_plus ...         # on the renderer the game ships
 #
 # Every run starts from a throwaway user data directory, so the screens show
 # first-run defaults (prefs, callouts, the tutorial gate) and a run never
@@ -17,6 +18,10 @@
 # rasterizer. That draws UI faithfully but the 3D world only roughly (no
 # SDFGI/SSR, so the ice reads blown out), and a match runs at about one frame
 # a second — expect several minutes for the full set, most of it in-match.
+# UI_PREVIEW_RENDERER=forward_plus draws on Forward+ instead, where the 3D reads
+# as in the game (the house light, the glass, the crowd); without a display it
+# needs Mesa's software Vulkan (lavapipe, the package mesa-vulkan-drivers), and
+# runs slower still.
 set -euo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
@@ -60,7 +65,19 @@ if [ -z "${DISPLAY:-}" ] && command -v xvfb-run >/dev/null 2>&1; then
   export LIBGL_ALWAYS_SOFTWARE=1
 fi
 
-"${RUNNER[@]}" "$GODOT" --path "$PROJECT_DIR" \
-  --rendering-driver opengl3 --rendering-method gl_compatibility \
+RENDERER=(--rendering-driver opengl3 --rendering-method gl_compatibility)
+if [ "${UI_PREVIEW_RENDERER:-}" = "forward_plus" ]; then
+  RENDERER=(--rendering-driver vulkan --rendering-method forward_plus)
+  LVP=/usr/share/vulkan/icd.d/lvp_icd.json
+  if [ ${#RUNNER[@]} -gt 0 ]; then
+    if [ ! -f "$LVP" ]; then
+      echo "[render-ui] no display and no lavapipe ($LVP): install mesa-vulkan-drivers." >&2
+      exit 1
+    fi
+    export VK_ICD_FILENAMES="$LVP"
+  fi
+fi
+
+"${RUNNER[@]}" "$GODOT" --path "$PROJECT_DIR" "${RENDERER[@]}" \
   --audio-driver Dummy --resolution 1920x1080 \
   -s res://tools/ui_preview.gd -- "${ARGS[@]}" "$@"

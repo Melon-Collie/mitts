@@ -179,6 +179,9 @@ a 3v3 against bots a few seconds in, the view from each penalty box, a smart pin
 first-run defaults and never touches your prefs. The UI comes out faithful but the 3D behind it does not (software
 Compatibility renderer), and a match runs at about a frame a second, so the full
 set takes several minutes. Name only the shots you need.
+`UI_PREVIEW_RENDERER=forward_plus` draws on the renderer the game ships instead
+(software Vulkan here, slower still): the check for anything whose read depends
+on the 3D behind the UI — the arena's light, the glass, a screen over the reel.
 
 **To see a KIT, lay it flat.** `.claude/hooks/render-kits.sh [teams]` writes
 one PNG per team to `.preview/kits/`: home and away, jersey front and back with
