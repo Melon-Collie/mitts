@@ -263,18 +263,22 @@ func _fight_tick(delta: float) -> void:
 	v.my_grip = skater.fight_grip
 	v.my_arm_held = false
 	v.his_arm_thrown = false
+	v.reach = SkaterFightHands.arm_reach(skater)
+	v.man_down = skater.is_knocked_down
 	var man: Skater = _fight_partner
 	if man != null and is_instance_valid(man):
-		v.head = FightPunchJudge.head_center(man)
-		v.his_top_fist = man.upper_body_to_global(man.get_top_hand_position())
-		v.his_bottom_fist = man.upper_body_to_global(man.get_blade_position())
+		v.him = man.global_position
+		v.man_down = v.man_down or man.is_knocked_down
+		v.head = SkaterFightHands.head_world(man)
+		v.his_top_fist = man.upper_body_to_global(SkaterFightHands.fist_local(man, true))
+		v.his_bottom_fist = man.upper_body_to_global(SkaterFightHands.fist_local(man, false))
 		v.my_arm_held = FightHoldRules.tied(skater.fight_punch_side, man.fight_grip)
-		var top: bool = man.fight_punch_side == FightHoldRules.Side.TOP
-		v.his_arm_thrown = FightHoldRules.thrown(
-				man.shoulder.position if top else man.bottom_shoulder.position,
-				man.get_top_hand_position() if top else man.get_blade_position(),
-				SkaterFightHands.arm_reach(man))
+		v.his_arm_thrown = SkaterFightHands.arm_thrown(man,
+				man.fight_punch_side == FightHoldRules.Side.TOP)
+		v.his_top_guards = SkaterFightHands.arm_guards(man, true)
+		v.his_bottom_guards = SkaterFightHands.arm_guards(man, false)
 	else:
+		v.him = v.me
 		v.head = v.me + Vector3(v.facing.x, 0.0, v.facing.y)
 	var d: AIFightBrain.Decision = _fight_brain.decide(v, delta)
 	_fight_input.delta = delta
@@ -282,7 +286,8 @@ func _fight_tick(delta: float) -> void:
 	_fight_input.mouse_world_pos = d.aim
 	_fight_input.shoot_held = d.grab
 	_fight_input.slap_pressed = d.swap
-	_fight_input.brake = true
+	_fight_input.move_vector = d.move
+	_fight_input.brake = d.brake
 	_process_input(_fight_input, delta)
 	skater.current_shot_state = _sm.get_state() as int
 

@@ -18,9 +18,11 @@ extends RefCounted
 # front of it. A fight spends the pair's grudges. Nobody already fighting, down
 # or ghosted takes part.
 #
-# A fight ends when either man goes down, when the pair have been apart long
-# enough or at the linesmen's cap (FightRules.end_of), or when either man is gone.
-# Its result is FightRules.result_of; a fight someone won says so (fight_won).
+# A fight is decided when either man goes down, and over once he is back on his
+# skates, so the fall is seen before the faceoff. Otherwise it ends when the
+# pair have been apart long enough or at the linesmen's cap (FightRules.end_of),
+# or when either man is gone. Its result is FightRules.result_of; a fight
+# someone won says so (fight_won), as the man goes down.
 
 signal challenge_made(challenger: Skater, target: Skater)
 signal challenge_lapsed(challenger: Skater)
@@ -43,6 +45,7 @@ var _cooling_until: Dictionary = {}           # Skater -> host seconds
 var _partner: Dictionary = {}                 # Skater -> Skater, both ways round
 var _started_at: Dictionary = {}              # Skater -> host seconds, both of a pair
 var _apart_s: Dictionary = {}                 # Skater -> seconds, both of a pair
+var _decided: Dictionary = {}                 # Skater -> true, both of a pair with a man put down
 var _hunts: FightHunts = null                 # with grudges only
 
 
@@ -107,6 +110,12 @@ func is_fighting(skater: Skater) -> bool:
 
 func partner_of(skater: Skater) -> Skater:
 	return _partner.get(skater, null)
+
+
+# Whether this fighter's fight has had a man put down: it is over but for his
+# getting up.
+func is_decided(skater: Skater) -> bool:
+	return _decided.has(skater)
 
 
 # The man this bot is skating after to fight, or null.
@@ -270,13 +279,18 @@ func _step_fights(delta: float) -> void:
 			continue
 		var a: Skater = key as Skater
 		var b: Skater = other as Skater
+		if _decided.has(a):
+			if not a.is_knocked_down and not b.is_knocked_down:
+				_end(a, b)
+			continue
 		if a.is_knocked_down or b.is_knocked_down:
+			_decided[a] = true
+			_decided[b] = true
 			match FightRules.result_of(a.is_knocked_down, b.is_knocked_down):
 				FightRules.Result.A_WON:
 					fight_won.emit(a, b)
 				FightRules.Result.B_WON:
 					fight_won.emit(b, a)
-			_end(a, b)  # put down: that is the fight
 			continue
 		var apart: float = FightRules.step_apart(float(_apart_s.get(a, 0.0)),
 				_xz(a).distance_to(_xz(b)), delta)
@@ -296,6 +310,7 @@ func _end_all() -> void:
 	_partner.clear()
 	_started_at.clear()
 	_apart_s.clear()
+	_decided.clear()
 
 
 # Takes Variants: either man may already be freed.
@@ -309,6 +324,8 @@ func _end(a: Variant, b: Variant) -> void:
 	_started_at.erase(b)
 	_apart_s.erase(a)
 	_apart_s.erase(b)
+	_decided.erase(a)
+	_decided.erase(b)
 
 
 func _grudge(holder: Skater, target: Skater) -> float:

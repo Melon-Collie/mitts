@@ -1706,9 +1706,7 @@ func _on_body_check_received(impulse: Vector3, stagger_strength: float = -1.0) -
 # his body was driven, so the boards behind him add to the stagger and not to
 # the fall. Committed to a check, he leans into it
 # (BodyBalanceRules.leaned_into), whichever body's resolver landed it.
-# `balance_scale` grows the Δv his balance reads (a rattled fighter's,
-# FightPunchRules.balance_scale) without moving him or reeling him more.
-func _absorb_hit(impulse: Vector3, stagger_strength: float, balance_scale: float = 1.0) -> void:
+func _absorb_hit(impulse: Vector3, stagger_strength: float) -> void:
 	var felt: Vector3 = impulse
 	if skater.delivers_checks():
 		var dv := Vector2(impulse.x, impulse.z)
@@ -1733,7 +1731,7 @@ func _absorb_hit(impulse: Vector3, stagger_strength: float, balance_scale: float
 		return
 	var cfg: BodyCheckRules.Config = _body_check_config()
 	var knockdown_add: float = 0.0
-	var overshoot: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z) * balance_scale,
+	var overshoot: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z),
 			skater.get_facing(), _balance_posture(), _build_height_mult, _balance_config())
 	var flat: bool = BodyCheckRules.is_flat(overshoot, cfg)
 	if flat:
@@ -1865,14 +1863,23 @@ func is_fighting() -> bool:
 
 # Host: a punch landed on this fighter (FightPunchJudge). It moves him by its
 # Δv, rattles him (FightPunchRules), reels him as a check of its reel's strength
-# would, and puts him down where his balance, shrunk by the rattle, cannot ride
-# it — which ends the fight.
+# would, and puts him down flat when it is more than he can take
+# (FightPunchRules.puts_down) — which decides the fight.
 func absorb_punch(dv: Vector3, hit: int, speed: float) -> void:
+	var out: bool = FightPunchRules.puts_down(hit, skater.fight_rattle, speed)
 	skater.velocity += dv
 	skater.fight_rattle = minf(skater.fight_rattle + FightPunchRules.rattle_added(hit, speed),
 			FightPunchRules.RATTLE_MAX_S)
-	_absorb_hit(dv, FightPunchRules.reel(hit, speed),
-			FightPunchRules.balance_scale(skater.fight_rattle))
+	_absorb_hit(dv, FightPunchRules.reel(hit, speed))
+	if out:
+		_set_knockdown_from_impulse(punch_knockdown_seconds(dv.length()), dv)
+
+
+# How long a punch that puts him down has him down: the fall its Δv starts, the
+# lie, and the get-up.
+func punch_knockdown_seconds(dv_m_s: float) -> float:
+	return KnockdownFallRules.first_impact_time(dv_m_s, _fall_config()) \
+			+ FightPunchRules.OUT_LIE_S + knockdown_getup_seconds
 
 
 # The fists as the last live tick left them (SkaterFightHands), for a reconcile
@@ -3910,7 +3917,7 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	# The dive goes down on the knockdown's rail ahead of the decay, so its first
 	# tick already slides; the get-up clears it.
 	if DiveRules.starts(input.stance_held, input.block_held,
-			_sm.get_state() == State.SKATING_WITHOUT_PUCK and not has_puck,
+			_sm.get_state() == State.SKATING_WITHOUT_PUCK and not has_puck and not is_fighting(),
 			knockdown_timer > 0.0):
 		_start_dive(input)
 	# A diver holding block stays lying there: the timer holds where the get-up

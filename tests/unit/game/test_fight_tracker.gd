@@ -4,9 +4,10 @@ extends GutTest
 # opponent nearest in front of the presser, and a press by that man inside the
 # window starts the fight. A bot answers only a man it holds a grudge against
 # (his checks on its team) or one hunting it; a big grudge sends one of the
-# team's bots after the man to call him out (FightHunts). A fight
-# ends when the pair have been apart long enough or at the linesmen's cap, and
-# everything goes when fighting is not allowed.
+# team's bots after the man to call him out (FightHunts). A fight is decided
+# when a man is put down and over once he is up; otherwise it ends when the pair
+# have been apart long enough or at the linesmen's cap, and everything goes when
+# fighting is not allowed.
 # Real Skater scenes, never ticked; positions, facings and presses by hand.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
@@ -397,14 +398,43 @@ func test_clear_stands_everyone_down() -> void:
 		assert_eq(s.fight_role, FightRules.Role.NONE)
 
 
-func test_a_man_put_down_ends_the_fight() -> void:
+func test_a_man_put_down_decides_the_fight_and_it_ends_once_he_is_up() -> void:
 	_press(_home)
 	_press(_away)
 	_away.is_knocked_down = true
 	_fights.tick(TICK, true, GamePhase.Phase.FIGHT)
-	assert_false(_fights.is_fighting(_home))
-	assert_eq(_over, 1)
 	assert_eq(_won, [[_home, _away]], "the man left standing won it")
+	assert_true(_fights.is_decided(_home) and _fights.is_decided(_away))
+	assert_true(_fights.is_fighting(_home), "not over while he is on the ice")
+	assert_eq(_away.fight_role, FightRules.Role.FIGHTING, "his gloves stay off through the fall")
+	assert_eq(_over, 0)
+	# Neither the linesmen's cap nor the pair drifting apart cuts the fall short.
+	_now += FightRules.FIGHT_MAX_S
+	_put(_home, Vector2(0.0, -FightRules.DISENGAGE_M - 1.0), Vector2(0.0, 1.0))
+	for i: int in ceili(FightRules.DISENGAGE_S / TICK) + 1:
+		_fights.tick(TICK, true, GamePhase.Phase.FIGHT)
+	assert_true(_fights.is_fighting(_home))
+	_away.is_knocked_down = false
+	_fights.tick(TICK, true, GamePhase.Phase.FIGHT)
+	assert_false(_fights.is_fighting(_home))
+	assert_false(_fights.is_decided(_home))
+	assert_eq(_over, 1)
+	assert_eq(_won.size(), 1, "won once")
+
+
+func test_both_put_down_is_a_draw() -> void:
+	_press(_home)
+	_press(_away)
+	_home.is_knocked_down = true
+	_away.is_knocked_down = true
+	_fights.tick(TICK, true, GamePhase.Phase.FIGHT)
+	_home.is_knocked_down = false
+	_fights.tick(TICK, true, GamePhase.Phase.FIGHT)
+	assert_true(_fights.is_fighting(_home), "one is still down")
+	_away.is_knocked_down = false
+	_fights.tick(TICK, true, GamePhase.Phase.FIGHT)
+	assert_eq(_over, 1)
+	assert_true(_won.is_empty())
 
 
 func test_a_fight_that_ends_standing_has_no_winner() -> void:

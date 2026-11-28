@@ -1,8 +1,8 @@
 extends GutTest
 
 # FightPunchRules: the sweep tests a punch is judged by, and what a landed one
-# does — the rattle it adds and wears off, and the balance and fist speed it
-# takes away. Properties, not calibration.
+# does — the rattle it adds, the fist speed it takes away, and the punch that
+# is more than a man can take. Properties, not calibration.
 
 const Hit = FightPunchRules.Hit
 
@@ -43,13 +43,11 @@ func test_the_head_rattles_most_a_block_least() -> void:
 	assert_lt(FightPunchRules.rattle_added(Hit.HEAD, s * 0.5), head, "a harder punch rattles more")
 
 
-func test_a_rattled_man_has_less_balance_and_slower_fists() -> void:
-	assert_eq(FightPunchRules.balance_scale(0.0), 1.0)
+func test_a_rattled_man_has_slower_fists() -> void:
 	assert_eq(FightPunchRules.fist_scale(0.0), 1.0)
 	var full: float = FightPunchRules.RATTLE_MAX_S
-	assert_gt(FightPunchRules.balance_scale(full * 0.5), 1.0)
-	assert_gt(FightPunchRules.balance_scale(full), FightPunchRules.balance_scale(full * 0.5))
-	assert_lt(FightPunchRules.fist_scale(full), 1.0)
+	assert_lt(FightPunchRules.fist_scale(full * 0.5), 1.0)
+	assert_lt(FightPunchRules.fist_scale(full), FightPunchRules.fist_scale(full * 0.5))
 
 
 func test_no_punch_moves_a_man_like_a_check() -> void:
@@ -58,17 +56,29 @@ func test_no_punch_moves_a_man_like_a_check() -> void:
 			"a sound man rides any punch on his feet")
 
 
-func test_a_full_rattle_leaves_a_clean_shot_enough_to_drop_him() -> void:
-	var cfg := BodyBalanceRules.Config.new()
-	var dv: float = FightPunchRules.impulse_dv(FightFistRules.MAX_SPEED_M_S, 90.0)
-	# Straight back off a punch to the face, square to the hitter.
-	var hit := Vector2(0.0, dv)
-	var facing := Vector2(0.0, -1.0)
-	var posture: int = BodyBalanceRules.Posture.UPRIGHT
-	assert_lt(BodyBalanceRules.overshoot(hit, facing, posture, 1.0, cfg), 1.0, "sound, he rides it")
-	var rattled: Vector2 = hit * FightPunchRules.balance_scale(FightPunchRules.RATTLE_MAX_S)
-	assert_gt(BodyBalanceRules.overshoot(rattled, facing, posture, 1.0, cfg), 1.0,
-			"rattled to the full, it puts him down")
+func test_no_one_punch_puts_a_sound_man_down() -> void:
+	var s: float = FightFistRules.MAX_SPEED_M_S
+	for hit: int in [Hit.HEAD, Hit.BODY, Hit.BLOCKED]:
+		assert_false(FightPunchRules.puts_down(hit, 0.0, s))
+	assert_gt(FightPunchRules.RATTLE_MAX_S, 2.0 * FightPunchRules.RATTLE_HEAD_S,
+			"nor do two")
+
+
+func test_the_punch_that_is_more_than_he_can_take_puts_him_down() -> void:
+	var s: float = FightFistRules.MAX_SPEED_M_S
+	var full: float = FightPunchRules.RATTLE_MAX_S
+	for hit: int in [Hit.HEAD, Hit.BODY, Hit.BLOCKED]:
+		assert_true(FightPunchRules.puts_down(hit, full, s), "rattled to the full, any punch does")
+	var nearly: float = full - 0.5 * FightPunchRules.rattle_added(Hit.HEAD, s)
+	assert_true(FightPunchRules.puts_down(Hit.HEAD, nearly, s))
+	assert_false(FightPunchRules.puts_down(Hit.HEAD, nearly, 0.25 * s), "a light one does not")
+	assert_false(FightPunchRules.puts_down(Hit.BLOCKED, nearly, s), "nor one he blocks")
+
+
+func test_a_guard_takes_more_than_twice_the_punches() -> void:
+	var s: float = FightFistRules.MAX_SPEED_M_S
+	assert_lt(FightPunchRules.rattle_added(Hit.BLOCKED, s),
+			0.5 * FightPunchRules.rattle_added(Hit.HEAD, s))
 
 
 func test_the_head_is_the_hardest_feedback() -> void:

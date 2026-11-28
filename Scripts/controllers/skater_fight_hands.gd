@@ -27,6 +27,11 @@ var _bottom_vel := Vector3.ZERO
 # A grip let go of by the swap, or torn away, is taken again only after the
 # grab button has come up.
 var _grab_spent: bool = false
+# How long this hand has held his arm (FightHoldRules.ARM_HOLD_S), and whether
+# the sleeve has torn out of it: that arm is caught again only once he has
+# pulled it back.
+var _arm_held_s: float = 0.0
+var _arm_slipped: bool = false
 
 
 func setup(skater: Skater, ik: SkaterIKCoordinator) -> void:
@@ -45,6 +50,8 @@ func leave() -> void:
 	_skater.fight_grip = Grip.NONE
 	_skater.fight_punch_side = Side.TOP
 	_grab_spent = false
+	_arm_held_s = 0.0
+	_arm_slipped = false
 
 
 # A live tick's fists. `partner` is the man being fought, null for none, his
@@ -66,10 +73,10 @@ func step(input: InputState, delta: float, partner: Skater, partner_pos: Vector3
 	var at: Vector3 = Vector3.ZERO if partner == null else partner_pos - partner.global_position
 
 	var guard: Vector3 = FightGuardRules.guard_hand(punch_shoulder)
-	var chin_y: float = guard.y
+	var head_y: float = guard.y
 	var tied: bool = false
 	if partner != null:
-		chin_y = _skater.upper_body_to_local(chin_world(partner) + at).y
+		head_y = _skater.upper_body_to_local(head_world(partner) + at).y
 		tied = FightHoldRules.tied(_skater.fight_punch_side, partner.fight_grip)
 	var rattled: float = FightPunchRules.fist_scale(_skater.fight_rattle)
 	var speed: float = FightFistRules.MAX_SPEED_M_S * rattled
@@ -80,9 +87,9 @@ func step(input: InputState, delta: float, partner: Skater, partner_pos: Vector3
 		accel *= FightFistRules.TIED_SPEED_SHARE
 		punch_reach *= FightFistRules.TIED_REACH_SHARE
 	var target: Vector3 = FightFistRules.target(punch_shoulder,
-			_skater.upper_body_to_local(input.mouse_world_pos), punch_reach, guard.y, chin_y)
+			_skater.upper_body_to_local(input.mouse_world_pos), punch_reach, guard.y, head_y)
 
-	var hold_target: Vector3 = _hold(input, partner, at, hold_shoulder, reach)
+	var hold_target: Vector3 = _hold(input, delta, partner, at, hold_shoulder, reach)
 	if top_punches:
 		_move_top(target, delta, speed, accel, punch_shoulder, punch_reach)
 		_move_bottom(hold_target, delta, FightFistRules.MAX_SPEED_M_S,
@@ -115,23 +122,41 @@ static func chin_world(s: Skater) -> Vector3:
 	return s.upper_body_to_global(mid)
 
 
+# The middle of his head, world: where a fist thrown at him goes, and the centre
+# of the ball a punch to the head lands on (FightPunchRules.HEAD_RADIUS_M).
+static func head_world(s: Skater) -> Vector3:
+	return chin_world(s) + Vector3.UP * FightPunchRules.HEAD_ABOVE_CHIN_M
+
+
 # What the holding hand reaches for this tick, in UpperBody's frame: the guard,
 # or the grip, which the grab button takes and keeps while it can.
-func _hold(input: InputState, partner: Skater, at: Vector3, shoulder: Vector3,
+func _hold(input: InputState, delta: float, partner: Skater, at: Vector3, shoulder: Vector3,
 		reach: float) -> Vector3:
 	var guard: Vector3 = FightGuardRules.guard_hand(shoulder)
 	if not input.shoot_held:
 		_grab_spent = false
 	if partner == null or not input.shoot_held:
 		_skater.fight_grip = Grip.NONE
+		_arm_held_s = 0.0
 		return guard
 	var shoulder_world: Vector3 = _skater.upper_body_to_global(shoulder)
 	var holding_top: bool = _skater.fight_punch_side == Side.BOTTOM
 	var hand_world: Vector3 = _skater.upper_body_to_global(_top if holding_top else _bottom)
+	var their_arm: int = FightHoldRules.arm_grip_for(partner.fight_punch_side)
+	var their_arm_thrown: bool = arm_thrown(partner, their_arm == Grip.ARM_TOP)
+	if not their_arm_thrown:
+		_arm_slipped = false
+	var holds_arm: bool = _skater.fight_grip == Grip.ARM_TOP \
+			or _skater.fight_grip == Grip.ARM_BOTTOM
+	_arm_held_s = _arm_held_s + delta if holds_arm else 0.0
+	if _arm_held_s >= FightHoldRules.ARM_HOLD_S:
+		# The sleeve tears free, and the hand goes back to his sweater.
+		_skater.fight_grip = Grip.NONE
+		_arm_held_s = 0.0
+		_arm_slipped = true
 	if _skater.fight_grip == Grip.NONE and not _grab_spent:
-		var their_arm: int = FightHoldRules.arm_grip_for(partner.fight_punch_side)
 		var arm: Vector3 = _grip_point(partner, at, their_arm)
-		if not _arm_thrown(partner, their_arm):
+		if not their_arm_thrown or _arm_slipped:
 			their_arm = Grip.NONE
 		_skater.fight_grip = FightHoldRules.choose(hand_world, shoulder_world, reach,
 				_grip_point(partner, at, Grip.JERSEY), arm, their_arm)
@@ -152,20 +177,31 @@ func _grip_point(partner: Skater, at: Vector3, grip: int) -> Vector3:
 				partner.collision_radius(), _skater.global_position,
 				partner.upper_body_to_global(partner.shoulder.position).y + at.y)
 	var top: bool = grip == Grip.ARM_TOP
-	var shoulder: Vector3 = partner.upper_body_to_global(
-			partner.shoulder.position if top else partner.bottom_shoulder.position)
-	var fist: Vector3 = partner.upper_body_to_global(
-			partner.get_top_hand_position() if top else partner.get_blade_position())
-	return FightHoldRules.arm_point(shoulder, fist) + at
+	return FightHoldRules.arm_point(partner.upper_body_to_global(shoulder_local(partner, top)),
+			partner.upper_body_to_global(fist_local(partner, top))) + at
 
 
-# Whether his arm `grip` names is out, thrown (FightHoldRules.thrown).
-static func _arm_thrown(partner: Skater, grip: int) -> bool:
-	var top: bool = grip == Grip.ARM_TOP
-	return FightHoldRules.thrown(
-			partner.shoulder.position if top else partner.bottom_shoulder.position,
-			partner.get_top_hand_position() if top else partner.get_blade_position(),
-			arm_reach(partner))
+# An arm's shoulder and its fist, in his UpperBody's frame: the top arm's fist on
+# TopHand, the bottom arm's on the Blade marker.
+static func shoulder_local(s: Skater, top: bool) -> Vector3:
+	return s.shoulder.position if top else s.bottom_shoulder.position
+
+
+static func fist_local(s: Skater, top: bool) -> Vector3:
+	return s.get_top_hand_position() if top else s.get_blade_position()
+
+
+# Whether one of his arms is out, thrown (FightHoldRules.thrown).
+static func arm_thrown(s: Skater, top: bool) -> bool:
+	return FightHoldRules.thrown(shoulder_local(s, top), fist_local(s, top), arm_reach(s))
+
+
+# Whether one of his arms is up in his guard, in a punch's way: the punching arm
+# while it is not thrown, the other while it holds nothing.
+static func arm_guards(s: Skater, top: bool) -> bool:
+	if (s.fight_punch_side == Side.TOP) == top:
+		return not arm_thrown(s, top)
+	return s.fight_grip == Grip.NONE
 
 
 func _shoulder(top: bool) -> Vector3:

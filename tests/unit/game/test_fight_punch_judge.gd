@@ -1,10 +1,9 @@
 extends GutTest
 
 # The host's punch judge (FightPunchJudge): a fist swept into the other man's
-# head fast enough lands on it, an arm in its way blocks it, one too slow lands
-# nothing, and a fist that landed lands nothing more for the cooldown. Then what
-# landing does (SkaterController.absorb_punch): the rattle, and a rattled man
-# put down by a clean shot, which ends the fight (FightTracker).
+# head fast enough lands on it, an arm up in his guard in its way blocks it (one
+# thrown or holding does not), one too slow lands nothing, a fist that landed
+# lands nothing more for the cooldown, and nothing lands with a man down.
 # Real Skater scenes, never ticked; the fists placed on their markers by hand.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
@@ -90,6 +89,49 @@ func test_an_arm_in_the_way_blocks_it() -> void:
 	var mine: Array = _landed.filter(func(l: Array) -> bool: return l[0] == _a)
 	assert_eq(mine.size(), 1)
 	assert_eq(mine[0][2], Hit.BLOCKED)
+
+
+func test_an_arm_thrown_guards_nothing() -> void:
+	var head: Vector3 = FightPunchJudge.head_center(_b)
+	_fist_at(head + Vector3(0.0, 0.0, 0.8))
+	_tick()
+	_fist_at(head)
+	# His punching arm out at us, along the fist's way in.
+	_b.set_top_hand_position(_b.upper_body_to_local(head + Vector3(0.0, -0.02, 0.6)))
+	assert_true(SkaterFightHands.arm_thrown(_b, true))
+	_tick()
+	var mine: Array = _landed.filter(func(l: Array) -> bool: return l[0] == _a)
+	assert_eq(mine.size(), 1)
+	assert_eq(mine[0][2], Hit.HEAD)
+
+
+func test_the_off_hand_guards_until_it_holds() -> void:
+	var head: Vector3 = FightPunchJudge.head_center(_b)
+	var guard: Vector3 = head + Vector3(0.0, -0.02, 0.15)
+	for grip: int in [FightHoldRules.Grip.NONE, FightHoldRules.Grip.JERSEY]:
+		_landed.clear()
+		_now += 1.0
+		_fist_at(head + Vector3(0.0, 0.0, 0.25))
+		_tick()
+		_fist_at(head)
+		_b.set_blade_position(_b.upper_body_to_local(guard))
+		_b.fight_grip = grip
+		_tick()
+		var mine: Array = _landed.filter(func(l: Array) -> bool: return l[0] == _a)
+		assert_eq(mine.size(), 1)
+		assert_eq(mine[0][2], Hit.BLOCKED if grip == FightHoldRules.Grip.NONE else Hit.HEAD)
+
+
+func test_nothing_lands_with_a_man_down() -> void:
+	var head: Vector3 = FightPunchJudge.head_center(_b)
+	_b.is_knocked_down = true
+	_punch(head + Vector3(0.0, 0.0, 0.2), head)
+	assert_true(_landed.is_empty(), "not on a man on the ice")
+	_b.is_knocked_down = false
+	_a.is_knocked_down = true
+	_now += 1.0
+	_punch(head + Vector3(0.0, 0.0, 0.2), head)
+	assert_true(_landed.is_empty(), "and not from one")
 
 
 func test_one_punch_lands_once() -> void:

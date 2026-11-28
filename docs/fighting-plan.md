@@ -1,8 +1,9 @@
 # Fighting — design plan
 
-Status: **approved; phases 1–4 built** (lifecycle, gloves off, the fist and
-the grab, punches landing) plus the fight camera; phase 4 awaits a local
-playtest. Phase 5 is not started. Where what is built
+Status: **approved; phases 1–5 built** (lifecycle, gloves off, the fist and
+the grab, punches landing, bots that fight) plus the fight camera. Landing a
+punch and the knockdown were reworked on 2026-11-28 (*Landing and the
+knockdown, as reworked*), which awaits a local playtest. Where what is built
 differs from the text below, the "as built" sections say how.
 
 Two skaters can fight. Both must agree to it, the referee blows the play
@@ -60,9 +61,9 @@ NONE ──Fight press, opponent in range──▶ CHALLENGING ──opponent pr
   suspended (there is no third man in). More than one pair may lock during
   the phase. It ends when the last fight ends, and then runs
   `_whistle_and_faceoff(stored_dot)` as any stoppage does.
-- **A fight ends** when a fighter goes down (a knockdown, §4), when both have
-  let go and are more than `DISENGAGE_M` apart for `DISENGAGE_S`, or at
-  `FIGHT_MAX_S` (~20 s, the linesmen stepping in). At a period horn or game
+- **A fight ends** when a fighter goes down (a knockdown, §4; as built, once
+  he is back up), when both have let go and are more than `DISENGAGE_M` apart
+  for `DISENGAGE_S`, or at `FIGHT_MAX_S` (~20 s, the linesmen stepping in). At a period horn or game
   over it is cleared outright, as `BoardPinTracker.clear()` does.
 - **The ruleset**: `NHL` and `ARCADE` whistle it. `OFF` has no whistles, so
   it never fights, and neither does free play, the tutorial or a drill,
@@ -288,13 +289,13 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   the wire carries both fists, and the bottom arm is drawn to the blade marker
   (`SkaterIKCoordinator.update_bottom_hand`). This replaces phase 2's parked
   blade and `apply_fight_guard`.
-- **The punching fist** (`FightFistRules`): the cursor's point on the ice,
-  held within the arm's reach (`SkaterFightHands.arm_reach`) and at least
-  `MIN_FORWARD_M` in front of the shoulder. Its height rises from the guard's
-  to the other man's chin as the arm straightens. It chases that target on an
-  arrive law capped at `MAX_SPEED_M_S` (9 m/s) and `MAX_ACCEL_M_S2`. With the
-  cursor close in, the fist sits up in a guard; driven out at him, it's a
-  punch.
+- **The punching fist** (`FightFistRules`): the cursor's point on the ice, at
+  least `MIN_FORWARD_M` in front of the shoulder. Its height rises from the
+  guard's to the middle of the other man's head as the arm straightens. It
+  chases that target on an arrive law capped at `MAX_SPEED_M_S` (9 m/s) and
+  `MAX_ACCEL_M_S2`, and stops where the arm is straight
+  (`SkaterFightHands.arm_reach`). With the cursor close in, the fist sits up in
+  a guard; driven out at him, it's a punch.
 - **The holding hand** keeps the guard (`FightGuardRules.guard_hand`) until
   the grab button (shoot, held) takes a grip (`FightHoldRules.choose`). The
   grip is his sweater at the chest, or his punching arm, but **only while that
@@ -302,7 +303,9 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   rule, two guards an arm apart always grabbed the forearm in front of the
   hand. So catching the punch is a timing skill, and from a guard you take
   the sweater. A held arm reaches `TIED_REACH_SHARE` and moves at
-  `TIED_SPEED_SHARE` (`FightHoldRules.tied`). A grip is torn away past
+  `TIED_SPEED_SHARE` (`FightHoldRules.tied`), for `ARM_HOLD_S`: then the
+  sleeve tears out of the hand, which goes back to the sweater, and that arm
+  is caught again only once it has been pulled back. A grip is torn away past
   `TEAR_SLACK_M`.
 - **The swap** (slap button) changes which arm punches
   (`Skater.fight_punch_side`) and lets the grip go. After a swap, or a torn
@@ -313,7 +316,9 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   a velocity post-step along the line between the pair, after the movement
   and the press. The pair never come closer than touching. While either holds
   the other, they're never further apart than the holder's reach plus
-  `BAND_BODY_M`. The change is shared by mass. **Deviation from §3**: this is
+  `BAND_BODY_M`: a bent arm's hold, inside the range a punch reaches the held
+  man's head from (`test_fight_hands.gd` holds the two together). The change
+  is shared by mass. **Deviation from §3**: this is
   a mass-shared band, not a `PressRules` force contest with edges. A held man
   can be dragged by skating away, and the heavier man moves less, but bracing
   on the edges doesn't resist yet. The tug's effect on balance is phase 4.
@@ -342,31 +347,26 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
 - **The judge** (`FightPunchJudge`, host-only, ticked by `GameManager` after
   the tracker) sweeps each fighter's punching fist from last tick to this one
   through the other man's head (a ball over his chin), his chest (a ball under
-  his shoulders) and both his arms (capsules from shoulder to fist).
-  `FightPunchRules` has the volumes and sweeps. The first volume the fist meets
-  is the hit, and an arm is a **block**. A fist closing slower than
-  `MIN_LAND_M_S` (2.5 m/s) is a hand on him, not a punch. A landed fist lands
-  nothing more for `HIT_COOLDOWN_S`. It's judged on the host's copy of both
-  bodies and both fists at the host's present, as a body check is.
+  his shoulders) and the arms he has up in his guard. `FightPunchRules` has
+  the volumes and sweeps. The first volume the fist meets is the hit, and an
+  arm is a **block**. A fist closing slower than `MIN_LAND_M_S` (2.5 m/s) is a
+  hand on him, not a punch. A landed fist lands nothing more for
+  `HIT_COOLDOWN_S`, and nothing lands with either man down. It's judged on the
+  host's copy of both bodies and both fists at the host's present, as a body
+  check is.
 - **What a punch does** (`SkaterController.absorb_punch`, host):
   - It moves him by its `Δv`: the arm's striking mass on his body's, ~0.4 m/s
     at full speed.
   - It adds **rattle**: a timer, the head's at full speed `RATTLE_HEAD_S`, the
-    chest's a share of that, a block's a sliver, capped at `RATTLE_MAX_S`. The
-    rattle wears off at `RATTLE_DECAY_PER_S` on the host and is adopted every
+    chest's and a block's shares of that, capped at `RATTLE_MAX_S`. The rattle
+    wears off at `RATTLE_DECAY_PER_S` on the host and is adopted every
     broadcast by every machine. It's replicated in the fight byte's bits 3–7
     (protocol v102).
   - It reels him as a check of strength `REEL_HEAD_M_S` would (the stagger,
     with its recoil and wobble).
-  - It **puts him down** through the check's own absorb path
-    (`_absorb_hit`), with the `Δv` his balance reads grown by
-    `FightPunchRules.balance_scale` (his balance shrunk by the rattle). A punch
-    never drops a sound man: a full-speed one is a sixth of what his balance
-    rides. Fully rattled, a clean head shot does
-    (`test_fight_punch_rules.gd` holds both). So a knockdown is
-    wobbled-then-dropped.
+  - It **puts him down** when it is more than he can take
+    (`FightPunchRules.puts_down`): see the rework below.
 - **A rattled fist** is slower (`FightPunchRules.fist_scale`).
-- **A man put down ends the fight** (`FightTracker._step_fights`).
 - **Feedback** on every peer (`notify_punch_landed`, reliable): the check's
   thud played shorter and brighter at his head, a half-size impact burst, a
   remote victim's knockback lead, and a crowd swell on a hard one
@@ -375,35 +375,92 @@ Each phase ends with the suite green, lint clean and a local playtest by you.
   pitched up.
 - **Not modelled**: the grip's tug on balance (dragging a man doesn't topple
   him), lag compensation for a remote attacker's punch, and an uppercut or
-  body-shot aim (the fist's height comes from its extension alone).
+  body-shot aim (the fist's height comes from its extension alone, so the
+  chest is only ever hit on a much shorter man).
+
+## Landing and the knockdown, as reworked
+
+Measured before the rework (`tests/instruments/controllers/test_fight_outcomes.gd`,
+real controllers fought by the bots' brain and by scripted cursors): no fight
+in some 250 ended with a man down, and almost no punch reached a head. Four
+causes, and what replaced each:
+
+- **The fist arrived stopped.** Its target was drawn back to the arm's reach
+  and the arrive law eased onto it, so a punch at a man near the end of the
+  arm landed under `MIN_LAND_M_S`. Now a cursor past the reach is thrown at and
+  the arm stops the fist, and `ARRIVE_GAIN` holds the fist at top speed until a
+  head's radius from where it is sent, so a cursor laid on his head lands as
+  hard as one past it.
+- **Fights were held out of range.** A punch reaches a head from about 0.95 m
+  centre to centre once both men have turned into their stance. The hold let
+  the pair out to 1.03 m and a fighting bot never moved its feet, so a hunt's
+  fight started and stayed at its 1.2 m stand-off. The band is now a bent
+  arm's (`BAND_BODY_M`), and a bot skates in (phase 5).
+- **Every arm blocked, always.** Both arms were whole-arm capsules whatever
+  they were doing, which covered the head from the front and both sides. Now
+  only an arm **up in his guard** blocks (`SkaterFightHands.arm_guards`): the
+  punching arm while it is not thrown, the other while it holds nothing; and
+  with its fist and forearm only (`GUARD_ARM_SHARE`). So throwing or holding
+  opens a man up, a straight punch into a guard is blocked, and a hook round
+  the side of it lands. A block lets `RATTLE_BLOCKED_SHARE` (a third) through.
+- **The knockdown was out of reach, and unseen.** It went through
+  `BodyBalanceRules` with the rattle shrinking his balance, which asked for a
+  full rattle and a near top-speed head shot together, and then gave a
+  stumble; and the fight ended the tick he started down, so the faceoff's
+  teleport stood him up. Now **the rattle is all a man can take**: the punch
+  that takes it past `RATTLE_MAX_S` puts him down flat
+  (`SkaterController.punch_knockdown_seconds`: the fall, `OUT_LIE_S`, the
+  get-up), whatever it hit. Three full-speed head shots a second apart do it;
+  blocked, three times as many. A man down **decides** the fight
+  (`FightTracker.is_decided`, `fight_won` at once) and it is **over once he
+  is back on his skates**, both men's gloves off until then, so the whole fall
+  is seen before the whistle. The linesmen's `FIGHT_MAX_S` stays for a fight
+  nobody is winning. A fighter cannot dive (it read as going down).
+
+Seen with `render-poses.sh --only=fight_down`. The instrument's numbers after
+the rework, four fights a row: bot against bot ends with a man down every time,
+in about 6 s on Hard, 7 s on Normal and 8 s on Easy; a scripted cursor that
+only throws straight at the head beats Easy, splits with Normal and loses to
+Hard, and one that hooks round the open side does better against each.
+
+Three choices in it were put to the user (2026-11-28): most fights end with a
+man down, and the linesmen's cap stays; only an arm resting in the guard
+blocks, and a block lets a third through; a caught arm tears free after a
+moment rather than staying tied until its man swaps hands.
 
 ## Phase 5 as built
 
-- **A bot fights with the human's three controls** (`AIFightBrain`, in
+- **A bot fights with the human's controls** (`AIFightBrain`, in
   `Scripts/domain/ai/`, engine-free; fed each fight tick by
   `AIController._fight_tick`, which reads his head and fists off the partner's
-  markers and the grips through `FightHoldRules`). It sets the cursor, the
-  grab and the swap, brakes, and the fight tick does the rest, so a bot's fist
-  obeys the same reach, speed and grip rules a human's does.
+  markers and the grips through `FightHoldRules`). It sets the stick, the
+  cursor, the grab and the swap, and the fight tick does the rest, so a bot's
+  fist obeys the same reach, speed and grip rules a human's does.
+- **It skates in** until its centre is `STAND_PAST_REACH_M` past its arm's
+  reach from his, and brakes there. A man who has skated off past
+  `FightRules.DISENGAGE_M` is let go.
 - **Between punches** the cursor rests `GUARD_AHEAD_M` in front of it, the
   fist up in a guard, and the grab holds his sweater.
-- **A punch** drives the cursor `THROUGH_M` past his head, `AROUND_M` round
-  the side his guard leaves open (away from whichever of his fists sits
-  nearer the line to his head), for `THROW_S`, then back for `RECOVER_S`. The
-  gap between punches rides `check_aggression` (`GAP_PASSIVE_S` at none,
-  `GAP_AGGRESSIVE_S` at full), so Easy throws every 2 s and Hard every 0.6 s.
-  Bots' cadences are staggered by peer id. It doesn't throw while he holds its
-  punching arm.
+- **A punch**, thrown only from where it reaches (`STRIKE_PAST_REACH_M`):
+  with none of his arms up in his guard, the cursor goes `THROUGH_M` straight
+  out past his head for `THROW_S`. With one up it is a hook: `WIND_S` out to a
+  point `HOOK_OUT_M` beside his head on the side he leaves open (away from the
+  guarding fist furthest off the line to his head), then across through it.
+  Then back for `RECOVER_S`. The gap between punches rides `check_aggression`
+  (`GAP_PASSIVE_S` at none, `GAP_AGGRESSIVE_S` at full), so Easy throws every
+  1.6 s and Hard every 0.6 s. Bots' cadences are staggered by peer id. It
+  doesn't throw while he holds its punching arm.
 - **Reads, a reaction late** (`carrier_reaction_delay_s`): his punching arm
   thrown, which it catches by letting the grab go for a tick so it takes
   again on the arm; and its own punching arm held, which it frees with the
   swap. Both are the `ties_up_arms` cognition gate, closed on Easy.
+- **With a man down** it lets go and stands off, its guard up.
 - **The fight controls** are toasted to a human whose fight is called (aim to
   punch, hold shoot to grab, slapshot to swap hands), with the keys of the
   device in use.
 - **Tested by** `test_ai_fight_brain.gd`.
-- **Not yet**: the tutorial line, a bot that skates off to
-  disengage or presses the band, and a body-shot aim.
+- **Not yet**: the tutorial line, a bot that skates off to disengage or
+  blocks with its hands, and a body-shot aim.
 
 ## The grudge
 

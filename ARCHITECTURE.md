@@ -319,7 +319,7 @@ Player-first guarantee: weighted target is clamped so player never exceeds `play
 | `FACEOFF` | Until pickup/touch or 10s timeout | Puck live at the dot, waiting for a player to engage it |
 | `END_OF_PERIOD` | 20s (`INTERMISSION_DURATION`) | Period clock hit zero; skaters skate off to their benches, then the intermission band comes up — with the period's goals looping behind it when there are any (see *Period break presentation*) |
 | `GAME_OVER` | Indefinite | All periods exhausted; movement locked until host resets |
-| `FIGHT` | Until `FightTracker` says the last fight is over | Two players agreed to fight (`docs/fighting-plan.md`): movement allowed, puck pickup-locked where it lies, clock stopped, body contact off (`PhaseRules.suspends_contact`); ends into `FACEOFF_PREP` at the dot `GameStateMachine.begin_fight` chose |
+| `FIGHT` | Until `FightTracker` says the last fight is over (a man put down is back up, the pair apart, or the linesmen) | Two players agreed to fight (`docs/fighting-plan.md`): movement allowed, puck pickup-locked where it lies, clock stopped, body contact off (`PhaseRules.suspends_contact`); ends into `FACEOFF_PREP` at the dot `GameStateMachine.begin_fight` chose |
 
 Period clock (`GameRules.PERIOD_DURATION = 240s`, `NUM_PERIODS = 3`) ticks down only during `PLAYING`. When it expires: if periods remain → `END_OF_PERIOD` → `FACEOFF_PREP` (period increments, clock resets); if last period → `GAME_OVER`. `END_OF_PERIOD` and `GAME_OVER` are dead-puck phases.
 

@@ -1,9 +1,11 @@
 extends GutTest
 
-# AIFightBrain: a bot fights with the three controls a human does. It guards
-# and holds the sweater, throws through the open side of the man's guard on its
-# tier's cadence, and — reading it a reaction delay late — catches his thrown
-# arm and swaps hands out of a tie. Easy does neither of the last two.
+# AIFightBrain: a bot fights with the controls a human does. It skates in to
+# where its fist reaches, guards and holds the sweater, throws on its tier's
+# cadence — straight through an open man's head, a hook round the open side of a
+# guard — and, reading it a reaction delay late, catches his thrown arm and
+# swaps hands out of a tie. Easy does neither of the last two. With a man down
+# it stands off.
 
 const DT: float = 1.0 / 90.0
 
@@ -14,9 +16,13 @@ func before_each() -> void:
 	_v = AIFightBrain.View.new()
 	_v.me = Vector3.ZERO
 	_v.facing = Vector2(0.0, -1.0)
-	_v.head = Vector3(0.0, 1.6, -0.9)
-	_v.his_top_fist = Vector3(0.15, 1.6, -0.6)     # covering the line to his head
-	_v.his_bottom_fist = Vector3(-0.4, 1.2, -0.7)  # down and out on the other side
+	_v.reach = 0.7
+	_v.him = Vector3(0.0, 0.0, -0.72)
+	_v.head = Vector3(0.0, 1.6, -0.72)
+	_v.his_top_fist = Vector3(0.05, 1.6, -0.45)    # up in front of his face
+	_v.his_bottom_fist = Vector3(-0.4, 1.5, -0.6)  # up, out on the other side
+	_v.his_top_guards = true
+	_v.his_bottom_guards = true
 
 
 func _brain(profile: BotSkillProfile, phase_s: float = 0.0) -> AIFightBrain:
@@ -33,6 +39,8 @@ func _run(b: AIFightBrain, seconds: float) -> Array[AIFightBrain.Decision]:
 		copy.aim = d.aim
 		copy.grab = d.grab
 		copy.swap = d.swap
+		copy.move = d.move
+		copy.brake = d.brake
 		out.append(copy)
 	return out
 
@@ -56,29 +64,74 @@ func test_between_throws_it_guards_and_holds_the_sweater() -> void:
 	assert_false(d.swap)
 
 
-func test_it_throws_through_his_head_on_its_cadence() -> void:
-	var b := _brain(BotSkillProfile.normal(), 0.0)
-	var ds: Array[AIFightBrain.Decision] = _run(b, 5.0)
+func test_it_throws_on_its_cadence() -> void:
+	var ds: Array[AIFightBrain.Decision] = _run(_brain(BotSkillProfile.normal(), 0.0), 5.0)
 	assert_gt(_throws(ds), 2, "several punches in five seconds")
-	var thrown: AIFightBrain.Decision = null
+
+
+func test_with_no_guard_up_it_throws_straight_through_his_head() -> void:
+	_v.his_top_guards = false
+	_v.his_bottom_guards = false
+	var d: AIFightBrain.Decision = _brain(BotSkillProfile.normal(), 0.0).decide(_v, DT)
+	assert_almost_eq(d.aim.x, 0.0, 1e-4)
+	assert_lt(d.aim.z, _v.head.z, "driven through, past his head")
+
+
+func test_it_hooks_round_the_side_his_guard_leaves_open() -> void:
+	# His off hand guards out on −x: the hook winds out beside his head on +x,
+	# then goes across through it.
+	var ds: Array[AIFightBrain.Decision] = _run(_brain(BotSkillProfile.normal(), 0.0),
+			AIFightBrain.WIND_S + AIFightBrain.THROW_S)
+	assert_almost_eq(ds[0].aim.x, AIFightBrain.HOOK_OUT_M, 1e-4, "out beside his head")
+	assert_almost_eq(ds[0].aim.z, _v.head.z, 1e-4)
+	assert_lt(ds[ds.size() - 1].aim.x, _v.head.x, "then across, through it")
+
+
+func test_an_arm_that_holds_or_punches_is_no_guard_to_go_round() -> void:
+	# His off hand on our sweater: only the fist in front of his face guards, a
+	# touch to +x of the line, so the hook goes round on −x.
+	_v.his_bottom_guards = false
+	var d: AIFightBrain.Decision = _brain(BotSkillProfile.normal(), 0.0).decide(_v, DT)
+	assert_almost_eq(d.aim.x, -AIFightBrain.HOOK_OUT_M, 1e-4)
+
+
+func test_it_skates_in_until_its_fist_reaches_and_throws_only_from_there() -> void:
+	_v.him = Vector3(0.0, 0.0, -2.0)
+	_v.head = Vector3(0.0, 1.6, -2.0)
+	var b := _brain(BotSkillProfile.hard(), 0.0)
+	var ds: Array[AIFightBrain.Decision] = _run(b, 3.0)
+	assert_eq(_throws(ds), 0, "nothing thrown at a man out of reach")
+	assert_almost_eq(ds[0].move, Vector2(0.0, -1.0), Vector2(1e-4, 1e-4), "it skates at him")
+	assert_false(ds[0].brake)
+	_v.him = Vector3(0.0, 0.0, -0.72)
+	_v.head = Vector3(0.0, 1.6, -0.72)
+	var d: AIFightBrain.Decision = b.decide(_v, DT)
+	assert_eq(d.move, Vector2.ZERO, "and stands once it is there")
+	assert_true(d.brake)
+
+
+func test_a_man_who_has_skated_off_is_let_go() -> void:
+	_v.him = Vector3(0.0, 0.0, -(FightRules.DISENGAGE_M + 0.5))
+	var d: AIFightBrain.Decision = _brain(BotSkillProfile.hard(), 0.0).decide(_v, DT)
+	assert_eq(d.move, Vector2.ZERO)
+	assert_true(d.brake)
+
+
+func test_with_a_man_down_it_stands_off() -> void:
+	_v.man_down = true
+	var b := _brain(BotSkillProfile.hard(), 0.0)
+	var ds: Array[AIFightBrain.Decision] = _run(b, 3.0)
+	assert_eq(_throws(ds), 0)
+	assert_false(b.throwing())
 	for d: AIFightBrain.Decision in ds:
-		if d.aim.distance_to(_v.me) > 0.6:
-			thrown = d
-			break
-	assert_lt(thrown.aim.z, _v.head.z, "driven through, past his head")
+		assert_false(d.grab, "it lets him go")
+		assert_eq(d.move, Vector2.ZERO)
 
 
 func test_an_aggressive_tier_throws_more() -> void:
 	var hard: int = _throws(_run(_brain(BotSkillProfile.hard()), 10.0))
 	var easy: int = _throws(_run(_brain(BotSkillProfile.easy()), 10.0))
 	assert_gt(hard, easy)
-
-
-func test_it_goes_round_the_side_his_guard_leaves_open() -> void:
-	var b := _brain(BotSkillProfile.normal(), 0.0)
-	var d: AIFightBrain.Decision = b.decide(_v, DT)
-	# His top fist covers the line on +x; the throw goes round on −x.
-	assert_lt(d.aim.x, 0.0)
 
 
 func test_it_does_not_throw_with_its_arm_held() -> void:

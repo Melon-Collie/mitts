@@ -4,7 +4,8 @@ extends RefCounted
 # The holding hand and what it holds (docs/fighting-plan.md §3). Held, the grab
 # button takes the other man's sweater at his chest, or his punching arm between
 # elbow and fist, whichever the hand is nearer to and can reach; held by the arm,
-# that fist is tied up (FightFistRules.TIED_*). Either grip holds the pair in a
+# that fist is tied up (FightFistRules.TIED_*) until the sleeve tears free
+# (ARM_HOLD_S) or its man swaps hands. Either grip holds the pair in a
 # band between bodies touching and the holder's arm's length, and with no grip
 # they still cannot pass through each other. The band is laid on both bodies'
 # velocities along the line between them, shared by their masses.
@@ -31,9 +32,13 @@ const ARM_TAKE_SHARE: float = 0.65
 # An arm can be caught only while it is thrown: its fist out past this share of
 # its reach. Held up in a guard it is the sweater the hand takes.
 const ARM_THROWN_SHARE: float = 0.7
+# A caught arm is held this long before the sleeve tears out of the hand: a
+# punch's worth, and the start of the next.
+const ARM_HOLD_S: float = 0.6
 # Held, the centres are kept no further apart than the holder's arm's length
-# and this much more: his shoulder off his centre, and the held point's.
-const BAND_BODY_M: float = 0.3
+# and this much more: a bent arm's hold, close enough that a punch thrown from
+# it reaches the held man's head.
+const BAND_BODY_M: float = 0.17
 # How fast the band takes up an overstretch or an overlap, 1/s: half of it in
 # about a tenth of a second.
 const BAND_RATE: float = 7.0
