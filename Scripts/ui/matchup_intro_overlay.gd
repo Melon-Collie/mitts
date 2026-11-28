@@ -1,19 +1,20 @@
 class_name MatchupIntroOverlay
 extends CanvasLayer
 
-# Opening-faceoff matchup screen, scrim-first: the pre-game camera sweep and
-# bench skate-on stay visible through a medium dim wash while the two rosters
-# read on top — team columns (color stripe + HOME/AWAY header, then per player
-# jersey number + name) around a center VS. Deliberately no build readout: the
-# attribute system is all-lateral (two body dials + gear leans, no build is
-# "better"), so any summary — a hex radar of the resolved multipliers, scouting
-# archetype tags — either implies a power ranking or editorializes; the bodies
-# on the ice during the sweep are the honest preview. Pure presentation, no
-# buttons; shown for the front
-# of the PREGAME_INTRO_DURATION hold and dismissed before the faceoff
-# countdown takes the banner.
+# Opening-faceoff matchup card, the broadcast's starting lineups: two team
+# panels on the scorebug's dark surface, away on the left as the scorebug lists
+# it, a VS disc between them and the title in a pill above. Each panel is headed
+# by its club's badge at hero scale (TeamBadge: the crest cropped at the
+# panel's outer edge, the club's name), with the lineup below. The camera
+# sweep and the skate-on stay visible round it through a medium dim wash.
 #
-# Owned by HUD, which passes the slot-sorted PlayerRecords per team.
+# Deliberately no build readout: the attribute system is all-lateral (two body
+# dials and gear leans, no build is "better"), so any summary would imply a
+# power ranking; the bodies on the ice during the sweep are the honest preview.
+#
+# Owned by HUD, which passes the slot-sorted PlayerRecords per team and the two
+# clubs. Pure presentation, no buttons: shown for the front of the
+# PREGAME_INTRO_DURATION hold and dismissed before the faceoff countdown.
 
 const _WHITE := MenuStyle.BROADCAST_CREAM
 const _DIM := MenuStyle.BROADCAST_DIM
@@ -21,16 +22,29 @@ const _DIM := MenuStyle.BROADCAST_DIM
 # Between the intermission reel's light wash (0.32) and the modal scrim
 # (0.55): the sweep behind is mood, not content, but should still read.
 const _INTRO_SCRIM := Color(0.024, 0.039, 0.071, 0.40)
+const _PANEL_BG := Color(MenuStyle.BROADCAST_BG, 0.94)
+
+const _PANEL_WIDTH: float = 500.0
+const _PANEL_RADIUS: int = 6
+const _TEAM_STRIPE: int = 5
+# The panel's head: the club's badge, the crest about twice its height.
+const _HEAD_HEIGHT: float = 78.0
+const _HEAD_CREST_PX: float = 156.0
+const _HEAD_NAME_SIZE: int = 30
+const _HEAD_NAME_INSET: float = 64.0
+const _ROW_MARGIN: int = 26
+const _VS_DISC: float = 68.0
+# Entry: the panels settle in from a touch small, the VS lands after them.
+const _ENTER_SCALE: float = 0.96
+const _ENTER_TIME: float = 0.40
+const _VS_DELAY: float = 0.25
 
 var _scrim: ColorRect = null
 var _content: VBoxContainer = null
-var _home_stripe_style: StyleBoxFlat = null
-var _away_stripe_style: StyleBoxFlat = null
-var _home_rows: VBoxContainer = null
 var _title_label: Label = null
-var _home_header: Label = null
-var _away_header: Label = null
-var _away_rows: VBoxContainer = null
+var _away: Dictionary = {}
+var _home: Dictionary = {}
+var _vs: Control = null
 var _present_tween: Tween = null
 
 
@@ -59,82 +73,124 @@ func _build_ui() -> void:
 
 	_content = VBoxContainer.new()
 	_content.alignment = BoxContainer.ALIGNMENT_CENTER
-	_content.add_theme_constant_override("separation", 22)
+	_content.add_theme_constant_override("separation", 18)
 	centering.add_child(_content)
 
-	_title_label = _lbl(tr(&"MATCHUP_TITLE"), 16, _DIM)
-	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_content.add_child(_title_label)
+	var title_pill := PanelContainer.new()
+	title_pill.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var pill_style := StyleBoxFlat.new()
+	pill_style.bg_color = _PANEL_BG
+	pill_style.set_corner_radius_all(4)
+	pill_style.set_content_margin(SIDE_LEFT, 16)
+	pill_style.set_content_margin(SIDE_RIGHT, 16)
+	pill_style.set_content_margin(SIDE_TOP, 6)
+	pill_style.set_content_margin(SIDE_BOTTOM, 6)
+	title_pill.add_theme_stylebox_override("panel", pill_style)
+	_title_label = _lbl(tr(&"MATCHUP_TITLE"), 16, _WHITE)
+	_title_label.add_theme_font_override("font", MenuStyle.display_font_spaced())
+	title_pill.add_child(_title_label)
+	_content.add_child(title_pill)
 
-	var columns := HBoxContainer.new()
-	columns.alignment = BoxContainer.ALIGNMENT_CENTER
-	columns.add_theme_constant_override("separation", 56)
-	_content.add_child(columns)
-
-	_home_stripe_style = _stripe_style()
-	var home_col := _build_team_column(tr(&"TEAM_HOME"), _home_stripe_style)
-	_home_rows = home_col.get_meta(&"rows") as VBoxContainer
-	_home_header = home_col.get_meta(&"header") as Label
-	columns.add_child(home_col)
-
-	# Center spine: just the VS — the archetype tags carry the build story in
-	# words, so there is no legend to key.
-	var vs := _lbl(tr(&"MATCHUP_VS"), 30, _DIM)
-	vs.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vs.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	columns.add_child(vs)
-
-	_away_stripe_style = _stripe_style()
-	var away_col := _build_team_column(tr(&"TEAM_AWAY"), _away_stripe_style)
-	_away_rows = away_col.get_meta(&"rows") as VBoxContainer
-	_away_header = away_col.get_meta(&"header") as Label
-	columns.add_child(away_col)
+	var panels := HBoxContainer.new()
+	panels.alignment = BoxContainer.ALIGNMENT_CENTER
+	panels.add_theme_constant_override("separation", 20)
+	_content.add_child(panels)
+	_away = _build_team_panel(false)
+	panels.add_child(_away.panel)
+	_vs = _build_vs()
+	panels.add_child(_vs)
+	_home = _build_team_panel(true)
+	panels.add_child(_home.panel)
 
 
-# One team's column: [stripe] HEADER, then a rows box the roster fills at
-# present() time. The rows container rides along as metadata so _build_ui can
-# grab it without plumbing a second return value.
-func _build_team_column(header: String, stripe_style: StyleBoxFlat) -> VBoxContainer:
+# One team's panel: the top stripe in its colour, its badge, its lineup. The
+# pieces present() fills ride in the returned Dictionary. `mirrored` is the
+# right-hand panel, its crest cropped at the right edge.
+func _build_team_panel(mirrored: bool) -> Dictionary:
+	var style := StyleBoxFlat.new()
+	style.bg_color = _PANEL_BG
+	style.set_corner_radius_all(_PANEL_RADIUS)
+	style.border_width_top = _TEAM_STRIPE
+	style.set_content_margin(SIDE_BOTTOM, 18)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", style)
+	panel.custom_minimum_size = Vector2(_PANEL_WIDTH, 0)
+	# Crops the badge's crest to the panel's rounded corners.
+	panel.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+
 	var col := VBoxContainer.new()
-	col.alignment = BoxContainer.ALIGNMENT_BEGIN
-	col.add_theme_constant_override("separation", 10)
+	col.add_theme_constant_override("separation", 12)
+	panel.add_child(col)
 
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 10)
-	head.add_child(_stripe(stripe_style, 30))
-	var header_label := _lbl(header, 28, _WHITE)
-	head.add_child(header_label)
-	col.add_child(head)
-	col.set_meta(&"header", header_label)
+	var badge := TeamBadge.new(_PANEL_WIDTH, _HEAD_CREST_PX, _HEAD_NAME_SIZE, _HEAD_NAME_INSET,
+			HORIZONTAL_ALIGNMENT_RIGHT if mirrored else HORIZONTAL_ALIGNMENT_LEFT, mirrored)
+	badge.custom_minimum_size.y = _HEAD_HEIGHT
+	col.add_child(badge)
 
+	var rule := ColorRect.new()
+	rule.color = MenuStyle.BROADCAST_SEP
+	rule.custom_minimum_size = Vector2(0, 1)
+	col.add_child(rule)
+
+	var rows_margin := MarginContainer.new()
+	rows_margin.add_theme_constant_override("margin_left", _ROW_MARGIN)
+	rows_margin.add_theme_constant_override("margin_right", _ROW_MARGIN)
+	col.add_child(rows_margin)
 	var rows := VBoxContainer.new()
-	rows.add_theme_constant_override("separation", 6)
-	col.add_child(rows)
-	col.set_meta(&"rows", rows)
-	return col
+	rows.add_theme_constant_override("separation", 8)
+	rows_margin.add_child(rows)
+	return {"panel": panel, "style": style, "badge": badge, "rows": rows}
 
 
-# `title` and the two headers replace "TONIGHT'S MATCHUP", HOME and AWAY when
-# given: a tournament game names its round and its clubs.
+func _build_vs() -> Control:
+	var disc := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = _PANEL_BG
+	style.set_corner_radius_all(int(_VS_DISC * 0.5))
+	style.border_color = MenuStyle.BROADCAST_BORDER_T
+	style.set_border_width_all(2)
+	disc.add_theme_stylebox_override("panel", style)
+	disc.custom_minimum_size = Vector2(_VS_DISC, _VS_DISC)
+	disc.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var vs := _lbl(tr(&"MATCHUP_VS"), 24, _WHITE)
+	vs.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vs.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	disc.add_child(vs)
+	return disc
+
+
+# `title` and the two names replace "TONIGHT'S MATCHUP" and the clubs' own names
+# when given: a tournament game names its round and seeds its clubs.
 func present(home_records: Array[PlayerRecord], away_records: Array[PlayerRecord],
-		home_stripe: Color, away_stripe: Color, title: String = "",
-		home_header: String = "", away_header: String = "") -> void:
+		home_club: int, away_club: int, title: String = "",
+		home_name: String = "", away_name: String = "") -> void:
 	_title_label.text = tr(&"MATCHUP_TITLE") if title.is_empty() else title
-	_home_header.text = tr(&"TEAM_HOME") if home_header.is_empty() else home_header
-	_away_header.text = tr(&"TEAM_AWAY") if away_header.is_empty() else away_header
-	_home_stripe_style.bg_color = home_stripe
-	_away_stripe_style.bg_color = away_stripe
-	_fill_rows(_home_rows, home_records)
-	_fill_rows(_away_rows, away_records)
+	var stripes: Dictionary = TeamColorRegistry.get_score_stripe_pair(home_club, away_club)
+	var inks: Dictionary = TeamColorRegistry.get_score_ink_pair(home_club, away_club,
+			MenuStyle.BROADCAST_BG)
+	_fill_panel(_home, home_records, home_club, stripes.home, inks.home,
+			home_name if not home_name.is_empty() else _club_name(home_club, &"TEAM_HOME"))
+	_fill_panel(_away, away_records, away_club, stripes.away, inks.away,
+			away_name if not away_name.is_empty() else _club_name(away_club, &"TEAM_AWAY"))
+
 	visible = true
 	if _present_tween != null and _present_tween.is_running():
 		_present_tween.kill()
 	_scrim.modulate.a = 0.0
 	_content.modulate.a = 0.0
+	_vs.modulate.a = 0.0
+	for panel: Control in [_away.panel, _home.panel]:
+		panel.pivot_offset = panel.size * 0.5
+		panel.scale = Vector2.ONE * _ENTER_SCALE
 	_present_tween = create_tween()
 	_present_tween.tween_property(_scrim, "modulate:a", 1.0, 0.30)
-	_present_tween.parallel().tween_property(_content, "modulate:a", 1.0, 0.40) \
+	_present_tween.parallel().tween_property(_content, "modulate:a", 1.0, _ENTER_TIME) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	for panel: Control in [_away.panel, _home.panel]:
+		_present_tween.parallel().tween_property(panel, "scale", Vector2.ONE, _ENTER_TIME) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_present_tween.parallel().tween_property(_vs, "modulate:a", 1.0, 0.20) \
+		.set_delay(_VS_DELAY)
 
 
 func hide_overlay() -> void:
@@ -150,13 +206,23 @@ func hide_overlay() -> void:
 	_present_tween.tween_callback(func() -> void: visible = false)
 
 
-# Roster rebuilt per present(): once per match, a handful of rows. Each row:
-# a position badge, jersey number, name. Records arrive slot-sorted (see
-# hud.gd._show_matchup_overlay), so in 5v5 the forward group (C/LW/RW) always
-# precedes defense (LD/RD) — thin "FORWARDS" / "DEFENSE" dividers label both
-# groups so the matchup reads at a glance instead of five undifferentiated
-# names (3v3 is position-free rovers, so it gets no dividers at all).
-func _fill_rows(rows: VBoxContainer, records: Array[PlayerRecord]) -> void:
+func _club_name(club: int, fallback_key: StringName) -> String:
+	return TeamColorRegistry.get_preset_name(club).to_upper() if club >= 0 else tr(fallback_key)
+
+
+func _fill_panel(side: Dictionary, records: Array[PlayerRecord], club: int,
+		stripe: Color, ink: Color, team_name: String) -> void:
+	(side.style as StyleBoxFlat).border_color = stripe
+	(side.badge as TeamBadge).set_team(club, team_name)
+	_fill_rows(side.rows, records, ink)
+
+
+# Roster rebuilt per present(): once per match, a handful of rows. Each row: a
+# position badge, the jersey number in the team's ink, the name. Records arrive
+# slot-sorted (see hud.gd._show_matchup_overlay), so in 5v5 the forward group
+# (C/LW/RW) always precedes defense (LD/RD) — "FORWARDS" / "DEFENSE" dividers
+# label both groups (3v3 is position-free rovers, so it gets none).
+func _fill_rows(rows: VBoxContainer, records: Array[PlayerRecord], ink: Color) -> void:
 	for child: Node in rows.get_children():
 		child.queue_free()
 	var is_5v5: bool = records.size() >= 5
@@ -169,54 +235,33 @@ func _fill_rows(rows: VBoxContainer, records: Array[PlayerRecord]) -> void:
 					open_group != -1)
 			open_group = group
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 12)
-		# Badge left-aligned in its cell so C / LW / LD share a left rail with
-		# the group headers above them; the jersey numbers keep the right
-		# alignment that lines up 7 with 71.
-		var pos := _lbl(
-				tr(PositionLabels.badge_key(record.team_slot, is_5v5)), 14, _DIM)
-		pos.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		pos.custom_minimum_size = Vector2(28, 0)
+		row.add_theme_constant_override("separation", 14)
+		var pos := _lbl(tr(PositionLabels.badge_key(record.team_slot, is_5v5)), 15, _DIM)
+		pos.custom_minimum_size = Vector2(30, 0)
 		pos.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(pos)
-		var num := _lbl("%d" % record.jersey_number, 16, _DIM)
+		# Right-aligned so 7 lines up with 71.
+		var num := _lbl("%d" % record.jersey_number, 20, ink)
 		num.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		num.custom_minimum_size = Vector2(30, 0)
+		num.custom_minimum_size = Vector2(32, 0)
 		num.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(num)
-		var name_label := _lbl(record.display_name(), 22, _WHITE)
+		var name_label := _lbl(record.display_name(), 23, _WHITE)
 		name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(name_label)
 		rows.add_child(row)
 
 
-# A group divider over the rows that follow it, flush with the column's left
-# edge (the same rail as the color stripe, the HOME/AWAY header, and the
-# position badges). `lead_gap` opens a little air above a group that follows
-# another one; the first group sits tight under the team header.
+# A group divider over the rows that follow it, on the position badges' rail.
+# `lead_gap` opens a little air above a group that follows another one.
 func _add_group_header(rows: VBoxContainer, text: String, lead_gap: bool) -> void:
 	if lead_gap:
 		var spacer := Control.new()
-		spacer.custom_minimum_size = Vector2(0, 6)
+		spacer.custom_minimum_size = Vector2(0, 4)
 		rows.add_child(spacer)
 	var head := _lbl(text, 12, _DIM)
-	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	head.add_theme_font_override("font", MenuStyle.display_font_spaced())
 	rows.add_child(head)
-
-
-func _stripe_style() -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = Color(0.5, 0.5, 0.5)
-	s.set_corner_radius_all(2)
-	return s
-
-
-func _stripe(style: StyleBoxFlat, height: int = 30) -> Panel:
-	var p := Panel.new()
-	p.add_theme_stylebox_override("panel", style)
-	p.custom_minimum_size = Vector2(6, height)
-	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	return p
 
 
 func _lbl(text: String, size: int, color: Color) -> Label:

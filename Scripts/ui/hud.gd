@@ -631,9 +631,8 @@ func _on_faceoff_prep_announced() -> void:
 	_chyron.begin_faceoff_prep(_penalty_shot_is_on())
 
 
-# Compose the opening matchup rosters from the live registry: one column per
-# team in slot order. The overlay reads name / number / attribute build off
-# the records itself.
+# Compose the opening matchup rosters from the live registry: one panel per
+# team in slot order. The overlay reads name and number off the records itself.
 func _show_matchup_overlay() -> void:
 	var home_records: Array[PlayerRecord] = []
 	var away_records: Array[PlayerRecord] = []
@@ -656,7 +655,7 @@ func _show_matchup_overlay() -> void:
 		home_header = TournamentCopy.seeded_club(state, TournamentRules.home_club(state, game))
 		away_header = TournamentCopy.seeded_club(state, TournamentRules.away_club(state, game))
 	_matchup_overlay.present(home_records, away_records,
-			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
+			HudChrome.team_club(0), HudChrome.team_club(1),
 			title, home_header, away_header)
 
 func _hide_matchup_overlay() -> void:

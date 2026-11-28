@@ -67,6 +67,7 @@ const _SHOTS: Array[Dictionary] = [
 	# Last: the box score closes on Tab, not Escape, so it stays up after its shot.
 	{"name": "scoreboard_match", "stage": _STAGE_MATCH, "open": "_open_scoreboard"},
 	{"name": "game_over_match", "stage": _STAGE_MATCH, "open": "_open_game_over"},
+	{"name": "matchup_intro_match", "stage": _STAGE_MATCH, "open": "_open_matchup_intro"},
 ]
 
 # Long enough for a match scene's first-frame setup (camera ease-in, HUD
@@ -375,6 +376,32 @@ func _open_game_over() -> void:
 		waited += 1
 		if waited > _MATCH_START_TIMEOUT_FRAMES:
 			_fail("the game-over screen never finished presenting")
+			return
+
+
+# An ordinary match's opening matchup card. Closes the box score and the
+# game-over screen the shots before it left up.
+func _open_matchup_intro() -> void:
+	var tree: SceneTree = get_tree()
+	var board: Scoreboard = _find(tree.current_scene, Scoreboard) as Scoreboard
+	if board != null:
+		board.hide_board()
+	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
+	if popup != null:
+		popup.hide_popup()
+	var hud: HUD = _find(tree.current_scene, HUD) as HUD
+	if hud == null:
+		_fail("the match has no HUD")
+		return
+	_invoke(hud, "_show_matchup_overlay")
+	var overlay: MatchupIntroOverlay = _find(tree.current_scene, MatchupIntroOverlay) \
+			as MatchupIntroOverlay
+	var waited: int = 0
+	while overlay != null and _tween_running(overlay, "_present_tween"):
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the matchup card never finished presenting")
 			return
 
 
