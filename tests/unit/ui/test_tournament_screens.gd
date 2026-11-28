@@ -268,10 +268,11 @@ func test_a_tournament_game_has_no_rematch() -> void:
 	assert_true(outcome_row.visible)
 	assert_eq(outcome.text, "Advance to the Semifinal")
 	assert_false((popup.get("_cup_crest") as Control).visible, "an ordinary round has no crest")
-	assert_eq(lobby.text, tr(&"GAME_OVER_CONTINUE"))
+	# Without a rematch, Continue is the card's lead action, lettered in capitals.
+	assert_eq(lobby.text, tr(&"GAME_OVER_CONTINUE").to_upper())
 	var votes: Dictionary[int, int] = {}
 	popup.update_votes(votes, 1, RematchVoteRules.Choice.NONE)
-	assert_eq(lobby.text, tr(&"GAME_OVER_CONTINUE"), "a tally refresh keeps the wording")
+	assert_eq(lobby.text, tr(&"GAME_OVER_CONTINUE").to_upper(), "a tally refresh keeps the wording")
 
 	popup.set_tournament(false, "")
 	assert_true(rematch.visible, "the next ordinary game gets its rematch back")

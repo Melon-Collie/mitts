@@ -31,6 +31,7 @@ var _pause_menu: PauseMenu = null
 var _side_menu: SideMenu = null
 var _bug_dialog: BugReportDialog = null
 var _toast_stack: ToastStack = null
+var _minimap: Minimap = null
 var _flash_overlay: FlashOverlay = null
 var _confirm_dialog: ConfirmDialog = null
 var _confirm_callback: Callable = Callable()
@@ -349,8 +350,8 @@ func _build_offscreen_indicators() -> void:
 # PlayerPrefs.minimap_enabled (drawing nothing when off), so no visibility wiring
 # is needed here.
 func _build_minimap() -> void:
-	var minimap := Minimap.new()
-	_scale_root.add_child(minimap)
+	_minimap = Minimap.new()
+	_scale_root.add_child(_minimap)
 
 func _build_bug_icon() -> void:
 	var icon_tex := load("res://Assets/Icons/bug_report.svg") as Texture2D
@@ -806,31 +807,71 @@ func _team_name(team_id: int) -> String:
 func _present_game_over_screen(result_text: String, result_color: Color) -> void:
 	# The screen carries the same FINAL info, so the chyron behind it retires.
 	_chyron.hide_banner()
+	_set_play_chrome_visible(false)
+	var summary := GameOverSummary.new()
+	summary.home_score = _scorebug.home_score()
+	summary.away_score = _scorebug.away_score()
+	summary.home_club = HudChrome.team_club(0)
+	summary.away_club = HudChrome.team_club(1)
+	summary.result_text = result_text
+	summary.result_color = result_color
+	summary.personal = _personal_result()
+	_fill_team_stats(summary)
 	# Up to three ranked stars; zero-stat players never star, so a quiet game
 	# shows fewer (or none — the whole stars block stays hidden).
-	var star_names: Array[String] = []
-	var star_lines: Array[String] = []
-	var star_stripes: Array[Color] = []
-	var star_titles: Array[String] = []
 	for star: PlayerRecord in GameManager.get_stars_of_game():
-		star_names.append(star.display_name())
-		star_titles.append(TrophyCopy.title_name(star.title_id)
+		summary.star_names.append(star.display_name())
+		summary.star_titles.append(TrophyCopy.title_name(star.title_id)
 				if Titles.is_known(star.title_id) else "")
 		if star.is_goalie:
 			var opp: int = 1 - star.team.team_id
-			star_lines.append(_goalie_star_line(GameManager.get_team_shots(opp),
+			summary.star_lines.append(_goalie_star_line(GameManager.get_team_shots(opp),
 					_scorebug.away_score() if opp == 1 else _scorebug.home_score()))
 		else:
-			star_lines.append(_star_stat_line(star.stats))
-		star_stripes.append(HudChrome.team_stripe(star.team.team_id))
+			summary.star_lines.append(_star_stat_line(star.stats))
+		summary.star_clubs.append(HudChrome.team_club(star.team.team_id))
 	# Before present: it decides which actions exist, and present focuses one.
 	_refresh_tournament_outcome()
-	_game_over_popup.present(_scorebug.home_score(), _scorebug.away_score(),
-			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
-			HudChrome.team_club(0), HudChrome.team_club(1),
-			result_text, result_color,
-			star_names, star_lines, star_stripes, star_titles)
+	_game_over_popup.present(summary)
 	_refresh_goal_saving()
+
+
+# The local player's own result; none for a tie or a spectator.
+func _personal_result() -> GameOverSummary.Personal:
+	var home: int = _scorebug.home_score()
+	var away: int = _scorebug.away_score()
+	var local: PlayerRecord = GameManager.get_local_player()
+	if home == away or local == null or local.team == null or GameManager.is_local_spectator():
+		return GameOverSummary.Personal.NONE
+	var winner: int = 0 if home > away else 1
+	return GameOverSummary.Personal.VICTORY if local.team.team_id == winner \
+			else GameOverSummary.Personal.DEFEAT
+
+
+# Shots, hits and faceoffs won, each side's total.
+func _fill_team_stats(summary: GameOverSummary) -> void:
+	var hits: Array[int] = [0, 0]
+	var faceoffs: Array[int] = [0, 0]
+	for record: PlayerRecord in GameManager.get_players().values():
+		if record.team == null:
+			continue
+		hits[record.team.team_id] += record.stats.hits
+		faceoffs[record.team.team_id] += record.stats.faceoff_wins
+	summary.stat_labels = PackedStringArray([tr(&"SCOREBUG_SHOTS"), tr(&"COL_HITS"),
+			tr(&"GAME_OVER_STAT_FACEOFFS")])
+	summary.away_stats = PackedStringArray([str(GameManager.get_team_shots(1)), str(hits[1]),
+			str(faceoffs[1])])
+	summary.home_stats = PackedStringArray([str(GameManager.get_team_shots(0)), str(hits[0]),
+			str(faceoffs[0])])
+
+
+# The in-play chrome the game-over card would otherwise sit among: the minimap
+# and the event feed.
+func _set_play_chrome_visible(shown: bool) -> void:
+	if _minimap != null:
+		_minimap.visible = shown
+	if _toast_stack != null:
+		_toast_stack.visible = shown
 
 
 # Tells the game-over screen whether this was a tournament game and what its
@@ -895,6 +936,7 @@ func _on_game_reset() -> void:
 		_game_over_present_tween.kill()
 	_game_over_present_tween = null
 	_game_over_popup.hide_popup()
+	_set_play_chrome_visible(true)
 	if _post_game_analytics != null:
 		_post_game_analytics.close()
 	if _goal_gif_picker != null:

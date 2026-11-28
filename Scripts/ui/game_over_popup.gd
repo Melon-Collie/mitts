@@ -1,17 +1,18 @@
 class_name GameOverPopup
 extends CanvasLayer
 
-# Full-screen end-of-game presentation, scrim-first: one dim wash over the
-# highlight reel, typography sitting directly on it — no boxed cards, so the
-# footage stays visible everywhere. Three bands: FINAL score + result up top,
-# the Three Stars reveal (3rd → 2nd → 1st, arena order) in the middle, and the
-# post-game actions in a strip along the bottom. HUD owns the timing (it lets
-# the final-horn banner beat play on the ice first, then calls present());
-# this class is pure presentation + the action buttons.
+# End-of-game card over the highlight reel: one dark panel on the scorebug's
+# surface, centred, the reel still running round it through the modal scrim.
+# Top to bottom: the local player's VICTORY / DEFEAT tag, FINAL and the score
+# row (the scorebug's team badges at hero scale, away first), the winner line,
+# the tournament outcome when there is one, the teams' stats side by side, the
+# Three Stars (landing 3rd → 2nd → 1st, arena order), and the actions along the
+# card's foot: the one primary action, the others, and Exit set apart. HUD owns
+# the timing (it lets the final-horn beat play on the ice first) and fills a
+# GameOverSummary; this class is pure presentation plus the action buttons.
 #
-# The box score is NOT embedded here — Tab still toggles the Scoreboard, which
-# renders on a higher layer, so the deep numbers stay one keypress away while
-# this screen carries the moment (score, stars, what-next).
+# The box score is not embedded here: Tab still raises the Scoreboard over it,
+# which the footer says.
 
 signal rematch_toggled
 signal lobby_vote_toggled
@@ -23,44 +24,53 @@ signal save_goal_pressed
 const _GOLD := MenuStyle.GOLD
 const _WHITE := MenuStyle.BROADCAST_CREAM
 const _DIM := MenuStyle.BROADCAST_DIM
+const _CARD_BG := Color(MenuStyle.BROADCAST_BG, 0.96)
 
-# Reveal cadence: bands settle first, then stars land 3rd → 2nd → 1st so the
-# first star is the climax beat (the arena announcement order).
-const _STAR_REVEAL_DELAY: float = 0.55
-const _STAR_REVEAL_GAP: float = 0.55
+const _CARD_WIDTH: float = 900.0
+const _CARD_RADIUS: int = 8
+const _SECTION_MARGIN: int = 30
+# The card settles in from a touch small.
+const _ENTER_SCALE: float = 0.97
+const _ENTER_TIME: float = 0.35
+# Reveal cadence: the card settles first, then the stars land 3rd → 2nd → 1st
+# so the first star is the climax beat.
+const _STAR_REVEAL_DELAY: float = 0.45
+const _STAR_REVEAL_GAP: float = 0.5
 
 const _MAX_STARS: int = 3
 # The tournament line under the result: a quiet note for most games, and the
 # club's crest beside gold lettering when the game just won the cup.
-const _OUTCOME_SIZE: int = 22
-const _CUP_SIZE: int = 44
-const _CUP_CREST_PX: float = 68.0
+const _OUTCOME_SIZE: int = 20
+const _CUP_SIZE: int = 40
+const _CUP_CREST_PX: float = 60.0
 const _CUP_REVEAL_DELAY: float = 0.45
 const _CUP_REVEAL_OVERSCALE: float = 1.35
-# Translation keys, tr()'d at the display seam (see _build_star_row); localized
-# copy lives in locale/translations.csv.
 const _RANK_TAG_KEYS: Array[String] = ["STAR_FIRST", "STAR_SECOND", "STAR_THIRD"]
-# First star reads bigger than the runners-up — rank is carried by scale and
-# color, not by borders.
-const _RANK_NAME_SIZES: Array[int] = [38, 24, 24]
-const _RANK_LINE_SIZES: Array[int] = [16, 13, 13]
-const _RANK_STRIPE_HEIGHTS: Array[int] = [34, 22, 22]
-const _RANK_ROW_HEIGHTS: Array[int] = [50, 32, 32]
-# Gap between the center stripe column and the tag / name on either side.
-const _STRIPE_GUTTER: float = 16.0
-# The final score's team badges (TeamBadge), the scorebug's at hero scale: the
-# crest about twice the badge's height, cropped at its outer edge.
+# The first star reads bigger than the runners-up: rank is carried by scale and
+# colour, not by borders.
+const _RANK_NAME_SIZES: Array[int] = [32, 22, 22]
+const _RANK_LINE_SIZES: Array[int] = [17, 15, 15]
+const _STAR_ROW_WIDTH: float = 640.0
+const _STAR_TAG_WIDTH: float = 104.0
+# A star's team badge (TeamBadge), the scorebug's at its own size.
+const _STAR_BADGE := Vector2(64.0, 34.0)
+const _STAR_CREST_PX: float = 70.0
+# The final score's team badges, the scorebug's at hero scale: the crest about
+# twice the badge's height, cropped at its outer edge.
 const _SCORE_BADGE_WIDTH: float = 124.0
 const _SCORE_BADGE_HEIGHT: float = 60.0
 const _SCORE_CREST_PX: float = 124.0
 const _SCORE_ABBR_SIZE: int = 32
 const _SCORE_ABBR_INSET: float = 24.0
+const _STAT_VALUE_WIDTH: float = 120.0
+const _STAT_LABEL_WIDTH: float = 180.0
 
 var _root: Control = null
 var _scrim: ColorRect = null
-var _top_block: VBoxContainer = null
-var _stars_block: VBoxContainer = null
-var _bottom_block: VBoxContainer = null
+var _card: PanelContainer = null
+var _personal_tag: PanelContainer = null
+var _personal_style: StyleBoxFlat = null
+var _personal_label: Label = null
 var _home_stripe_style: StyleBoxFlat = null
 var _away_stripe_style: StyleBoxFlat = null
 var _home_badge: TeamBadge = null
@@ -68,12 +78,14 @@ var _away_badge: TeamBadge = null
 var _home_score_label: Label = null
 var _away_score_label: Label = null
 var _result_label: Label = null
-var _stars_tag: Label = null
+var _stats_section: Control = null
+var _stats_grid: GridContainer = null
+var _stars_section: Control = null
 var _star_rows: Array[Control] = []
+var _star_badges: Array[TeamBadge] = []
 var _star_name_labels: Array[Label] = []
 var _star_line_labels: Array[Label] = []
 var _star_title_labels: Array[Label] = []
-var _star_stripe_styles: Array[StyleBoxFlat] = []
 var _save_goal_btn: Button = null
 var _rematch_btn: Button = null
 var _lobby_btn: Button = null
@@ -87,6 +99,11 @@ var _present_tween: Tween = null
 var _is_spectator: bool = false
 # A tournament game has no rematch, and its way on is the bracket.
 var _in_tournament: bool = false
+# The button the card leads with: Rematch, or Continue / Lobby without one.
+var _primary: Button = null
+# The local player's vote (RematchVoteRules.Choice), which the two vote buttons
+# are worded from.
+var _local_vote: int = RematchVoteRules.Choice.NONE
 
 
 func _ready() -> void:
@@ -107,49 +124,84 @@ func _build_ui() -> void:
 	add_child(root)
 	_root = root
 
-	# Scrim dims the highlight reel behind the presentation and makes this
-	# modal — same dim every popup uses.
+	# Dims the reel behind the card and makes this modal: the same dim every
+	# popup uses.
 	_scrim = ColorRect.new()
 	_scrim.color = MenuStyle.SCRIM
 	_scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(_scrim)
 
-	_build_top_block(root)
-	_build_stars_block(root)
-	_build_bottom_block(root)
+	var centering := CenterContainer.new()
+	centering.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centering.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(centering)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = _CARD_BG
+	style.set_corner_radius_all(_CARD_RADIUS)
+	style.border_color = MenuStyle.BROADCAST_BORDER_T
+	style.border_width_top = 1
+	_card = PanelContainer.new()
+	_card.add_theme_stylebox_override("panel", style)
+	_card.custom_minimum_size = Vector2(_CARD_WIDTH, 0)
+	centering.add_child(_card)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 0)
+	_card.add_child(col)
+	col.add_child(_build_header())
+	_stats_section = _section(_build_stats())
+	col.add_child(_stats_section)
+	_stars_section = _section(_build_stars())
+	col.add_child(_stars_section)
+	col.add_child(_build_footer())
 
 
-# FINAL tag + hero score row + result headline, pinned to the upper band so
-# the middle of the frame stays open for the reel and the stars.
-func _build_top_block(root: Control) -> void:
-	_top_block = VBoxContainer.new()
-	_top_block.alignment = BoxContainer.ALIGNMENT_BEGIN
-	_top_block.add_theme_constant_override("separation", 10)
-	_top_block.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_top_block.offset_top = 64
-	root.add_child(_top_block)
+# The tag, FINAL, the score row, the winner and the tournament outcome.
+func _build_header() -> Control:
+	var margin := _margin(_SECTION_MARGIN, 26, 22)
+	var head := VBoxContainer.new()
+	head.alignment = BoxContainer.ALIGNMENT_CENTER
+	head.add_theme_constant_override("separation", 10)
+	margin.add_child(head)
 
-	var final_tag := _lbl(tr(&"FINAL"), 18, _DIM)
+	_personal_style = StyleBoxFlat.new()
+	_personal_style.set_corner_radius_all(4)
+	_personal_style.set_content_margin(SIDE_LEFT, 14)
+	_personal_style.set_content_margin(SIDE_RIGHT, 14)
+	_personal_style.set_content_margin(SIDE_TOP, 4)
+	_personal_style.set_content_margin(SIDE_BOTTOM, 4)
+	_personal_tag = PanelContainer.new()
+	_personal_tag.add_theme_stylebox_override("panel", _personal_style)
+	_personal_tag.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_personal_label = _lbl("", 16, _WHITE)
+	_personal_label.add_theme_font_override("font", MenuStyle.display_font_spaced())
+	_personal_tag.add_child(_personal_label)
+	head.add_child(_personal_tag)
+
+	var final_tag := _lbl(tr(&"FINAL"), 16, _DIM)
+	final_tag.add_theme_font_override("font", MenuStyle.display_font_spaced())
 	final_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_top_block.add_child(final_tag)
+	head.add_child(final_tag)
 
-	_top_block.add_child(_build_score_row())
+	head.add_child(_build_score_row())
 
-	_result_label = _lbl("", 52, _WHITE)
+	_result_label = _lbl("", 44, _WHITE)
 	_result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_top_block.add_child(_result_label)
+	head.add_child(_result_label)
 
 	_tournament_row = HBoxContainer.new()
 	_tournament_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_tournament_row.add_theme_constant_override("separation", 16)
+	_tournament_row.add_theme_constant_override("separation", 14)
 	_tournament_row.visible = false
-	_top_block.add_child(_tournament_row)
+	head.add_child(_tournament_row)
 	_cup_crest = ClubCrest.new(_CUP_CREST_PX)
 	_cup_crest.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_cup_crest.visible = false
 	_tournament_row.add_child(_cup_crest)
 	_tournament_label = _lbl("", _OUTCOME_SIZE, _DIM)
 	_tournament_row.add_child(_tournament_label)
+	return margin
 
 
 # [stripe|AWAY badge]  3  —  2  [HOME badge|stripe]: the scorebug's teams at
@@ -163,7 +215,7 @@ func _build_score_row() -> Control:
 	_away_stripe_style = _stripe_style()
 	_away_badge = TeamBadge.new(_SCORE_BADGE_WIDTH, _SCORE_CREST_PX, _SCORE_ABBR_SIZE,
 			_SCORE_ABBR_INSET)
-	row.add_child(_team_unit(_stripe(_away_stripe_style, int(_SCORE_BADGE_HEIGHT)), _away_badge))
+	row.add_child(_team_unit(_stripe(_away_stripe_style), _away_badge))
 	_away_score_label = _lbl("0", 56, _WHITE)
 	row.add_child(_away_score_label)
 
@@ -176,7 +228,7 @@ func _build_score_row() -> Control:
 	_home_stripe_style = _stripe_style()
 	_home_badge = TeamBadge.new(_SCORE_BADGE_WIDTH, _SCORE_CREST_PX, _SCORE_ABBR_SIZE,
 			_SCORE_ABBR_INSET, HORIZONTAL_ALIGNMENT_CENTER, true)
-	row.add_child(_team_unit(_home_badge, _stripe(_home_stripe_style, int(_SCORE_BADGE_HEIGHT))))
+	row.add_child(_team_unit(_home_badge, _stripe(_home_stripe_style)))
 	return row
 
 
@@ -191,108 +243,93 @@ func _team_unit(first: Control, second: Control) -> HBoxContainer:
 	return unit
 
 
-# Three star rows, typography straight on the scrim. Every row is anchored
-# around the screen's horizontal center: the team stripe IS the center column,
-# rank tags right-align to it, names flow left-aligned from it — so all three
-# stripes (and both text spines) line up exactly regardless of name length.
-func _build_stars_block(root: Control) -> void:
-	_stars_block = VBoxContainer.new()
-	_stars_block.alignment = BoxContainer.ALIGNMENT_CENTER
-	_stars_block.add_theme_constant_override("separation", 14)
-	_stars_block.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_stars_block.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(_stars_block)
+# Away value | stat | home value, a row per stat, under the score's own order.
+func _build_stats() -> Control:
+	_stats_grid = GridContainer.new()
+	_stats_grid.columns = 3
+	_stats_grid.add_theme_constant_override("h_separation", 0)
+	_stats_grid.add_theme_constant_override("v_separation", 6)
+	_stats_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	return _stats_grid
 
-	_stars_tag = _lbl(tr("STARS_OF_THE_GAME"), 15, _GOLD)
-	_stars_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_stars_block.add_child(_stars_tag)
 
+func _build_stars() -> Control:
+	var block := VBoxContainer.new()
+	block.add_theme_constant_override("separation", 10)
+	block.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var tag := _lbl(tr(&"STARS_OF_THE_GAME"), 15, _GOLD)
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	block.add_child(tag)
 	for rank: int in _MAX_STARS:
-		_stars_block.add_child(_build_star_row(rank))
+		block.add_child(_build_star_row(rank))
+	return block
 
 
+# rank tag | team badge | NAME title ......... stat line, every row the same
+# width so the badges, names and lines each share an edge down the block.
 func _build_star_row(rank: int) -> Control:
-	var row := Control.new()
-	row.custom_minimum_size = Vector2(0, _RANK_ROW_HEIGHTS[rank])
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	row.custom_minimum_size = Vector2(_STAR_ROW_WIDTH, 0)
 	var first: bool = rank == 0
-	var tag := _lbl(tr(_RANK_TAG_KEYS[rank]), 14 if first else 12, _GOLD if first else _DIM)
+
+	var tag := _lbl(tr(_RANK_TAG_KEYS[rank]), 15 if first else 13, _GOLD if first else _DIM)
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	tag.set_anchors_preset(Control.PRESET_FULL_RECT)
-	tag.anchor_right = 0.5
-	tag.offset_right = -_STRIPE_GUTTER
+	tag.custom_minimum_size = Vector2(_STAR_TAG_WIDTH, 0)
+	tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(tag)
 
-	var stripe_style := _stripe_style()
-	_star_stripe_styles.append(stripe_style)
-	var stripe := _stripe(stripe_style, _RANK_STRIPE_HEIGHTS[rank])
-	stripe.set_anchors_preset(Control.PRESET_CENTER)
-	stripe.offset_left = -3.0
-	stripe.offset_right = 3.0
-	stripe.offset_top = -_RANK_STRIPE_HEIGHTS[rank] / 2.0
-	stripe.offset_bottom = _RANK_STRIPE_HEIGHTS[rank] / 2.0
-	row.add_child(stripe)
-
-	var content := HBoxContainer.new()
-	content.add_theme_constant_override("separation", 12)
-	content.set_anchors_preset(Control.PRESET_FULL_RECT)
-	content.anchor_left = 0.5
-	content.offset_left = _STRIPE_GUTTER
-	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(content)
+	var badge := TeamBadge.new(_STAR_BADGE.x, _STAR_CREST_PX, 15, 8.0)
+	badge.custom_minimum_size.y = _STAR_BADGE.y
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_star_badges.append(badge)
+	row.add_child(badge)
 
 	var name_label := _lbl("", _RANK_NAME_SIZES[rank], _WHITE)
 	name_label.uppercase = true
 	name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_star_name_labels.append(name_label)
-	content.add_child(name_label)
+	row.add_child(name_label)
 
-	var title_label := _lbl("", _RANK_LINE_SIZES[rank], _GOLD)
+	var title_label := _lbl("", 13, _GOLD)
 	title_label.uppercase = true
 	title_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_star_title_labels.append(title_label)
-	content.add_child(title_label)
+	row.add_child(title_label)
 
 	var line_label := _lbl("", _RANK_LINE_SIZES[rank], _DIM)
 	line_label.add_theme_font_override("font", MenuStyle.UI_FONT)
+	line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	line_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	line_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_star_line_labels.append(line_label)
-	content.add_child(line_label)
+	row.add_child(line_label)
 
 	_star_rows.append(row)
 	return row
 
 
-# Action strip along the bottom: horizontal buttons, vote tally, box-score hint.
-func _build_bottom_block(root: Control) -> void:
-	_bottom_block = VBoxContainer.new()
-	_bottom_block.alignment = BoxContainer.ALIGNMENT_END
-	_bottom_block.add_theme_constant_override("separation", 8)
-	_bottom_block.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_bottom_block.offset_top = -190
-	_bottom_block.offset_bottom = -36
-	_bottom_block.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	root.add_child(_bottom_block)
+# The actions along the card's foot: what's next on the left, the views of this
+# game beside them, Exit set apart at the right; the vote tally and the box
+# score hint under them.
+func _build_footer() -> Control:
+	var foot_style := StyleBoxFlat.new()
+	foot_style.bg_color = MenuStyle.SURFACE_ELEV
+	foot_style.corner_radius_bottom_left = _CARD_RADIUS
+	foot_style.corner_radius_bottom_right = _CARD_RADIUS
+	foot_style.set_content_margin(SIDE_LEFT, 22)
+	foot_style.set_content_margin(SIDE_RIGHT, 22)
+	foot_style.set_content_margin(SIDE_TOP, 16)
+	foot_style.set_content_margin(SIDE_BOTTOM, 12)
+	var foot := PanelContainer.new()
+	foot.add_theme_stylebox_override("panel", foot_style)
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 10)
+	foot.add_child(rows)
 
 	var actions := HBoxContainer.new()
-	actions.alignment = BoxContainer.ALIGNMENT_CENTER
-	actions.add_theme_constant_override("separation", 12)
-	_bottom_block.add_child(actions)
-
-	# Leads the strip: the analytics screen is a VIEW of the game just played,
-	# so it sits ahead of the what-next actions rather than among them.
-	var analytics_btn := _action_button(tr(&"GAME_OVER_ANALYTICS"))
-	analytics_btn.pressed.connect(func() -> void: analytics_pressed.emit())
-	actions.add_child(analytics_btn)
-
-	# Another view of the game just played, so it sits beside Analytics. Hidden
-	# until set_goal_saving says there is a goal to save.
-	_save_goal_btn = _action_button(tr(&"GAME_OVER_SAVE_GOAL"))
-	_save_goal_btn.pressed.connect(func() -> void: save_goal_pressed.emit())
-	_save_goal_btn.visible = false
-	actions.add_child(_save_goal_btn)
+	actions.add_theme_constant_override("separation", 10)
+	rows.add_child(actions)
 
 	_rematch_btn = _action_button(tr(&"GAME_OVER_REMATCH"))
 	_rematch_btn.pressed.connect(func() -> void: rematch_toggled.emit())
@@ -317,75 +354,107 @@ func _build_bottom_block(root: Control) -> void:
 	free_play_btn.pressed.connect(func() -> void: free_play_pressed.emit())
 	actions.add_child(free_play_btn)
 
-	var exit_btn := _action_button(tr(&"GAME_OVER_EXIT"))
-	exit_btn.pressed.connect(func() -> void: exit_pressed.emit())
-	actions.add_child(exit_btn)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(spacer)
 
-	_vote_label = Label.new()
-	_vote_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_vote_label.add_theme_font_size_override("font_size", 13)
-	_vote_label.add_theme_color_override("font_color", Color(0.62, 0.62, 0.68, 1.0))
-	_bottom_block.add_child(_vote_label)
+	var analytics_btn := _action_button(tr(&"GAME_OVER_ANALYTICS"))
+	analytics_btn.pressed.connect(func() -> void: analytics_pressed.emit())
+	actions.add_child(analytics_btn)
 
-	var hint := _lbl(tr(&"HINT_TAB_BOX_SCORE"), 12, MenuStyle.TEXT_MUTED)
+	# Hidden until set_goal_saving says there is a goal to save.
+	_save_goal_btn = _action_button(tr(&"GAME_OVER_SAVE_GOAL"))
+	_save_goal_btn.pressed.connect(func() -> void: save_goal_pressed.emit())
+	_save_goal_btn.visible = false
+	actions.add_child(_save_goal_btn)
+
+	actions.add_child(_exit_button())
+
+	var notes := HBoxContainer.new()
+	rows.add_child(notes)
+	_vote_label = _lbl("", 13, _DIM)
+	_vote_label.add_theme_font_override("font", MenuStyle.UI_FONT)
+	notes.add_child(_vote_label)
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	notes.add_child(gap)
+	var hint := _lbl(tr(&"HINT_TAB_BOX_SCORE"), 13, _DIM)
 	hint.add_theme_font_override("font", MenuStyle.UI_FONT)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_bottom_block.add_child(hint)
+	notes.add_child(hint)
+
+	_set_primary(_rematch_btn)
+	return foot
 
 
-# Fill the screen with this game's data and play the reveal: scrim + bands
-# fade in, then the stars land 3rd → 2nd → 1st. `star_names` is ranked best
-# first and may be shorter than three (empty = a nothing game, the whole
-# stars block stays hidden); `star_titles` runs beside it, "" for no title.
-# `home_club` / `away_club` are the clubs the two sides play as, for their badges.
-func present(home_score: int, away_score: int,
-		home_stripe: Color, away_stripe: Color, home_club: int, away_club: int,
-		result_text: String, result_color: Color,
-		star_names: Array[String], star_lines: Array[String],
-		star_stripes: Array[Color], star_titles: Array[String] = []) -> void:
-	_home_score_label.text = str(home_score)
-	_away_score_label.text = str(away_score)
-	_home_stripe_style.bg_color = home_stripe
-	_away_stripe_style.bg_color = away_stripe
-	_home_badge.set_team(home_club, _abbr_of(home_club))
-	_away_badge.set_team(away_club, _abbr_of(away_club))
-	_result_label.text = result_text
-	_result_label.add_theme_color_override("font_color", result_color)
+# Quits the whole game: quieter than the rest, red only when reached.
+func _exit_button() -> Button:
+	var btn := Button.new()
+	btn.text = tr(&"GAME_OVER_EXIT")
+	btn.flat = true
+	btn.custom_minimum_size = Vector2(0, 42)
+	btn.add_theme_font_size_override("font_size", 15)
+	btn.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
+	btn.add_theme_color_override("font_hover_color", MenuStyle.DANGER)
+	btn.add_theme_color_override("font_focus_color", MenuStyle.DANGER)
+	btn.pressed.connect(func() -> void: exit_pressed.emit())
+	SoundManager.wire_button(btn)
+	MenuStyle.apply_focus_ring(btn)
+	return btn
 
-	var star_count: int = mini(star_names.size(), _MAX_STARS)
-	_stars_tag.visible = star_count > 0
+
+# Fill the card with this game and play the reveal: the card fades and settles,
+# then the stars land 3rd → 2nd → 1st. A summary without stars (a nothing game)
+# hides that block.
+func present(summary: GameOverSummary) -> void:
+	_home_score_label.text = str(summary.home_score)
+	_away_score_label.text = str(summary.away_score)
+	var known: bool = summary.home_club >= 0 and summary.away_club >= 0
+	if known:
+		var stripes: Dictionary = TeamColorRegistry.get_score_stripe_pair(
+				summary.home_club, summary.away_club)
+		_home_stripe_style.bg_color = stripes.home
+		_away_stripe_style.bg_color = stripes.away
+	_home_badge.set_team(summary.home_club, _abbr_of(summary.home_club))
+	_away_badge.set_team(summary.away_club, _abbr_of(summary.away_club))
+	_result_label.text = summary.result_text
+	_result_label.add_theme_color_override("font_color", summary.result_color)
+	_show_personal(summary.personal)
+	_fill_stats(summary)
+
+	var star_count: int = mini(summary.star_names.size(), _MAX_STARS)
+	_stars_section.visible = star_count > 0
 	for rank: int in _MAX_STARS:
 		var filled: bool = rank < star_count
 		_star_rows[rank].visible = filled
-		if filled:
-			_star_name_labels[rank].text = star_names[rank]
-			var title: String = star_titles[rank] if rank < star_titles.size() else ""
-			_star_title_labels[rank].text = title
-			_star_title_labels[rank].visible = not title.is_empty()
-			_star_line_labels[rank].text = star_lines[rank]
-			_star_line_labels[rank].visible = not star_lines[rank].is_empty()
-			_star_stripe_styles[rank].bg_color = star_stripes[rank]
+		if not filled:
+			continue
+		var club: int = summary.star_clubs[rank] if rank < summary.star_clubs.size() else -1
+		_star_badges[rank].set_team(club, _abbr_of(club))
+		_star_name_labels[rank].text = summary.star_names[rank]
+		var title: String = summary.star_titles[rank] if rank < summary.star_titles.size() else ""
+		_star_title_labels[rank].text = title
+		_star_title_labels[rank].visible = not title.is_empty()
+		var line: String = summary.star_lines[rank] if rank < summary.star_lines.size() else ""
+		_star_line_labels[rank].text = line
 
 	visible = true
-	# Controller: focus the primary action (Rematch, or Lobby when Rematch is
-	# hidden for spectators) so the pad can act on the post-game screen.
-	if _rematch_btn != null and _rematch_btn.visible:
-		ControllerNav.grab_focus(_rematch_btn)
-	elif _lobby_btn != null:
-		ControllerNav.grab_focus(_lobby_btn)
+	# Controller: focus the card's lead action so the pad can act at once.
+	if _primary != null and _primary.visible:
+		ControllerNav.grab_focus(_primary)
 	if _present_tween != null and _present_tween.is_running():
 		_present_tween.kill()
 	_scrim.modulate.a = 0.0
-	_top_block.modulate.a = 0.0
-	_bottom_block.modulate.a = 0.0
+	_card.modulate.a = 0.0
+	_card.pivot_offset = _card.size * 0.5
+	_card.scale = Vector2.ONE * _ENTER_SCALE
 	for rank: int in star_count:
 		_star_rows[rank].modulate.a = 0.0
 	_present_tween = create_tween()
 	_present_tween.tween_property(_scrim, "modulate:a", 1.0, 0.30)
-	_present_tween.parallel().tween_property(_top_block, "modulate:a", 1.0, 0.35) \
+	_present_tween.parallel().tween_property(_card, "modulate:a", 1.0, _ENTER_TIME) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	_present_tween.parallel().tween_property(_bottom_block, "modulate:a", 1.0, 0.35) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_present_tween.parallel().tween_property(_card, "scale", Vector2.ONE, _ENTER_TIME) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	if _cup_club != TournamentRules.NO_CLUB:
 		_play_cup_reveal(_CUP_REVEAL_DELAY)
 	else:
@@ -400,11 +469,43 @@ func present(home_score: int, away_score: int,
 				_present_tween.tween_interval(_STAR_REVEAL_GAP)
 
 
-# One star row's landing: quick fade with a spring settle from a slight
-# overscale, scaled up for the first star.
+# VICTORY in gold for the winners, DEFEAT on a quiet plate for the losers; no
+# tag for a tie or a spectator.
+func _show_personal(personal: GameOverSummary.Personal) -> void:
+	_personal_tag.visible = personal != GameOverSummary.Personal.NONE
+	var won: bool = personal == GameOverSummary.Personal.VICTORY
+	_personal_label.text = tr(&"GAME_OVER_VICTORY") if won else tr(&"GAME_OVER_DEFEAT")
+	_personal_label.add_theme_color_override("font_color", MenuStyle.ON_TEAL if won else _WHITE)
+	_personal_style.bg_color = _GOLD if won else MenuStyle.SURFACE_ELEV
+
+
+func _fill_stats(summary: GameOverSummary) -> void:
+	for child: Node in _stats_grid.get_children():
+		child.queue_free()
+	_stats_section.visible = not summary.stat_labels.is_empty()
+	for i: int in summary.stat_labels.size():
+		_stats_grid.add_child(_stat_value(summary.away_stats[i]))
+		var label := _lbl(summary.stat_labels[i], 14, _DIM)
+		label.add_theme_font_override("font", MenuStyle.display_font_spaced())
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.custom_minimum_size = Vector2(_STAT_LABEL_WIDTH, 0)
+		_stats_grid.add_child(label)
+		_stats_grid.add_child(_stat_value(summary.home_stats[i]))
+
+
+func _stat_value(text: String) -> Label:
+	var value := _lbl(text, 24, _WHITE)
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	value.custom_minimum_size = Vector2(_STAT_VALUE_WIDTH, 0)
+	return value
+
+
+# One star row's landing: a quick fade with a spring settle from a slight
+# overscale, a bigger one for the first star.
 func _append_star_reveal(rank: int) -> void:
 	var row: Control = _star_rows[rank]
-	var overscale: float = 1.14 if rank == 0 else 1.08
+	var overscale: float = 1.10 if rank == 0 else 1.05
 	_present_tween.tween_callback(func() -> void:
 		row.pivot_offset = row.size / 2.0
 		row.scale = Vector2(overscale, overscale))
@@ -435,7 +536,7 @@ func set_tournament(in_tournament: bool, outcome: String,
 			_CUP_SIZE if won_cup else _OUTCOME_SIZE)
 	_tournament_label.add_theme_color_override("font_color", _GOLD if won_cup else _DIM)
 	_tournament_row.visible = in_tournament and not outcome.is_empty()
-	_lobby_btn.text = _lobby_button_text(RematchVoteRules.Choice.NONE)
+	_local_vote = RematchVoteRules.Choice.NONE
 	_refresh_actions()
 	# On a client the result can land with the screen already up.
 	if cup_just_arrived and visible:
@@ -457,10 +558,40 @@ func _play_cup_reveal(delay: float) -> void:
 		.set_trans(Tween.TRANS_SPRING).set_ease(Tween.EASE_OUT)
 
 
+# Which actions exist, and which one leads: Rematch, or Continue / Lobby when a
+# tournament or a spectator has no rematch.
 func _refresh_actions() -> void:
 	_rematch_btn.visible = not _is_spectator and not _in_tournament
 	_lobby_btn.visible = not _is_spectator
 	_vote_label.visible = not _is_spectator
+	if _rematch_btn.visible:
+		_set_primary(_rematch_btn)
+	elif _lobby_btn.visible:
+		_set_primary(_lobby_btn)
+	else:
+		_set_primary(null)
+
+
+func _set_primary(btn: Button) -> void:
+	for b: Button in [_rematch_btn, _lobby_btn]:
+		var lead: bool = b == btn
+		b.theme_type_variation = &"ButtonPrimary" if lead else &""
+		if lead:
+			b.add_theme_font_override("font", MenuStyle.name_font_spaced())
+		else:
+			b.remove_theme_font_override("font")
+	_primary = btn
+	_refresh_vote_texts()
+
+
+# The two vote buttons' wording from the local vote. The lead one is lettered in
+# capitals, as MenuStyle.apply_primary_cta letters every lead button.
+func _refresh_vote_texts() -> void:
+	var rematch: String = tr(&"GAME_OVER_UNVOTE") \
+			if _local_vote == RematchVoteRules.Choice.REMATCH else tr(&"GAME_OVER_REMATCH")
+	var lobby: String = _lobby_button_text(_local_vote)
+	_rematch_btn.text = rematch.to_upper() if _rematch_btn == _primary else rematch
+	_lobby_btn.text = lobby.to_upper() if _lobby_btn == _primary else lobby
 
 
 func _lobby_button_text(local_vote: int) -> String:
@@ -489,9 +620,8 @@ func hide_popup() -> void:
 # the other flavor switches the vote instead); the tally line flags when the
 # pool is already headed to the lobby.
 func update_votes(votes: Dictionary[int, int], total_voters: int, local_vote: int) -> void:
-	_rematch_btn.text = tr(&"GAME_OVER_UNVOTE") \
-			if local_vote == RematchVoteRules.Choice.REMATCH else tr(&"GAME_OVER_REMATCH")
-	_lobby_btn.text = _lobby_button_text(local_vote)
+	_local_vote = local_vote
+	_refresh_vote_texts()
 	var count: int = RematchVoteRules.count_voted(votes)
 	# One key per phrasing rather than a suffix appended to the tally: the
 	# clause does not attach at the end in every language.
@@ -500,17 +630,38 @@ func update_votes(votes: Dictionary[int, int], total_voters: int, local_vote: in
 	_vote_label.text = tr(key) % [count, total_voters]
 
 
-# Slimmer than MenuStyle.popup_button so four of them sit comfortably in one
-# bottom strip; same hover/sound wiring.
 func _action_button(label: String) -> Button:
 	var btn := Button.new()
 	btn.text = label
-	btn.custom_minimum_size = Vector2(170, 44)
-	btn.add_theme_font_size_override("font_size", 17)
+	btn.custom_minimum_size = Vector2(0, 42)
+	btn.add_theme_font_size_override("font_size", 16)
 	MenuStyle.wire_hover_scale(btn)
 	SoundManager.wire_button(btn)
 	MenuStyle.apply_focus_ring(btn)
 	return btn
+
+
+# A section of the card under a hairline rule.
+func _section(content: Control) -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 0)
+	var rule := ColorRect.new()
+	rule.color = MenuStyle.BROADCAST_SEP
+	rule.custom_minimum_size = Vector2(0, 1)
+	box.add_child(rule)
+	var margin := _margin(_SECTION_MARGIN, 18, 20)
+	margin.add_child(content)
+	box.add_child(margin)
+	return box
+
+
+func _margin(side: int, top: int, bottom: int) -> MarginContainer:
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_left", side)
+	m.add_theme_constant_override("margin_right", side)
+	m.add_theme_constant_override("margin_top", top)
+	m.add_theme_constant_override("margin_bottom", bottom)
+	return m
 
 
 func _abbr_of(club: int) -> String:
@@ -524,10 +675,10 @@ func _stripe_style() -> StyleBoxFlat:
 	return s
 
 
-func _stripe(style: StyleBoxFlat, height: int = 40) -> Panel:
+func _stripe(style: StyleBoxFlat) -> Panel:
 	var p := Panel.new()
 	p.add_theme_stylebox_override("panel", style)
-	p.custom_minimum_size = Vector2(6, height)
+	p.custom_minimum_size = Vector2(6, _SCORE_BADGE_HEIGHT)
 	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	return p
 
