@@ -66,6 +66,7 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "hud_match", "stage": _STAGE_MATCH, "open": "_open_nothing"},
 	# Last: the box score closes on Tab, not Escape, so it stays up after its shot.
 	{"name": "scoreboard_match", "stage": _STAGE_MATCH, "open": "_open_scoreboard"},
+	{"name": "game_over_match", "stage": _STAGE_MATCH, "open": "_open_game_over"},
 ]
 
 # Long enough for a match scene's first-frame setup (camera ease-in, HUD
@@ -352,6 +353,31 @@ func _open_nothing() -> void:
 	pass
 
 
+# The end of an ordinary match, through the HUD's own final-horn path: away wins
+# 3–2. Closes the box score the shot before left up.
+func _open_game_over() -> void:
+	var tree: SceneTree = get_tree()
+	var board: Scoreboard = _find(tree.current_scene, Scoreboard) as Scoreboard
+	if board != null:
+		board.hide_board()
+	var hud: HUD = _find(tree.current_scene, HUD) as HUD
+	if hud == null:
+		_fail("the match has no HUD")
+		return
+	GameManager.score_changed.emit(2, 3)
+	_invoke(hud, "_on_game_over")
+	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
+	# The horn's beat and the reveal run on game time, which crawls here.
+	var waited: int = 0
+	while _tween_running(hud, "_game_over_present_tween") \
+			or (popup != null and _tween_running(popup, "_present_tween")):
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the game-over screen never finished presenting")
+			return
+
+
 func _open_scoreboard() -> void:
 	var board: Scoreboard = _find(get_tree().current_scene, Scoreboard) as Scoreboard
 	if board == null:
@@ -441,11 +467,11 @@ func _open_tournament_champion() -> void:
 	# have long since dismissed.
 	_invoke(hud, "_hide_matchup_overlay")
 	await _settle(_SHOT_SETTLE_FRAMES, _SHOT_SETTLE_SEC)
-	var result_key: StringName = &"RESULT_HOME_WINS" if side == 0 else &"RESULT_AWAY_WINS"
-	if not hud.has_method("_present_game_over_screen"):
-		_fail("HUD no longer has _present_game_over_screen")
+	if not hud.has_method("_present_game_over_screen") or not hud.has_method("_team_name"):
+		_fail("HUD no longer has _present_game_over_screen or _team_name")
 		return
-	hud.call("_present_game_over_screen", tr(result_key), HudChrome.team_ink(side))
+	var result: String = tr(&"RESULT_TEAM_WINS") % hud.call("_team_name", side)
+	hud.call("_present_game_over_screen", result, HudChrome.team_ink(side))
 	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
 	# The reveal runs on game time, which crawls here: wait for it by its tweens.
 	var waited: int = 0

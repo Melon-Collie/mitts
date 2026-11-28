@@ -48,6 +48,13 @@ const _RANK_STRIPE_HEIGHTS: Array[int] = [34, 22, 22]
 const _RANK_ROW_HEIGHTS: Array[int] = [50, 32, 32]
 # Gap between the center stripe column and the tag / name on either side.
 const _STRIPE_GUTTER: float = 16.0
+# The final score's team badges (TeamBadge), the scorebug's at hero scale: the
+# crest about twice the badge's height, cropped at its outer edge.
+const _SCORE_BADGE_WIDTH: float = 124.0
+const _SCORE_BADGE_HEIGHT: float = 60.0
+const _SCORE_CREST_PX: float = 124.0
+const _SCORE_ABBR_SIZE: int = 32
+const _SCORE_ABBR_INSET: float = 24.0
 
 var _root: Control = null
 var _scrim: ColorRect = null
@@ -56,6 +63,8 @@ var _stars_block: VBoxContainer = null
 var _bottom_block: VBoxContainer = null
 var _home_stripe_style: StyleBoxFlat = null
 var _away_stripe_style: StyleBoxFlat = null
+var _home_badge: TeamBadge = null
+var _away_badge: TeamBadge = null
 var _home_score_label: Label = null
 var _away_score_label: Label = null
 var _result_label: Label = null
@@ -143,29 +152,43 @@ func _build_top_block(root: Control) -> void:
 	_tournament_row.add_child(_tournament_label)
 
 
-# [stripe] HOME  3   —   2  AWAY [stripe] — the scorebug's stripe language at
-# hero scale, so the final score reads in the same visual system as the game.
+# [stripe|AWAY badge]  3  —  2  [HOME badge|stripe]: the scorebug's teams at
+# hero scale, away first as it lists them, each badge's crest cropped at the
+# row's outer edge.
 func _build_score_row() -> Control:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", 18)
 
-	_home_stripe_style = _stripe_style()
-	row.add_child(_stripe(_home_stripe_style))
-	row.add_child(_lbl(tr(&"TEAM_HOME"), 24, _WHITE))
-	_home_score_label = _lbl("0", 56, _WHITE)
-	row.add_child(_home_score_label)
+	_away_stripe_style = _stripe_style()
+	_away_badge = TeamBadge.new(_SCORE_BADGE_WIDTH, _SCORE_CREST_PX, _SCORE_ABBR_SIZE,
+			_SCORE_ABBR_INSET)
+	row.add_child(_team_unit(_stripe(_away_stripe_style, int(_SCORE_BADGE_HEIGHT)), _away_badge))
+	_away_score_label = _lbl("0", 56, _WHITE)
+	row.add_child(_away_score_label)
 
 	var dash := _lbl("—", 30, _DIM)
 	dash.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(dash)
 
-	_away_score_label = _lbl("0", 56, _WHITE)
-	row.add_child(_away_score_label)
-	row.add_child(_lbl(tr(&"TEAM_AWAY"), 24, _WHITE))
-	_away_stripe_style = _stripe_style()
-	row.add_child(_stripe(_away_stripe_style))
+	_home_score_label = _lbl("0", 56, _WHITE)
+	row.add_child(_home_score_label)
+	_home_stripe_style = _stripe_style()
+	_home_badge = TeamBadge.new(_SCORE_BADGE_WIDTH, _SCORE_CREST_PX, _SCORE_ABBR_SIZE,
+			_SCORE_ABBR_INSET, HORIZONTAL_ALIGNMENT_CENTER, true)
+	row.add_child(_team_unit(_home_badge, _stripe(_home_stripe_style, int(_SCORE_BADGE_HEIGHT))))
 	return row
+
+
+# A team's stripe and badge, flush, as one unit of the score row.
+func _team_unit(first: Control, second: Control) -> HBoxContainer:
+	var unit := HBoxContainer.new()
+	unit.add_theme_constant_override("separation", 0)
+	unit.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	for part: Control in [first, second]:
+		part.custom_minimum_size.y = _SCORE_BADGE_HEIGHT
+		unit.add_child(part)
+	return unit
 
 
 # Three star rows, typography straight on the scrim. Every row is anchored
@@ -314,8 +337,9 @@ func _build_bottom_block(root: Control) -> void:
 # fade in, then the stars land 3rd → 2nd → 1st. `star_names` is ranked best
 # first and may be shorter than three (empty = a nothing game, the whole
 # stars block stays hidden); `star_titles` runs beside it, "" for no title.
+# `home_club` / `away_club` are the clubs the two sides play as, for their badges.
 func present(home_score: int, away_score: int,
-		home_stripe: Color, away_stripe: Color,
+		home_stripe: Color, away_stripe: Color, home_club: int, away_club: int,
 		result_text: String, result_color: Color,
 		star_names: Array[String], star_lines: Array[String],
 		star_stripes: Array[Color], star_titles: Array[String] = []) -> void:
@@ -323,6 +347,8 @@ func present(home_score: int, away_score: int,
 	_away_score_label.text = str(away_score)
 	_home_stripe_style.bg_color = home_stripe
 	_away_stripe_style.bg_color = away_stripe
+	_home_badge.set_team(home_club, _abbr_of(home_club))
+	_away_badge.set_team(away_club, _abbr_of(away_club))
 	_result_label.text = result_text
 	_result_label.add_theme_color_override("font_color", result_color)
 
@@ -485,6 +511,10 @@ func _action_button(label: String) -> Button:
 	SoundManager.wire_button(btn)
 	MenuStyle.apply_focus_ring(btn)
 	return btn
+
+
+func _abbr_of(club: int) -> String:
+	return TeamColorRegistry.get_preset_abbr(club) if club >= 0 else ""
 
 
 func _stripe_style() -> StyleBoxFlat:

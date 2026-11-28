@@ -768,7 +768,7 @@ func _flash_period_end() -> void:
 	if _flash_overlay != null:
 		_flash_overlay.flash(MenuStyle.GOLD, 0.35, 0.5)
 
-# The final-horn beat plays on the ice first (gold flash + "HOME WINS" chyron
+# The final-horn beat plays on the ice first (gold flash + "<TEAM> WINS" chyron
 # via _on_phase_changed / here), then the full end-of-game screen takes over.
 # This delay is that breath; the presentation tween is killed by _on_game_reset
 # if a rematch fires inside the window.
@@ -779,10 +779,10 @@ func _on_game_over() -> void:
 	var result_text: String
 	var result_color: Color
 	if _scorebug.home_score() > _scorebug.away_score():
-		result_text = tr(&"RESULT_HOME_WINS")
+		result_text = tr(&"RESULT_TEAM_WINS") % _team_name(0)
 		result_color = HudChrome.team_ink(0)
 	elif _scorebug.away_score() > _scorebug.home_score():
-		result_text = tr(&"RESULT_AWAY_WINS")
+		result_text = tr(&"RESULT_TEAM_WINS") % _team_name(1)
 		result_color = HudChrome.team_ink(1)
 	else:
 		result_text = tr(&"RESULT_TIE_GAME")
@@ -795,6 +795,14 @@ func _on_game_over() -> void:
 	_game_over_present_tween.tween_interval(_GAME_OVER_PRESENT_DELAY)
 	_game_over_present_tween.tween_callback(
 			_present_game_over_screen.bind(result_text, result_color))
+
+# A side's club by name, or HOME / AWAY before the clubs are known.
+func _team_name(team_id: int) -> String:
+	var club: int = HudChrome.team_club(team_id)
+	if club < 0:
+		return tr(&"TEAM_HOME") if team_id == 0 else tr(&"TEAM_AWAY")
+	return TeamColorRegistry.get_preset_name(club).to_upper()
+
 
 func _present_game_over_screen(result_text: String, result_color: Color) -> void:
 	# The screen carries the same FINAL info, so the chyron behind it retires.
@@ -820,6 +828,7 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 	_refresh_tournament_outcome()
 	_game_over_popup.present(_scorebug.home_score(), _scorebug.away_score(),
 			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
+			HudChrome.team_club(0), HudChrome.team_club(1),
 			result_text, result_color,
 			star_names, star_lines, star_stripes, star_titles)
 	_refresh_goal_saving()
