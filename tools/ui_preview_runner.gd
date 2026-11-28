@@ -67,6 +67,7 @@ const _SHOTS: Array[Dictionary] = [
 	# Last: the box score closes on Tab, not Escape, so it stays up after its shot.
 	{"name": "scoreboard_match", "stage": _STAGE_MATCH, "open": "_open_scoreboard"},
 	{"name": "game_over_match", "stage": _STAGE_MATCH, "open": "_open_game_over"},
+	{"name": "game_over_watch_replays", "stage": _STAGE_MATCH, "open": "_open_watch_replays"},
 	{"name": "matchup_intro_match", "stage": _STAGE_MATCH, "open": "_open_matchup_intro"},
 ]
 
@@ -401,6 +402,24 @@ func _stage_star_lines() -> void:
 		record.stats.assists = line[1]
 		record.stats.shots_on_goal = line[2]
 		record.stats.hits = line[3]
+
+
+# The game-over screen with its bands faded off the reel, as Watch Replays
+# leaves it. Follows game_over_match, which put the screen up.
+func _open_watch_replays() -> void:
+	var tree: SceneTree = get_tree()
+	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
+	if popup == null or not popup.visible:
+		_fail("no game-over screen up to watch the replays behind")
+		return
+	_invoke(popup, "_hide_bands")
+	var waited: int = 0
+	while _tween_running(popup, "_bands_tween"):
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the bands never faded off")
+			return
 
 
 # An ordinary match's opening matchup card. Closes the box score and the

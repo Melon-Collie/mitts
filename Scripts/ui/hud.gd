@@ -816,7 +816,6 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 	summary.result_text = result_text
 	summary.result_color = result_color
 	summary.personal = _personal_result()
-	_fill_team_stats(summary)
 	# Up to three ranked stars; zero-stat players never star, so a quiet game
 	# shows fewer (or none — the whole stars block stays hidden).
 	for star: PlayerRecord in GameManager.get_stars_of_game():
@@ -848,24 +847,7 @@ func _personal_result() -> GameOverSummary.Personal:
 			else GameOverSummary.Personal.DEFEAT
 
 
-# Shots, hits and faceoffs won, each side's total.
-func _fill_team_stats(summary: GameOverSummary) -> void:
-	var hits: Array[int] = [0, 0]
-	var faceoffs: Array[int] = [0, 0]
-	for record: PlayerRecord in GameManager.get_players().values():
-		if record.team == null:
-			continue
-		hits[record.team.team_id] += record.stats.hits
-		faceoffs[record.team.team_id] += record.stats.faceoff_wins
-	summary.stat_labels = PackedStringArray([tr(&"SCOREBUG_SHOTS"), tr(&"COL_HITS"),
-			tr(&"GAME_OVER_STAT_FACEOFFS")])
-	summary.away_stats = PackedStringArray([str(GameManager.get_team_shots(1)), str(hits[1]),
-			str(faceoffs[1])])
-	summary.home_stats = PackedStringArray([str(GameManager.get_team_shots(0)), str(hits[0]),
-			str(faceoffs[0])])
-
-
-# The in-play chrome the game-over card would otherwise sit among: the minimap
+# The in-play chrome the game-over screen would otherwise sit among: the minimap
 # and the event feed.
 func _set_play_chrome_visible(shown: bool) -> void:
 	if _minimap != null:

@@ -16,11 +16,6 @@ var result_text: String = ""
 var result_color: Color = Color.WHITE
 var personal: Personal = Personal.NONE
 
-## Team stats side by side: each label with the away and home values beside it.
-var stat_labels: PackedStringArray = PackedStringArray()
-var away_stats: PackedStringArray = PackedStringArray()
-var home_stats: PackedStringArray = PackedStringArray()
-
 ## The stars, best first, up to three: an empty title is no title, an empty line
 ## no stat line.
 var star_names: Array[String] = []
