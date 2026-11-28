@@ -354,6 +354,14 @@ func _open_nothing() -> void:
 	pass
 
 
+# Stat lines for the game-over shot's stars, by side: away's three goals, home's
+# two. Seconds into a match nobody has a line, and the stars block stays hidden.
+const _GAME_OVER_LINES: Array = [
+	[[2, 1, 6, 1], [1, 1, 3, 2], [0, 1, 2, 4]],
+	[[1, 1, 4, 0], [1, 0, 3, 3], [0, 1, 1, 2]],
+]
+
+
 # The end of an ordinary match, through the HUD's own final-horn path: away wins
 # 3–2. Closes the box score the shot before left up.
 func _open_game_over() -> void:
@@ -365,6 +373,7 @@ func _open_game_over() -> void:
 	if hud == null:
 		_fail("the match has no HUD")
 		return
+	_stage_star_lines()
 	GameManager.score_changed.emit(2, 3)
 	_invoke(hud, "_on_game_over")
 	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
@@ -377,6 +386,21 @@ func _open_game_over() -> void:
 		if waited > _MATCH_START_TIMEOUT_FRAMES:
 			_fail("the game-over screen never finished presenting")
 			return
+
+
+# Goals, assists, shots on goal and hits for each skater, by side then slot.
+func _stage_star_lines() -> void:
+	for record: PlayerRecord in GameManager.get_players().values():
+		if record.team == null or record.is_goalie:
+			continue
+		var lines: Array = _GAME_OVER_LINES[record.team.team_id]
+		if record.team_slot >= lines.size():
+			continue
+		var line: Array = lines[record.team_slot]
+		record.stats.goals = line[0]
+		record.stats.assists = line[1]
+		record.stats.shots_on_goal = line[2]
+		record.stats.hits = line[3]
 
 
 # An ordinary match's opening matchup card. Closes the box score and the
