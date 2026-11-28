@@ -81,11 +81,12 @@ prices its own velocity as the run-up.
 
 - the check was thrown at full-check strength or more (`HitRules.FULL_CHECK_IMPULSE`,
   the strength that strips and rocks);
-- the victim is within `BOARDING_ZONE_M` of the boards (proposed 1.5 m: the
+- the victim is within `BOARDING_ZONE_M` of the boards (1.0 m, about a stride: the
   distance a man is thrown into them, wider than `BACKSTOP_MARGIN_M`) and the hit
   drives him toward them (more than 45° into the wall, the backstop's own test);
 - the victim had his back to the hitter: the hitter sat in his rear cone
-  (`BOARDING_REAR_COS`, proposed the rear 90°).
+  (`BOARDING_REAR_COS`, the rear 60°: square from behind, so a hit from behind
+  and beside him is the legal angling).
 
 His facing is read `BOARDING_TURN_GRACE_S` (proposed 0.3 s) **before** the
 contact, from the state buffer the claim resolvers already rewind, so a man who
@@ -411,10 +412,12 @@ The bots learn each rule in the phase that adds it.
 - **The bots know a short-handed team may ice the puck**
   (`TeamBrain.icing_enforced`, off `WorldSnapshot.short_handed_team_id`), so a
   dump or a rim down the ice is no longer priced as a whistle against them.
-- **The thresholds are the proposal's**, untested in play: the 1.5 m boarding
-  zone, the rear 90°, the 0.3 s turn grace, the 2 m loose-puck reach. The first
-  playtest moved two: a foul is judged on the hitter's run-up, and a check may
-  be finished up to 1.0 s after the pass (section 1).
+- **The thresholds started as the proposal's**: the 1.5 m boarding zone, the
+  rear 90°, the 0.3 s turn grace, the 2 m loose-puck reach. Playtests have moved
+  four: a foul is judged on the hitter's run-up, a check may be finished up to
+  1.0 s after the pass (section 1), and boarding takes a hit square from behind
+  (the rear 60°) within 1.0 m of the boards. The turn grace and the loose-puck
+  reach are still the proposal's.
 
 Known gaps, each small enough to leave for the playtest to rank:
 
