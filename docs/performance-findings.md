@@ -526,7 +526,7 @@ the milliseconds.
 | Player Shadows off | 0 (−9..+9) | 0% | 470 | Low |
 | Puck Shadow off | +19 (−6..+43) | noise | 664 | Low |
 | Ice Scratches off | +6 (+1..+12) | noise | 566 | Low |
-| Arena Ads off | +23 (+12..+34) | noise | 556 | None |
+| Arena Ads on | not re-measured (measured off from on: +23, +12..+34) | noise | 556 | None |
 | Animation Detail Low / Full | +21 / +4 | noise | 598 / 596 | Processor |
 | Color Grade None | +9 (+6..+11) | noise | 581 | None |
 

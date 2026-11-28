@@ -54,6 +54,8 @@ enum Sound {
 	SKATE_TOUCH,
 	STICK_RELEASE,
 	STICK_DRAG,
+	BOARD_CHECK,
+	GLASS_RATTLE,
 }
 
 const _SOUND_PATHS: Dictionary = {
@@ -87,6 +89,8 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.SKATE_TOUCH:      "res://Sounds/skate_touch_%02d.wav",
 	Sound.STICK_RELEASE:    "res://Sounds/stick_release.wav",
 	Sound.STICK_DRAG:       "res://Sounds/stick_drag.wav",
+	Sound.BOARD_CHECK:      "res://Sounds/puck_boards.wav",
+	Sound.GLASS_RATTLE:     "res://Sounds/puck_glass.wav",
 }
 
 # Cues recorded as several takes: the path above is a pattern numbered from 1,
@@ -120,6 +124,8 @@ const _MIX_DB: Dictionary = {
 	Sound.PUCK_STRIP:       0.0,
 	Sound.STICK_LIFT:       0.0,
 	Sound.BODY_CHECK:       0.0,
+	Sound.BOARD_CHECK:      1.0,
+	Sound.GLASS_RATTLE:    -2.0,
 	Sound.PUCK_PICKUP:     -6.0,
 	Sound.SKATE_BRAKE:     -4.0,
 	Sound.SKATE_DIG:       -4.0,
@@ -150,6 +156,7 @@ const _UNDER_REFERENCE_DB: Dictionary = {
 	Sound.PUCK_GOAL_BODY:  1.3,
 	Sound.PUCK_BODY_BLOCK: 4.1,
 	Sound.PUCK_GLASS:      7.1,
+	Sound.GLASS_RATTLE:    7.1,
 	Sound.STICK_TAP:      10.0,
 	Sound.GOALIE_PAD_DROP: 11.0,
 	Sound.SKATE_PUSH:      4.9,
@@ -163,6 +170,10 @@ const _UNDER_REFERENCE_DB: Dictionary = {
 # a body is a softer, heavier stop than a goalie pad.
 const _BASE_PITCH: Dictionary = {
 	Sound.PUCK_BODY_BLOCK: 0.85,
+	# A body into the boards: the puck's rap, deep and heavy, with the glass's
+	# shiver under it.
+	Sound.BOARD_CHECK:     0.55,
+	Sound.GLASS_RATTLE:    0.7,
 }
 
 const _UI_POOL_SIZE: int = 4

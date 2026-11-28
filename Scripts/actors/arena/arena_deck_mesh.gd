@@ -132,7 +132,7 @@ func add_terraces(root: Node3D, mesh: ArrayMesh) -> void:
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.mesh = mesh
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = _spec.concrete_color
+	mat.albedo_color = ArenaBowlSpec.in_house_light(_spec.concrete_color)
 	mat.roughness = 0.95
 	# Every face is wound front-toward-the-bowl-interior (treads up, risers /
 	# fascia rinkward), and the under-tread volumes are sealed by the riser
@@ -183,7 +183,7 @@ func add_shell(root: Node3D, mesh: ArrayMesh) -> void:
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.mesh = mesh
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = _spec.shell_color
+	mat.albedo_color = ArenaBowlSpec.in_house_light(_spec.shell_color)
 	mat.roughness = 1.0
 	# Same winding contract as the terraces: the wall's front faces the bowl
 	# interior, so cull the never-visible outward side.

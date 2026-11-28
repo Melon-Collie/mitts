@@ -81,6 +81,10 @@ signal highlight_stopped
 # A body check re-fired by a goal replay (the cinematic, or a stored goal
 # re-aired for its GIF): body_check_broadcast's counterpart for the stands.
 signal replay_body_check(force: float)
+# A hard check that drove its victim into the boards, live or replayed, at the
+# point on the glass he met (BoardCheckRules): the boards' thud and rattle, the
+# snow off them and the fans behind them react to it.
+signal boards_checked(contact: Vector3, force: float)
 # Goal-clip GIF export (GoalClipExporter). state is a GoalClipExporter.State —
 # the HUD reads it to swap its prompt between "save", "saving", and gone.
 # finished carries the written path, or "" when the export failed.
@@ -123,6 +127,10 @@ signal local_spectator_state_changed(is_spectator: bool)
 # grace window). HUD listens to flash the "PUCK OUT OF PLAY" toast; the
 # FACEOFF_PREP phase change drives the countdown banner separately.
 signal puck_out_of_play()
+# The authoritative board hit on every peer — the host's own, a client's from the
+# host — never a client's predicted one, so a mark is left only where every peer
+# agrees the puck struck.
+signal puck_marked_boards(position: Vector3, speed: float)
 # Emitted on every peer when an NHL-rule stoppage fires. Same role as
 # puck_out_of_play but lets HUD differentiate the toast text. Hosts emit
 # inside _consume_pending_faceoff; clients emit from the RPC handler.
@@ -2137,6 +2145,7 @@ func _wire_subsystems() -> void:
 	_goal_replay_driver.replay_started.connect(_on_goal_replay_started_capture)
 	_goal_replay_driver.replay_frame_changed.connect(goal_replay_frame_changed.emit)
 	_goal_replay_driver.body_check_replayed.connect(replay_body_check.emit)
+	_goal_replay_driver.boards_check_replayed.connect(_on_boards_checked)
 	_post_game_replay_driver = PostGameReplayDriver.new()
 	add_child(_post_game_replay_driver)
 	_post_game_replay_driver.replay_frame_changed.connect(highlight_frame_changed.emit)
@@ -2171,6 +2180,7 @@ func _wire_subsystems() -> void:
 		_goal_clip_exporter.stored_replay_frame_changed.connect(highlight_frame_changed.emit)
 		_goal_clip_exporter.stored_replay_stopped.connect(highlight_stopped.emit)
 		_goal_clip_exporter.stored_replay_body_check.connect(replay_body_check.emit)
+		_goal_clip_exporter.stored_replay_boards_check.connect(_on_boards_checked)
 		_goal_clip_exporter.state_changed.connect(
 				func(_state: GoalClipExporter.State) -> void: goal_gif_saving_changed.emit())
 		_goal_clip_exporter.set_goal_label_provider(
@@ -2394,6 +2404,7 @@ func _wire_sound_signals() -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManagerScript.board_contact_sound(puck.get_puck_position()), puck.get_puck_position(), _puck_speed_volume(spd), 0.05)
 			puck.fire_board_impact_vfx(spd)
+			puck_marked_boards.emit(puck.get_puck_position(), spd)
 			NetworkManager.send_board_hit_to_all(puck.get_puck_position(), spd)
 			_record_replay_audio_event("puck_boards", puck.get_puck_position(), spd))
 		puck.puck_hit_goal_body.connect(func() -> void:
@@ -2482,6 +2493,7 @@ func _wire_sound_signals() -> void:
 			SoundManager.play_crowd(SoundManager.Sound.GOAL_HORN))
 	NetworkManager.board_hit_received.connect(
 		func(pos: Vector3, spd: float) -> void:
+			puck_marked_boards.emit(pos, spd)
 			if _cue_is_echo(_local_boards_cue_at):
 				return
 			SoundManager.play_world(SoundManagerScript.board_contact_sound(pos), pos, _puck_speed_volume(spd), 0.05)
@@ -4893,6 +4905,7 @@ func _on_body_check_landed(hitter_peer_id: int, victim_peer_id: int,
 		SoundManager.play_world(SoundManager.Sound.BODY_CHECK, victim_rec.skater.global_position,
 				SkaterVFX.check_sound_volume_db(force), 0.08, SkaterVFX.check_sound_pitch_scale(force))
 	body_check_broadcast.emit(force)
+	_on_boards_checked(BoardCheckRules.contact(victim_rec.skater.global_position, hit_dir), force)
 	# The hitter's check-delivery body pose (shoulder drive through the contact)
 	# rides the same broadcast as the burst/thud so all three land the identical
 	# frame on every machine. Intensity shares the VFX hardness curve.
@@ -4905,6 +4918,18 @@ func _on_body_check_landed(hitter_peer_id: int, victim_peer_id: int,
 	var rc: RemoteController = victim_rec.controller as RemoteController
 	if rc != null:
 		rc.start_knockback_lead(hit_dir, SkaterVFX.check_intensity(force))
+
+
+# A check that drove its victim into the boards (`contact`, NONE when it did
+# not): a heavy thud and the glass's rattle under it, then the cosmetic
+# listeners. Only checks hard enough to be heard reach the boards.
+func _on_boards_checked(contact: Vector3, force: float) -> void:
+	if contact == BoardCheckRules.NONE or not SkaterVFX.check_sound_audible(force):
+		return
+	var level: float = SkaterVFX.check_sound_volume_db(force)
+	SoundManager.play_world(SoundManager.Sound.BOARD_CHECK, contact, level, 0.06)
+	SoundManager.play_world(SoundManager.Sound.GLASS_RATTLE, contact, level, 0.1)
+	boards_checked.emit(contact, force)
 
 
 func _on_hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float,

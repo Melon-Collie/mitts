@@ -168,7 +168,7 @@ func attach(root: Node3D, layout: Dictionary) -> void:
 # so the per-instance shade roll multiplies into the albedo.
 func _material() -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = _spec.seat_color
+	mat.albedo_color = ArenaBowlSpec.in_house_light(_spec.seat_color)
 	mat.vertex_color_use_as_albedo = true
 	mat.roughness = 0.85
 	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED

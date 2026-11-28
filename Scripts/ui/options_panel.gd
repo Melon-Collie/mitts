@@ -15,8 +15,9 @@ const _SEP := MenuStyle.TEXT_SEP
 # Hard cap on the tab-content viewport. Each tab is wrapped in a fixed-height
 # ScrollContainer of this size, so every tab is identically tall (the popup never
 # resizes when switching) and any tab whose content exceeds the cap scrolls
-# instead of overflowing. Sized to give the 6-tab bar room for its longer labels.
-const _TAB_VIEWPORT_SIZE := Vector2(560, 500)
+# instead of overflowing. The UI is laid out at 1920×1080 and stretched, so the
+# whole panel (~950 px tall at this size) always fits the screen.
+const _TAB_VIEWPORT_SIZE := Vector2(860, 680)
 const _SCROLLBAR_GUTTER := 12   # reserved on every tab so columns line up scroll-or-not
 
 const _TAB_LABELS: Array[String] = ["Gameplay", "Camera", "Video", "Audio", "Controls", "Accessibility"]
@@ -39,20 +40,24 @@ func _ready() -> void:
 	if focus_theme != null:
 		theme = focus_theme
 
-	var close_row := HBoxContainer.new()
-	var close_spacer := Control.new()
-	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	close_row.add_child(close_spacer)
+	# The close button shares the title's row; a spacer as wide as it on the
+	# other side keeps the title centred.
+	var title_row := HBoxContainer.new()
 	var close_btn := MenuStyle.close_button()
+	close_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	close_btn.pressed.connect(_on_cancel_pressed)
 	SoundManager.wire_button(close_btn)
-	close_row.add_child(close_btn)
-	add_child(close_row)
+	var balance := Control.new()
+	balance.custom_minimum_size = close_btn.custom_minimum_size
+	title_row.add_child(balance)
 	var title := Label.new()
 	title.text = "Options"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	MenuStyle.apply_heading(title)
-	add_child(title)
+	title_row.add_child(title)
+	title_row.add_child(close_btn)
+	add_child(title_row)
 
 	add_child(_build_tab_switcher())
 
@@ -396,7 +401,7 @@ func _defaults() -> Dictionary:
 		"shadow_quality": PlayerPrefs.SHADOW_QUALITY_HIGH,
 		"crowd_density": PlayerPrefs.CROWD_DENSITY_HIGH,
 		"ice_scratches_enabled": true,
-		"arena_ads_enabled": true,
+		"arena_ads_enabled": false,
 		"puck_shadow_enabled": true,
 		"player_shadows_enabled": true,
 		"animation_detail": SkaterAnimationLod.DETAIL_BALANCED,

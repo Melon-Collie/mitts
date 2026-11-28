@@ -236,6 +236,13 @@ static func get_preset_name(slot: int) -> String:
 	return get_preset(slot).get("name", "Slot %d" % slot)
 
 
+# The team's three-letter abbreviation; a team without one (an edited copy from
+# before the field, the hardcoded fallback) takes its name's first three letters.
+static func get_preset_abbr(slot: int) -> String:
+	var abbr: String = get_preset(slot).get("abbr", "")
+	return abbr if not abbr.is_empty() else get_preset_name(slot).left(3).to_upper()
+
+
 # Pick the "accent" color for legacy *_stripe consumers: first stripe of
 # the region, or the shoulder color if the region has no stripes.
 static func _accent_color(region: Dictionary, fallback: Color) -> Color:
@@ -260,6 +267,7 @@ static func _try_load_from(path: String) -> bool:
 	for entry: Dictionary in data_dict.teams:
 		_presets.append({
 			"name":      entry.get("name", "Slot %d" % _presets.size()),
+			"abbr":      str(entry.get("abbr", "")).strip_edges().to_upper(),
 			"primary":   _parse_color(entry.get("primary",   "#FFFFFF")),
 			"secondary": _parse_color(entry.get("secondary", "#FFFFFF")),
 			"light":     _parse_color(entry.get("light",     "#F2F4F7")),

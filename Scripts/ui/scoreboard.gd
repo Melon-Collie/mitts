@@ -6,6 +6,15 @@ const _WHITE   := MenuStyle.BROADCAST_CREAM
 const _DIM     := MenuStyle.BROADCAST_DIM
 const _HEADER  := MenuStyle.BROADCAST_DIM
 const _SEP     := MenuStyle.BROADCAST_SEP
+# Team badges (TeamBadge), in the period summary and on each team's section of
+# the table: the crest about twice the row's height, so the row crops it.
+const _SUMMARY_BADGE_WIDTH: float = 64.0
+const _SUMMARY_CREST_PX: float = 62.0
+const _SUMMARY_ROW_HEIGHT: float = 30.0
+const _SUMMARY_ABBR_INSET: float = 12.0
+const _SECTION_CREST_PX: float = 66.0
+const _SECTION_HEIGHT: float = 32.0
+const _SECTION_NAME_INSET: float = 22.0
 
 # Column headers, tr()'d where the header row is built. The order is the
 # left-to-right order _fill_row lays a row out in, and every data row passes
@@ -18,8 +27,6 @@ const _COLUMN_KEYS: Array[StringName] = [
 var _rows_container: VBoxContainer = null
 var _period_score_labels: Array = []  # [team_id][period_index, then total]
 var _period_summary_grid: GridContainer = null
-var _away_badge_style: StyleBoxFlat = null
-var _home_badge_style: StyleBoxFlat = null
 
 # Replay mode: when configured(), an external owner (the replay HUD) drives
 # visibility and supplies replay-derived data through these providers instead
@@ -101,14 +108,12 @@ func _period_stripe(team_id: int) -> Color:
 			_team_color_slot(0), _team_color_slot(1))
 	return pair.home if team_id == 0 else pair.away
 
+# The teams' stripes, crests and names are all built from the clubs, so a
+# change of clubs rebuilds the summary; the sections rebuild on every refresh.
 func _on_team_colors_ready(_home_primary: Color, _home_secondary: Color, _away_primary: Color, _away_secondary: Color) -> void:
-	# Period-summary team identifiers use the scorebug's stripe+label treatment
-	# (white text next to a vertical color band), so only the stripe needs to
-	# follow team colors. Labels stay white.
-	if _home_badge_style != null:
-		_home_badge_style.bg_color = _period_stripe(0)
-	if _away_badge_style != null:
-		_away_badge_style.bg_color = _period_stripe(1)
+	if _period_summary_grid != null:
+		_rebuild_period_grid(_data_period_scores()[0].size())
+	_refresh()
 
 func _build_panel() -> void:
 	var root := Control.new()
@@ -228,7 +233,7 @@ func _rebuild_period_grid(num_periods: int) -> void:
 		child.free()
 	_period_score_labels.clear()
 
-	var col_num: int = 32
+	var col_num: int = 40
 	_period_summary_grid.columns = 2 + num_periods  # badge + periods + total
 
 	_period_summary_grid.add_child(Control.new())
@@ -247,17 +252,10 @@ func _rebuild_period_grid(num_periods: int) -> void:
 	_period_summary_grid.add_child(t_header)
 
 	for team_id: int in [1, 0]:
-		var label: String = tr(&"TEAM_AWAY") if team_id == 1 else tr(&"TEAM_HOME")
-		var badge := _team_badge(label, _period_stripe(team_id))
-		var badge_style := badge.get_meta(&"stripe_style") as StyleBoxFlat
-		if team_id == 1:
-			_away_badge_style = badge_style
-		else:
-			_home_badge_style = badge_style
-		_period_summary_grid.add_child(badge)
+		_period_summary_grid.add_child(_summary_team_cell(team_id))
 		var row_labels: Array[Label] = []
 		for _i: int in num_periods + 1:  # periods + total
-			var l := _lbl("0", 13, _WHITE)
+			var l := _lbl("0", 18, _WHITE)
 			l.custom_minimum_size = Vector2(col_num, 0)
 			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			_period_summary_grid.add_child(l)
@@ -327,49 +325,58 @@ func _refresh() -> void:
 			_WHITE, false
 		)
 
+# A team's section of the table: its stripe, then its crest and full name on a
+# raised band, the same for both teams.
 func _make_team_header(team_id: int) -> HBoxContainer:
-	var label_text: String = tr(&"TEAM_AWAY") if team_id == 1 else tr(&"TEAM_HOME")
-	# Two panels stitched together so the outside reads as one 4px-rounded
-	# shape with a hard vertical seam between the stripe and the jersey
-	# body — same "rounded outside, flat inside" pattern the lobby cards
-	# use (slot_grid_panel.gd:174-198). A single rounded panel with a
-	# border-as-stripe instead bends the stripe around the corner, which
-	# is the "curve on curve" tell we're avoiding.
-	var colors: Dictionary = TeamColorRegistry.get_colors(_team_color_slot(team_id), team_id)
+	var club: int = _team_color_slot(team_id)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 0)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
+	# Two panels stitched together so the outside reads as one 4px-rounded
+	# shape with a hard seam between the stripe and the band, as the lobby
+	# cards are: a single rounded panel bends its stripe round the corner.
 	var stripe_style := StyleBoxFlat.new()
-	stripe_style.bg_color = colors.ui_stripe
+	stripe_style.bg_color = _period_stripe(team_id)
 	stripe_style.corner_radius_top_left = 4
 	stripe_style.corner_radius_bottom_left = 4
-	stripe_style.corner_radius_top_right = 0
-	stripe_style.corner_radius_bottom_right = 0
 	var stripe := PanelContainer.new()
 	stripe.add_theme_stylebox_override("panel", stripe_style)
 	stripe.custom_minimum_size = Vector2(6, 0)
 	row.add_child(stripe)
 
-	var body_style := StyleBoxFlat.new()
-	body_style.bg_color = colors.ui_base
-	body_style.corner_radius_top_left = 0
-	body_style.corner_radius_bottom_left = 0
-	body_style.corner_radius_top_right = 4
-	body_style.corner_radius_bottom_right = 4
-	body_style.set_content_margin(SIDE_LEFT, 8)
-	body_style.set_content_margin(SIDE_RIGHT, 14)
-	body_style.set_content_margin(SIDE_TOP, 5)
-	body_style.set_content_margin(SIDE_BOTTOM, 5)
-	var body := PanelContainer.new()
-	body.add_theme_stylebox_override("panel", body_style)
-	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var lbl := _lbl(label_text, 16, colors.ui_text)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	body.add_child(lbl)
-	row.add_child(body)
-
+	var band_style := StyleBoxFlat.new()
+	band_style.bg_color = MenuStyle.SURFACE_ELEV
+	band_style.corner_radius_top_right = 4
+	band_style.corner_radius_bottom_right = 4
+	var band := PanelContainer.new()
+	band.add_theme_stylebox_override("panel", band_style)
+	band.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	band.clip_contents = true
+	var badge := TeamBadge.new(0.0, _SECTION_CREST_PX, 17, _SECTION_NAME_INSET,
+			HORIZONTAL_ALIGNMENT_LEFT)
+	badge.custom_minimum_size.y = _SECTION_HEIGHT
+	badge.set_team(club, TeamColorRegistry.get_preset_name(club).to_upper())
+	band.add_child(badge)
+	row.add_child(band)
 	return row
+
+
+# A team in the period summary: its stripe and its badge, as on the scorebug.
+func _summary_team_cell(team_id: int) -> HBoxContainer:
+	var club: int = _team_color_slot(team_id)
+	var cell := HBoxContainer.new()
+	cell.add_theme_constant_override("separation", 0)
+	var stripe := ColorRect.new()
+	stripe.color = _period_stripe(team_id)
+	stripe.custom_minimum_size = Vector2(5, 0)
+	cell.add_child(stripe)
+	var badge := TeamBadge.new(_SUMMARY_BADGE_WIDTH, _SUMMARY_CREST_PX, 17, _SUMMARY_ABBR_INSET)
+	badge.custom_minimum_size.y = _SUMMARY_ROW_HEIGHT
+	badge.set_team(club, TeamColorRegistry.get_preset_abbr(club))
+	cell.add_child(badge)
+	return cell
+
 
 func _make_row() -> HBoxContainer:
 	var row := HBoxContainer.new()
@@ -422,32 +429,6 @@ func _fill_row(row: HBoxContainer, texts: Array, name_color: Color, is_header: b
 		cell.add_theme_color_override("font_color", col)
 		cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if i == 3 else HORIZONTAL_ALIGNMENT_CENTER
 		row.add_child(cell)
-
-func _team_badge(text: String, color: Color) -> Control:
-	# Scorebug-style team identifier: a thin vertical color stripe next to a
-	# white label, so the period summary speaks the same visual language as the
-	# scorebug. Returns an HBoxContainer; the stripe's StyleBoxFlat is meta so
-	# _on_team_colors_ready can recolor it when team palettes change.
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 8)
-	hbox.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-
-	var stripe_style := StyleBoxFlat.new()
-	stripe_style.bg_color = color
-	var stripe := PanelContainer.new()
-	stripe.add_theme_stylebox_override("panel", stripe_style)
-	stripe.custom_minimum_size = Vector2(4, 18)
-	stripe.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hbox.add_child(stripe)
-
-	var lbl := _lbl(text, 12, _WHITE)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	hbox.add_child(lbl)
-
-	hbox.set_meta(&"stripe_style", stripe_style)
-	return hbox
-
 
 func _lbl(text: String, size: int, color: Color) -> Label:
 	var l := Label.new()

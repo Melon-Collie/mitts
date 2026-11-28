@@ -40,7 +40,7 @@ const CONDITIONS: Array = [
 	["player shadows: off", {"player_shadows_enabled": false}],
 	["puck shadow: off", {"puck_shadow_enabled": false}],
 	["ice scratches: off", {"ice_scratches_enabled": false}],
-	["arena ads: off", {"arena_ads_enabled": false}],
+	["arena ads: on", {"arena_ads_enabled": true}],
 	["animation detail: low", {"animation_detail": SkaterAnimationLod.DETAIL_LOW}],
 	["animation detail: full", {"animation_detail": SkaterAnimationLod.DETAIL_FULL}],
 	["color grade: none", {"color_grade_preset": 0}],

@@ -268,10 +268,11 @@ func test_a_tournament_game_has_no_rematch() -> void:
 	assert_true(outcome_row.visible)
 	assert_eq(outcome.text, "Advance to the Semifinal")
 	assert_false((popup.get("_cup_crest") as Control).visible, "an ordinary round has no crest")
-	assert_eq(lobby.text, tr(&"GAME_OVER_CONTINUE"))
+	# Without a rematch, Continue is the card's lead action, lettered in capitals.
+	assert_eq(lobby.text, tr(&"GAME_OVER_CONTINUE").to_upper())
 	var votes: Dictionary[int, int] = {}
 	popup.update_votes(votes, 1, RematchVoteRules.Choice.NONE)
-	assert_eq(lobby.text, tr(&"GAME_OVER_CONTINUE"), "a tally refresh keeps the wording")
+	assert_eq(lobby.text, tr(&"GAME_OVER_CONTINUE").to_upper(), "a tally refresh keeps the wording")
 
 	popup.set_tournament(false, "")
 	assert_true(rematch.visible, "the next ordinary game gets its rematch back")
@@ -300,7 +301,7 @@ func test_the_matchup_intro_names_the_round_and_the_clubs() -> void:
 	var no_one: Array[PlayerRecord] = []
 	var state: TournamentState = _state()
 	var game: int = TournamentRules.player_game(state)
-	overlay.present(no_one, no_one, Color.RED, Color.BLUE, TournamentCopy.intro_title(game),
+	overlay.present(no_one, no_one, _FIELD[2], _PLAYER_CLUB, TournamentCopy.intro_title(game),
 			TournamentCopy.seeded_club(state, _FIELD[2]),
 			TournamentCopy.seeded_club(state, _PLAYER_CLUB))
 	var texts: Array[String] = _labels(overlay)
@@ -309,10 +310,15 @@ func test_the_matchup_intro_names_the_round_and_the_clubs() -> void:
 	assert_has(texts, "#3 " + TournamentCopy.club_name(_FIELD[2]).to_upper())
 	assert_has(texts, "#6 " + TournamentCopy.club_name(_PLAYER_CLUB).to_upper())
 
-	overlay.present(no_one, no_one, Color.RED, Color.BLUE)
+	overlay.present(no_one, no_one, _FIELD[2], _PLAYER_CLUB)
 	texts = _labels(overlay)
 	assert_has(texts, tr(&"MATCHUP_TITLE"), "an ordinary game gets the ordinary title back")
-	assert_has(texts, tr(&"TEAM_HOME"))
+	assert_has(texts, TournamentCopy.club_name(_FIELD[2]).to_upper(), "and its clubs unseeded")
+	assert_has(texts, TournamentCopy.club_name(_PLAYER_CLUB).to_upper())
+
+	overlay.present(no_one, no_one, -1, -1)
+	texts = _labels(overlay)
+	assert_has(texts, tr(&"TEAM_HOME"), "before the clubs are known, the sides")
 	assert_has(texts, tr(&"TEAM_AWAY"))
 
 

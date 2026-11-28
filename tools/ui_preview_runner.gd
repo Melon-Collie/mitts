@@ -64,6 +64,11 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "tournament_intro", "stage": _STAGE_TOURNAMENT_FINAL, "open": "_open_nothing"},
 	{"name": "tournament_champion", "stage": _STAGE_TOURNAMENT_FINAL, "open": "_open_tournament_champion"},
 	{"name": "hud_match", "stage": _STAGE_MATCH, "open": "_open_nothing"},
+	# Last: the box score closes on Tab, not Escape, so it stays up after its shot.
+	{"name": "scoreboard_match", "stage": _STAGE_MATCH, "open": "_open_scoreboard"},
+	{"name": "game_over_match", "stage": _STAGE_MATCH, "open": "_open_game_over"},
+	{"name": "game_over_watch_replays", "stage": _STAGE_MATCH, "open": "_open_watch_replays"},
+	{"name": "matchup_intro_match", "stage": _STAGE_MATCH, "open": "_open_matchup_intro"},
 ]
 
 # Long enough for a match scene's first-frame setup (camera ease-in, HUD
@@ -350,6 +355,107 @@ func _open_nothing() -> void:
 	pass
 
 
+# Stat lines for the game-over shot's stars, by side: away's three goals, home's
+# two. Seconds into a match nobody has a line, and the stars block stays hidden.
+const _GAME_OVER_LINES: Array = [
+	[[2, 1, 6, 1], [1, 1, 3, 2], [0, 1, 2, 4]],
+	[[1, 1, 4, 0], [1, 0, 3, 3], [0, 1, 1, 2]],
+]
+
+
+# The end of an ordinary match, through the HUD's own final-horn path: away wins
+# 3–2. Closes the box score the shot before left up.
+func _open_game_over() -> void:
+	var tree: SceneTree = get_tree()
+	var board: Scoreboard = _find(tree.current_scene, Scoreboard) as Scoreboard
+	if board != null:
+		board.hide_board()
+	var hud: HUD = _find(tree.current_scene, HUD) as HUD
+	if hud == null:
+		_fail("the match has no HUD")
+		return
+	_stage_star_lines()
+	GameManager.score_changed.emit(2, 3)
+	_invoke(hud, "_on_game_over")
+	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
+	# The horn's beat and the reveal run on game time, which crawls here.
+	var waited: int = 0
+	while _tween_running(hud, "_game_over_present_tween") \
+			or (popup != null and _tween_running(popup, "_present_tween")):
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the game-over screen never finished presenting")
+			return
+
+
+# Goals, assists, shots on goal and hits for each skater, by side then slot.
+func _stage_star_lines() -> void:
+	for record: PlayerRecord in GameManager.get_players().values():
+		if record.team == null or record.is_goalie:
+			continue
+		var lines: Array = _GAME_OVER_LINES[record.team.team_id]
+		if record.team_slot >= lines.size():
+			continue
+		var line: Array = lines[record.team_slot]
+		record.stats.goals = line[0]
+		record.stats.assists = line[1]
+		record.stats.shots_on_goal = line[2]
+		record.stats.hits = line[3]
+
+
+# The game-over screen with its bands faded off the reel, as Watch Replays
+# leaves it. Follows game_over_match, which put the screen up.
+func _open_watch_replays() -> void:
+	var tree: SceneTree = get_tree()
+	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
+	if popup == null or not popup.visible:
+		_fail("no game-over screen up to watch the replays behind")
+		return
+	_invoke(popup, "_hide_bands")
+	var waited: int = 0
+	while _tween_running(popup, "_bands_tween"):
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the bands never faded off")
+			return
+
+
+# An ordinary match's opening matchup card. Closes the box score and the
+# game-over screen the shots before it left up.
+func _open_matchup_intro() -> void:
+	var tree: SceneTree = get_tree()
+	var board: Scoreboard = _find(tree.current_scene, Scoreboard) as Scoreboard
+	if board != null:
+		board.hide_board()
+	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
+	if popup != null:
+		popup.hide_popup()
+	var hud: HUD = _find(tree.current_scene, HUD) as HUD
+	if hud == null:
+		_fail("the match has no HUD")
+		return
+	_invoke(hud, "_show_matchup_overlay")
+	var overlay: MatchupIntroOverlay = _find(tree.current_scene, MatchupIntroOverlay) \
+			as MatchupIntroOverlay
+	var waited: int = 0
+	while overlay != null and _tween_running(overlay, "_present_tween"):
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the matchup card never finished presenting")
+			return
+
+
+func _open_scoreboard() -> void:
+	var board: Scoreboard = _find(get_tree().current_scene, Scoreboard) as Scoreboard
+	if board == null:
+		_fail("the match has no Scoreboard")
+		return
+	board.show_board()
+
+
 func _open_boot_options(tab: int) -> void:
 	var boot: Boot = _boot()
 	_invoke(boot, "_on_settings_pressed")
@@ -431,11 +537,11 @@ func _open_tournament_champion() -> void:
 	# have long since dismissed.
 	_invoke(hud, "_hide_matchup_overlay")
 	await _settle(_SHOT_SETTLE_FRAMES, _SHOT_SETTLE_SEC)
-	var result_key: StringName = &"RESULT_HOME_WINS" if side == 0 else &"RESULT_AWAY_WINS"
-	if not hud.has_method("_present_game_over_screen"):
-		_fail("HUD no longer has _present_game_over_screen")
+	if not hud.has_method("_present_game_over_screen") or not hud.has_method("_team_name"):
+		_fail("HUD no longer has _present_game_over_screen or _team_name")
 		return
-	hud.call("_present_game_over_screen", tr(result_key), HudChrome.team_ink(side))
+	var result: String = tr(&"RESULT_TEAM_WINS") % hud.call("_team_name", side)
+	hud.call("_present_game_over_screen", result, HudChrome.team_ink(side))
 	var popup: GameOverPopup = _find(tree.current_scene, GameOverPopup) as GameOverPopup
 	# The reveal runs on game time, which crawls here: wait for it by its tweens.
 	var waited: int = 0

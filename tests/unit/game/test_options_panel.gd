@@ -73,6 +73,22 @@ func test_defaults_is_snapshot_minus_locale() -> void:
 		"_defaults() should omit exactly 'locale' relative to _snapshot()")
 
 
+# The Defaults button restores exactly what a first launch starts with: each
+# value in _defaults() is a second copy of a PlayerPrefs field initializer.
+# Bindings are the exception — their defaults are the InputMap as the project
+# ships it, snapshotted at first load, which a fresh unloaded instance lacks.
+func test_defaults_match_a_fresh_prefs() -> void:
+	const FROM_INPUT_MAP: Array[String] = ["bindings", "pad_bindings"]
+	var fresh: Node = (load("res://Scripts/game/player_prefs.gd") as GDScript).new()
+	var defaults: Dictionary = _panel._defaults()
+	for k: String in defaults:
+		if k in FROM_INPUT_MAP:
+			continue
+		assert_eq(defaults[k], fresh.get(k),
+			"Defaults button sets '%s' to something a first launch doesn't" % k)
+	fresh.free()
+
+
 func test_opens_clean_no_pending_apply() -> void:
 	# Freshly opened with no edits, read state matches the snapshot baseline, so
 	# Apply is disabled.

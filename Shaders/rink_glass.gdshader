@@ -34,6 +34,27 @@ uniform float pane_bottom_y;
 uniform vec3 edge_colour : source_color = vec3(0.55, 0.85, 0.75);
 uniform float edge_strength : hint_range(0.0, 2.0) = 0.35;
 
+// A body driven into the boards rattles the pane (BoardCheckVFX): the glass
+// either side of where he hit it flexes back and forth, its whole height, and
+// dies away, its reflection swinging and the pane frosting and catching the
+// light as it goes. The pane is a few long flat quads, so this is drawn rather
+// than bent. `rattle_t` runs 0 → 1 over the rattle; `rattle_pos` is where it
+// struck, in the rink's space.
+uniform vec3 rattle_pos = vec3(0.0, -100.0, 0.0);
+uniform float rattle_t : hint_range(0.0, 1.0) = 1.0;
+uniform float rattle_strength : hint_range(0.0, 1.0) = 0.0;
+// How far along the boards the pane flexes, how many times it swings over the
+// rattle, how its swing varies along the pane (radians a metre: the panes are
+// ~1.5 m wide), and at full strength how far it bends the normal, how much it
+// frosts and the sheen it catches: the pane is nearly clear, so a swung
+// reflection alone does not show.
+const float RATTLE_REACH_M = 3.0;
+const float RATTLE_SWINGS = 7.0;
+const float RATTLE_ALONG = 2.1;
+const float RATTLE_BEND = 0.28;
+const float RATTLE_FROST = 0.17;
+const vec3 RATTLE_SHEEN = vec3(0.2, 0.22, 0.26);
+
 const float F0_GLASS = 0.04;
 
 // Mesh space, which is the rink's: the pane heights below are measured in it.
@@ -71,10 +92,26 @@ void fragment() {
 
 	float top_edge = step(0.9, v_local_normal.y);
 
+	// The rattle: a damped swing of the pane near the hit, fading along it.
+	vec2 from_hit = v_local.xz - rattle_pos.xz;
+	float reach = 1.0 - smoothstep(0.0, RATTLE_REACH_M, length(from_hit));
+	float life = rattle_strength * (1.0 - rattle_t) * (1.0 - rattle_t);
+	float run = (from_hit.x + from_hit.y) * RATTLE_ALONG;
+	float swing = sin(rattle_t * RATTLE_SWINGS * 6.2831853 + run);
+	float rattle = life * reach * swing;
+	vec3 sheen = vec3(0.0);
+	if (life * reach > 1e-4) {
+		vec3 sideways = normalize(vec3(from_hit.x, 0.0, from_hit.y) + vec3(1e-4, 0.0, 0.0));
+		vec3 bend = (VIEW_MATRIX * MODEL_MATRIX * vec4(sideways, 0.0)).xyz;
+		NORMAL = normalize(NORMAL + bend * rattle * RATTLE_BEND);
+		block = min(block + life * reach * RATTLE_FROST, 1.0);
+		sheen = RATTLE_SHEEN * life * reach * (0.5 + 0.5 * swing);
+	}
+
 	ALBEDO = tint.rgb * tint.a;
 	ALPHA = block;
 	METALLIC = 0.0;
 	SPECULAR = specular_strength;
 	ROUGHNESS = mix(roughness_clean, smudge_roughness, smudge);
-	EMISSION = edge_colour * edge_strength * top_edge;
+	EMISSION = edge_colour * edge_strength * top_edge + sheen;
 }

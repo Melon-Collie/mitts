@@ -7,6 +7,13 @@ extends Node
 # Advance warnings the clock crosses; the HUD owns the toast stack.
 signal warning_toast(text: String, color: Color)
 
+# The team badge (TeamBadge), flush against the stripe: its crest over twice
+# the ~34 px row's height, and its letters right of its middle, over the crest's
+# body rather than the edge the stripe crops.
+const _BADGE_WIDTH: float = 74.0
+const _CREST_PX: float = 78.0
+const _ABBR_INSET: float = 14.0
+
 var _panel: PanelContainer = null
 var _period_label: Label = null
 var _clock_label: Label = null
@@ -16,6 +23,8 @@ var _home_sog_label: Label = null
 var _away_sog_label: Label = null
 var _home_badge_style: StyleBoxFlat = null
 var _away_badge_style: StyleBoxFlat = null
+var _home_badge: TeamBadge = null
+var _away_badge: TeamBadge = null
 var _score_0: int = 0
 var _score_1: int = 0
 var _clock_warning_label: Label = null
@@ -43,7 +52,7 @@ func build(scale_root: Control) -> void:
 	panel.add_child(hbox)
 
 	# === Teams column ===
-	# Each team row is [stripe | abbr label | score]. Stripes carry the team
+	# Each team row is [stripe | crest badge | score]. Stripes carry the team
 	# color the way a chyron lower-third does.
 	var teams_outer := MarginContainer.new()
 	teams_outer.add_theme_constant_override("margin_top", 4)
@@ -56,17 +65,19 @@ func build(scale_root: Control) -> void:
 	# they hug the panel's full left edge top-to-bottom. The top stripe gets
 	# the panel's top-left curve, the bottom stripe gets the bottom-left
 	# curve; they meet flush at the midpoint of the inter-row separation.
-	var away_row := _build_team_row(1, tr(&"TEAM_AWAY"))
+	var away_row := _build_team_row(1)
 	_away_badge_style = away_row.get_meta(&"stripe_style") as StyleBoxFlat
 	_away_score_label = away_row.get_meta(&"score_label") as Label
+	_away_badge = away_row.get_meta(&"badge") as TeamBadge
 	var away_stripe: Panel = away_row.get_meta(&"stripe") as Panel
 	_away_badge_style.corner_radius_top_left = 4
 	away_stripe.offset_top = -5
 	away_stripe.offset_bottom = 2
 	teams_vbox.add_child(away_row)
-	var home_row := _build_team_row(0, tr(&"TEAM_HOME"))
+	var home_row := _build_team_row(0)
 	_home_badge_style = home_row.get_meta(&"stripe_style") as StyleBoxFlat
 	_home_score_label = home_row.get_meta(&"score_label") as Label
+	_home_badge = home_row.get_meta(&"badge") as TeamBadge
 	var home_stripe: Panel = home_row.get_meta(&"stripe") as Panel
 	_home_badge_style.corner_radius_bottom_left = 4
 	home_stripe.offset_top = -2
@@ -114,8 +125,9 @@ func build(scale_root: Control) -> void:
 	time_vbox.add_child(_clock_label)
 
 # One row of the teams column. Returns an HBox whose .get_meta() exposes the
-# stripe StyleBox + abbreviation + score Labels for live updates.
-func _build_team_row(team_id: int, abbr: String) -> HBoxContainer:
+# stripe StyleBox, the crest, and the abbreviation and score Labels for live
+# updates.
+func _build_team_row(team_id: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 0)
 
@@ -135,15 +147,13 @@ func _build_team_row(team_id: int, abbr: String) -> HBoxContainer:
 	stripe.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stripe_slot.add_child(stripe)
 
-	var abbr_margin := MarginContainer.new()
-	abbr_margin.add_theme_constant_override("margin_left", 8)
-	abbr_margin.add_theme_constant_override("margin_right", 4)
-	row.add_child(abbr_margin)
-	var abbr_label := HudChrome.lbl(abbr, 18, MenuStyle.BROADCAST_CREAM)
-	abbr_label.custom_minimum_size = Vector2(50, 0)
-	abbr_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	abbr_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	abbr_margin.add_child(abbr_label)
+	var badge_margin := MarginContainer.new()
+	badge_margin.add_theme_constant_override("margin_left", 0)
+	badge_margin.add_theme_constant_override("margin_right", 4)
+	row.add_child(badge_margin)
+	var badge := TeamBadge.new(_BADGE_WIDTH, _CREST_PX, 21, _ABBR_INSET)
+	_set_badge_team(badge, team_id)
+	badge_margin.add_child(badge)
 
 	# Center-aligned in a fixed-width slot so single- vs two-digit scores
 	# don't drift visually — under right-alignment "1" reads as offset from
@@ -161,7 +171,13 @@ func _build_team_row(team_id: int, abbr: String) -> HBoxContainer:
 	row.set_meta(&"stripe_style", stripe_style)
 	row.set_meta(&"stripe", stripe)
 	row.set_meta(&"score_label", score_label)
+	row.set_meta(&"badge", badge)
 	return row
+
+
+func _set_badge_team(badge: TeamBadge, team_id: int) -> void:
+	var club: int = HudChrome.team_club(team_id)
+	badge.set_team(club, TeamColorRegistry.get_preset_abbr(club) if club >= 0 else "")
 
 # Big, screen-centered countdown shown only in the final 10 seconds of a
 # period — the small scorebug clock is easy to miss while watching the puck,
@@ -209,15 +225,18 @@ func set_shots(sog_0: int, sog_1: int) -> void:
 func set_period(new_period: int) -> void:
 	_period_label.text = HudChrome.period_ordinal(new_period)
 
-# In the chyron layout the AWAY/HOME labels sit on the dark panel, not on the
-# team color, so their text stays cream regardless of team palette. The stripes
-# are each team's own primary color (see HudChrome.team_stripe) rather than the
-# raw signal colors.
+# The abbreviations sit on the dark panel, not on the team color, so their text
+# stays cream regardless of team palette. The stripes are each team's own primary
+# color (see HudChrome.team_stripe) rather than the raw signal colors.
 func refresh_team_colors() -> void:
 	if _home_badge_style != null:
 		_home_badge_style.bg_color = HudChrome.team_stripe(0)
 	if _away_badge_style != null:
 		_away_badge_style.bg_color = HudChrome.team_stripe(1)
+	if _home_badge != null:
+		_set_badge_team(_home_badge, 0)
+	if _away_badge != null:
+		_set_badge_team(_away_badge, 1)
 
 # Flash the scoring team's digit in their primary and spring it back to size.
 func celebrate_goal(team_id: int, primary: Color) -> void:

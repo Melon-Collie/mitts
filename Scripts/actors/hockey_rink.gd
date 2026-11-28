@@ -253,6 +253,8 @@ var _board_ads: MeshInstance3D = null
 var _ads_shown: bool = true
 var _render_targets_freed: bool = false
 var _ring_field: IceRingField = null
+var _puck_marks: BoardPuckMarks = null
+var _board_check_vfx: BoardCheckVFX = null
 
 func _ready() -> void:
 	_rebuild()
@@ -261,6 +263,11 @@ func _ready() -> void:
 		# unbind the int — without this, Godot errors silently each emit
 		# ("Expected 0 arguments, got 1") and the ice never resets.
 		GameManager.period_synced.connect(_scratch_map.clear.unbind(1))
+	if not Engine.is_editor_hint():
+		# Through methods rather than bound to the marks node: a rebuild replaces it.
+		GameManager.puck_marked_boards.connect(_on_puck_marked_boards)
+		GameManager.boards_checked.connect(_on_boards_checked)
+		GameManager.game_reset.connect(_on_game_reset)
 	if not Engine.is_editor_hint() and _ring_field != null:
 		GameManager.phase_changed.connect(_ring_field.on_phase_changed)
 		# Resurfacer crew for scoreless intermissions. Both teardown signals are
@@ -315,6 +322,9 @@ func _teardown_render_targets() -> void:
 	if is_instance_valid(_ice_ad_vp):
 		_ice_ad_vp.free()
 	_ice_ad_vp = null
+	if is_instance_valid(_puck_marks):
+		_puck_marks.teardown()
+	_puck_marks = null
 
 
 # Drop the process-lifetime build cache. The cached products include the ice
@@ -373,7 +383,9 @@ func _rebuild() -> void:
 	_add_band_instance(products.band_kickplate, kp_mat)
 	_add_band_instance(products.band_board, board_mat)
 	_add_band_instance(products.band_cap, cap_mat)
-	_add_band_instance(products.band_glass, _make_glass_material())
+	var glass: ShaderMaterial = _make_glass_material()
+	_add_band_instance(products.band_glass, glass)
+	_add_board_check_vfx(glass)
 
 	# --- Painted stripes ---
 	# Goal-line stripes on each corner's white-board zone, drawn where the line
@@ -401,6 +413,8 @@ func _rebuild() -> void:
 
 	if board_ads_enabled:
 		_add_board_ads(products.band_ads)
+
+	_add_puck_marks(products.band_marks)
 
 
 # ── Build cache ──────────────────────────────────────────────────────────────
@@ -466,6 +480,8 @@ func _get_or_build_products() -> Dictionary:
 		"band_ads": _build_ad_band(stations, board_half_thick),
 		"band_gates": _build_gate_band(stations, board_half_thick),
 		"band_netting": _build_net_band(stations, glass_half_thick),
+		"band_marks": BoardPuckMarks.build_ribbon(stations, board_half_thick, kick_half_thick,
+				kickplate_height, board_top),
 	}
 	_build_cache[key] = products
 	return products
@@ -989,6 +1005,43 @@ func _add_board_ads(band: ArrayMesh) -> void:
 	_board_ad_material = mat
 	_board_ads = mi
 	add_child(mi)
+
+
+# Runtime only, like the scratch map: the canvas is a render target.
+func _add_puck_marks(ribbon: ArrayMesh) -> void:
+	if Engine.is_editor_hint():
+		return
+	_puck_marks = BoardPuckMarks.new()
+	_puck_marks.name = "BoardPuckMarks"
+	add_child(_puck_marks)
+	_puck_marks.setup(ribbon, rink_width / 2.0, rink_length / 2.0, corner_radius,
+			wall_height - CAP_RAIL_HEIGHT)
+
+
+# Runtime only, like the puck marks.
+func _add_board_check_vfx(glass: ShaderMaterial) -> void:
+	if Engine.is_editor_hint():
+		return
+	_board_check_vfx = BoardCheckVFX.new()
+	_board_check_vfx.name = "BoardCheckVFX"
+	add_child(_board_check_vfx)
+	_board_check_vfx.setup(glass)
+
+
+func _on_boards_checked(contact: Vector3, force: float) -> void:
+	if is_instance_valid(_board_check_vfx):
+		_board_check_vfx.fire(to_local(contact), SkaterVFX.check_intensity(force))
+
+
+func _on_puck_marked_boards(world_pos: Vector3, speed: float) -> void:
+	if is_instance_valid(_puck_marks):
+		_puck_marks.add_mark(to_local(world_pos), speed)
+
+
+# A rematch starts from the worn boards again; a new match loads a new rink.
+func _on_game_reset() -> void:
+	if is_instance_valid(_puck_marks):
+		_puck_marks.reset()
 
 
 # The player's Arena Ads option. Hides what was built rather than flipping the

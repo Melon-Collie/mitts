@@ -86,7 +86,8 @@ func test_the_mix_keeps_its_order() -> void:
 	assert_gt(mix[S.GOAL_HORN], mix[S.PERIOD_BUZZER], "the horn is the biggest moment")
 	assert_gt(mix[S.PERIOD_BUZZER], mix[S.FACEOFF_WHISTLE], "the whistle sits under the buzzer")
 	var contacts: Array = [S.PUCK_BOARDS, S.PUCK_GLASS, S.PUCK_GOALIE, S.PUCK_POST, S.PUCK_GOAL_BODY,
-			S.PUCK_DEFLECTION, S.PUCK_BODY_BLOCK, S.PUCK_STRIP, S.STICK_LIFT, S.BODY_CHECK]
+			S.PUCK_DEFLECTION, S.PUCK_BODY_BLOCK, S.PUCK_STRIP, S.STICK_LIFT, S.BODY_CHECK,
+			S.BOARD_CHECK, S.GLASS_RATTLE]
 	for contact: int in contacts:
 		for shot: int in [S.SHOT_SLAPPER, S.SHOT_WRISTER]:
 			assert_gt(mix[shot], mix[contact], "shots over puck contacts")

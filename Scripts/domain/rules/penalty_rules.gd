@@ -7,11 +7,13 @@ class_name PenaltyRules
 
 enum Foul { NONE, BOARDING, INTERFERENCE, FIGHTING, ROUGHING }
 
-# How far off the boards a man can be thrown into them (body edge to board).
-const BOARDING_ZONE_M: float = 1.5
-# The hitter is behind his man when the man faces within 45° of the way he is
-# driven: the rear 90°.
-const BOARDING_REAR_COS: float = 0.7071
+# How far off the boards a man can be thrown into them (body edge to board):
+# about a stride, so a hit from behind further off the wall is not boarding.
+const BOARDING_ZONE_M: float = 1.0
+# The hitter is behind his man when the man faces within 30° of the way he is
+# driven (cos 30°): the rear 60°, square from behind. A hit from behind and
+# beside him is the angling that puts a man on the wall, and is legal.
+const BOARDING_REAR_COS: float = 0.8660
 # Boarding reads the victim's facing this long before the contact, so turning
 # his back as the hit arrives draws nothing.
 const BOARDING_TURN_GRACE_S: float = 0.3

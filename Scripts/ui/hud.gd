@@ -31,6 +31,7 @@ var _pause_menu: PauseMenu = null
 var _side_menu: SideMenu = null
 var _bug_dialog: BugReportDialog = null
 var _toast_stack: ToastStack = null
+var _minimap: Minimap = null
 var _flash_overlay: FlashOverlay = null
 var _confirm_dialog: ConfirmDialog = null
 var _confirm_callback: Callable = Callable()
@@ -349,8 +350,8 @@ func _build_offscreen_indicators() -> void:
 # PlayerPrefs.minimap_enabled (drawing nothing when off), so no visibility wiring
 # is needed here.
 func _build_minimap() -> void:
-	var minimap := Minimap.new()
-	_scale_root.add_child(minimap)
+	_minimap = Minimap.new()
+	_scale_root.add_child(_minimap)
 
 func _build_bug_icon() -> void:
 	var icon_tex := load("res://Assets/Icons/bug_report.svg") as Texture2D
@@ -631,9 +632,8 @@ func _on_faceoff_prep_announced() -> void:
 	_chyron.begin_faceoff_prep(_penalty_shot_is_on())
 
 
-# Compose the opening matchup rosters from the live registry: one column per
-# team in slot order. The overlay reads name / number / attribute build off
-# the records itself.
+# Compose the opening matchup rosters from the live registry: one panel per
+# team in slot order. The overlay reads name and number off the records itself.
 func _show_matchup_overlay() -> void:
 	var home_records: Array[PlayerRecord] = []
 	var away_records: Array[PlayerRecord] = []
@@ -656,7 +656,7 @@ func _show_matchup_overlay() -> void:
 		home_header = TournamentCopy.seeded_club(state, TournamentRules.home_club(state, game))
 		away_header = TournamentCopy.seeded_club(state, TournamentRules.away_club(state, game))
 	_matchup_overlay.present(home_records, away_records,
-			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
+			HudChrome.team_club(0), HudChrome.team_club(1),
 			title, home_header, away_header)
 
 func _hide_matchup_overlay() -> void:
@@ -768,7 +768,7 @@ func _flash_period_end() -> void:
 	if _flash_overlay != null:
 		_flash_overlay.flash(MenuStyle.GOLD, 0.35, 0.5)
 
-# The final-horn beat plays on the ice first (gold flash + "HOME WINS" chyron
+# The final-horn beat plays on the ice first (gold flash + "<TEAM> WINS" chyron
 # via _on_phase_changed / here), then the full end-of-game screen takes over.
 # This delay is that breath; the presentation tween is killed by _on_game_reset
 # if a rematch fires inside the window.
@@ -779,10 +779,10 @@ func _on_game_over() -> void:
 	var result_text: String
 	var result_color: Color
 	if _scorebug.home_score() > _scorebug.away_score():
-		result_text = tr(&"RESULT_HOME_WINS")
+		result_text = tr(&"RESULT_TEAM_WINS") % _team_name(0)
 		result_color = HudChrome.team_ink(0)
 	elif _scorebug.away_score() > _scorebug.home_score():
-		result_text = tr(&"RESULT_AWAY_WINS")
+		result_text = tr(&"RESULT_TEAM_WINS") % _team_name(1)
 		result_color = HudChrome.team_ink(1)
 	else:
 		result_text = tr(&"RESULT_TIE_GAME")
@@ -796,33 +796,64 @@ func _on_game_over() -> void:
 	_game_over_present_tween.tween_callback(
 			_present_game_over_screen.bind(result_text, result_color))
 
+# A side's club by name, or HOME / AWAY before the clubs are known.
+func _team_name(team_id: int) -> String:
+	var club: int = HudChrome.team_club(team_id)
+	if club < 0:
+		return tr(&"TEAM_HOME") if team_id == 0 else tr(&"TEAM_AWAY")
+	return TeamColorRegistry.get_preset_name(club).to_upper()
+
+
 func _present_game_over_screen(result_text: String, result_color: Color) -> void:
 	# The screen carries the same FINAL info, so the chyron behind it retires.
 	_chyron.hide_banner()
+	_set_play_chrome_visible(false)
+	var summary := GameOverSummary.new()
+	summary.home_score = _scorebug.home_score()
+	summary.away_score = _scorebug.away_score()
+	summary.home_club = HudChrome.team_club(0)
+	summary.away_club = HudChrome.team_club(1)
+	summary.result_text = result_text
+	summary.result_color = result_color
+	summary.personal = _personal_result()
 	# Up to three ranked stars; zero-stat players never star, so a quiet game
 	# shows fewer (or none — the whole stars block stays hidden).
-	var star_names: Array[String] = []
-	var star_lines: Array[String] = []
-	var star_stripes: Array[Color] = []
-	var star_titles: Array[String] = []
 	for star: PlayerRecord in GameManager.get_stars_of_game():
-		star_names.append(star.display_name())
-		star_titles.append(TrophyCopy.title_name(star.title_id)
+		summary.star_names.append(star.display_name())
+		summary.star_titles.append(TrophyCopy.title_name(star.title_id)
 				if Titles.is_known(star.title_id) else "")
 		if star.is_goalie:
 			var opp: int = 1 - star.team.team_id
-			star_lines.append(_goalie_star_line(GameManager.get_team_shots(opp),
+			summary.star_lines.append(_goalie_star_line(GameManager.get_team_shots(opp),
 					_scorebug.away_score() if opp == 1 else _scorebug.home_score()))
 		else:
-			star_lines.append(_star_stat_line(star.stats))
-		star_stripes.append(HudChrome.team_stripe(star.team.team_id))
+			summary.star_lines.append(_star_stat_line(star.stats))
+		summary.star_clubs.append(HudChrome.team_club(star.team.team_id))
 	# Before present: it decides which actions exist, and present focuses one.
 	_refresh_tournament_outcome()
-	_game_over_popup.present(_scorebug.home_score(), _scorebug.away_score(),
-			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
-			result_text, result_color,
-			star_names, star_lines, star_stripes, star_titles)
+	_game_over_popup.present(summary)
 	_refresh_goal_saving()
+
+
+# The local player's own result; none for a tie or a spectator.
+func _personal_result() -> GameOverSummary.Personal:
+	var home: int = _scorebug.home_score()
+	var away: int = _scorebug.away_score()
+	var local: PlayerRecord = GameManager.get_local_player()
+	if home == away or local == null or local.team == null or GameManager.is_local_spectator():
+		return GameOverSummary.Personal.NONE
+	var winner: int = 0 if home > away else 1
+	return GameOverSummary.Personal.VICTORY if local.team.team_id == winner \
+			else GameOverSummary.Personal.DEFEAT
+
+
+# The in-play chrome the game-over screen would otherwise sit among: the minimap
+# and the event feed.
+func _set_play_chrome_visible(shown: bool) -> void:
+	if _minimap != null:
+		_minimap.visible = shown
+	if _toast_stack != null:
+		_toast_stack.visible = shown
 
 
 # Tells the game-over screen whether this was a tournament game and what its
@@ -887,6 +918,7 @@ func _on_game_reset() -> void:
 		_game_over_present_tween.kill()
 	_game_over_present_tween = null
 	_game_over_popup.hide_popup()
+	_set_play_chrome_visible(true)
 	if _post_game_analytics != null:
 		_post_game_analytics.close()
 	if _goal_gif_picker != null:

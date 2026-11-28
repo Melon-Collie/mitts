@@ -24,7 +24,9 @@ const _SEP    := MenuStyle.TEXT_SEP
 
 # Two-column row layout shared by every tab so labels and controls line up
 # vertically across rows and between tabs.
-const _LABEL_COL_WIDTH := 180
+# Clears the longest label ("Confine Cursor to Window", 216 px), so no row's
+# control is pushed out of the column.
+const _LABEL_COL_WIDTH := 240
 const _LABEL_FONT_SIZE := 17
 const _VALUE_FONT_SIZE := 14
 const _SECTION_FONT_SIZE := 12
